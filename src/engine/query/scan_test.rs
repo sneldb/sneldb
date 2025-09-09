@@ -1,6 +1,7 @@
 use crate::command::types::{CompareOp, Expr};
 use crate::engine::core::Flusher;
 use crate::engine::core::MemTable;
+use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
 use crate::engine::query::scan::scan;
 use crate::test_helpers::factories::{
     CommandFactory, EventFactory, MemTableFactory, SchemaRegistryFactory,
@@ -41,7 +42,7 @@ async fn scan_query_returns_expected_events() {
         .create()
         .unwrap();
 
-    let passive_memtable = Arc::new(tokio::sync::Mutex::new(MemTable::new(2)));
+    let passive_buffers = Arc::new(PassiveBufferSet::new(8));
 
     let flusher = Flusher::new(memtable.clone(), 1, &segment_base_dir, registry.clone());
     flusher.flush().await.expect("Flush failed");
@@ -58,7 +59,7 @@ async fn scan_query_returns_expected_events() {
         &segment_base_dir,
         &segment_ids,
         &memtable,
-        &passive_memtable,
+        &passive_buffers,
     )
     .await
     .expect("scan failed");
@@ -101,7 +102,7 @@ async fn scan_where_expr_logic() {
         .create()
         .unwrap();
 
-    let passive_memtable = Arc::new(tokio::sync::Mutex::new(MemTable::new(2)));
+    let passive_buffers = Arc::new(PassiveBufferSet::new(8));
 
     let cases: Vec<(Expr, Vec<&str>)> = vec![
         (
@@ -201,7 +202,7 @@ async fn scan_where_expr_logic() {
             tmp_dir.path(),
             &segment_ids,
             &memtable,
-            &passive_memtable,
+            &passive_buffers,
         )
         .await
         .unwrap();
@@ -242,7 +243,7 @@ async fn scan_query_with_context_id_and_expr_logic() {
             .create(),
     ];
     let memtable = MemTableFactory::new().with_events(events).create().unwrap();
-    let passive_memtable = Arc::new(tokio::sync::Mutex::new(MemTable::new(2)));
+    let passive_buffers = Arc::new(PassiveBufferSet::new(8));
 
     // 1. Filter by context_id only
     let cmd = CommandFactory::query().with_context_id("ctx1").create();
@@ -252,7 +253,7 @@ async fn scan_query_with_context_id_and_expr_logic() {
         dir.path(),
         &segment_ids,
         &memtable,
-        &passive_memtable,
+        &passive_buffers,
     )
     .await
     .unwrap();
@@ -275,7 +276,7 @@ async fn scan_query_with_context_id_and_expr_logic() {
         dir.path(),
         &segment_ids,
         &memtable,
-        &passive_memtable,
+        &passive_buffers,
     )
     .await
     .unwrap();
@@ -298,7 +299,7 @@ async fn scan_query_with_context_id_and_expr_logic() {
         dir.path(),
         &segment_ids,
         &memtable,
-        &passive_memtable,
+        &passive_buffers,
     )
     .await
     .unwrap();
@@ -321,7 +322,7 @@ async fn scan_query_with_context_id_and_expr_logic() {
         dir.path(),
         &segment_ids,
         &memtable,
-        &passive_memtable,
+        &passive_buffers,
     )
     .await
     .unwrap();
@@ -350,7 +351,7 @@ async fn scan_query_with_context_id_and_expr_logic() {
         dir.path(),
         &segment_ids,
         &memtable,
-        &passive_memtable,
+        &passive_buffers,
     )
     .await
     .unwrap();

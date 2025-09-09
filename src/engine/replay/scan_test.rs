@@ -4,6 +4,7 @@ use crate::test_helpers::factories::{
 };
 use serde_json::json;
 use std::sync::Arc;
+use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[tokio::test]
@@ -54,9 +55,7 @@ async fn scan_replay_with_context_id_and_time_logic() {
             .create(),
     ];
     let memtable = MemTableFactory::new().with_events(events).create().unwrap();
-    let passive_memtable = Arc::new(tokio::sync::Mutex::new(
-        MemTableFactory::new().create().unwrap(),
-    ));
+    let passive_buffers = Arc::new(PassiveBufferSet::new(8));
 
     // 1. Replay ctx1 with no `since` (should include)
     let cmd = CommandFactory::replay().with_context_id("ctx1").create();
@@ -66,7 +65,7 @@ async fn scan_replay_with_context_id_and_time_logic() {
         dir.path(),
         &segment_ids,
         &memtable,
-        &passive_memtable,
+        &passive_buffers,
     )
     .await
     .unwrap();
@@ -85,7 +84,7 @@ async fn scan_replay_with_context_id_and_time_logic() {
         dir.path(),
         &segment_ids,
         &memtable,
-        &passive_memtable,
+        &passive_buffers,
     )
     .await
     .unwrap();
@@ -104,7 +103,7 @@ async fn scan_replay_with_context_id_and_time_logic() {
         dir.path(),
         &segment_ids,
         &memtable,
-        &passive_memtable,
+        &passive_buffers,
     )
     .await
     .unwrap();
@@ -122,7 +121,7 @@ async fn scan_replay_with_context_id_and_time_logic() {
         dir.path(),
         &segment_ids,
         &memtable,
-        &passive_memtable,
+        &passive_buffers,
     )
     .await
     .unwrap();
@@ -141,7 +140,7 @@ async fn scan_replay_with_context_id_and_time_logic() {
         dir.path(),
         &segment_ids,
         &memtable,
-        &passive_memtable,
+        &passive_buffers,
     )
     .await
     .unwrap();
@@ -158,7 +157,7 @@ async fn scan_replay_with_context_id_and_time_logic() {
         dir.path(),
         &segment_ids,
         &memtable,
-        &passive_memtable,
+        &passive_buffers,
     )
     .await
     .unwrap();

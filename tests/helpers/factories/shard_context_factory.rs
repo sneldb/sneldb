@@ -1,4 +1,5 @@
 use crate::engine::core::{FlushManager, MemTable, WalHandle};
+use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
 use crate::engine::shard::context::ShardContext;
 use crate::shared::config::CONFIG;
 use std::path::PathBuf;
@@ -76,9 +77,7 @@ impl ShardContextFactory {
             flush_count: 0,
             wal: Some(wal),
             flush_manager,
-            passive_memtable: Arc::new(tokio::sync::Mutex::new(MemTable::new(
-                CONFIG.engine.flush_threshold,
-            ))),
+            passive_buffers: Arc::new(PassiveBufferSet::new(8)),
         };
 
         ctx

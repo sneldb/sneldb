@@ -51,9 +51,7 @@ pub async fn insert_and_maybe_flush(
 
         let capacity = ctx.memtable.capacity();
 
-        let mut passive_memtable = ctx.passive_memtable.lock().await;
-        *passive_memtable = ctx.memtable.clone();
-
+        let passive_arc = ctx.passive_buffers.add_from(&ctx.memtable).await;
         let flushed_mem = std::mem::replace(&mut ctx.memtable, MemTable::new(capacity));
 
         debug!(
@@ -67,9 +65,15 @@ pub async fn insert_and_maybe_flush(
                 flushed_mem,
                 Arc::clone(schema_registry),
                 current_segment_id,
-                Arc::clone(&ctx.passive_memtable),
+                Arc::clone(&passive_arc),
             )
             .await?;
+
+        // Opportunistic pruning: every max_inflight/2 rotations
+        let prune_every = std::cmp::max(1, ctx.passive_buffers.max_inflight() / 2);
+        if (ctx.segment_id as usize) % prune_every == 0 {
+            ctx.passive_buffers.prune_empties().await;
+        }
     }
 
     Ok(())

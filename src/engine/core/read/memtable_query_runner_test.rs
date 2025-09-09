@@ -60,7 +60,8 @@ async fn runs_memtable_query_runner_and_returns_matching_events() {
         .unwrap();
 
     // Run the MemTableQueryRunner
-    let runner = MemTableQueryRunner::new(Some(&memtable), None, &plan);
+    let passives: Vec<&Arc<tokio::sync::Mutex<crate::engine::core::MemTable>>> = Vec::new();
+    let runner = MemTableQueryRunner::new(Some(&memtable), &passives, &plan);
     let result = runner.run().await;
 
     // Verify: Only the "shipped" event is returned
@@ -90,7 +91,8 @@ async fn returns_empty_when_memtable_is_none() {
         .create()
         .await;
 
-    let runner = MemTableQueryRunner::new(None, None, &plan);
+    let passives: Vec<&Arc<tokio::sync::Mutex<crate::engine::core::MemTable>>> = Vec::new();
+    let runner = MemTableQueryRunner::new(None, &passives, &plan);
     let result = runner.run().await;
 
     // Verify: result is empty when no memtable provided

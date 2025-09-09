@@ -35,6 +35,7 @@ pub struct EngineConfig {
     pub compaction_threshold: usize,
     pub compaction_interval: u64,
     pub sys_io_threshold: usize,
+    pub max_inflight_passives: Option<usize>,
 }
 
 impl EngineConfig {
