@@ -5,7 +5,7 @@
 Run:
 
 ```bash
-SNELDB_CONFIG='config.test.toml' cargo test
+SNELDB_CONFIG='config/test.toml' cargo test
 ```
 
 ### E2E tests
@@ -13,5 +13,5 @@ SNELDB_CONFIG='config.test.toml' cargo test
 Run:
 
 ```bash
-SNELDB_CONFIG='config.toml' cargo run --bin test_runner
+SNELDB_CONFIG='config/test.toml' cargo run --bin test_runner
 ```
