@@ -38,3 +38,18 @@ code.hljs .hljs-string {
     color: #c1ccd7;       /* light gray with a hint of blue */
     font-weight: normal;
   }
+
+/* Header logo injection */
+.menu-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.menu-title::before {
+  content: "";
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  background: url("logo.svg") no-repeat center / contain;
+}

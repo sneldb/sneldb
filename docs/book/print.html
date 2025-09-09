@@ -1,0 +1,1670 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>SnelDB: The Complete Guide</title>
+        <meta name="robots" content="noindex">
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="theme/sneldb.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">SnelDB: The Complete Guide</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="quickstart"><a class="header" href="#quickstart">Quickstart</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
+<pre><code class="language-bash">test command
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><h1 id="a-gentle-guide-for-engineers"><a class="header" href="#a-gentle-guide-for-engineers">A Gentle Guide for Engineers</a></h1>
+<p>SnelDB is built to be small and simple. It keeps track of what happened, in order, and makes it easy to get those facts back out quickly. That’s it. This guide will walk you through how to think about events, how to design them so they’re useful, and how to use SnelDB’s tiny set of commands—<code>DEFINE</code>, <code>STORE</code>, <code>QUERY</code>, and <code>REPLAY</code>. Along the way we’ll use a retail shop as an example, but the same ideas apply in many domains.</p>
+<h2 id="why-events"><a class="header" href="#why-events">Why events?</a></h2>
+<p>An event is just a record that something happened: <em>an order was created</em>, <em>a customer signed up</em>, <em>a parcel was delivered</em>. Events don’t change once they’re stored. By keeping them all, you get a trustworthy history. Your application can look back, replay them, and figure out the current state whenever it needs. SnelDB focuses on storing these events and letting you fetch them again quickly. The “what do these events mean?” part stays in your application.</p>
+<h2 id="two-ways-of-reading"><a class="header" href="#two-ways-of-reading">Two ways of reading</a></h2>
+<p>With SnelDB, there are really only two ways you read:</p>
+<ol>
+<li>
+<p><strong>Replay a timeline for one thing.</strong> All the events for a single <code>context_id</code> (like an order, a customer, or a device) form a story. If you <code>REPLAY FOR order-9001</code>, you’ll see every event for that order in sequence. Your code can fold those into the current state.</p>
+</li>
+<li>
+<p><strong>Query across many things.</strong> Sometimes you don’t want the whole story of one order, you want a slice across all orders. For that, you use <code>QUERY</code>. For example: <code>QUERY order_created WHERE status="submitted"</code>. Behind the scenes, SnelDB uses tricks like enum bitmaps and filters to make those queries quick, so you don’t have to think about indexes.</p>
+</li>
+</ol>
+<p>If you remember one thing: replay for one thing’s story, query for slices across many things.</p>
+<h2 id="choosing-a-context"><a class="header" href="#choosing-a-context">Choosing a context</a></h2>
+<p>So what is this <code>context_id</code>? Think of it as “whose story am I telling?” For a retail system:</p>
+<ul>
+<li>An <strong>order</strong> has a start and an end, so it makes sense to use <code>order-&lt;id&gt;</code> as the context.</li>
+<li>Inventory belongs to a <strong>SKU</strong>, so <code>sku-&lt;code&gt;</code> is a context.</li>
+<li>A <strong>customer profile</strong> belongs to a customer, so <code>customer-&lt;id&gt;</code> works.</li>
+</ul>
+<p>When you want to be able to say <em>“show me everything that ever happened to X”</em>, that X should be a context.</p>
+<h2 id="designing-an-event"><a class="header" href="#designing-an-event">Designing an event</a></h2>
+<p>Name events the way you’d explain them to a teammate: <code>order_created</code>, <code>customer_registered</code>, <code>shipment_delivered</code>. Keep the payload small and clear. Always include:</p>
+<ul>
+<li>The IDs you’ll need to filter by later (<code>order_id</code>, <code>customer_id</code>, <code>sku</code>).</li>
+<li>Enums for fixed sets of values. For example:
+<pre><code class="language-sneldb">"plan": ["basic", "pro", "enterprise"]
+</code></pre>
+</li>
+<li>A timestamp for when it happened.</li>
+</ul>
+<p>Here are a few examples:</p>
+<pre><code class="language-sneldb">DEFINE customer_registered FIELDS {
+  "customer_id":"string",
+  "email":"string",
+  "plan":["basic","pro","enterprise"],
+  "created_at":"timestamp"
+}
+
+DEFINE order_created FIELDS {
+  "order_id":"string",
+  "customer_id":"string",
+  "status":["pending","submitted","cancelled"],
+  "created_at":"timestamp"
+}
+
+DEFINE shipment_delivered FIELDS {
+  "shipment_id":"string",
+  "order_id":"string",
+  "carrier":["UPS","DHL","FedEx"],
+  "delivered_at":"timestamp"
+}
+</code></pre>
+<h2 id="storing-events"><a class="header" href="#storing-events">Storing events</a></h2>
+<p>The very first need is to <strong>record facts</strong>: something happened, and you want to keep it. Writing an event in SnelDB is just that—adding a new fact to the timeline.</p>
+<pre><code class="language-sneldb">STORE customer_registered FOR customer-123
+  PAYLOAD {"customer_id":"123","email":"a@b.com","plan":"pro"}
+
+STORE order_created FOR order-9001
+  PAYLOAD {"order_id":"9001","customer_id":"123","status":"pending"}
+
+STORE shipment_delivered FOR ship-5001
+  PAYLOAD {"shipment_id":"5001","order_id":"9001","carrier":"UPS"}
+</code></pre>
+<p>Later on, when dealing with retries or external systems, you might add optional fields like <code>idempotency_key</code>. But the heart of storing events is simply: write down the fact.</p>
+<h2 id="reading-events"><a class="header" href="#reading-events">Reading events</a></h2>
+<p>If you want to know the <strong>current state of one thing</strong>, replay its story:</p>
+<pre><code class="language-sneldb">REPLAY FOR order-9001
+</code></pre>
+<p>If you want to know <strong>which events match a condition across many things</strong>, query:</p>
+<pre><code class="language-sneldb">QUERY order_created WHERE customer_id="123"
+</code></pre>
+<p>If you need to follow a chain—like from an order to its shipment—query by the keys you included in the payload:</p>
+<pre><code class="language-sneldb">QUERY shipment_delivered WHERE order_id="9001"
+</code></pre>
+<h2 id="how-to-evolve"><a class="header" href="#how-to-evolve">How to evolve</a></h2>
+<p>SnelDB is built on immutability. Once an event is stored it never changes. If the shape of an event needs to change, we don’t edit old events or add fields onto them. Instead, we create a new version of the schema or define a new event type that represents the new shape.</p>
+<p>Older events remain valid and replayable; newer ones follow the updated schema. This way, every event clearly shows which version of the schema it follows, and your code can handle old and new versions side by side. Immutability guarantees that history is stable, while evolution ensures you can keep writing new chapters without breaking the old ones.</p>
+<h2 id="scaling-without-extra-knobs"><a class="header" href="#scaling-without-extra-knobs">Scaling without extra knobs</a></h2>
+<p>You don’t manage indexes or query planners. You simply design your events with the right fields. SnelDB takes care of compression and filtering internally. If a query feels heavy, ask yourself: <em>did I include the right key in the payload?</em></p>
+<h2 id="streaming"><a class="header" href="#streaming">Streaming</a></h2>
+<p>If you need near‑real‑time processing, you don’t need a new command. Just poll with <code>SINCE</code> on your timestamp:</p>
+<pre><code class="language-sneldb">QUERY order_created WHERE created_at &gt;= "2025-09-07T00:00:00Z" LIMIT 1000
+</code></pre>
+<p>Keep track of the last event you saw in your application and continue from there.</p>
+<h2 id="other-domains"><a class="header" href="#other-domains">Other domains</a></h2>
+<ul>
+<li><strong>Billing:</strong> replay a subscription’s events to learn its current plan; query invoices or payments by <code>customer_id</code>.</li>
+<li><strong>IoT:</strong> replay one device’s events to see its config; query telemetry since last night.</li>
+<li><strong>Logistics:</strong> replay one parcel’s journey; query all parcels delivered today.</li>
+</ul>
+<h2 id="what-sneldb-wont-do"><a class="header" href="#what-sneldb-wont-do">What SnelDB won’t do</a></h2>
+<p>SnelDB will never enforce your workflows, run aggregates, or decide who is allowed to see data. Those belong in your application or other tools. SnelDB’s job is narrower: keep facts safe, and give them back quickly.</p>
+<h2 id="a-closing-picture"><a class="header" href="#a-closing-picture">A closing picture</a></h2>
+<p>Think of two simple moves:</p>
+<ul>
+<li><strong>Down:</strong> replay the whole story for one thing.</li>
+<li><strong>Across:</strong> query slices across many things.</li>
+</ul>
+<p>Nearly everything you need can be done by combining these two moves. The database is small on purpose. If you design your events carefully, SnelDB will give you speed and reliability without ever getting in your way.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="sneldb-design-philosophy"><a class="header" href="#sneldb-design-philosophy">SnelDB Design Philosophy</a></h1>
+<h2 id="hassle-free-by-design"><a class="header" href="#hassle-free-by-design">Hassle-free by design</a></h2>
+<p>SnelDB is small on purpose. You don’t need to learn dozens of commands, fiddle with query planners, or manage indexes. Four simple verbs—<code>DEFINE</code>, <code>STORE</code>, <code>QUERY</code>, <code>REPLAY</code>—cover almost everything you need. Less to remember, less to break.</p>
+<h2 id="immutability-at-the-core"><a class="header" href="#immutability-at-the-core">Immutability at the core</a></h2>
+<p>Facts don’t change once written. Immutability makes your history reliable and auditable. If things evolve, you add new event types or new schema versions. Old events remain intact; new ones live alongside them.</p>
+<h2 id="evolution-over-correction"><a class="header" href="#evolution-over-correction">Evolution over correction</a></h2>
+<p>Rather than patching or rewriting, you let the story grow. Each new event is another page in the log. That makes timelines honest, reproducible, and easy to debug.</p>
+<h2 id="performance-without-knobs"><a class="header" href="#performance-without-knobs">Performance without knobs</a></h2>
+<p>SnelDB is built for performance, but you don’t need to manage any of it. Internally, it uses shards to spread load, an LSM-tree design to keep writes fast, and columnar storage with enum bitmaps and XOR filters to make queries efficient. You never have to tune these parts yourself—they just work in the background so you can focus on your application.</p>
+<h2 id="universal-patterns"><a class="header" href="#universal-patterns">Universal patterns</a></h2>
+<p>Two simple movements cover most use cases:</p>
+<ul>
+<li><strong>Replay</strong> one context’s timeline to rebuild its state.</li>
+<li><strong>Query</strong> across many contexts with filters.</li>
+</ul>
+<p>This model is the same whether you’re preparing order data in retail, collecting device signals in IoT, managing subscriptions in SaaS, or feeding clean event streams into data and AI/ML teams for training and analysis.</p>
+<h2 id="staying-in-its-lane"><a class="header" href="#staying-in-its-lane">Staying in its lane</a></h2>
+<p>SnelDB doesn’t do business logic, aggregations, or access control. Those belong in your services and tools. The database’s job is to keep track of everything faithfully and give it back quickly.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
+<p>SnelDB is a lightweight, high‑performance database for immutable events. You append facts, then filter or replay them—quickly and reliably.</p>
+<h2 id="what-it-is"><a class="header" href="#what-it-is">What it is</a></h2>
+<ul>
+<li>Store: append events with a type, context_id, timestamp, and payload</li>
+<li>Query: filter by event type, context, time, and conditions</li>
+<li>Replay: stream events for a context in original order</li>
+</ul>
+<pre><code class="language-sneldb">DEFINE payment FIELDS {"amount":"int","status":"string"}
+STORE payment FOR user-123 PAYLOAD {"amount":250,"status":"verified"}
+QUERY payment WHERE status="verified"
+REPLAY FOR user-123
+</code></pre>
+<h2 id="why-it-exists"><a class="header" href="#why-it-exists">Why it exists</a></h2>
+<p>General-purpose databases and queues struggle with large, evolving event logs. SnelDB is built for:</p>
+<ul>
+<li>Immutable, append-only data</li>
+<li>Fast filtering at scale (columnar + pruning)</li>
+<li>Ordered replay per context</li>
+<li>Minimal ops overhead</li>
+</ul>
+<h2 id="key-features"><a class="header" href="#key-features">Key features</a></h2>
+<ul>
+<li>Append-only storage (perfect audit trails; predictable recovery)</li>
+<li>Simple, human‑readable commands (JSON‑native)</li>
+<li>Fast queries at scale (shards, zones, compaction)</li>
+<li>Replay built in (time‑travel debugging, sequence modeling)</li>
+<li>Flexible schemas (strict validation; optional fields)</li>
+<li>Lightweight &amp; safe (Rust; embeddable; no GC)</li>
+</ul>
+<h2 id="who-its-for"><a class="header" href="#who-its-for">Who it’s for</a></h2>
+<ul>
+<li>Product analytics and auditing</li>
+<li>ML pipelines on event sequences</li>
+<li>Operational debugging and timeline reconstruction</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="why-sneldb"><a class="header" href="#why-sneldb">Why SnelDB?</a></h1>
+<p>Most databases were never built for events.</p>
+<p>They're optimized for records that change: customer profiles, inventory counts, order statuses. But in the real world, especially in modern systems and data pipelines, we’re dealing more and more with <strong>things that happened</strong> — not things that are.</p>
+<ul>
+<li>A user signed up.</li>
+<li>A sensor pinged.</li>
+<li>A document was approved.</li>
+<li>A model prediction was stored.</li>
+</ul>
+<p>These aren’t updates. They’re <strong>facts</strong>. Immutable. Time-stamped. Contextual.</p>
+<h2 id="the-gap"><a class="header" href="#the-gap">The gap</a></h2>
+<p>If you’ve tried to build on top of these kinds of events, you've probably run into one of these:</p>
+<ul>
+<li><strong>Slow queries</strong> over millions of records because you're using a general-purpose SQL database</li>
+<li><strong>Too much ceremony</strong>, it’s painful to rebuild a timeline of actions (what happened, when, and in what order)</li>
+<li><strong>Custom tooling</strong> just to read back historical behavior</li>
+<li><strong>Mixing logs and storage</strong> (Kafka for ingest, S3 for storage, Athena for queries… and duct tape in between)</li>
+<li><strong>Hard to filter</strong>, trace, or correlate things once the data grows</li>
+</ul>
+<p>And if you work in <strong>AI or data science</strong>, you’ve probably dealt with brittle pipelines, long joins, and the question:</p>
+<blockquote>
+<p><em>“How do I get all the events for this user/session/date range — and trust the output?”</em></p>
+</blockquote>
+<h2 id="the-idea"><a class="header" href="#the-idea">The idea</a></h2>
+<p><strong>SnelDB</strong> was born to make event-driven storage and retrieval feel natural — for developers, data engineers, and model builders alike.</p>
+<p>It’s a database designed from scratch for:</p>
+<ul>
+<li><strong>Immutable, append-only data</strong></li>
+<li><strong>High-throughput ingest</strong></li>
+<li><strong>Fast filtering and replay</strong></li>
+<li><strong>Event-type-aware columnar storage</strong></li>
+<li><strong>Schema evolution without migrations</strong></li>
+<li><strong>Minimal operational overhead</strong></li>
+</ul>
+<p>You store events. You query them. You replay them. That’s it. It does the rest — segmenting, zoning, indexing, compaction — in the background.</p>
+<h2 id="why-not-just-use-x"><a class="header" href="#why-not-just-use-x">Why not just use X?</a></h2>
+<ul>
+<li><strong>Kafka?</strong> Great for streaming, not for historical querying.</li>
+<li><strong>PostgreSQL?</strong> Fantastic RDBMS, but not built for multi-billion-row event logs.</li>
+<li><strong>Snowflake?</strong> Powerful, but heavy and expensive for interactive filtering.</li>
+<li><strong>ClickHouse?</strong> Blazing fast, but not optimized for replay semantics and evolving schemas.</li>
+</ul>
+<p>SnelDB is a <strong>sweet spot</strong>: light like SQLite, fast like ClickHouse, event-native like Kafka — but simple to reason about.</p>
+<h2 id="built-for-builders"><a class="header" href="#built-for-builders">Built for builders</a></h2>
+<p>Whether you’re:</p>
+<ul>
+<li>Building product analytics dashboards from raw event logs</li>
+<li>Tracking user behavior over time, across sessions or contexts</li>
+<li>Training machine learning models on real-world event sequences</li>
+<li>Auditing critical flows or investigating anomalies</li>
+<li>Archiving time-stamped data for compliance or reporting</li>
+<li>Creating time-travel debugging tools or operational replay systems</li>
+</ul>
+<p>SnelDB gives you a clean, reliable foundation to work with immutable facts — fast to store, easy to query, and simple to reason about.</p>
+<p><strong>Simple to embed. Easy to query. Scales with clarity.</strong></p>
+<p>That’s why we built SnelDB.</p>
+<h2 id="stories-from-the-field"><a class="header" href="#stories-from-the-field">Stories from the field</a></h2>
+<p>To see why SnelDB exists, it helps to look at a few real situations where traditional tools fall short.</p>
+<ul>
+<li>
+<p><strong>Product analytics at scale</strong>
+A growing SaaS company wants to track how users move through their app.
+At first, PostgreSQL is fine. But soon the tables balloon into billions of rows. Queries slow to a crawl, analysts create brittle pipelines, and nobody fully trusts the numbers.
+With SnelDB, they could store clean, immutable event streams, filter them quickly by context, and build dashboards that actually stay fast as volume grows.</p>
+</li>
+<li>
+<p><strong>Machine learning pipelines</strong>
+A data science team trains fraud detection models using transaction histories.
+They struggle to rebuild consistent training sets: data is scattered across Kafka topics, S3 buckets, and ad-hoc SQL queries.
+With SnelDB, they can reliably fetch “all sequences of events leading to flagged outcomes,” ensuring reproducibility and shortening the path from raw logs to usable training data.</p>
+</li>
+<li>
+<p><strong>Auditing in regulated industries</strong>
+A fintech startup needs to prove to auditors what happened, when, and by whom.
+Traditional databases allow updates and deletes, which introduces doubt.
+SnelDB’s append-only design guarantees that past events remain untouched, making it straightforward to demonstrate compliance with minimal operational effort.</p>
+</li>
+<li>
+<p><strong>Operational debugging</strong>
+An infrastructure engineer gets paged at 2am for a production outage.
+Logs are rotated, metrics are sampled, and the picture is incomplete.
+With SnelDB, they can replay the exact sequence of system events leading up to the failure, reconstruct the timeline, and pinpoint the root cause without guesswork.</p>
+</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="what-is-sneldb"><a class="header" href="#what-is-sneldb">What is SnelDB?</a></h1>
+<p>SnelDB is a lightweight, high-performance database designed for <strong>immutable events</strong>.</p>
+<p>At its core, it’s a system where you can:</p>
+<ul>
+<li><strong>Store</strong> events in an append-only fashion</li>
+<li><strong>Query</strong> them efficiently by type, context, or time</li>
+<li><strong>Replay</strong> them in order to understand what happened</li>
+</ul>
+<p>That’s it. No updates. No deletes. Just fast, reliable access to a growing stream of facts.</p>
+<h2 id="not-your-average-database"><a class="header" href="#not-your-average-database">Not your average database</a></h2>
+<p>SnelDB is not a general-purpose relational database, a message broker, or a data lake.
+It’s a specialized tool focused on <strong>event-driven data</strong>:</p>
+<ul>
+<li>Unlike a <strong>relational database</strong>, SnelDB doesn’t model changing rows. It treats data as a log of things that happened.</li>
+<li>Unlike a <strong>message queue</strong>, it’s built for storage and querying, not just delivery.</li>
+<li>Unlike a <strong>data warehouse</strong>, it’s lightweight and easy to embed in everyday applications.</li>
+</ul>
+<p>Think of it as a <strong>database that embraces time and immutability as first-class concepts</strong>.</p>
+<h2 id="a-mental-model"><a class="header" href="#a-mental-model">A mental model</a></h2>
+<p>The easiest way to think about SnelDB is:</p>
+<ul>
+<li><strong>A notebook for your system’s history</strong>: every line is a fact, recorded once, never erased.</li>
+<li><strong>A timeline you can slice and filter</strong>: events are grouped by type, context, and time, so you can quickly zoom in.</li>
+<li><strong>A replay button</strong>: if you need to reconstruct a past sequence, you can ask SnelDB to play it back in order.</li>
+</ul>
+<h2 id="a-simple-example"><a class="header" href="#a-simple-example">A simple example</a></h2>
+<p>Imagine you’re building a payments system.</p>
+<p>You might store events like:</p>
+<pre><code class="language-json">{ "event_type": "payment_initiated", "context_id": "user_123",  "payload" : { "amount": 100 }, "timestamp": "2025-08-20T09:30:00Z" }
+{ "event_type": "payment_verified",  "context_id": "user_123",  "payload" : { "amount": 100 }, "timestamp": "2025-08-20T09:31:00Z" }
+{ "event_type": "payment_settled",   "context_id": "user_123", "payload" : { "amount": 100 }, "timestamp": "2025-08-20T09:35:00Z" }
+</code></pre>
+<p>Later, you might want to:</p>
+<ul>
+<li>Fetch all payment_initiated events from last week</li>
+<li>Replay all events for <code>user_123</code> in order</li>
+<li>Filter for verified payments over <code>$500</code></li>
+</ul>
+<p>And maybe even more:</p>
+<ul>
+<li>Compare the average settlement time for all payments last month</li>
+<li>Find all users who initiated a payment but never settled</li>
+<li>Retrieve the full sequence of events for a disputed transaction</li>
+<li>Generate a distribution of payment amounts across different countries</li>
+<li>Train a model using all past transactions, keeping the exact order of events intact</li>
+</ul>
+<p>In a traditional setup, you’d stitch together logs, SQL queries, and custom scripts.
+With SnelDB, these queries are <strong>first-class citizens</strong>. For example:</p>
+<pre><code class="language-sneldb">QUERY payment_initiated SINCE 2025-08-01
+</code></pre>
+<p>or:</p>
+<pre><code class="language-sneldb">REPLAY FOR user_123
+</code></pre>
+<p>even like:</p>
+<pre><code class="language-sneldb">QUERY payment_verified WHERE amount &gt; 500
+</code></pre>
+<p>Instead of thinking in terms of tables and joins, you think in terms of events.
+SnelDB is designed so the way you ask matches the way you think: “What happened? When? For whom?”</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="key-features-1"><a class="header" href="#key-features-1">Key Features</a></h1>
+<p>SnelDB is small in surface area but powerful in practice.
+Here are the highlights that make it different:</p>
+<h2 id="1-append-only-storage"><a class="header" href="#1-append-only-storage">1. Append-only storage</a></h2>
+<p>Events are <strong>immutable</strong>.
+Once stored, they’re never updated or deleted — which means:</p>
+<ul>
+<li>Perfect audit trails</li>
+<li>Predictable replay of past behavior</li>
+<li>No risk of hidden mutations breaking analysis</li>
+</ul>
+<h2 id="2-simple-human-readable-commands"><a class="header" href="#2-simple-human-readable-commands">2. Simple, human-readable commands</a></h2>
+<p>No SQL boilerplate. No obscure APIs.
+SnelDB has a compact command language that reads like plain English:</p>
+<pre><code class="language-sneldb">DEFINE payment FIELDS { "amount": "int", "status": "string" }
+STORE payment FOR user-123 PAYLOAD {"amount": 250, "status":"verified"}
+QUERY payment WHERE status="verified"
+REPLAY FOR user-123
+</code></pre>
+<p>Fast to learn. Easy to remember.
+Case-insensitive and JSON-native.</p>
+<h2 id="3-fast-queries-at-scale"><a class="header" href="#3-fast-queries-at-scale">3. Fast queries at scale</a></h2>
+<p>Under the hood, SnelDB uses an LSM-tree design with:</p>
+<ul>
+<li>Shards for parallelism</li>
+<li>Zones and filters to skip irrelevant data</li>
+<li>Compaction to keep reads efficient over time</li>
+</ul>
+<p>The result: queries stay snappy whether you have thousands or billions of events.</p>
+<h2 id="4-replay-built-in"><a class="header" href="#4-replay-built-in">4. Replay built in</a></h2>
+<p>You don’t just query — you can replay events in order:</p>
+<pre><code class="language-sneldb">REPLAY order_created FOR customer-42
+</code></pre>
+<p>This makes debugging, time-travel analysis, and sequence modeling natural parts of the workflow.</p>
+<h2 id="5-flexible-schemas"><a class="header" href="#5-flexible-schemas">5. Flexible schemas</a></h2>
+<p>SnelDB supports schema definitions per event type, with:</p>
+<ul>
+<li>Strict validation: payloads must match fields</li>
+<li>Optional fields: declared as string | null</li>
+<li>Clear errors when something doesn’t line up</li>
+</ul>
+<p>This keeps data trustworthy without slowing you down.</p>
+<h2 id="6-designed-for-ai--analytics"><a class="header" href="#6-designed-for-ai--analytics">6. Designed for AI &amp; analytics</a></h2>
+<p>Because events are ordered, immutable, and replayable, SnelDB is a natural fit for:</p>
+<ul>
+<li>Training models on real-world sequences</li>
+<li>Feeding pipelines with reproducible datasets</li>
+<li>Analyzing behavior over time without complex joins</li>
+<li>Auditing decision processes with confidence</li>
+</ul>
+<h2 id="7-lightweight--embeddable"><a class="header" href="#7-lightweight--embeddable">7. Lightweight &amp; embeddable</a></h2>
+<p>SnelDB is written in Rust with minimal dependencies.
+It runs anywhere — from a laptop dev setup to production servers — without heavyweight orchestration.</p>
+<p>You can drop it into your stack as a focused, reliable event database.</p>
+<h2 id="8-safety-by-design"><a class="header" href="#8-safety-by-design">8. Safety by design</a></h2>
+<p>SnelDB is built in Rust, which brings <strong>memory safety, thread safety, and performance</strong> without garbage collection.</p>
+<p>This means:</p>
+<ul>
+<li>No segfaults or memory leaks corrupting your data</li>
+<li>Concurrency without data races</li>
+<li>Predictable performance, even under load</li>
+</ul>
+<p>When you’re storing critical events, <strong>safety is not optional</strong> — and Rust helps guarantee it from the ground up.</p>
+<hr />
+<p>In short:
+SnelDB is designed to be small but sharp — a tool that does one thing well:
+<strong>make working with immutable events simple, fast, and reliable.</strong></p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="commands"><a class="header" href="#commands">Commands</a></h1>
+<p>SnelDB has a compact, human-friendly command language. <strong>Keywords are case-insensitive</strong> (<code>store</code>, <code>STORE</code>, <code>StOrE</code> all work). <strong>Event type names and context IDs are case-preserving</strong>.</p>
+<p>Core verbs:</p>
+<ul>
+<li><code>DEFINE</code> — declare a schema for an event type</li>
+<li><code>STORE</code> — append a new event with a JSON payload</li>
+<li><code>QUERY</code> — filter events</li>
+<li><code>REPLAY</code> — stream events in original order (per context, optionally per type)</li>
+<li><code>FLUSH</code> — force a memtable → segment flush</li>
+<li><code>PING</code> — health check</li>
+</ul>
+<p>If a command returns no rows, you’ll see: <code>No matching events found</code>.</p>
+<p>See pages below for full syntax and examples.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="syntax--operators"><a class="header" href="#syntax--operators">Syntax &amp; Operators</a></h1>
+<h2 id="command-forms"><a class="header" href="#command-forms">Command forms</a></h2>
+<pre><code class="language-sneldb">DEFINE &lt;event_type&gt; FIELDS { "key": "type", … }
+
+STORE  &lt;event_type&gt; FOR &lt;context_id&gt; PAYLOAD &lt;json_object&gt;
+
+QUERY  &lt;event_type&gt; [FOR &lt;context_id&gt;] [SINCE ] [WHERE ] [LIMIT ]
+
+REPLAY [&lt;event_type&gt;] FOR &lt;context_id&gt; [SINCE ]
+
+FLUSH
+</code></pre>
+<ul>
+<li><strong>Keywords</strong>: case-insensitive.</li>
+<li><strong>Literals</strong>:
+<ul>
+<li>Strings: double-quoted (<code>"NL"</code>, <code>"a string"</code>).</li>
+<li>Numbers: unquoted (<code>42</code>, <code>3</code>, <code>900</code>).</li>
+<li>Booleans: <code>true</code>, <code>false</code> (unquoted).</li>
+</ul>
+</li>
+<li><strong>WHERE operators</strong>: <code>=</code>, <code>!=</code>, <code>&gt;</code>, <code>&gt;=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>AND</code>, <code>OR</code>, <code>NOT</code>.</li>
+<li><strong>Precedence</strong>: <code>NOT</code> &gt; <code>AND</code> &gt; <code>OR</code>. Use parentheses sparingly by structuring conditions; (parentheses not required in current grammar).</li>
+<li><strong>LIMIT</strong>: positive integer; caps returned rows.</li>
+<li><strong>SINCE</strong>: ISO-8601 timestamp string (e.g., <code>2025-08-01T00:00:00Z</code>). When present, only events at/after this instant are considered.</li>
+</ul>
+<h3 id="mini-grammar-informal"><a class="header" href="#mini-grammar-informal">Mini-grammar (informal)</a></h3>
+<pre><code class="language-bash">expr      := cmp | NOT expr | expr AND expr | expr OR expr
+cmp       :=
+op        := = | != | &gt; | &gt;= | &lt; | &lt;=
+value     := string | number | boolean
+</code></pre>
+<h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
+<pre><code class="language-sneldb">DEFINE order_created AS 1 FIELDS {
+  id: "uuid",
+  amount: "float",
+  currency: "string"
+}
+
+STORE order_created FOR ctx_123 PAYLOAD {
+  "id": "a1-b2",
+  "amount": 42.5,
+  "currency": "EUR",
+  "tags": ["new","vip"],
+  "flag": true
+}
+
+QUERY order_created FOR "ctx_123" SINCE "2025-08-01T00:00:00Z"
+WHERE amount &gt;= 40 AND currency = "EUR"
+LIMIT 100
+
+REPLAY order_created FOR ctx_123 SINCE "2025-08-01T00:00:00Z"
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="define"><a class="header" href="#define">DEFINE</a></h1>
+<h2 id="purpose"><a class="header" href="#purpose">Purpose</a></h2>
+<p>Register the schema for an event type. <code>STORE</code> payloads must conform to this schema.</p>
+<h2 id="form"><a class="header" href="#form">Form</a></h2>
+<pre><code class="language-sneldb">DEFINE &lt;event_type:WORD&gt; [ AS &lt;version:NUMBER&gt; ] FIELDS { "key_1": "type_1", ... }
+</code></pre>
+<h2 id="field-pairs"><a class="header" href="#field-pairs">Field pairs</a></h2>
+<ul>
+<li>Keys can be STRING or WORD. The parser will quote WORD keys when converting to JSON.</li>
+<li>Values (types) can be:
+<ul>
+<li>STRING literals, for example: "int", "string", "string | null"</li>
+<li>ARRAY of strings to define an enum, for example: ["pro", "basic"]
+<ul>
+<li>Enum variants are case-sensitive ("Pro" != "pro")</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>Schema must be flat (no nested objects).</li>
+</ul>
+<h2 id="examples-1"><a class="header" href="#examples-1">Examples</a></h2>
+<pre><code class="language-sneldb">DEFINE order_created FIELDS { "order_id": "int", "status": "string" }
+</code></pre>
+<pre><code class="language-sneldb">DEFINE review FIELDS { rating: "int", verified: "bool" }
+</code></pre>
+<pre><code class="language-sneldb">DEFINE order_created AS 2 FIELDS { order_id: "int", status: "string", note: "string | null" }
+</code></pre>
+<pre><code class="language-sneldb">DEFINE subscription FIELDS { plan: ["pro", "basic"] }
+</code></pre>
+<h2 id="typical-validation-errors-raised-during-store"><a class="header" href="#typical-validation-errors-raised-during-store">Typical validation errors raised during STORE</a></h2>
+<ul>
+<li>No schema defined</li>
+<li>Missing field <code>status</code> in payload</li>
+<li>Field <code>order_id</code> is expected to be one of <code>int</code>, but got <code>String</code></li>
+<li>Payload contains fields not defined in schema: invalid_field</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="store"><a class="header" href="#store">Store</a></h1>
+<h2 id="purpose-1"><a class="header" href="#purpose-1">Purpose</a></h2>
+<p>Append an event for a specific context.</p>
+<h2 id="form-1"><a class="header" href="#form-1">Form</a></h2>
+<pre><code class="language-sneldb">STORE &lt;event_type:WORD&gt; FOR &lt;context_id:WORD or STRING&gt; PAYLOAD {"key":"value", ...}
+</code></pre>
+<h2 id="constraints"><a class="header" href="#constraints">Constraints</a></h2>
+<ul>
+<li><code>&lt;context_id&gt;</code> can be a WORD (example: user-1) or a quoted STRING.</li>
+<li><code>PAYLOAD</code> must be a flat JSON object (no nested objects).</li>
+<li><code>PAYLOAD</code> must follow schema defined using <code>DEFINE</code> command.</li>
+</ul>
+<h2 id="examples-2"><a class="header" href="#examples-2">Examples</a></h2>
+<pre><code class="language-sneldb">STORE order_created FOR customer-1 PAYLOAD {"order_id":123,"status":"confirmed"}
+</code></pre>
+<pre><code class="language-sneldb">STORE review FOR "user:ext:42" PAYLOAD {"rating":5,"verified":true}
+</code></pre>
+<pre><code class="language-sneldb">STORE login FOR user-7 PAYLOAD {"device":"android"}
+</code></pre>
+<h2 id="behavior"><a class="header" href="#behavior">Behavior</a></h2>
+<ul>
+<li>Validates payload against the schema of the event type.</li>
+<li>Rejects missing or extra fields and type mismatches.</li>
+<li>Durability-first: once acknowledged, the event will survive crashes.</li>
+</ul>
+<h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
+<ul>
+<li><code>&lt;event_type&gt;</code> cannot be empty</li>
+<li><code>&lt;context_id&gt;</code> cannot be empty</li>
+<li>Schema validation errors (see <code>DEFINE</code>)</li>
+<li>Overload/backpressure (rare): Shard is busy, try again later</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="query"><a class="header" href="#query">QUERY</a></h1>
+<h2 id="purpose-2"><a class="header" href="#purpose-2">Purpose</a></h2>
+<p>Filter events by type, optionally by context, time, predicate, and limit.</p>
+<h2 id="form-2"><a class="header" href="#form-2">Form</a></h2>
+<pre><code class="language-sneldb">QUERY &lt;event_type:WORD&gt; [ FOR &lt;context_id:WORD or STRING&gt; ] [ SINCE timestamp:STRING ] [ WHERE  ] [ LIMIT  ]
+</code></pre>
+<h2 id="examples-3"><a class="header" href="#examples-3">Examples</a></h2>
+<pre><code class="language-sneldb">QUERY order_created WHERE status="confirmed"
+</code></pre>
+<pre><code class="language-sneldb">QUERY order_created WHERE status=confirmed
+</code></pre>
+<pre><code class="language-sneldb">QUERY order_created WHERE id &gt; 13 AND id &lt; 15
+</code></pre>
+<pre><code class="language-sneldb">QUERY order_created WHERE country!="NL"
+</code></pre>
+<pre><code class="language-sneldb">QUERY order_created WHERE country="NL" OR country="FR"
+</code></pre>
+<pre><code class="language-sneldb">QUERY login FOR user-1 WHERE device="android"
+</code></pre>
+<pre><code class="language-sneldb">QUERY payment SINCE "2025-08-01T00:00:00Z" WHERE amount &gt;= 500 LIMIT 100
+</code></pre>
+<h2 id="notes"><a class="header" href="#notes">Notes</a></h2>
+<ul>
+<li><code>SINCE</code> is a STRING timestamp.</li>
+<li>Works across in-memory and on-disk segments.</li>
+<li>If nothing matches, returns: No matching events found.</li>
+</ul>
+<h2 id="gotchas"><a class="header" href="#gotchas">Gotchas</a></h2>
+<ul>
+<li>Field names used in <code>WHERE</code> must exist in the schema for that event type.</li>
+<li>Strings must be double-quoted when you need explicit string literals.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="replay"><a class="header" href="#replay">REPLAY</a></h1>
+<h2 id="purpose-3"><a class="header" href="#purpose-3">Purpose</a></h2>
+<p>Stream events back in their original append order for a context, optionally restricted to one event type.</p>
+<h2 id="form-3"><a class="header" href="#form-3">Form</a></h2>
+<pre><code class="language-sneldb">REPLAY [ &lt;event_type:WORD&gt; ] FOR &lt;context_id:WORD or STRING&gt; [ SINCE timestamp:STRING ]
+</code></pre>
+<h2 id="variants"><a class="header" href="#variants">Variants</a></h2>
+<ul>
+<li>All event types:</li>
+</ul>
+<pre><code class="language-sneldb">REPLAY FOR &lt;context_id&gt;
+</code></pre>
+<ul>
+<li>Only specific event types:</li>
+</ul>
+<pre><code class="language-sneldb">REPLAY &lt;event_type&gt; FOR &lt;context_id&gt;
+</code></pre>
+<h2 id="examples-4"><a class="header" href="#examples-4">Examples</a></h2>
+<pre><code class="language-sneldb">REPLAY FOR alice
+</code></pre>
+<pre><code class="language-sneldb">REPLAY order_shipped FOR customer-99
+</code></pre>
+<pre><code class="language-sneldb">REPLAY FOR "user:ext:42" SINCE "2025-08-20T09:00:00Z"
+</code></pre>
+<h2 id="behavior-1"><a class="header" href="#behavior-1">Behavior</a></h2>
+<ul>
+<li>Routes to the shard owning the context ID.</li>
+<li>Preserves original order.</li>
+<li>If nothing matches: No matching events found.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="flush"><a class="header" href="#flush">Flush</a></h1>
+<h2 id="purpose-4"><a class="header" href="#purpose-4">Purpose</a></h2>
+<p>Force a memtable flush into an immutable segment.</p>
+<h2 id="form-4"><a class="header" href="#form-4">Form</a></h2>
+<pre><code class="language-sneldb">FLUSH
+</code></pre>
+<h2 id="notes-1"><a class="header" href="#notes-1">Notes</a></h2>
+<p>Useful for tests, checkpoints, or when you want on-disk segments immediately. Not required for correctness; ingestion continues during flush.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="design"><a class="header" href="#design">Design</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="overview"><a class="header" href="#overview">Overview</a></h1>
+<h2 id="what-this-section-is"><a class="header" href="#what-this-section-is">What this section is</a></h2>
+<ul>
+<li>A short tour of how SnelDB works inside: the big components and how data flows between them.</li>
+<li>Enough context for contributors to find their bearings without reading the whole codebase first.</li>
+</ul>
+<h2 id="the-big-picture"><a class="header" href="#the-big-picture">The big picture</a></h2>
+<ul>
+<li>Commands enter via frontends (TCP/UNIX/HTTP) and are parsed, validated, and dispatched.</li>
+<li>Writes go through a WAL for durability, land in an in-memory table, and get flushed into immutable segments on disk.</li>
+<li>Reads (query/replay) scan the in-memory table and segments, skipping as much as possible using zone metadata and filters.</li>
+<li>Background compaction keeps segments tidy so read performance stays predictable.</li>
+<li>Sharding by <code>context_id</code> spreads work and makes per-context replay cheap.</li>
+</ul>
+<h2 id="lifecycle-at-a-glance"><a class="header" href="#lifecycle-at-a-glance">Lifecycle at a glance</a></h2>
+<ul>
+<li><code>DEFINE</code>: register or update the schema for an event type (used to validate STORE).</li>
+<li><code>STORE</code>: validate payload → append to WAL → apply to MemTable → later flush to a new segment.</li>
+<li><code>QUERY</code>: fan out to shards, prune zones and project only needed columns, evaluate predicates, merge results.</li>
+<li><code>REPLAY</code>: route to the shard for the context_id, stream events in original append order (optionally narrowed by event type).</li>
+<li><code>FLUSH</code>: force a MemTable flush to produce a new immutable segment (useful in tests/checkpoints).</li>
+</ul>
+<h2 id="what-runs-where"><a class="header" href="#what-runs-where">What runs where</a></h2>
+<ul>
+<li>Commands and flow control: command/parser, command/dispatcher, command/handlers.</li>
+<li>Storage engine: engine/core/* for WAL, memory, segments, zones, filters; engine/store, engine/query, engine/replay.</li>
+<li>Sharding and concurrency: engine/shard/* (manager, worker, messages).</li>
+<li>Background work: engine/compactor/* for segment merging and cleanup.</li>
+<li>Wiring and I/O: frontend/_ listeners; shared/_ for config, responses, logging.</li>
+</ul>
+<h2 id="key-guarantees-high-level"><a class="header" href="#key-guarantees-high-level">Key guarantees (high level)</a></h2>
+<ul>
+<li>Durability once a <code>STORE</code> is acknowledged (WAL first).</li>
+<li>Immutability of events and on-disk segments (compaction replaces whole files, never edits in place).</li>
+<li>Ordered replay per <code>context_id</code>.</li>
+<li>Schema-validated payloads (strict by default, optional fields via union types).</li>
+<li>Bounded memory via shard-local backpressure.</li>
+</ul>
+<h2 id="what-this-section-doesnt-do"><a class="header" href="#what-this-section-doesnt-do">What this section doesn’t do</a></h2>
+<ul>
+<li>It won’t dive into file formats or algorithmic details; those live in the focused pages that follow.</li>
+<li>It won’t prescribe ops/production practices; see the development/operations parts of the book.</li>
+</ul>
+<h2 id="how-to-use-this-section"><a class="header" href="#how-to-use-this-section">How to use this section</a></h2>
+<p>Skim this page, then jump to the piece you’re touching:</p>
+<ul>
+<li><a href="design/../commands/">Changing parsing or adding a command</a></li>
+<li><a href="design/./storage_engine.html">Touching durability/flush/segment files</a></li>
+<li><a href="design/./sharding.html">Threading, channels, and routing</a></li>
+<li><a href="design/./query_replay.html">Anything read-path related</a></li>
+<li><a href="design/./compaction.html">Background merging/policies</a></li>
+<li><a href="design/./infrastructure.html">Config, responses, logging, tests</a></li>
+</ul>
+<p>That’s the map. Next pages keep the same tone and size: just enough to guide you to the right code.</p>
+<h2 id="core-concepts"><a class="header" href="#core-concepts">Core concepts</a></h2>
+<ul>
+<li>Event: time-stamped, immutable fact with a typed payload</li>
+<li>Event type &amp; schema: defined via DEFINE, validates payload shape</li>
+<li>Context: groups related events under a context_id</li>
+<li>Shard: independent pipeline — WAL → MemTable → Flush → Segments</li>
+<li>WAL: per-shard durability log; replayed on startup</li>
+<li>MemTable: in-memory buffer; flushed when full</li>
+<li>Segment: immutable on-disk unit with columns, zones, filters, indexes</li>
+<li>Zone: fixed-size block inside a segment with pruning metadata</li>
+<li>Compaction: merges small segments to keep reads predictable</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="storage-engine"><a class="header" href="#storage-engine">Storage Engine</a></h1>
+<h2 id="overview-1"><a class="header" href="#overview-1">Overview</a></h2>
+<p>The storage engine turns incoming events into durable, immutable data you can query quickly. It’s built around append-only writes, in-memory buffering, and on-disk segments that are efficient to scan and easy to skip.</p>
+<h2 id="core-components"><a class="header" href="#core-components">Core Components</a></h2>
+<ul>
+<li><strong>WAL (write-ahead log)</strong>: Per-shard durability log. Every accepted event is appended here first.</li>
+<li><strong>MemTable</strong>: In-memory buffer for recent events. Fast inserts; swapped out when full.</li>
+<li><strong>Flush worker</strong>: Converts a full MemTable into an immutable on-disk segment in the background.</li>
+<li><strong>Segments</strong>: On-disk building blocks (columns, zone metadata, filters, lightweight indexes).</li>
+<li><strong>Compactor</strong> (covered later): Merges small segments into larger ones to keep reads predictable.</li>
+</ul>
+<h2 id="write-path-at-a-glance"><a class="header" href="#write-path-at-a-glance">Write Path (At a Glance)</a></h2>
+<ol>
+<li>Validate payload against the event type schema.</li>
+<li>Append to the WAL (durability point).</li>
+<li>Apply to the MemTable (fast in-memory structure).</li>
+<li>When the MemTable hits a threshold, swap it out and enqueue a background flush.</li>
+<li>Flush worker writes a new segment and publishes it atomically.</li>
+</ol>
+<p>See the diagram below:</p>
+<p><img src="design/storage.svg" alt="Write path" /></p>
+<h2 id="write-path-in-depth"><a class="header" href="#write-path-in-depth">Write Path (In Depth)</a></h2>
+<h3 id="0-validate-the-event"><a class="header" href="#0-validate-the-event">0) Validate the event</a></h3>
+<ul>
+<li><strong>What</strong>: Check the incoming payload against the registered schema for its <code>event_type</code>.</li>
+<li><strong>Why</strong>: Ensures only well-formed data enters the system so downstream files and indexes remain consistent.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-json">{
+  "timestamp": 1700000000,
+  "event_type": "signup",
+  "context_id": "user-42",
+  "payload": { "plan": "pro", "country": "US" }
+}
+</code></pre>
+<p>Equivalent command:</p>
+<pre><code class="language-sneldb">STORE signup FOR user-42 PAYLOAD {"plan":"pro","country":"US"}
+</code></pre>
+<p>Validation ensures required fields exist and types are correct (for example, the <code>event_type</code> is known and a "plan" is provided in the payload).</p>
+<h3 id="1-append-to-the-wal-durability-point"><a class="header" href="#1-append-to-the-wal-durability-point">1) Append to the WAL (durability point)</a></h3>
+<ul>
+<li><strong>What</strong>: Append the validated event to the per-shard Write-Ahead Log (WAL).</li>
+<li><strong>Why</strong>: Once the append returns, the event will survive a crash. On restart, the system replays WAL entries to rebuild in-memory state and complete any interrupted flushes.</li>
+<li><strong>Notes</strong>:
+<ul>
+<li>WAL records are lightweight, line-oriented appends (JSON-serialized per line).</li>
+<li>WAL files rotate in sync with the MemTable flush threshold (<code>engine.flush_threshold</code>), so replay windows are bounded by flush points. After a successful flush, older WAL files up to that cutoff can be pruned.</li>
+<li>Behavior is tunable via config: <code>[wal] enabled, dir, buffered, buffer_size, flush_each_write, fsync, fsync_every_n</code> and <code>[engine] flush_threshold</code>.</li>
+</ul>
+</li>
+</ul>
+<p>Crash safety example:</p>
+<ul>
+<li>If the process crashes after the WAL append but before the event hits memory, recovery will re-insert it into the MemTable on startup.</li>
+</ul>
+<h3 id="2-insert-into-the-memtable-fast-in-memory-apply"><a class="header" href="#2-insert-into-the-memtable-fast-in-memory-apply">2) Insert into the MemTable (fast in-memory apply)</a></h3>
+<ul>
+<li><strong>What</strong>: Place the event into the in-memory, append-friendly, queryable buffer (MemTable).</li>
+<li><strong>Why</strong>: Absorb writes in memory to batch them into large, sequential segment writes (avoids random I/O), maintain backpressure with bounded memory, and maximize ingest throughput. As a secondary benefit, new events are immediately visible to queries.</li>
+<li><strong>Behavior</strong>:
+<ul>
+<li>The MemTable is sized by <code>flush_threshold</code> (config). When it reaches capacity, it triggers a swap and a background flush.</li>
+<li>Inserts are grouped by context so the flusher can scan them quickly.</li>
+</ul>
+</li>
+</ul>
+<p>Small example:</p>
+<ul>
+<li><code>flush_threshold = 4</code></li>
+<li>Incoming events (in order): A, B, C, D, E
+<ul>
+<li>A, B, C, D go into the active MemTable. After D, the MemTable is full.</li>
+<li>A background flush is enqueued for these four; a fresh MemTable becomes active.</li>
+<li>E enters the new MemTable immediately (no blocking on the background flush).</li>
+</ul>
+</li>
+</ul>
+<h3 id="3-swap-and-enqueue-a-background-flush"><a class="header" href="#3-swap-and-enqueue-a-background-flush">3) Swap and enqueue a background flush</a></h3>
+<ul>
+<li><strong>What</strong>: When the active MemTable is full, it’s atomically swapped for a fresh, empty one, and the full snapshot is queued for flushing.</li>
+<li><strong>Why</strong>: Writers remain responsive (no long I/O in the foreground) and the system maintains bounded memory.</li>
+<li><strong>Details</strong>:
+<ul>
+<li>The passive MemTable (now immutable) is handed off to the flush worker.</li>
+<li>Writes proceed into the newly created active MemTable.</li>
+</ul>
+</li>
+</ul>
+<h3 id="4-flush-worker-writes-a-new-immutable-segment"><a class="header" href="#4-flush-worker-writes-a-new-immutable-segment">4) Flush worker writes a new immutable segment</a></h3>
+<ul>
+<li><strong>What</strong>: The background worker turns the passive MemTable into an on-disk segment directory (for example, <code>segment-00042/</code>).</li>
+<li>Inside the segment:
+<ul>
+<li><strong>Column files</strong>: One file per field, optimized for sequential appends and later memory-mapped (mmap) access. Naming: <code>&lt;uid&gt;_&lt;field&gt;.col</code>. Example: <code>u01_timestamp.col</code>, <code>u01_event_type.col</code>, <code>u01_context_id.col</code>, <code>u01_plan.col</code>, <code>u01_country.col</code>. Where <code>&lt;uid&gt;</code> is defiened per event type.</li>
+<li><strong>Zone metadata</strong>: Per-zone min/max timestamps, row ranges, and presence stats for pruning.</li>
+<li><strong>Filters</strong>: Compact structures (for example, XOR filters) for “definitely-not-here” checks before touching columns.</li>
+<li><strong>Offsets/Index</strong>: Jump tables and per-field offsets (<code>.zf</code> files) to locate values efficiently.</li>
+</ul>
+</li>
+<li><strong>Publication</strong>: Segment creation is atomic at the directory level; once complete, readers can discover and scan it.</li>
+</ul>
+<p>See the diagram below:</p>
+<p><img src="design/uid.svg" alt="UID storage example" /></p>
+<p>Sizing example:</p>
+<ul>
+<li><code>flush_threshold = 32_768</code></li>
+<li><code>events_per_zone = 2_048</code></li>
+<li>A full flush of 32,768 events creates exactly 16 zones. Each zone has its own metadata and contributes field values to the filter files. Larger <code>events_per_zone</code> values reduce metadata overhead but offer coarser pruning; smaller values increase pruning precision at the cost of more metadata.</li>
+</ul>
+<h3 id="5-cleanup-and-wal-compaction"><a class="header" href="#5-cleanup-and-wal-compaction">5) Cleanup and WAL compaction</a></h3>
+<ul>
+<li><strong>What</strong>: After a successful flush, the system can prune or rotate old WAL files up to a cutoff corresponding to flushed data.</li>
+<li><strong>Why</strong>: Keeps recovery time short and disk usage bounded.</li>
+</ul>
+<h3 id="end-to-end-write-example"><a class="header" href="#end-to-end-write-example">End-to-end write example</a></h3>
+<ol>
+<li>Client sends <code>STORE signup ...</code> with a valid payload.</li>
+<li>The engine validates the event against the <code>signup</code> schema.</li>
+<li>The event is appended to the WAL for shard 3 (durability).</li>
+<li>The event is inserted into shard 3’s active MemTable.</li>
+<li>When the MemTable reaches <code>flush_threshold</code>, it is swapped and the old one is queued for the background flush.</li>
+<li>The flush worker writes <code>segment-00137/</code> with column files, 16 zones (if 32,768/2,048), zone metadata, XOR filters, and offsets/index.</li>
+<li>Once published, queries immediately see the segment alongside any newer in-memory events.</li>
+<li>The WAL up to (and including) the flushed range is now safe to compact or rotate.</li>
+</ol>
+<h3 id="failure-model-write-path"><a class="header" href="#failure-model-write-path">Failure model (write path)</a></h3>
+<ul>
+<li><strong>Crash before WAL append</strong>: The event is lost (not acknowledged).</li>
+<li><strong>Crash after WAL append but before MemTable insert</strong>: The event is recovered from the WAL and re-applied on startup.</li>
+<li><strong>Crash after MemTable insert but before flush</strong>: The event is not yet in a segment, but it is durable in the WAL. On restart, WAL replay restores it to the MemTable; if a swap occurred and a passive MemTable existed, its contents are reconstructed from WAL as well. No data loss; no duplicate segments.</li>
+<li><strong>Crash during flush</strong>: The WAL still contains the flushed events; on restart, the system replays or completes the flush. Partially written segments are ignored until a valid, fully published segment is present.</li>
+</ul>
+<h3 id="tuning-the-write-path"><a class="header" href="#tuning-the-write-path">Tuning the write path</a></h3>
+<ul>
+<li><strong>shards</strong>: More shards increase parallelism of WAL, MemTable, and flush pipelines (at the cost of more intense CPU and RAM usage and more files and directories).</li>
+<li><strong><code>flush_threshold</code></strong>: Controls MemTable size. Higher values reduce flush frequency (bigger segments) but increase peak memory and WAL replay cost.</li>
+<li><strong><code>events_per_zone</code></strong>: Smaller values improve pruning for reads but increase metadata and filter counts. Pick based on query selectivity and typical field cardinalities.</li>
+</ul>
+<h2 id="durability--recovery"><a class="header" href="#durability--recovery">Durability &amp; Recovery</a></h2>
+<ul>
+<li>Covered in the write path: WAL append is the durability point; replay restores MemTables; WAL rotation keeps recovery bounded. See Failure model above.</li>
+</ul>
+<h2 id="backpressure--safety"><a class="header" href="#backpressure--safety">Backpressure &amp; Safety</a></h2>
+<ul>
+<li><strong>Bounded channels</strong> between components provide backpressure under load (writers slow down instead of exhausting memory).</li>
+<li><strong>Async workers</strong> (flush and compaction) are throttled so foreground writes and reads stay responsive.</li>
+</ul>
+<p>This is the spine of the engine: durable append, fast memory, immutable segments with rich metadata, and just enough background work to keep reads snappy as data grows.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="query-and-replay"><a class="header" href="#query-and-replay">Query and Replay</a></h1>
+<h2 id="overview-2"><a class="header" href="#overview-2">Overview</a></h2>
+<p>SnelDB reads come in two flavors:</p>
+<ul>
+<li><code>QUERY</code>: filter one event type by predicates, time, and optional <code>context_id</code>; may span shards.</li>
+<li><code>REPLAY</code>: stream all events for one <code>context_id</code> (optionally one type) in original append order; single shard.</li>
+</ul>
+<p>Both use the same internals as the write path: in‑memory MemTable, on‑disk immutable segments, per‑segment zones, and compact per‑field filters.</p>
+<h2 id="when-to-use-which"><a class="header" href="#when-to-use-which">When to Use Which</a></h2>
+<ul>
+<li>Use <code>QUERY</code> for analytics, debugging slices, and ad‑hoc filters across many contexts.</li>
+<li>Use <code>REPLAY</code> to rebuild state or audit the exact sequence for one context.</li>
+</ul>
+<h3 id="examples-5"><a class="header" href="#examples-5">Examples</a></h3>
+<ul>
+<li>
+<p>QUERY</p>
+<ul>
+<li>Investigate: "All <code>order_created</code> over $100 in the last 24h across all users"</li>
+<li>Dashboard: "Errors by type this week"</li>
+<li>Debug: "Sessions with <code>status = 'pending'</code> and <code>retries &gt; 3</code>"</li>
+</ul>
+</li>
+<li>
+<p>REPLAY</p>
+<ul>
+<li>Operational debugging (incident timeline)
+<pre><code class="language-sneldb">REPLAY system_event FOR host-123 SINCE "2024-05-01T00:00:00Z"
+</code></pre>
+</li>
+<li>Auditing/compliance (full account trail)
+<pre><code class="language-sneldb">REPLAY FOR account-42 SINCE "2024-01-01T00:00:00Z"
+</code></pre>
+</li>
+<li>ML pipelines (rebuild a customer’s transaction sequence)
+<pre><code class="language-sneldb">REPLAY transaction FOR user-456 SINCE "2023-01-01T00:00:00Z"
+</code></pre>
+</li>
+<li>Product journey (single user or session in order)
+<pre><code class="language-sneldb">REPLAY FOR user-123
+</code></pre>
+</li>
+</ul>
+</li>
+</ul>
+<h2 id="command-cheatsheet"><a class="header" href="#command-cheatsheet">Command Cheatsheet</a></h2>
+<pre><code class="language-sneldb">QUERY &lt;event_type&gt; [FOR &lt;context_id&gt;] [SINCE &lt;ts&gt;] [WHERE &lt;expr&gt;] [LIMIT &lt;n&gt;]
+</code></pre>
+<pre><code class="language-sneldb">REPLAY [&lt;event_type&gt;] FOR &lt;context_id&gt; [SINCE &lt;ts&gt;]
+</code></pre>
+<p>More examples: <a href="design/../commands/query.html">Query</a> and <a href="design/../commands/replay.html">Replay</a></p>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h2>
+<h3 id="query-stepbystep"><a class="header" href="#query-stepbystep">QUERY (step‑by‑step)</a></h3>
+<ol>
+<li>Parse and validate inputs.</li>
+<li>Plan shard tasks (fan‑out unless narrowed by <code>context_id</code>).</li>
+<li>Per shard, scan MemTable and pick relevant segments.</li>
+<li>Prune zones by time and per‑field filters; read only needed columns.</li>
+<li>Evaluate predicates and apply <code>WHERE</code> condition.</li>
+<li>Merge shard results; apply global <code>LIMIT</code> if set.</li>
+</ol>
+<h3 id="replay-stepbystep"><a class="header" href="#replay-stepbystep">REPLAY (step‑by‑step)</a></h3>
+<ol>
+<li>Parse and validate inputs.</li>
+<li>Route to the shard owning the <code>context_id</code>.</li>
+<li>Scan MemTable and relevant segments for that context.</li>
+<li>Apply optional <code>event_type</code> and <code>SINCE</code> filters.</li>
+<li>Stream events in original append order.</li>
+</ol>
+<p>See the diagram:</p>
+<p><img src="design/query.svg" alt="Query and Replay flow" /></p>
+<h2 id="what-you-get"><a class="header" href="#what-you-get">What You Get</a></h2>
+<ul>
+<li><strong>Visibility</strong>: fresh writes are visible from <code>MemTable</code> before flush.</li>
+<li><strong>Ordering</strong>: <code>REPLAY</code> preserves append order (single shard). <code>QUERY</code> has no global ordering unless you explicitly sort at merge (costly) or scope the query narrowly.</li>
+<li><strong>LIMIT</strong> (<code>QUERY</code>): short‑circuit per shard when possible; always cap globally during merge.</li>
+</ul>
+<h2 id="performance-tips"><a class="header" href="#performance-tips">Performance Tips</a></h2>
+<ul>
+<li><strong>Prune early</strong>: favor <code>event_type</code>, <code>context_id</code>, and <code>SINCE</code> to skip zones fast.</li>
+<li><strong>Shard wisely</strong>: more shards increase scan parallelism but cost more on fan‑out.</li>
+</ul>
+<h2 id="tuning"><a class="header" href="#tuning">Tuning</a></h2>
+<ul>
+<li><code>events_per_zone</code>: smaller zones = better pruning, more metadata; larger zones = fewer skips, less metadata.</li>
+<li><code>flush_threshold</code>: affects how much is in memory vs on disk, and segment cadence.</li>
+<li>Shard count: match to CPU and expected concurrency.</li>
+</ul>
+<h2 id="invariants"><a class="header" href="#invariants">Invariants</a></h2>
+<ul>
+<li>Immutability: events and segments are never edited in place.</li>
+<li>Single‑shard replay: each <code>context_id</code> maps to exactly one shard.</li>
+<li>Schema validity: stored payloads conform to their event type schema.</li>
+<li>Atomic publication: new segments become visible all‑or‑nothing.</li>
+</ul>
+<h2 id="further-reading"><a class="header" href="#further-reading">Further Reading</a></h2>
+<ul>
+<li><a href="design/./storage_engine.html">Read flow overview</a></li>
+<li><a href="design/../architecture/segments_zones.html">Segments and zones</a></li>
+</ul>
+<p>SnelDB’s read path is simple to reason about: prune aggressively, read only what you need, and merge efficiently—whether you’re slicing across many contexts or replaying one.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="sharding"><a class="header" href="#sharding">Sharding</a></h1>
+<h2 id="what-it-is-1"><a class="header" href="#what-it-is-1">What it is</a></h2>
+<p>Sharding is how SnelDB scales ingestion and keeps per-context replay efficient. Instead of one big pipeline, the system runs multiple shard workers side by side. Each <code>context_id</code> is deterministically mapped to a shard, so all events for that context live together.</p>
+<h2 id="core-pieces"><a class="header" href="#core-pieces">Core pieces</a></h2>
+<ul>
+<li>Shard Manager — owns all shards and routes work to them by hashing <code>context_id</code>.</li>
+<li>Shard (worker) — long‑lived task that owns a WAL, active/passive MemTables, a flush queue, and the shard’s segment list. Processes Store, Query, Replay, and Flush messages.</li>
+<li>Messages — typed messages delivered to each shard: Store, Query, Replay, Flush.</li>
+<li>Backpressure — each shard has a bounded mailbox; when it fills, senders wait. Hot shards slow down independently without affecting others.</li>
+</ul>
+<p><img src="design/sharding.svg" alt="Sharding overview" /></p>
+<h2 id="how-it-works-1"><a class="header" href="#how-it-works-1">How it works</a></h2>
+<ul>
+<li>
+<p>Startup</p>
+<ul>
+<li>The manager creates <code>N</code> shards (configurable) and starts one worker per shard.</li>
+<li>Each shard ensures its storage directories exist, recovers its MemTable from its WAL, loads existing segment IDs, and starts background services (flush, compaction).</li>
+</ul>
+</li>
+<li>
+<p>Store</p>
+<ul>
+<li>Hash <code>context_id</code> → pick shard → send Store.</li>
+<li>The shard appends to its WAL, updates the in‑memory MemTable, and, when the MemTable reaches its threshold, rotates it to a passive buffer and enqueues a flush.</li>
+</ul>
+</li>
+<li>
+<p>Query</p>
+<ul>
+<li>Broadcast to all shards. Each shard scans its in‑memory state and on‑disk segments and returns matches. Results are merged.</li>
+</ul>
+</li>
+<li>
+<p>Replay</p>
+<ul>
+<li>Single‑shard. The manager routes to the shard that owns the <code>context_id</code>. The shard streams events in order for that context.</li>
+</ul>
+</li>
+<li>
+<p>Flush</p>
+<ul>
+<li>Manual <code>Flush</code> is broadcast to all shards. Each shard rotates its active MemTable and enqueues a flush to create a new segment.</li>
+<li>Automatic flush also occurs when a shard’s MemTable reaches its configured threshold during ingestion.</li>
+</ul>
+</li>
+</ul>
+<h2 id="why-this-design"><a class="header" href="#why-this-design">Why this design</a></h2>
+<ul>
+<li><strong>Locality</strong>: all events for a <code>context_id</code> stay on one shard → fast, single‑shard replay.</li>
+<li><strong>Parallelism</strong>: shards work independently → ingestion and queries scale with cores.</li>
+<li><strong>Isolation</strong>: hot shards apply backpressure locally without stalling the whole system.</li>
+<li><strong>Simplicity</strong>: shards don’t coordinate directly; only query results are merged.</li>
+</ul>
+<h2 id="invariants-1"><a class="header" href="#invariants-1">Invariants</a></h2>
+<ul>
+<li>Same <code>context_id</code> → always the same shard.</li>
+<li>Within a shard, event order per <code>context_id</code> is preserved.</li>
+<li>Shards never share mutable state; cross‑shard communication happens via message passing and result merging.</li>
+</ul>
+<h2 id="operational-notes"><a class="header" href="#operational-notes">Operational notes</a></h2>
+<ul>
+<li>Number of shards controls parallelism; increase to utilize more CPU cores.</li>
+<li>Flush threshold tunes memory usage vs. write amplification; lower values flush more often.</li>
+<li>On startup, shards recover from their WALs before serving traffic; compaction runs in the background to control segment growth.</li>
+</ul>
+<h2 id="further-reading-1"><a class="header" href="#further-reading-1">Further Reading</a></h2>
+<ul>
+<li>A deep dive into WAL or flush internals (see <a href="design/./storage_engine.html">Storage Engine</a>).</li>
+<li>Query planning details (see <a href="design/./query_replay.html">Query &amp; Replay</a>).</li>
+<li>Compaction policies (see <a href="design/./compaction.html">Compaction</a>).</li>
+</ul>
+<p>Sharding is the concurrency backbone: it divides the work, keeps replay cheap, and prevents overload by applying backpressure shard by shard.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="infrastructure"><a class="header" href="#infrastructure">Infrastructure</a></h1>
+<p>SnelDB isn’t just a storage engine — it needs the scaffolding around it to feel safe, predictable, and easy to integrate. That’s what the infrastructure layer provides.</p>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<p>Every system needs a single source of truth for its settings.
+SnelDB loads a configuration once at startup and makes it available everywhere. This means:</p>
+<ul>
+<li>Consistency — all components (server, engine, WAL, logging) read from the same snapshot.</li>
+<li>Flexibility — settings can be changed through a config file or environment variable without recompiling.</li>
+<li>Safety — startup fails fast if something critical is missing or invalid.</li>
+</ul>
+<p>Think of it as the contract between how you run SnelDB and how the engine behaves.</p>
+<h2 id="logging"><a class="header" href="#logging">Logging</a></h2>
+<p>Logs are the “black box recorder” of SnelDB. They serve two purposes:</p>
+<ul>
+<li>For operators: real-time feedback in the console (levels like info/debug/warn).</li>
+<li>For long-term visibility: structured logs rotated daily on disk.</li>
+</ul>
+<p>The philosophy is simple: logs should be human-readable, lightweight, and always available when you need to explain “what just happened.”</p>
+<h2 id="responses"><a class="header" href="#responses">Responses</a></h2>
+<p>Every command produces a response. SnelDB keeps them minimal and predictable:</p>
+<ul>
+<li>A clear status code (OK, BadRequest, NotFound, InternalError).</li>
+<li>A message for humans.</li>
+<li>A body that can be either lines (for CLI-like tools) or structured JSON arrays (for programmatic use).</li>
+</ul>
+<p>Two renderers handle the output: one friendly for terminals, one clean for machines. This way, SnelDB speaks both languages without complicating the core.</p>
+<h2 id="why-it-matters"><a class="header" href="#why-it-matters">Why it matters</a></h2>
+<p>These pieces aren’t “extra code” — they’re the glue that makes SnelDB usable in the real world:</p>
+<ul>
+<li>Configuration means you can run the same binary in development, staging, and production with confidence.</li>
+<li>Logging means you can trust the system to tell you what it’s doing, even when things go wrong.</li>
+<li>Responses mean every client, from shell scripts to dashboards, gets consistent feedback.</li>
+</ul>
+<p>Together, they provide the operational safety net: when you store events, you know how to configure it, you see what’s happening, and you get a clear answer back.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="compaction"><a class="header" href="#compaction">Compaction</a></h1>
+<h2 id="what-it-is-2"><a class="header" href="#what-it-is-2">What it is</a></h2>
+<p>Compaction keeps reads predictable as data grows. Instead of editing files in place, SnelDB periodically merges small, freshly-flushed segments into larger, cleaner ones. This reduces file count, tightens zone metadata, and improves pruning—without touching the logical history of events.</p>
+<h2 id="why-it-matters-1"><a class="header" href="#why-it-matters-1">Why it matters</a></h2>
+<ul>
+<li>Fewer segments → fewer seeks and better cache behavior.</li>
+<li>Larger, well-formed zones → more “skip work” during queries.</li>
+<li>Stable tail latencies as ingestion continues day after day.</li>
+</ul>
+<h2 id="how-it-runs-big-picture"><a class="header" href="#how-it-runs-big-picture">How it runs (big picture)</a></h2>
+<ul>
+<li>One background task per shard.</li>
+<li>Wakes up at a configurable interval.</li>
+<li>Checks disk/IO pressure; if the system is busy, skips this round.</li>
+<li>Looks at the shard’s segment index to decide if compaction is needed.</li>
+<li>When needed, launches a compaction worker to perform the merge and publish new segments atomically.</li>
+</ul>
+<h2 id="shard-local-by-design"><a class="header" href="#shard-local-by-design">Shard-local by design</a></h2>
+<p>Each shard compacts its own segments. This keeps the work isolated, prevents cross-shard coordination, and preserves the “all events for a context live together” property.</p>
+<h2 id="when-it-triggers"><a class="header" href="#when-it-triggers">When it triggers</a></h2>
+<ul>
+<li>On a fixed timer (compaction_interval).</li>
+<li>Only if the segment index reports that thresholds are met (e.g., too many L0s, size/age criteria).</li>
+<li>Skips entirely if IO pressure is high to avoid hurting foreground work.</li>
+</ul>
+<h2 id="safety--correctness"><a class="header" href="#safety--correctness">Safety &amp; correctness</a></h2>
+<ul>
+<li>Segments are immutable; compaction writes new files and then swaps pointers in one step.</li>
+<li>If a run fails, nothing is partially applied; the old segments remain authoritative.</li>
+<li>Reads continue throughout—queries see either the old set or the new set, never a half state.</li>
+<li>Replay order and event immutability are unaffected.</li>
+</ul>
+<h2 id="resource-awareness"><a class="header" href="#resource-awareness">Resource awareness</a></h2>
+<ul>
+<li>The loop samples system state (disks/IO) before running.</li>
+<li>Under pressure, the compactor yields to ingestion and queries.</li>
+<li>This protects P99 read latencies and avoids “compaction storms.”</li>
+</ul>
+<h2 id="what-the-worker-does-conceptually"><a class="header" href="#what-the-worker-does-conceptually">What the worker does (conceptually)</a></h2>
+<ul>
+<li>Selects a compaction set (often recent small segments).</li>
+<li>Merges column files in order, rebuilding zones, filters, and indexes.</li>
+<li>Emits a new, leveled segment and updates the segment index.</li>
+<li>Schedules old segments for deletion/GC.</li>
+</ul>
+<h2 id="operator-knobs"><a class="header" href="#operator-knobs">Operator knobs</a></h2>
+<ul>
+<li>compaction_interval: how often to check.</li>
+<li>compaction_threshold: when the segment index should say “yes, compact.”</li>
+<li>sys_io_threshold (and related IO heuristics): how conservative to be under load.</li>
+<li>events_per_zone and flush_threshold: influence zone granularity and L0 creation rate (tune together).</li>
+</ul>
+<h2 id="invariants-2"><a class="header" href="#invariants-2">Invariants</a></h2>
+<ul>
+<li>No in-place mutation; only append/replace at the segment set level.</li>
+<li>Queries stay available and correct while compaction runs.</li>
+<li>Failures are contained to the background task; foreground paths remain healthy.</li>
+</ul>
+<h2 id="what-this-page-is-not"><a class="header" href="#what-this-page-is-not">What this page is not</a></h2>
+<ul>
+<li>A file-format spec or merge algorithm walkthrough.</li>
+<li>A policy recipe for every workload. The defaults aim for good general behavior; heavy write or read-mostly deployments may tune the thresholds differently.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="layering-strategy-in-sneldb"><a class="header" href="#layering-strategy-in-sneldb">Layering Strategy in SnelDB</a></h1>
+<p>This page gives a high-level view of how SnelDB is structured. It focuses on what each layer does and how requests flow through the system.</p>
+<h2 id="layer-1-frontend--transport-and-connections"><a class="header" href="#layer-1-frontend--transport-and-connections">Layer 1: <code>frontend</code> — Transport and Connections</a></h2>
+<ul>
+<li>Listens for client connections (e.g., Unix/TCP/HTTP).</li>
+<li>Reads requests and writes responses.</li>
+<li>Hands off parsing and execution to the <code>command</code> and <code>engine</code> layers.</li>
+</ul>
+<h2 id="layer-2-command--parse-and-dispatch"><a class="header" href="#layer-2-command--parse-and-dispatch">Layer 2: <code>command</code> — Parse and Dispatch</a></h2>
+<ul>
+<li>Parses user input (e.g., <code>DEFINE</code>, <code>STORE</code>, <code>QUERY</code>).</li>
+<li>Validates and turns text into typed commands.</li>
+<li>Dispatches to the appropriate operation in the engine.</li>
+</ul>
+<h2 id="layer-3-engine--core-logic"><a class="header" href="#layer-3-engine--core-logic">Layer 3: <code>engine</code> — Core Logic</a></h2>
+<ul>
+<li>Implements the main behaviors: define schemas, store events, run queries, replay, and flush.</li>
+<li>Chooses the right shard and updates on-disk data as needed.</li>
+<li>Stays independent from how clients connect or send requests.</li>
+</ul>
+<h2 id="layer-4-shared--common-utilities"><a class="header" href="#layer-4-shared--common-utilities">Layer 4: <code>shared</code> — Common Utilities</a></h2>
+<ul>
+<li>Configuration and response types used across layers.</li>
+<li>Logging setup and other small shared helpers.</li>
+</ul>
+<h2 id="flow-summary-store-example"><a class="header" href="#flow-summary-store-example">Flow Summary (STORE example)</a></h2>
+<ol>
+<li>Frontend receives a request.</li>
+<li><code>command</code> parses and validates it.</li>
+<li>The dispatcher routes to the correct engine operation.</li>
+<li><code>engine</code> executes and updates storage.</li>
+<li>A response is returned to the client.</li>
+</ol>
+<h2 id="why-this-layering"><a class="header" href="#why-this-layering">Why this layering?</a></h2>
+<ul>
+<li>Clean separation: parsing, logic, and transport are independent.</li>
+<li>Easy to test: engine logic can be tested without real sockets.</li>
+<li>Scales well: clear boundaries support growth and optimization.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="threading-and-async"><a class="header" href="#threading-and-async">Threading and Async</a></h1>
+<h2 id="what-it-is-3"><a class="header" href="#what-it-is-3">What it is</a></h2>
+<ul>
+<li>Networking is handled with async tasks (Tokio) for each client connection.</li>
+<li>Work is executed by per-shard worker tasks, communicated via message passing.</li>
+<li>This separates I/O from data processing and keeps shard state isolated.</li>
+</ul>
+<h2 id="core-pieces-1"><a class="header" href="#core-pieces-1">Core pieces</a></h2>
+<ul>
+<li>Frontends — Unix/TCP/HTTP listeners accept connections and spawn a task per client.</li>
+<li>Connection — reads lines, parses commands, and dispatches them for execution.</li>
+<li>Shard Manager — owns shards and routes work by hashing <code>context_id</code>.</li>
+<li>Shard (worker) — long‑lived task that owns WAL, MemTables, flush queue, and segment list; handles Store, Query, Replay, Flush.</li>
+<li>Channels — <code>tokio::sync::mpsc</code> for sending typed messages to shards.</li>
+<li>Schema Registry — shared via <code>Arc&lt;tokio::sync::RwLock&lt;SchemaRegistry&gt;&gt;</code>.</li>
+</ul>
+<h2 id="how-it-works-2"><a class="header" href="#how-it-works-2">How it works</a></h2>
+<ul>
+<li>
+<p>Startup</p>
+<ul>
+<li>Initialize the schema registry and shard manager.</li>
+<li>Bind a Unix listener and start accepting connections.</li>
+<li>Spawn background workers (flush, compaction) per shard.</li>
+</ul>
+</li>
+<li>
+<p>Connection handling</p>
+<ul>
+<li>Spawn a task per client.</li>
+<li>Read lines, parse into commands, dispatch to the shard manager.</li>
+</ul>
+</li>
+<li>
+<p>Store</p>
+<ul>
+<li>Route to shard by <code>context_id</code>.</li>
+<li>Append to WAL, update active MemTable; rotate and enqueue flush when needed.</li>
+</ul>
+</li>
+<li>
+<p>Query</p>
+<ul>
+<li>Broadcast to all shards.</li>
+<li>Each shard scans its in‑memory and on‑disk state and returns matches; results are merged.</li>
+</ul>
+</li>
+<li>
+<p>Replay</p>
+<ul>
+<li>Route to the shard for the <code>context_id</code>.</li>
+<li>Stream events in original append order for that context.</li>
+</ul>
+</li>
+<li>
+<p>Flush</p>
+<ul>
+<li>Broadcast; shards rotate MemTables and enqueue flush to produce a new segment.</li>
+</ul>
+</li>
+</ul>
+<h2 id="why-this-design-1"><a class="header" href="#why-this-design-1">Why this design</a></h2>
+<ul>
+<li>Async I/O: efficient, scalable handling of many connections.</li>
+<li>Shard workers: clear ownership and predictable performance.</li>
+<li>Separation of concerns: networking and storage logic don’t intermingle.</li>
+</ul>
+<h2 id="invariants-3"><a class="header" href="#invariants-3">Invariants</a></h2>
+<ul>
+<li>Frontends do not perform disk I/O or modify indexes directly.</li>
+<li>Shard workers own shard state; cross‑shard mutable sharing is avoided.</li>
+<li>Schema access uses async <code>RwLock</code> for safe concurrent reads/writes.</li>
+</ul>
+<h2 id="operational-notes-1"><a class="header" href="#operational-notes-1">Operational notes</a></h2>
+<ul>
+<li>Bounded shard mailboxes apply local backpressure; tune channel sizes as needed.</li>
+<li>Number of shards controls parallelism; size to match CPU/core availability.</li>
+<li>Monitor channel depth and lock contention to spot hotspots.</li>
+</ul>
+<h2 id="further-reading-2"><a class="header" href="#further-reading-2">Further Reading</a></h2>
+<ul>
+<li><a href="design/./sharding.html">Sharding</a></li>
+<li><a href="design/./storage_engine.html">Storage Engine</a></li>
+<li><a href="design/./query_replay.html">Query &amp; Replay</a></li>
+<li><a href="design/./infrastructure.html">Infrastructure</a></li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="logging-1"><a class="header" href="#logging-1">Logging</a></h1>
+<h2 id="what-it-is-4"><a class="header" href="#what-it-is-4">What it is</a></h2>
+<ul>
+<li>SnelDB uses the <code>tracing</code> ecosystem for structured, leveled logs.</li>
+<li>Logs are emitted to stdout and to a daily‑rotated file, with independent levels.</li>
+<li>Levels and output directory are configured via the config file.</li>
+</ul>
+<h2 id="core-pieces-2"><a class="header" href="#core-pieces-2">Core pieces</a></h2>
+<ul>
+<li>Initializer — sets up <code>tracing_subscriber</code> layers for stdout and file.</li>
+<li>Config — <code>[logging]</code> section controls <code>log_dir</code>, <code>stdout_level</code>, and <code>file_level</code>.</li>
+<li>Levels — <code>error</code>, <code>warn</code>, <code>info</code>, <code>debug</code>, <code>trace</code>.</li>
+</ul>
+<h2 id="how-it-works-3"><a class="header" href="#how-it-works-3">How it works</a></h2>
+<ul>
+<li>
+<p>Startup</p>
+<ul>
+<li><code>logging::init()</code> is called from <code>main.rs</code> before starting frontends.</li>
+<li>Reads <code>CONFIG.logging</code> to build filters and writers.</li>
+<li>Installs two layers: ANSI stdout and file appender (<code>sneldb.log</code>, daily rotation).</li>
+</ul>
+</li>
+<li>
+<p>Emitting logs</p>
+<ul>
+<li>Use <code>tracing::{error!, warn!, info!, debug!, trace!}</code> in code.</li>
+<li>Prefer spans (e.g., <code>#[instrument]</code>) to capture context around operations.</li>
+</ul>
+</li>
+</ul>
+<h2 id="configuration-1"><a class="header" href="#configuration-1">Configuration</a></h2>
+<p>Example snippet from <code>config.toml</code>:</p>
+<pre><code class="language-toml">[logging]
+log_dir = "../data/logs"
+stdout_level = "debug"
+file_level = "error"
+</code></pre>
+<ul>
+<li><code>stdout_level</code>: global level for console logs.</li>
+<li><code>file_level</code>: global level for file logs.</li>
+<li><code>log_dir</code>: directory where <code>sneldb.log</code> is created (daily rotation).</li>
+</ul>
+<h2 id="why-this-design-2"><a class="header" href="#why-this-design-2">Why this design</a></h2>
+<ul>
+<li>Structured logs with levels and spans ease debugging and operations.</li>
+<li>Separate stdout/file control supports local development and production hygiene.</li>
+</ul>
+<h2 id="operational-notes-2"><a class="header" href="#operational-notes-2">Operational notes</a></h2>
+<ul>
+<li>Tune levels per environment (e.g., <code>stdout_level=warn</code> in prod).</li>
+<li>Ensure <code>log_dir</code> exists and is writable; it is created on first write by the appender.</li>
+<li>Use targets when necessary to scope logs for noisy modules.</li>
+</ul>
+<h2 id="further-reading-3"><a class="header" href="#further-reading-3">Further Reading</a></h2>
+<ul>
+<li><code>tracing</code> crate docs</li>
+<li><code>tracing_subscriber</code> filters and formatters</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="file-formats-and-data-layout"><a class="header" href="#file-formats-and-data-layout">File Formats and Data Layout</a></h1>
+<h2 id="what-it-is-5"><a class="header" href="#what-it-is-5">What it is</a></h2>
+<ul>
+<li>The on-disk layout for shards and segments, and the binary formats used for columns, offsets, zone metadata, indexes, and schemas.</li>
+<li>These formats are append-friendly, read-optimized, and simple to parse with memory maps.</li>
+</ul>
+<h2 id="core-pieces-3"><a class="header" href="#core-pieces-3">Core pieces</a></h2>
+<ul>
+<li>Segments — <code>segment-xxxxx/</code> directories under each shard.</li>
+<li>Columns — <code>{uid}_{field}.col</code> files storing values with length prefixes.</li>
+<li>Zone Offsets — <code>{uid}_{field}.zf</code> files listing byte offsets per zone.</li>
+<li>Zone Metadata — <code>{uid}.zones</code> containing per-zone min/max timestamps and row ranges.</li>
+<li>Zone Index — <code>{uid}.idx</code> mapping context_id values to zone ids.</li>
+<li>XOR Filters — <code>{uid}_{field}.xf</code> per-field filters for fast membership tests.</li>
+<li>Enum Bitmap Indexes — <code>{uid}_{field}.ebm</code> per-enum-field bitmaps for zone pruning.</li>
+<li>Schemas — <code>schema/schemas.bin</code> append-only records of event type schemas and UIDs.</li>
+</ul>
+<h2 id="binary-headers"><a class="header" href="#binary-headers">Binary headers</a></h2>
+<ul>
+<li>All binary files now begin with a fixed, 20-byte header to improve safety and detect corruption.</li>
+<li>Header layout (little-endian):
+<ul>
+<li>8 bytes: MAGIC (ASCII tag identifying file kind)</li>
+<li>2 bytes: VERSION (u16)</li>
+<li>2 bytes: FLAGS (u16)</li>
+<li>4 bytes: RESERVED (u32)</li>
+<li>4 bytes: HEADER_CRC32 (u32) computed over MAGIC+VERSION+FLAGS+RESERVED</li>
+</ul>
+</li>
+<li>WAL logs remain newline-delimited JSON without a binary header.</li>
+</ul>
+<p>Magic strings per file kind:</p>
+<ul>
+<li>Columns (<code>.col</code>): <code>EVDBCOL\0</code></li>
+<li>Zone Offsets (<code>.zf</code>): <code>EVDBZOF\0</code></li>
+<li>Zone Metadata (<code>.zones</code>): <code>EVDBZON\0</code></li>
+<li>Zone Index (<code>.idx</code> per-UID/context): <code>EVDBUID\0</code></li>
+<li>XOR Filters (<code>.xf</code>): <code>EVDBXRF\0</code></li>
+<li>Shard Segment Index (<code>segments.idx</code>): <code>EVDBSIX\0</code></li>
+<li>Schemas (<code>schemas.bin</code>): <code>EVDBSCH\0</code></li>
+<li>Enum Bitmap Index (<code>.ebm</code>): <code>EVDBEBM\0</code></li>
+</ul>
+<p>Compatibility and migration:</p>
+<ul>
+<li>Readers tolerate legacy files that lack headers and continue to parse them.</li>
+<li>New writers always prepend the header.</li>
+<li>A future strict mode may enforce headers on read.</li>
+</ul>
+<h2 id="directory-layout"><a class="header" href="#directory-layout">Directory layout</a></h2>
+<pre><code>data/
+├── cols/
+│   ├── shard-0/
+│   │   └── segment-00000/
+│   │       ├── {uid}_{field}.col
+│   │       ├── {uid}_{field}.zf
+│   │       ├── {uid}.zones
+│   │       ├── {uid}.idx
+│   │       ├── {uid}_{field}.xf
+│   │       └── {uid}_{field}.ebm
+│   └── shard-1/
+│       └── segment-00000/
+├── logs/
+│   └── sneldb.log.YYYY-MM-DD
+└── schema/
+    └── schemas.bin
+</code></pre>
+<h2 id="column-files-uid_fieldcol"><a class="header" href="#column-files-uid_fieldcol">Column files: <code>{uid}_{field}.col</code></a></h2>
+<ul>
+<li>Format per value (binary):
+<ul>
+<li>File begins with a binary header (MAGIC <code>EVDBCOL\0</code>).</li>
+<li><code>[u16]</code> little-endian length</li>
+<li><code>[bytes]</code> UTF‑8 string of the value</li>
+</ul>
+</li>
+<li>Access pattern: memory-mapped and sliced using offsets.</li>
+</ul>
+<h2 id="zone-offsets-uid_fieldzf"><a class="header" href="#zone-offsets-uid_fieldzf">Zone offsets: <code>{uid}_{field}.zf</code></a></h2>
+<ul>
+<li>Binary layout per zone (repeated):
+<ul>
+<li>File begins with a binary header (MAGIC <code>EVDBZOF\0</code>).</li>
+<li><code>[u32] zone_id</code></li>
+<li><code>[u32] count</code> number of offsets</li>
+<li><code>[u64] * count</code> byte offsets into the corresponding <code>.col</code></li>
+</ul>
+</li>
+<li>Purpose: enables loading only the rows for a given zone.</li>
+</ul>
+<h2 id="zone-metadata-uidzones"><a class="header" href="#zone-metadata-uidzones">Zone metadata: <code>{uid}.zones</code></a></h2>
+<ul>
+<li>Bincode-encoded <code>Vec&lt;ZoneMeta&gt;</code>.</li>
+<li>File begins with a binary header (MAGIC <code>EVDBZON\0</code>).</li>
+<li>Fields:
+<ul>
+<li><code>zone_id: u32</code></li>
+<li><code>uid: String</code></li>
+<li><code>segment_id: u64</code></li>
+<li><code>start_row: u32</code></li>
+<li><code>end_row: u32</code></li>
+<li><code>timestamp_min: u64</code></li>
+<li><code>timestamp_max: u64</code></li>
+</ul>
+</li>
+</ul>
+<h2 id="zone-index-uididx"><a class="header" href="#zone-index-uididx">Zone index: <code>{uid}.idx</code></a></h2>
+<ul>
+<li>Binary map of <code>event_type -&gt; context_id -&gt; [zone_id...]</code>.</li>
+<li>Used to quickly locate candidate zones by <code>context_id</code>.</li>
+<li>Written via <code>ZoneIndex::write_to_path</code> and read with <code>ZoneIndex::load_from_path</code>.</li>
+<li>File begins with a binary header (MAGIC <code>EVDBUID\0</code>).</li>
+</ul>
+<h2 id="xor-filters-uid_fieldxf"><a class="header" href="#xor-filters-uid_fieldxf">XOR filters: <code>{uid}_{field}.xf</code></a></h2>
+<ul>
+<li>Bincode-serialized <code>BinaryFuse8</code> filter over unique field values.</li>
+<li>Used for fast approximate membership checks during planning.</li>
+<li>File begins with a binary header (MAGIC <code>EVDBXRF\0</code>).</li>
+</ul>
+<h2 id="enum-bitmap-index-uid_fieldebm"><a class="header" href="#enum-bitmap-index-uid_fieldebm">Enum bitmap index: <code>{uid}_{field}.ebm</code></a></h2>
+<ul>
+<li>Zone-level bitmaps per enum variant for fast Eq/Neq pruning.</li>
+<li>File begins with a binary header (MAGIC <code>EVDBEBM\0</code>).</li>
+<li>Binary layout:
+<ul>
+<li><code>[u16] variant_count</code></li>
+<li>Repeated <code>variant_count</code> times:
+<ul>
+<li><code>[u16] name_len</code></li>
+<li><code>[bytes] variant_name (UTF‑8)</code></li>
+</ul>
+</li>
+<li><code>[u16] rows_per_zone</code></li>
+<li>Repeated per zone present in the file:
+<ul>
+<li><code>[u32] zone_id</code></li>
+<li><code>[u16] variant_count_again</code></li>
+<li>Repeated <code>variant_count_again</code> times:
+<ul>
+<li><code>[u32] bitmap_len_bytes</code></li>
+<li><code>[bytes] packed_bitmap</code> (LSB-first within a byte; bit i set ⇒ row i has this variant)</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>Usage: on a filter <code>plan = "pro"</code>, prune zones where the <code>pro</code> bitmap is all zeros; similarly for <code>!=</code> by checking any non-target variant has a bit set.</li>
+<li>Observability: use <code>convertor ebm &lt;segment_dir&gt; &lt;uid&gt; &lt;field&gt;</code> to dump a JSON view of per-zone row positions per variant.</li>
+</ul>
+<h2 id="schemas-schemaschemasbin"><a class="header" href="#schemas-schemaschemasbin">Schemas: <code>schema/schemas.bin</code></a></h2>
+<ul>
+<li>Append-only file of bincode-encoded <code>SchemaRecord</code> entries:
+<ul>
+<li><code>uid: String</code></li>
+<li><code>event_type: String</code></li>
+<li><code>schema: MiniSchema</code></li>
+</ul>
+</li>
+<li>Loaded at startup by <code>SchemaRegistry</code>.</li>
+<li>File begins with a binary header (MAGIC <code>EVDBSCH\0</code>).</li>
+</ul>
+<h2 id="shard-segment-index-segmentsidx"><a class="header" href="#shard-segment-index-segmentsidx">Shard segment index: <code>segments.idx</code></a></h2>
+<ul>
+<li>Bincode-encoded <code>Vec&lt;SegmentEntry&gt;</code>; file begins with a binary header (MAGIC <code>EVDBSIX\0</code>).</li>
+</ul>
+<h2 id="why-this-design-3"><a class="header" href="#why-this-design-3">Why this design</a></h2>
+<ul>
+<li>Immutable segments + append-only metadata simplify recovery and concurrency.</li>
+<li>Memory-mappable, length-prefixed encodings keep parsing simple and fast.</li>
+<li>Separate files per concern (values, offsets, metadata, indexes) enable targeted IO.</li>
+</ul>
+<h2 id="operational-notes-3"><a class="header" href="#operational-notes-3">Operational notes</a></h2>
+<ul>
+<li>Segment directories are named <code>segment-00000</code>, <code>segment-00001</code>, ...</li>
+<li>UIDs are per-event-type identifiers generated at DEFINE; filenames use <code>{uid}</code> not the event type.</li>
+<li>New fields simply create new <code>.col/.zf/.xf</code> files in subsequent segments.</li>
+</ul>
+<h2 id="further-reading-4"><a class="header" href="#further-reading-4">Further Reading</a></h2>
+<ul>
+<li><a href="design/./storage_engine.html">Storage Engine</a></li>
+<li><a href="design/./sharding.html">Sharding</a></li>
+<li><a href="design/./query_replay.html">Query &amp; Replay</a></li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+        <!-- Livereload script (if served using the cli tool) -->
+        <script>
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
+            const socket = new WebSocket(wsAddress);
+            socket.onmessage = function (event) {
+                if (event.data === "reload") {
+                    socket.close();
+                    location.reload();
+                }
+            };
+
+            window.onbeforeunload = function() {
+                socket.close();
+            }
+        </script>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="theme/book.js"></script>
+        <script src="theme/sneldb.js"></script>
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+
+    </div>
+    </body>
+</html>

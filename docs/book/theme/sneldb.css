@@ -1,0 +1,55 @@
+/* Non-keyword identifiers (e.g. ctx_123, amount) */
+code.hljs .hljs-identifier {
+    color: #56b6c2;       /* soft cyan */
+    font-weight: normal;  /* no bold */
+  }
+
+  /* Event types (e.g. order_created) */
+  code.hljs .hljs-event-type {
+    color: #d19a66;       /* warm amber */
+    font-style: italic;   /* subtle emphasis */
+    font-weight: normal;
+  }
+
+  /* Keywords (DEFINE, STORE, QUERY, …) */
+  code.hljs .hljs-keyword {
+    color: #e06c75;       /* muted red */
+    font-weight: 600;     /* keep them slightly strong */
+  }
+
+  /* JSON keys (id, amount, currency inside { }) */
+  code.hljs .hljs-attr {
+    color: #61afef;       /* gentle blue */
+    font-weight: normal;
+  }
+
+  /* Numbers */
+  code.hljs .hljs-number {
+    color: #98c379;       /* green */
+  }
+
+  /* Operators (=, >=, etc.) */
+  code.hljs .hljs-operator {
+    color: #abb2bf;       /* neutral gray */
+  }
+
+  /* Strings (payload values, timestamps) */
+code.hljs .hljs-string {
+    color: #c1ccd7;       /* light gray with a hint of blue */
+    font-weight: normal;
+  }
+
+/* Header logo injection */
+.menu-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.menu-title::before {
+  content: "";
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  background: url("logo.svg") no-repeat center / contain;
+}

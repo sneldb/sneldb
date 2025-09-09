@@ -1,0 +1,351 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>A Gentle Guide - SnelDB: The Complete Guide</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/sneldb.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">SnelDB: The Complete Guide</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="a-gentle-guide-for-engineers"><a class="header" href="#a-gentle-guide-for-engineers">A Gentle Guide for Engineers</a></h1>
+<p>SnelDB is built to be small and simple. It keeps track of what happened, in order, and makes it easy to get those facts back out quickly. That’s it. This guide will walk you through how to think about events, how to design them so they’re useful, and how to use SnelDB’s tiny set of commands—<code>DEFINE</code>, <code>STORE</code>, <code>QUERY</code>, and <code>REPLAY</code>. Along the way we’ll use a retail shop as an example, but the same ideas apply in many domains.</p>
+<h2 id="why-events"><a class="header" href="#why-events">Why events?</a></h2>
+<p>An event is just a record that something happened: <em>an order was created</em>, <em>a customer signed up</em>, <em>a parcel was delivered</em>. Events don’t change once they’re stored. By keeping them all, you get a trustworthy history. Your application can look back, replay them, and figure out the current state whenever it needs. SnelDB focuses on storing these events and letting you fetch them again quickly. The “what do these events mean?” part stays in your application.</p>
+<h2 id="two-ways-of-reading"><a class="header" href="#two-ways-of-reading">Two ways of reading</a></h2>
+<p>With SnelDB, there are really only two ways you read:</p>
+<ol>
+<li>
+<p><strong>Replay a timeline for one thing.</strong> All the events for a single <code>context_id</code> (like an order, a customer, or a device) form a story. If you <code>REPLAY FOR order-9001</code>, you’ll see every event for that order in sequence. Your code can fold those into the current state.</p>
+</li>
+<li>
+<p><strong>Query across many things.</strong> Sometimes you don’t want the whole story of one order, you want a slice across all orders. For that, you use <code>QUERY</code>. For example: <code>QUERY order_created WHERE status="submitted"</code>. Behind the scenes, SnelDB uses tricks like enum bitmaps and filters to make those queries quick, so you don’t have to think about indexes.</p>
+</li>
+</ol>
+<p>If you remember one thing: replay for one thing’s story, query for slices across many things.</p>
+<h2 id="choosing-a-context"><a class="header" href="#choosing-a-context">Choosing a context</a></h2>
+<p>So what is this <code>context_id</code>? Think of it as “whose story am I telling?” For a retail system:</p>
+<ul>
+<li>An <strong>order</strong> has a start and an end, so it makes sense to use <code>order-&lt;id&gt;</code> as the context.</li>
+<li>Inventory belongs to a <strong>SKU</strong>, so <code>sku-&lt;code&gt;</code> is a context.</li>
+<li>A <strong>customer profile</strong> belongs to a customer, so <code>customer-&lt;id&gt;</code> works.</li>
+</ul>
+<p>When you want to be able to say <em>“show me everything that ever happened to X”</em>, that X should be a context.</p>
+<h2 id="designing-an-event"><a class="header" href="#designing-an-event">Designing an event</a></h2>
+<p>Name events the way you’d explain them to a teammate: <code>order_created</code>, <code>customer_registered</code>, <code>shipment_delivered</code>. Keep the payload small and clear. Always include:</p>
+<ul>
+<li>The IDs you’ll need to filter by later (<code>order_id</code>, <code>customer_id</code>, <code>sku</code>).</li>
+<li>Enums for fixed sets of values. For example:
+<pre><code class="language-sneldb">"plan": ["basic", "pro", "enterprise"]
+</code></pre>
+</li>
+<li>A timestamp for when it happened.</li>
+</ul>
+<p>Here are a few examples:</p>
+<pre><code class="language-sneldb">DEFINE customer_registered FIELDS {
+  "customer_id":"string",
+  "email":"string",
+  "plan":["basic","pro","enterprise"],
+  "created_at":"timestamp"
+}
+
+DEFINE order_created FIELDS {
+  "order_id":"string",
+  "customer_id":"string",
+  "status":["pending","submitted","cancelled"],
+  "created_at":"timestamp"
+}
+
+DEFINE shipment_delivered FIELDS {
+  "shipment_id":"string",
+  "order_id":"string",
+  "carrier":["UPS","DHL","FedEx"],
+  "delivered_at":"timestamp"
+}
+</code></pre>
+<h2 id="storing-events"><a class="header" href="#storing-events">Storing events</a></h2>
+<p>The very first need is to <strong>record facts</strong>: something happened, and you want to keep it. Writing an event in SnelDB is just that—adding a new fact to the timeline.</p>
+<pre><code class="language-sneldb">STORE customer_registered FOR customer-123
+  PAYLOAD {"customer_id":"123","email":"a@b.com","plan":"pro"}
+
+STORE order_created FOR order-9001
+  PAYLOAD {"order_id":"9001","customer_id":"123","status":"pending"}
+
+STORE shipment_delivered FOR ship-5001
+  PAYLOAD {"shipment_id":"5001","order_id":"9001","carrier":"UPS"}
+</code></pre>
+<p>Later on, when dealing with retries or external systems, you might add optional fields like <code>idempotency_key</code>. But the heart of storing events is simply: write down the fact.</p>
+<h2 id="reading-events"><a class="header" href="#reading-events">Reading events</a></h2>
+<p>If you want to know the <strong>current state of one thing</strong>, replay its story:</p>
+<pre><code class="language-sneldb">REPLAY FOR order-9001
+</code></pre>
+<p>If you want to know <strong>which events match a condition across many things</strong>, query:</p>
+<pre><code class="language-sneldb">QUERY order_created WHERE customer_id="123"
+</code></pre>
+<p>If you need to follow a chain—like from an order to its shipment—query by the keys you included in the payload:</p>
+<pre><code class="language-sneldb">QUERY shipment_delivered WHERE order_id="9001"
+</code></pre>
+<h2 id="how-to-evolve"><a class="header" href="#how-to-evolve">How to evolve</a></h2>
+<p>SnelDB is built on immutability. Once an event is stored it never changes. If the shape of an event needs to change, we don’t edit old events or add fields onto them. Instead, we create a new version of the schema or define a new event type that represents the new shape.</p>
+<p>Older events remain valid and replayable; newer ones follow the updated schema. This way, every event clearly shows which version of the schema it follows, and your code can handle old and new versions side by side. Immutability guarantees that history is stable, while evolution ensures you can keep writing new chapters without breaking the old ones.</p>
+<h2 id="scaling-without-extra-knobs"><a class="header" href="#scaling-without-extra-knobs">Scaling without extra knobs</a></h2>
+<p>You don’t manage indexes or query planners. You simply design your events with the right fields. SnelDB takes care of compression and filtering internally. If a query feels heavy, ask yourself: <em>did I include the right key in the payload?</em></p>
+<h2 id="streaming"><a class="header" href="#streaming">Streaming</a></h2>
+<p>If you need near‑real‑time processing, you don’t need a new command. Just poll with <code>SINCE</code> on your timestamp:</p>
+<pre><code class="language-sneldb">QUERY order_created WHERE created_at &gt;= "2025-09-07T00:00:00Z" LIMIT 1000
+</code></pre>
+<p>Keep track of the last event you saw in your application and continue from there.</p>
+<h2 id="other-domains"><a class="header" href="#other-domains">Other domains</a></h2>
+<ul>
+<li><strong>Billing:</strong> replay a subscription’s events to learn its current plan; query invoices or payments by <code>customer_id</code>.</li>
+<li><strong>IoT:</strong> replay one device’s events to see its config; query telemetry since last night.</li>
+<li><strong>Logistics:</strong> replay one parcel’s journey; query all parcels delivered today.</li>
+</ul>
+<h2 id="what-sneldb-wont-do"><a class="header" href="#what-sneldb-wont-do">What SnelDB won’t do</a></h2>
+<p>SnelDB will never enforce your workflows, run aggregates, or decide who is allowed to see data. Those belong in your application or other tools. SnelDB’s job is narrower: keep facts safe, and give them back quickly.</p>
+<h2 id="a-closing-picture"><a class="header" href="#a-closing-picture">A closing picture</a></h2>
+<p>Think of two simple moves:</p>
+<ul>
+<li><strong>Down:</strong> replay the whole story for one thing.</li>
+<li><strong>Across:</strong> query slices across many things.</li>
+</ul>
+<p>Nearly everything you need can be done by combining these two moves. The database is small on purpose. If you design your events carefully, SnelDB will give you speed and reliability without ever getting in your way.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../quickstart/running.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../quickstart/philosophy.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../quickstart/running.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../quickstart/philosophy.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+        <!-- Livereload script (if served using the cli tool) -->
+        <script>
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
+            const socket = new WebSocket(wsAddress);
+            socket.onmessage = function (event) {
+                if (event.data === "reload") {
+                    socket.close();
+                    location.reload();
+                }
+            };
+
+            window.onbeforeunload = function() {
+                socket.close();
+            }
+        </script>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/book.js"></script>
+        <script src="../theme/sneldb.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
