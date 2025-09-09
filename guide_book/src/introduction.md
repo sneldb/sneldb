@@ -1,0 +1,40 @@
+# Introduction
+
+SnelDB is a lightweight, high‑performance database for immutable events. You append facts, then filter or replay them—quickly and reliably.
+
+## What it is
+
+- Store: append events with a type, context_id, timestamp, and payload
+- Query: filter by event type, context, time, and conditions
+- Replay: stream events for a context in original order
+
+```sneldb
+DEFINE payment FIELDS {"amount":"int","status":"string"}
+STORE payment FOR user-123 PAYLOAD {"amount":250,"status":"verified"}
+QUERY payment WHERE status="verified"
+REPLAY FOR user-123
+```
+
+## Why it exists
+
+General-purpose databases and queues struggle with large, evolving event logs. SnelDB is built for:
+
+- Immutable, append-only data
+- Fast filtering at scale (columnar + pruning)
+- Ordered replay per context
+- Minimal ops overhead
+
+## Key features
+
+- Append-only storage (perfect audit trails; predictable recovery)
+- Simple, human‑readable commands (JSON‑native)
+- Fast queries at scale (shards, zones, compaction)
+- Replay built in (time‑travel debugging, sequence modeling)
+- Flexible schemas (strict validation; optional fields)
+- Lightweight & safe (Rust; embeddable; no GC)
+
+## Who it’s for
+
+- Product analytics and auditing
+- ML pipelines on event sequences
+- Operational debugging and timeline reconstruction

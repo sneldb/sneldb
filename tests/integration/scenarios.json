@@ -1,0 +1,749 @@
+[
+  {
+    "name": "store_without_definition",
+    "input_commands": [
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":1,\"status\":\"confirmed\"}"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "No schema defined"
+    }
+  },
+  {
+    "name": "store_and_query_enum_eq",
+    "input_commands": [
+      "DEFINE subscription FIELDS { \"plan\": [\"pro\", \"basic\"] }",
+      "STORE subscription FOR user-1 PAYLOAD {\"plan\": \"pro\"}",
+      "STORE subscription FOR user-2 PAYLOAD {\"plan\": \"basic\"}",
+      "QUERY subscription WHERE plan=\"pro\""
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "user-1"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "user-2"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "store_and_query_enum_neq",
+    "input_commands": [
+      "DEFINE subscription FIELDS { \"plan\": [\"pro\", \"basic\"] }",
+      "STORE subscription FOR user-3 PAYLOAD {\"plan\": \"pro\"}",
+      "STORE subscription FOR user-4 PAYLOAD {\"plan\": \"basic\"}",
+      "QUERY subscription WHERE plan!=\"basic\""
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "user-3"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "user-4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "store_with_invalid_enum_value",
+    "input_commands": [
+      "DEFINE subscription FIELDS { \"plan\": [\"pro\", \"basic\"] }",
+      "STORE subscription FOR user-1 PAYLOAD {\"plan\": \"enterprise\"}"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "does not match expected type"
+    }
+  },
+  {
+    "name": "store_with_invalid_payload",
+    "input_commands": [
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"status\": \"string\" }",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\": \"a string\",\"status\":\"confirmed\"}"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "Field 'order_id' does not match expected type"
+    }
+  },
+  {
+    "name": "store_with_missing_field",
+    "input_commands": [
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"status\": \"string\" }",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":1}"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "Missing field 'status' in payload"
+    }
+  },
+  {
+    "name": "store_with_invalid_field_type",
+    "input_commands": [
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"status\": \"string\" }",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":1,\"status\":\"confirmed\", \"invalid_field\": \"a string\"}"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "Payload contains fields not defined in schema: invalid_field"
+    }
+  },
+  {
+    "name": "store_with_optional_field_present",
+    "input_commands": [
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"status\": \"string\", \"optional_field\": \"string | null\" }",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":123, \"status\":\"confirmed\", \"optional_field\":\"a string\"}",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":124, \"status\":\"confirmed\"}",
+      "QUERY order_created WHERE status=\"confirmed\""
+    ],
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "123",
+        "124"
+      ]
+    }
+  },
+  {
+    "name": "query_with_optional_field",
+    "input_commands": [
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"status\": \"string\", \"optional_field\": \"string | null\" }",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":123, \"status\":\"confirmed\", \"optional_field\":\"a string\"}",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":124, \"status\":\"confirmed\"}",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":125, \"status\":\"confirmed\"}",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":126, \"status\":\"confirmed\", \"optional_field\":\"a string\"}",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":127, \"status\":\"confirmed\"}",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":128, \"status\":\"confirmed\", \"optional_field\":\"a string\"}",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":129, \"status\":\"confirmed\"}",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":130, \"status\":\"confirmed\", \"optional_field\":\"a string\"}",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":131, \"status\":\"confirmed\", \"optional_field\":\"a string\"}",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":132, \"status\":\"confirmed\"}",
+      "QUERY order_created WHERE optional_field=\"a string\""
+    ],
+    "matchers": [
+      {
+      "kind": "include_all",
+      "value": [
+        "123",
+        "126",
+        "128",
+        "130",
+        "131"
+      ]
+    },
+    {
+      "kind": "include_none",
+      "value": [
+        "124",
+        "125",
+        "127",
+        "129",
+        "132"
+      ]
+    }
+    ]
+  },
+  {
+    "name": "simple_query_status_confirmed",
+    "input_commands": [
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"status\": \"string\" }",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":1,\"status\":\"confirmed\"}",
+      "STORE order_created FOR customer-2 PAYLOAD {\"order_id\":2,\"status\":\"pending\"}",
+      "QUERY order_created WHERE status=\"confirmed\""
+    ],
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "\"order_id\":1",
+        "\"status\":\"confirmed\""
+      ]
+    }
+  },
+  {
+    "name": "simple_query_with_mixed_commands",
+    "input_commands": [
+      "define order_created FIELDS { \"order_id\": \"int\", \"status\": \"string\" }",
+      "Store order_created FoR customer-1 PAYLOAD {\"order_id\":123,\"status\":\"confirmed\"}",
+      "STORe order_created For customer-2 PAYLOAD {\"order_id\":124,\"status\":\"pending\"}",
+      "qUERY order_created wherE status=\"confirmed\""
+    ],
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "123"
+      ]
+    }
+  },
+  {
+    "name": "segment_memory_hybrid_query",
+    "input_commands": [
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"status\": \"string\" }",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":1,\"status\":\"confirmed\"}",
+      "STORE order_created FOR customer-2 PAYLOAD {\"order_id\":2,\"status\":\"confirmed\"}",
+      "STORE order_created FOR customer-3 PAYLOAD {\"order_id\":3,\"status\":\"confirmed\"}",
+      "STORE order_created FOR customer-4 PAYLOAD {\"order_id\":4,\"status\":\"confirmed\"}",
+      "STORE order_created FOR customer-5 PAYLOAD {\"order_id\":5,\"status\":\"pending\"}",
+      "STORE order_created FOR customer-6 PAYLOAD {\"order_id\":6,\"status\":\"pending\"}",
+      "STORE order_created FOR customer-7 PAYLOAD {\"order_id\":7,\"status\":\"confirmed\"}",
+      "QUERY order_created WHERE status=\"confirmed\""
+    ],
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "customer-1",
+        "customer-2",
+        "customer-3",
+        "customer-4",
+        "customer-7"
+      ]
+    }
+  },
+  {
+    "name": "multi_context_query",
+    "input_commands": [
+      "DEFINE login FIELDS { \"device\": \"string\" }",
+      "STORE login FOR user-1 PAYLOAD {\"device\":\"android\"} ",
+      "STORE login FOR user-2 PAYLOAD {\"device\":\"android\"} ",
+      "STORE login FOR user-3 PAYLOAD {\"device\":\"web\"} ",
+      "STORE login FOR user-4 PAYLOAD {\"device\":\"android\"} ",
+      "QUERY login WHERE device=\"android\""
+    ],
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "user-1",
+        "user-2",
+        "user-4"
+      ]
+    }
+  },
+  {
+    "name": "replay_from_segment",
+    "input_commands": [
+      "DEFINE order_shipped FIELDS { \"order_id\": \"int\", \"status\": \"string\" }",
+      "STORE order_shipped FOR customer-99 PAYLOAD {\"order_id\":999,\"status\":\"shipped\"}",
+      "STORE order_shipped FOR customer-99 PAYLOAD {\"order_id\":1000,\"status\":\"delivered\"}",
+      "STORE order_shipped FOR customer-99 PAYLOAD {\"order_id\":1001,\"status\":\"delivered\"}",
+      "STORE order_shipped FOR customer-100 PAYLOAD {\"order_id\":1002,\"status\":\"returned\"}",
+      "FLUSH",
+      "REPLAY order_shipped FOR customer-99"
+    ],
+    "matchers": [
+      {
+      "kind": "include_all",
+      "value": [
+        "999",
+        "1000",
+        "1001"
+      ]
+    },
+    {
+      "kind": "include_none",
+      "value": [
+        "1002"
+      ]
+    }
+    ]
+  },
+  {
+    "name": "replay_mixed_context",
+    "input_commands": [
+      "DEFINE login FIELDS { \"device\": \"string\" }",
+      "STORE login FOR alice PAYLOAD {\"device\":\"android\"}",
+      "STORE login FOR alice PAYLOAD {\"device\":\"web\"}",
+      "STORE login FOR bob PAYLOAD {\"device\":\"iphone\"}",
+      "REPLAY FOR alice"
+    ],
+    "matchers": [
+      {
+      "kind": "include_all",
+      "value": [
+        "android",
+        "web"
+      ]
+    },
+    {
+      "kind": "include_none",
+      "value": [
+        "bob"
+      ]
+    }
+    ]
+  },
+  {
+    "name": "query_on_boolean_flag",
+    "input_commands": [
+      "DEFINE review FIELDS { \"rating\": \"int\", \"verified\": \"bool\" }",
+      "STORE review FOR u1 PAYLOAD {\"rating\":5,\"verified\":true}",
+      "STORE review FOR u2 PAYLOAD {\"rating\":4,\"verified\":false}",
+      "QUERY review WHERE verified=true"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "u1"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "u2"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "query_in_memory_only",
+    "input_commands": [
+      "DEFINE cart_updated FIELDS { \"sku\": \"string\", \"qty\": \"int\" }",
+      "STORE cart_updated FOR user-1 PAYLOAD {\"sku\":\"ABC123\",\"qty\":2}",
+      "QUERY cart_updated WHERE sku=\"ABC123\""
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "ABC123"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "replay_nonexistent_context",
+    "input_commands": [
+      "REPLAY FOR ghost-user"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "No matching events found"
+    }
+  },
+  {
+    "name": "replay_context_post_flush",
+    "input_commands": [
+      "DEFINE order_returned FIELDS { \"order_id\": \"int\", \"reason\": \"string\" }",
+      "STORE order_returned FOR user-2 PAYLOAD {\"order_id\":991,\"reason\":\"broken\"}",
+      "STORE order_returned FOR user-2 PAYLOAD {\"order_id\":992,\"reason\":\"wrong_size\"}",
+      "STORE order_returned FOR user-2 PAYLOAD {\"order_id\":993,\"reason\":\"changed_mind\"}",
+      "STORE order_returned FOR user-2 PAYLOAD {\"order_id\":994,\"reason\":\"late_delivery\"}",
+      "FLUSH",
+      "REPLAY order_returned FOR user-2"
+    ],
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "991",
+        "992",
+        "993",
+        "994"
+      ]
+    }
+  },
+  {
+    "name": "query_empty_event_type",
+    "input_commands": [
+      "QUERY nonexistent_type WHERE id=42"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "No matching events found"
+    }
+  },
+  {
+    "name": "query_filter_single_match",
+    "input_commands": [
+      "DEFINE order_created FIELDS { \"id\": \"int\", \"country\": \"string\" }",
+      "STORE order_created FOR user-1 PAYLOAD {\"id\":1,\"country\":\"NL\"}",
+      "FLUSH",
+      "QUERY order_created WHERE country=\"NL\""
+    ],
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "user-1"
+      ]
+    }
+  },
+  {
+    "name": "query_with_no_match",
+    "input_commands": [
+      "DEFINE order_created FIELDS { \"id\": \"int\", \"country\": \"string\" }",
+      "STORE order_created FOR user-2 PAYLOAD {\"id\":2,\"country\":\"DE\"}",
+      "FLUSH",
+      "QUERY order_created WHERE country=\"NL\""
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "No matching events found"
+    }
+  },
+  {
+    "name": "query_multiple_matches",
+    "input_commands": [
+      "DEFINE order_created FIELDS { \"id\": \"int\", \"country\": \"string\" }",
+      "STORE order_created FOR user-3 PAYLOAD {\"id\":3,\"country\":\"NL\"} ",
+      "STORE order_created FOR user-4 PAYLOAD {\"id\":4,\"country\":\"NL\"} ",
+      "QUERY order_created WHERE country=\"NL\""
+    ],
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "user-3",
+        "user-4"
+      ]
+    }
+  },
+  {
+    "name": "query_multiple_shards",
+    "input_commands": [
+      "DEFINE order_created FIELDS { \"id\": \"int\", \"country\": \"string\" }",
+      "STORE order_created FOR user-7 PAYLOAD {\"id\":7,\"country\":\"NL\"}",
+      "STORE order_created FOR user-8 PAYLOAD {\"id\":8,\"country\":\"DE\"}",
+      "STORE order_created FOR user-9 PAYLOAD {\"id\":9,\"country\":\"NL\"}",
+      "FLUSH",
+      "QUERY order_created WHERE country=\"NL\""
+    ],
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "user-7",
+        "user-9"
+      ]
+    }
+  },
+  {
+    "name": "query_mixed_conditions",
+    "input_commands": [
+      "DEFINE order_created FIELDS { \"id\": \"int\", \"country\": \"string\" }",
+      "STORE order_created FOR user-10 PAYLOAD {\"id\":10,\"country\":\"NL\"}",
+      "STORE order_created FOR user-11 PAYLOAD {\"id\":11,\"country\":\"FR\"}",
+      "STORE order_created FOR user-12 PAYLOAD {\"id\":12,\"country\":\"FR\"}",
+      "QUERY order_created WHERE country=\"FR\" AND id > 11"
+    ],
+    "matchers": [
+      {
+      "kind": "include_all",
+      "value": [
+        "user-12"
+      ]
+    },
+    {
+      "kind": "include_none",
+      "value": [
+        "user-10",
+        "user-11"
+      ]
+    }
+    ]
+  },
+  {
+    "name": "query_after_multiple_flushes",
+    "input_commands": [
+      "DEFINE order_create_1 FIELDS { \"id\": \"int\", \"country\": \"string\" }",
+      "STORE order_create_1 FOR user-12 PAYLOAD {\"id\":12,\"country\":\"DE\"}",
+      "FLUSH",
+      "STORE order_create_1 FOR user-13 PAYLOAD {\"id\":13,\"country\":\"NL\"}",
+      "FLUSH",
+      "QUERY order_create_1 WHERE country=NL"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "user-13"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "user-12"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "query_with_inequality",
+    "input_commands": [
+      "DEFINE order_created FIELDS { \"id\": \"int\", \"country\": \"string\" }",
+      "STORE order_created FOR user-13 PAYLOAD {\"id\":13,\"country\":\"NL\"}",
+      "STORE order_created FOR user-14 PAYLOAD {\"id\":14,\"country\":\"FR\"}",
+      "QUERY order_created WHERE country!=\"NL\""
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "user-14"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "user-13"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "query_with_not",
+    "input_commands": [
+      "DEFINE order_created FIELDS { \"id\": \"int\", \"country\": \"string\" }",
+      "STORE order_created FOR user-13 PAYLOAD {\"id\":13,\"country\":\"NL\"}",
+      "STORE order_created FOR user-14 PAYLOAD {\"id\":14,\"country\":\"FR\"}",
+      "QUERY order_created WHERE NOT country=\"NL\""
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "user-14"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "user-13"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "query_with_or",
+    "input_commands": [
+      "DEFINE order_created FIELDS { \"id\": \"int\", \"country\": \"string\" }",
+      "STORE order_created FOR user-13 PAYLOAD {\"id\":13,\"country\":\"NL\"}",
+      "STORE order_created FOR user-14 PAYLOAD {\"id\":14,\"country\":\"FR\"}",
+      "STORE order_created FOR user-15 PAYLOAD {\"id\":15,\"country\":\"DE\"}",
+      "QUERY order_created WHERE country=\"NL\" OR country=\"FR\""
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "user-13",
+          "user-14"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "user-15"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "query_with_greater_than_or_equal",
+    "input_commands": [
+      "DEFINE order_created FIELDS { \"id\": \"int\", \"country\": \"string\" }",
+      "STORE order_created FOR user-13 PAYLOAD {\"id\":13,\"country\":\"NL\"}",
+      "STORE order_created FOR user-14 PAYLOAD {\"id\":14,\"country\":\"FR\"}",
+      "STORE order_created FOR user-15 PAYLOAD {\"id\":15,\"country\":\"DE\"}",
+      "QUERY order_created WHERE id >= 14"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "user-14",
+          "user-15"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "user-13"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "query_with_less_than_or_equal",
+    "input_commands": [
+      "DEFINE order_created FIELDS { \"id\": \"int\", \"country\": \"string\" }",
+      "STORE order_created FOR user-13 PAYLOAD {\"id\":13,\"country\":\"NL\"}",
+      "STORE order_created FOR user-14 PAYLOAD {\"id\":14,\"country\":\"FR\"}",
+      "STORE order_created FOR user-15 PAYLOAD {\"id\":15,\"country\":\"DE\"}",
+      "QUERY order_created WHERE id <= 14"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "user-13",
+          "user-14"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "user-15"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "query_with_logical_operators",
+    "input_commands": [
+      "DEFINE order_created FIELDS { \"id\": \"int\", \"country\": \"string\" }",
+      "STORE order_created FOR user-13 PAYLOAD {\"id\":13,\"country\":\"NL\"}",
+      "STORE order_created FOR user-14 PAYLOAD {\"id\":14,\"country\":\"FR\"}",
+      "STORE order_created FOR user-15 PAYLOAD {\"id\":15,\"country\":\"DE\"}",
+      "FLUSH",
+      "QUERY order_created WHERE id > 13 AND id < 15"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "user-14"
+        ]
+      }
+    ]
+  }
+  ,
+  {
+    "name": "enum_store_wrong_case_rejected",
+    "input_commands": [
+      "DEFINE plan_change FIELDS { \"plan\": [\"pro\", \"basic\"] }",
+      "STORE plan_change FOR u1 PAYLOAD {\"plan\": \"Pro\"}"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "does not match expected type"
+    }
+  },
+  {
+    "name": "enum_query_wrong_case_returns_no_results",
+    "input_commands": [
+      "DEFINE plan_change FIELDS { \"plan\": [\"pro\", \"basic\"] }",
+      "STORE plan_change FOR u1 PAYLOAD {\"plan\": \"pro\"}",
+      "FLUSH",
+      "QUERY plan_change WHERE plan=\"Pro\""
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "No matching events found"
+    }
+  },
+  {
+    "name": "ebm_eq_logs_pruning",
+    "input_commands": [
+      "DEFINE subscription FIELDS { \"plan\": [\"free\", \"pro\", \"premium\", \"enterprise\"] }",
+      "STORE subscription FOR ctx1 PAYLOAD {\"plan\": \"free\"}",
+      "STORE subscription FOR ctx2 PAYLOAD {\"plan\": \"pro\"}",
+      "STORE subscription FOR ctx3 PAYLOAD {\"plan\": \"premium\"}",
+      "STORE subscription FOR ctx4 PAYLOAD {\"plan\": \"enterprise\"}",
+      "FLUSH",
+      "QUERY subscription WHERE plan = \"pro\" OR plan = \"premium\""
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "ctx2",
+          "ctx3"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "ctx1",
+          "ctx4"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "ebm_neq_logs_pruning",
+    "input_commands": [
+      "DEFINE subscription FIELDS { \"plan\": [\"free\", \"pro\", \"premium\", \"enterprise\"] }",
+      "STORE subscription FOR ctx1 PAYLOAD {\"plan\": \"free\"}",
+      "STORE subscription FOR ctx2 PAYLOAD {\"plan\": \"pro\"}",
+      "STORE subscription FOR ctx3 PAYLOAD {\"plan\": \"premium\"}",
+      "STORE subscription FOR ctx4 PAYLOAD {\"plan\": \"enterprise\"}",
+      "FLUSH",
+      "QUERY subscription WHERE plan != \"pro\""
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "ctx1",
+          "ctx3",
+          "ctx4"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "ctx2"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "ebm_unknown_variant_no_results",
+    "input_commands": [
+      "DEFINE subscription FIELDS { \"plan\": [\"free\", \"pro\", \"premium\", \"enterprise\"] }",
+      "STORE subscription FOR u1 PAYLOAD {\"plan\": \"free\"}",
+      "STORE subscription FOR u2 PAYLOAD {\"plan\": \"pro\"}",
+      "FLUSH",
+      "QUERY subscription WHERE plan = \"unknown\""
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "No matching events found"
+    }
+  },
+  {
+    "name": "ebm_eq_across_two_zones",
+    "input_commands": [
+      "DEFINE subscription FIELDS { \"plan\": [\"free\", \"pro\", \"premium\", \"enterprise\"] }",
+      "STORE subscription FOR ctx1 PAYLOAD {\"plan\": \"free\"}",
+      "STORE subscription FOR ctx2 PAYLOAD {\"plan\": \"pro\"}",
+      "STORE subscription FOR ctx3 PAYLOAD {\"plan\": \"premium\"}",
+      "STORE subscription FOR ctx4 PAYLOAD {\"plan\": \"enterprise\"}",
+      "STORE subscription FOR ctx5 PAYLOAD {\"plan\": \"pro\"}",
+      "STORE subscription FOR ctx6 PAYLOAD {\"plan\": \"free\"}",
+      "STORE subscription FOR ctx7 PAYLOAD {\"plan\": \"pro\"}",
+      "STORE subscription FOR ctx8 PAYLOAD {\"plan\": \"premium\"}",
+      "STORE subscription FOR ctx9 PAYLOAD {\"plan\": \"pro\"}",
+      "FLUSH",
+      "QUERY subscription WHERE plan = \"pro\""
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "ctx2",
+          "ctx5",
+          "ctx7",
+          "ctx9"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "ctx1",
+          "ctx3",
+          "ctx4",
+          "ctx6",
+          "ctx8"
+        ]
+      }
+    ]
+  }
+]

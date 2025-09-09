@@ -1,0 +1,60 @@
+use crate::engine::core::{CandidateZone, LogicalOp};
+use std::collections::HashMap;
+use tracing::{info, warn};
+
+pub struct ZoneCombiner {
+    zones: Vec<Vec<CandidateZone>>,
+    op: LogicalOp,
+}
+
+impl ZoneCombiner {
+    pub fn new(zones: Vec<Vec<CandidateZone>>, op: LogicalOp) -> Self {
+        Self { zones, op }
+    }
+
+    pub fn combine(&self) -> Vec<CandidateZone> {
+        if self.zones.is_empty() {
+            return vec![];
+        }
+
+        if self.zones.len() == 1 {
+            return CandidateZone::uniq(self.zones[0].clone());
+        }
+
+        let maps: Vec<HashMap<(u32, String), CandidateZone>> = self
+            .zones
+            .iter()
+            .map(|set| {
+                set.iter()
+                    .map(|z| ((z.zone_id, z.segment_id.clone()), z.clone()))
+                    .collect()
+            })
+            .collect();
+
+        let result = match self.op {
+            LogicalOp::And => {
+                let mut base = maps[0].clone();
+                info!(target: "sneldb::zone_combiner", count = %base.len(), "Base map size before AND");
+                for m in &maps[1..] {
+                    base.retain(|k, _| m.contains_key(k));
+                }
+                info!(target: "sneldb::zone_combiner", count = %base.len(), "Base map size after AND");
+                base
+            }
+            LogicalOp::Or => {
+                let mut all = HashMap::new();
+                for m in maps {
+                    all.extend(m);
+                }
+                info!(target: "sneldb::zone_combiner", count = %all.len(), "Combined map size for OR");
+                all
+            }
+            LogicalOp::Not => {
+                warn!(target: "sneldb::zone_combiner", "ZoneCombiner: NOT operation not implemented");
+                HashMap::new()
+            }
+        };
+
+        CandidateZone::uniq(result.into_values().collect())
+    }
+}

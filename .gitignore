@@ -1,0 +1,13 @@
+/target
+/data
+/index
+/logs
+/wal
+/tests/integration/tmp
+/tests/integration/tmp/*
+/src/tests/integration/tmp/*
+/tools/aritje/data
+/tools/aritje/backend/node_modules
+/tools/aritje/frontend/node_modules
+/.cursor/*
+/guide_book/book

@@ -1,0 +1,92 @@
+use crate::engine::core::{Event, FlushManager, MemTable, SegmentIdLoader, WalHandle, WalRecovery};
+use crate::engine::schema::registry::SchemaRegistry;
+use crate::shared::config::CONFIG;
+use std::collections::BTreeMap;
+use std::path::PathBuf;
+use std::sync::{Arc, RwLock};
+use tokio::sync::Mutex;
+use tokio::sync::mpsc::Sender;
+use tracing::{info, warn};
+
+#[derive(Debug, Clone)]
+pub struct ShardContext {
+    pub id: usize,
+
+    // LSM ingestion
+    pub memtable: MemTable,
+    pub passive_memtable: Arc<Mutex<MemTable>>,
+    pub flush_sender: Sender<(
+        u64,
+        MemTable,
+        Arc<tokio::sync::RwLock<SchemaRegistry>>,
+        Arc<Mutex<MemTable>>,
+    )>,
+    pub segment_id: u64,
+    pub segment_ids: Arc<RwLock<Vec<String>>>,
+    pub base_dir: PathBuf,
+    pub wal_dir: PathBuf,
+
+    // Query / replay cache
+    pub events: BTreeMap<String, Vec<Event>>,
+
+    // WAL and flushing
+    pub flush_count: usize,
+    pub wal: Option<Arc<WalHandle>>,
+    pub flush_manager: FlushManager,
+}
+
+impl ShardContext {
+    pub fn new(
+        id: usize,
+        flush_sender: Sender<(
+            u64,
+            MemTable,
+            Arc<tokio::sync::RwLock<SchemaRegistry>>,
+            Arc<Mutex<MemTable>>,
+        )>,
+        base_dir: PathBuf,
+        wal_dir: PathBuf,
+    ) -> Self {
+        // Step 1: Initialize WAL
+        info!(target: "shard::context", shard_id = id, "Creating WAL handle");
+        let wal_handle = WalHandle::new(id, &wal_dir).expect("Failed to create WAL writer");
+        let wal = Arc::new(
+            wal_handle
+                .spawn_wal_thread()
+                .expect("Failed to spawn WAL thread"),
+        );
+
+        // Step 2: Load existing segment IDs
+        let segment_id_loader = SegmentIdLoader::new(base_dir.clone());
+        let segment_ids = Arc::new(RwLock::new(segment_id_loader.load()));
+        let segment_id = SegmentIdLoader::next_id(&segment_ids);
+
+        // Step 3: Initialize core components
+        let flush_manager = FlushManager::new(id, base_dir.clone(), Arc::clone(&segment_ids));
+
+        let mut ctx = Self {
+            id,
+            memtable: MemTable::new(CONFIG.engine.flush_threshold),
+            passive_memtable: Arc::new(Mutex::new(MemTable::new(CONFIG.engine.flush_threshold))),
+            flush_sender,
+            segment_id,
+            segment_ids,
+            base_dir,
+            wal_dir: wal_dir.clone(),
+            events: BTreeMap::new(),
+            flush_count: 0,
+            wal: Some(wal),
+            flush_manager,
+        };
+
+        // Step 4: Recover MemTable from WAL
+        let wal_recovery = WalRecovery::new(id, &wal_dir);
+        if let Err(err) = wal_recovery.recover(&mut ctx) {
+            warn!(target: "shard::context", shard_id = id, "Failed to recover from WAL: {:?}", err);
+        } else {
+            info!(target: "shard::context", shard_id = id, "WAL recovery completed");
+        }
+
+        ctx
+    }
+}

@@ -1,0 +1,86 @@
+use crate::engine::core::{FlushManager, MemTable, WalHandle};
+use crate::engine::shard::context::ShardContext;
+use crate::shared::config::CONFIG;
+use std::path::PathBuf;
+use std::sync::{Arc, RwLock};
+use tokio::sync::mpsc;
+
+/// A test factory for creating ShardContext with default or customized parameters.
+pub struct ShardContextFactory {
+    id: usize,
+    capacity: usize,
+    base_dir: Option<PathBuf>,
+    wal_dir: Option<PathBuf>,
+}
+
+impl ShardContextFactory {
+    pub fn new() -> Self {
+        Self {
+            id: 0,
+            capacity: CONFIG.engine.flush_threshold,
+            base_dir: None,
+            wal_dir: None,
+        }
+    }
+
+    pub fn with_id(mut self, id: usize) -> Self {
+        self.id = id;
+        self
+    }
+
+    pub fn with_capacity(mut self, capacity: usize) -> Self {
+        self.capacity = capacity;
+        self
+    }
+
+    pub fn with_base_dir(mut self, dir: PathBuf) -> Self {
+        self.base_dir = Some(dir);
+        self
+    }
+
+    pub fn with_wal_dir(mut self, dir: PathBuf) -> Self {
+        self.wal_dir = Some(dir);
+        self
+    }
+
+    /// Create a ShardContext with default or configured values.
+    /// Returns the context and its backing tempdir (if used).
+    pub fn create(self) -> ShardContext {
+        let tempdir = tempfile::tempdir().expect("tempdir creation failed");
+        let base_dir = self
+            .base_dir
+            .unwrap_or_else(|| tempdir.path().to_path_buf());
+        let wal_dir = self.wal_dir.unwrap_or_else(|| tempdir.path().to_path_buf());
+
+        let (flush_sender, _rx) = mpsc::channel(8);
+
+        let wal_handle = WalHandle::new(self.id, &wal_dir).expect("Failed to create WAL writer");
+        let wal = Arc::new(
+            wal_handle
+                .spawn_wal_thread()
+                .expect("Failed to spawn WAL thread"),
+        );
+
+        let segment_ids = Arc::new(RwLock::new(vec![]));
+        let flush_manager = FlushManager::new(self.id, base_dir.clone(), Arc::clone(&segment_ids));
+
+        let ctx = ShardContext {
+            id: self.id,
+            memtable: MemTable::new(self.capacity),
+            flush_sender,
+            segment_id: 0,
+            segment_ids,
+            base_dir,
+            wal_dir: wal_dir.clone(),
+            events: Default::default(),
+            flush_count: 0,
+            wal: Some(wal),
+            flush_manager,
+            passive_memtable: Arc::new(tokio::sync::Mutex::new(MemTable::new(
+                CONFIG.engine.flush_threshold,
+            ))),
+        };
+
+        ctx
+    }
+}

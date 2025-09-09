@@ -1,0 +1,9 @@
+[book]
+authors = ["Max Shafiei"]
+language = "en"
+src = "src"
+title = "SnelDB: The Complete Guide"
+
+[output.html]
+additional-js = ["theme/book.js", "theme/sneldb.js"]
+additional-css = ["theme/sneldb.css"]

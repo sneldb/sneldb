@@ -1,0 +1,164 @@
+use crate::engine::core::ZoneIndex;
+use crate::engine::core::{CandidateZone, ColumnKey, ZoneData, ZoneId};
+use crate::test_helpers::factories::ColumnOffsetsFactory;
+use std::collections::{BTreeMap, HashMap};
+use tempfile::tempdir;
+
+#[test]
+fn test_zone_index_roundtrip() {
+    let tmp = tempdir().unwrap();
+    let path = tmp.path().join("index.bin");
+
+    let col_offsets = ColumnOffsetsFactory::new()
+        .with_entry("signup", "context_id", 0, vec![10], vec!["ctx42"])
+        .with_entry("signup", "context_id", 1, vec![20], vec!["ctx99"])
+        .with_entry("login", "context_id", 0, vec![5], vec!["ctx42"])
+        .create();
+
+    let mut index = ZoneIndex::default();
+
+    for event_type in &["signup", "login"] {
+        let filtered: HashMap<ColumnKey, HashMap<ZoneId, ZoneData>> = col_offsets
+            .as_map()
+            .iter()
+            .filter(|((etype, _), _)| etype == event_type)
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+
+        index.populate(&filtered, "context_id");
+    }
+
+    index.write_to_path(&path).unwrap();
+    let loaded = ZoneIndex::load_from_path(&path).unwrap();
+
+    assert_eq!(index.index, loaded.index);
+}
+#[test]
+fn test_zone_index_write_and_load_from_path() {
+    let mut index = ZoneIndex::default();
+    index.insert("signup", "ctx42", 0);
+    index.insert("signup", "ctx42", 1);
+    index.insert("signup", "ctx99", 2);
+
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("zone.idx");
+
+    index.write_to_path(&path).unwrap();
+    assert!(path.exists());
+
+    let loaded = ZoneIndex::load_from_path(&path).unwrap();
+
+    assert_eq!(loaded.index["signup"]["ctx42"], vec![0, 1]);
+    assert_eq!(loaded.index["signup"]["ctx99"], vec![2]);
+}
+
+#[test]
+fn test_find_candidate_zones_with_context_id() {
+    let mut index = ZoneIndex::default();
+    index.insert("login", "ctxA", 1);
+    index.insert("login", "ctxA", 2); // Should only pick the first (1)
+
+    let candidates = index.find_candidate_zones("login", Some("ctxA"), "segment-001");
+
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0], CandidateZone::new(1, "segment-001".into()));
+}
+
+#[test]
+fn test_find_candidate_zones_without_context_id() {
+    let mut index = ZoneIndex::default();
+    index.insert("signup", "ctxX", 5);
+    index.insert("signup", "ctxY", 7);
+
+    let mut result = index.find_candidate_zones("signup", None, "segment-002");
+    result.sort_by_key(|c| c.zone_id);
+
+    assert_eq!(result.len(), 2);
+    assert_eq!(result[0], CandidateZone::new(5, "segment-002".into()));
+    assert_eq!(result[1], CandidateZone::new(7, "segment-002".into()));
+}
+
+#[test]
+fn test_find_candidate_zones_with_unknown_event_type() {
+    let index = ZoneIndex::default();
+
+    let candidates = index.find_candidate_zones("nonexistent", None, "segment-003");
+    assert!(candidates.is_empty());
+}
+
+#[test]
+fn test_find_candidate_zones_with_unknown_context_id() {
+    let mut index = ZoneIndex::default();
+    index.insert("payment", "known_ctx", 9);
+
+    let candidates = index.find_candidate_zones("payment", Some("unknown_ctx"), "segment-004");
+    assert!(candidates.is_empty());
+}
+
+#[test]
+fn test_find_candidate_zones_skips_empty_zone_lists() {
+    let mut index = ZoneIndex::default();
+    index.index.insert(
+        "event".into(),
+        BTreeMap::from([("ctx1".into(), vec![]), ("ctx2".into(), vec![11])]),
+    );
+
+    let result = index.find_candidate_zones("event", None, "segment-005");
+
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0], CandidateZone::new(11, "segment-005".into()));
+}
+
+#[test]
+fn test_zone_index_find_candidates_after_roundtrip() {
+    let tmp = tempdir().unwrap();
+    let path = tmp.path().join("zone.idx");
+
+    // Step 1: Create and populate a ZoneIndex
+    let mut original = ZoneIndex::default();
+    original.insert("signup", "ctx42", 10);
+    original.insert("signup", "ctx42", 20); // Should be ignored, only first used
+    original.insert("signup", "ctx99", 30);
+    original.insert("login", "ctxA", 42);
+
+    // Step 2: Write to disk
+    original.write_to_path(&path).expect("Write failed");
+    assert!(path.exists());
+
+    // Step 3: Load back from disk
+    let reloaded = ZoneIndex::load_from_path(&path).expect("Load failed");
+
+    // Step 4: Check that find_candidate_zones still works
+    let mut signup_candidates = reloaded.find_candidate_zones("signup", None, "segment-01");
+    signup_candidates.sort_by_key(|c| c.zone_id);
+
+    assert_eq!(signup_candidates.len(), 2);
+    assert_eq!(
+        signup_candidates[0],
+        CandidateZone::new(10, "segment-01".into())
+    );
+    assert_eq!(
+        signup_candidates[1],
+        CandidateZone::new(30, "segment-01".into())
+    );
+
+    let ctx42_candidates = reloaded.find_candidate_zones("signup", Some("ctx42"), "segment-02");
+    assert_eq!(ctx42_candidates.len(), 1);
+    assert_eq!(
+        ctx42_candidates[0],
+        CandidateZone::new(10, "segment-02".into())
+    );
+
+    let login_candidates = reloaded.find_candidate_zones("login", Some("ctxA"), "segment-03");
+    assert_eq!(login_candidates.len(), 1);
+    assert_eq!(
+        login_candidates[0],
+        CandidateZone::new(42, "segment-03".into())
+    );
+
+    let unknown_event = reloaded.find_candidate_zones("not_exists", None, "segment-99");
+    assert!(unknown_event.is_empty());
+
+    let unknown_ctx = reloaded.find_candidate_zones("signup", Some("does_not_exist"), "segment-99");
+    assert!(unknown_ctx.is_empty());
+}

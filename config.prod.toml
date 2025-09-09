@@ -1,0 +1,35 @@
+[wal]
+enabled = true
+fsync = false
+buffered = true
+buffer_size = 102400
+dir = "../data/wal/"
+flush_each_write = false
+fsync_every_n = 1024
+
+[engine]
+flush_threshold = 16384
+data_dir = "../data/cols"
+index_dir = "../data/index/"
+shard_count = 8
+event_per_zone = 2048
+compaction_threshold = 8
+compaction_interval = 300
+sys_io_threshold = 100
+
+
+[schema]
+def_dir="../data/schema/"
+
+[server]
+socket_path = "/tmp/sneldb.sock"
+log_level = "error"
+output_format = "json"
+tcp_addr = "127.0.0.1:7171"
+http_addr = "127.0.0.1:8080"
+auth_token = "mysecrettoken"
+
+[logging]
+log_dir = "../data/logs"
+stdout_level = "warn"
+file_level = "error"

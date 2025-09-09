@@ -1,0 +1,83 @@
+use crate::engine::core::Flusher;
+use crate::engine::core::MemTable;
+use crate::engine::core::WalCleaner;
+use crate::engine::errors::StoreError;
+use crate::engine::schema::registry::SchemaRegistry;
+use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::sync::{RwLock as TokioRwLock, mpsc::Receiver};
+use tracing::{debug, error, info};
+
+/// Worker that processes MemTables and writes them to disk
+pub struct FlushWorker {
+    shard_id: usize,
+    base_dir: PathBuf,
+}
+
+impl FlushWorker {
+    /// Creates a new FlushWorker instance
+    pub fn new(shard_id: usize, base_dir: PathBuf) -> Self {
+        Self { shard_id, base_dir }
+    }
+
+    /// Runs the worker loop that processes MemTables
+    pub async fn run(
+        &self,
+        mut rx: Receiver<(
+            u64,
+            MemTable,
+            Arc<TokioRwLock<SchemaRegistry>>,
+            Arc<tokio::sync::Mutex<MemTable>>,
+        )>,
+    ) -> Result<(), StoreError> {
+        while let Some((segment_id, memtable, registry, passive_memtable)) = rx.recv().await {
+            let segment_dir = self.base_dir.join(format!("segment-{:05}", segment_id));
+
+            info!(
+                target: "sneldb::flush",
+                shard_id = self.shard_id,
+                segment_id,
+                path = ?segment_dir,
+                "Starting flush"
+            );
+
+            let flusher = Flusher::new(memtable, segment_id, &segment_dir, Arc::clone(&registry));
+            if let Err(e) = flusher.flush().await {
+                error!(
+                    target: "sneldb::flush",
+                    shard_id = self.shard_id,
+                    segment_id,
+                    error = %e,
+                    "Flush failed"
+                );
+            } else {
+                info!(
+                    target: "sneldb::flush",
+                    shard_id = self.shard_id,
+                    segment_id,
+                    "Flush succeeded"
+                );
+
+                debug!(
+                    target: "sneldb::flush",
+                    shard_id = self.shard_id,
+                    segment_id,
+                    "Clearing passive MemTable"
+                );
+                let mut pmem = passive_memtable.lock().await;
+                pmem.flush();
+
+                debug!(
+                    target: "sneldb::flush",
+                    shard_id = self.shard_id,
+                    wal_cutoff = segment_id + 1,
+                    "Cleaning up WAL files"
+                );
+                let cleaner = WalCleaner::new(self.shard_id);
+                cleaner.cleanup_up_to(segment_id + 1);
+            }
+        }
+
+        Ok(())
+    }
+}
