@@ -11,3 +11,4 @@
 /tools/aritje/frontend/node_modules
 /.cursor/*
 /guide_book/book
+.DS_Store
