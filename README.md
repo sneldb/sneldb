@@ -76,4 +76,6 @@ Start with the guide:
 - Commands (overview and syntax)
 - Design (overview, storage engine, sharding, replay & query, compaction)
 
-You can wire it into your stack via the provided frontends (HTTP, TCP, UNIX). Configuration, examples, and operational notes live in the guide. Links will be fixed in this README soon.
+---
+
+Built with ❤️ in Rust.
