@@ -36,6 +36,7 @@ pub struct EngineConfig {
     pub compaction_threshold: usize,
     pub compaction_interval: u64,
     pub sys_io_threshold: usize,
+    pub max_inflight_passives: usize,
 }
 
 #[derive(Serialize)]
@@ -71,7 +72,7 @@ pub fn write_config_for(name: &str) -> (String, String) {
             fsync_every_n: None,
         },
         engine: EngineConfig {
-            flush_threshold: 6,
+            flush_threshold: 2,
             data_dir: format!("{}/data", base_dir),
             index_dir: format!("{}/index", base_dir),
             shard_count: 2,
@@ -79,6 +80,7 @@ pub fn write_config_for(name: &str) -> (String, String) {
             compaction_threshold: 10,
             compaction_interval: 10,
             sys_io_threshold: 10,
+            max_inflight_passives: 8,
         },
         server: ServerConfig {
             socket_path: socket_path.clone(),

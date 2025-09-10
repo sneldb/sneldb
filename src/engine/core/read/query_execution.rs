@@ -13,7 +13,7 @@ pub struct QueryExecution<'a> {
     steps: Vec<ExecutionStep<'a>>,
     metadata: HashMap<String, String>,
     memtable: Option<&'a MemTable>,
-    passive_memtable: Option<&'a Arc<tokio::sync::Mutex<MemTable>>>,
+    passive_memtables: Vec<&'a Arc<tokio::sync::Mutex<MemTable>>>,
 }
 
 impl<'a> QueryExecution<'a> {
@@ -35,7 +35,7 @@ impl<'a> QueryExecution<'a> {
             steps,
             metadata: HashMap::new(),
             memtable: None,
-            passive_memtable: None,
+            passive_memtables: Vec::new(),
         }
     }
 
@@ -44,11 +44,11 @@ impl<'a> QueryExecution<'a> {
         self
     }
 
-    pub fn with_passive_memtable(
+    pub fn with_passive_memtables(
         mut self,
-        passive_memtable: &'a Arc<tokio::sync::Mutex<MemTable>>,
+        passives: Vec<&'a Arc<tokio::sync::Mutex<MemTable>>>,
     ) -> Self {
-        self.passive_memtable = Some(passive_memtable);
+        self.passive_memtables = passives;
         self
     }
 
@@ -88,7 +88,7 @@ impl<'a> QueryExecution<'a> {
 
         // Step 1: Memtable
         let memtable_events =
-            MemTableQueryRunner::new(self.memtable, self.passive_memtable, self.plan)
+            MemTableQueryRunner::new(self.memtable, &self.passive_memtables, self.plan)
                 .run()
                 .await;
         debug!(

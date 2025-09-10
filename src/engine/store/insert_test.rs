@@ -173,7 +173,7 @@ async fn test_insert_and_maybe_flush_e2e() {
         &ctx.base_dir,
         &ctx.segment_ids,
         &ctx.memtable,
-        &ctx.passive_memtable,
+        &ctx.passive_buffers,
     )
     .await
     .unwrap();
