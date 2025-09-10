@@ -81,7 +81,7 @@ async fn on_query(
         &ctx.base_dir,
         &ctx.segment_ids,
         &ctx.memtable,
-        &ctx.passive_memtable,
+        &ctx.passive_buffers,
     )
     .await
     .map_err(|e| e.to_string())?;
@@ -102,7 +102,7 @@ async fn on_replay(
         &ctx.base_dir,
         &ctx.segment_ids,
         &ctx.memtable,
-        &ctx.passive_memtable,
+        &ctx.passive_buffers,
     )
     .await
     .map_err(|e| e.to_string())?;
@@ -118,9 +118,8 @@ async fn on_flush(
     let capacity = ctx.memtable.capacity();
     let segment_id = SegmentIdLoader::next_id(&ctx.segment_ids);
 
-    // Move current memtable to passive
-    let mut pmem = ctx.passive_memtable.lock().await;
-    *pmem = ctx.memtable.clone();
+    // Move current memtable to a new passive buffer
+    let passive = ctx.passive_buffers.add_from(&ctx.memtable).await;
     let flushed_mem = std::mem::replace(&mut ctx.memtable, MemTable::new(capacity));
 
     // Create flush manager and enqueue
@@ -132,7 +131,7 @@ async fn on_flush(
             flushed_mem,
             Arc::clone(registry),
             segment_id,
-            Arc::clone(&ctx.passive_memtable),
+            Arc::clone(&passive),
         )
         .await
         .map_err(|e| e.to_string())

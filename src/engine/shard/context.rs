@@ -1,3 +1,4 @@
+use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
 use crate::engine::core::{Event, FlushManager, MemTable, SegmentIdLoader, WalHandle, WalRecovery};
 use crate::engine::schema::registry::SchemaRegistry;
 use crate::shared::config::CONFIG;
@@ -14,7 +15,7 @@ pub struct ShardContext {
 
     // LSM ingestion
     pub memtable: MemTable,
-    pub passive_memtable: Arc<Mutex<MemTable>>,
+    pub passive_buffers: Arc<PassiveBufferSet>,
     pub flush_sender: Sender<(
         u64,
         MemTable,
@@ -67,7 +68,9 @@ impl ShardContext {
         let mut ctx = Self {
             id,
             memtable: MemTable::new(CONFIG.engine.flush_threshold),
-            passive_memtable: Arc::new(Mutex::new(MemTable::new(CONFIG.engine.flush_threshold))),
+            passive_buffers: Arc::new(PassiveBufferSet::new(
+                CONFIG.engine.max_inflight_passives.unwrap_or(8),
+            )),
             flush_sender,
             segment_id,
             segment_ids,

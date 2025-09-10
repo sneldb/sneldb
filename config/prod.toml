@@ -16,6 +16,7 @@ event_per_zone = 2048
 compaction_threshold = 8
 compaction_interval = 300
 sys_io_threshold = 100
+max_inflight_passives = 32
 
 
 [schema]

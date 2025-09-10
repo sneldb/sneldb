@@ -1,5 +1,6 @@
 use crate::command::types::Command;
 use crate::engine::core::{Event, MemTable, QueryExecution, QueryPlan};
+use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
 use crate::engine::errors::QueryExecutionError;
 use crate::engine::schema::registry::SchemaRegistry;
 use std::path::Path;
@@ -14,7 +15,7 @@ pub async fn scan(
     segment_base_dir: &Path,
     segment_ids: &Arc<std::sync::RwLock<Vec<String>>>,
     memtable: &MemTable,
-    passive_memtable: &Arc<Mutex<MemTable>>,
+    passive_buffers: &Arc<PassiveBufferSet>,
 ) -> Result<Vec<Event>, QueryExecutionError> {
     // Step 1: Convert to a Query command
     let query_command = match command.to_query_command() {
@@ -41,9 +42,12 @@ pub async fn scan(
     };
 
     // Step 3: Execute the query
+    let passives = passive_buffers.non_empty().await;
+    let passive_refs: Vec<&Arc<Mutex<MemTable>>> = passives.iter().collect();
+
     let mut execution = QueryExecution::new(&plan)
         .with_memtable(memtable)
-        .with_passive_memtable(passive_memtable);
+        .with_passive_memtables(passive_refs);
 
     let results = execution.run().await?;
     info!(target: "engine::replay::scan", count = results.len(), "Replay scan completed");

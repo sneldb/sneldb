@@ -4,19 +4,19 @@ use tracing::{debug, info};
 
 pub struct MemTableQueryRunner<'a> {
     memtable: Option<&'a MemTable>,
-    passive_memtable: Option<&'a Arc<tokio::sync::Mutex<MemTable>>>,
+    passive_memtables: &'a Vec<&'a Arc<tokio::sync::Mutex<MemTable>>>,
     plan: &'a QueryPlan,
 }
 
 impl<'a> MemTableQueryRunner<'a> {
     pub fn new(
         memtable: Option<&'a MemTable>,
-        passive_memtable: Option<&'a Arc<tokio::sync::Mutex<MemTable>>>,
+        passive_memtables: &'a Vec<&'a Arc<tokio::sync::Mutex<MemTable>>>,
         plan: &'a QueryPlan,
     ) -> Self {
         Self {
             memtable,
-            passive_memtable,
+            passive_memtables,
             plan,
         }
     }
@@ -40,18 +40,11 @@ impl<'a> MemTableQueryRunner<'a> {
             events.extend(found);
         }
 
-        if let Some(pm) = self.passive_memtable {
-            debug!(
-                target: "sneldb::query_memtable",
-                "Acquiring lock for passive MemTable"
-            );
+        for pm in self.passive_memtables.iter() {
+            debug!(target: "sneldb::query_memtable", "Acquiring lock for passive MemTable");
             let guard = pm.lock().await;
             let count = guard.len();
-            debug!(
-                target: "sneldb::query_memtable",
-                count,
-                "Querying passive MemTable"
-            );
+            debug!(target: "sneldb::query_memtable", count, "Querying passive MemTable");
             let found = MemTableQuery::new(&*guard, self.plan).query();
             debug!(
                 target: "sneldb::query_memtable",
