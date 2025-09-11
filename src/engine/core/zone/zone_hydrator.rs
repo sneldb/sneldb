@@ -22,11 +22,8 @@ impl<'a> ZoneHydrator<'a> {
 
         match self.plan.event_type_uid().await {
             Some(uid) => {
-                let columns: Vec<String> = self
-                    .steps
-                    .iter()
-                    .map(|step| step.filter.column.clone())
-                    .collect();
+                // Build minimal column set: filters + projection + core fields
+                let columns = self.plan.columns_to_load().await;
 
                 info!(target: "sneldb::query", "Hydrating zones with columns: {:?}", columns);
 

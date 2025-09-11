@@ -1,5 +1,19 @@
 [
   {
+    "name": "replay_projection_excludes_unreferenced_payload_field",
+    "input_commands": [
+      "DEFINE product FIELDS { \"name\": \"string\", \"price\": \"int\", \"color\": \"string\" }",
+      "STORE product FOR user-1 PAYLOAD {\"name\":\"Desk\",\"price\":25,\"color\":\"red\"}",
+      "STORE product FOR user-1 PAYLOAD {\"name\":\"Chair\",\"price\":50,\"color\":\"blue\"}",
+      "FLUSH",
+      "REPLAY product FOR user-1 RETURN [name]"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["Desk", "Chair"] },
+      { "kind": "include_none", "value": ["\"color\"", "\"price\""] }
+    ]
+  },
+  {
     "name": "store_without_definition",
     "input_commands": [
       "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":1,\"status\":\"confirmed\"}"
@@ -8,6 +22,29 @@
       "kind": "include",
       "value": "No schema defined"
     }
+  },
+  {
+    "name": "projection_excludes_unreferenced_payload_field",
+    "input_commands": [
+      "DEFINE product FIELDS { \"name\": \"string\", \"price\": \"int\", \"color\": \"string\" }",
+      "STORE product FOR user-1 PAYLOAD {\"name\":\"Desk\",\"price\":25,\"color\":\"red\"}",
+      "FLUSH",
+      "QUERY product RETURN [name] WHERE price > 10"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "Desk"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "\"color\""
+        ]
+      }
+    ]
   },
   {
     "name": "store_and_query_enum_eq",
