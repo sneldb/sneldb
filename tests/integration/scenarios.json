@@ -799,7 +799,7 @@
   },
   {
     "name": "wal_reload_after_restart",
-    "config": { "engine": { "flush_threshold": 100 }, "wal": { "enabled": true, "fsync_every_n": 1 } },
+    "config": { "engine": { "flush_threshold": 100 }, "wal": { "enabled": true } },
     "input_commands": [
       "DEFINE login FIELDS { \"device\": \"string\" }",
       "STORE login FOR u1 PAYLOAD {\"device\":\"android\"}",
@@ -813,7 +813,7 @@
   ,
   {
     "name": "wal_recover_no_flush",
-    "config": { "engine": { "flush_threshold": 100 }, "wal": { "enabled": true, "fsync_every_n": 1 } },
+    "config": { "engine": { "flush_threshold": 100 }, "wal": { "enabled": true } },
     "input_commands": [
       "DEFINE login FIELDS { \"device\": \"string\" }",
       "STORE login FOR u1 PAYLOAD {\"device\":\"android\"}",
@@ -827,7 +827,7 @@
   ,
   {
     "name": "wal_disabled_no_recovery",
-    "config": { "engine": { "flush_threshold": 100 }, "wal": { "enabled": false, "fsync_every_n": 1 } },
+    "config": { "engine": { "flush_threshold": 100 }, "wal": { "enabled": false} },
     "input_commands": [
       "DEFINE login FIELDS { \"device\": \"string\" }",
       "STORE login FOR u1 PAYLOAD {\"device\":\"android\"}",
@@ -841,7 +841,7 @@
   ,
   {
     "name": "wal_multi_log_recovery",
-    "config": { "engine": { "flush_threshold": 2 }, "wal": { "enabled": true, "fsync_every_n": 1 } },
+    "config": { "engine": { "flush_threshold": 2 }, "wal": { "enabled": true } },
     "input_commands": [
       "DEFINE evt FIELDS { \"v\": \"int\" }",
       "STORE evt FOR a PAYLOAD {\"v\":1}",
@@ -857,7 +857,7 @@
   ,
   {
     "name": "wal_recover_during_pending_flush",
-    "config": { "engine": { "flush_threshold": 1 }, "wal": { "enabled": true, "fsync_every_n": 1 } },
+    "config": { "engine": { "flush_threshold": 1 }, "wal": { "enabled": true } },
     "input_commands": [
       "DEFINE evt FIELDS { \"v\": \"int\" }",
       "STORE evt FOR a PAYLOAD {\"v\":1}",
@@ -871,7 +871,7 @@
   ,
   {
     "name": "wal_flush_then_restart_segment_only",
-    "config": { "engine": { "flush_threshold": 2 }, "wal": { "enabled": true, "fsync_every_n": 1 } },
+    "config": { "engine": { "flush_threshold": 2 }, "wal": { "enabled": true } },
     "input_commands": [
       "DEFINE order FIELDS { \"id\": \"int\" }",
       "STORE order FOR c1 PAYLOAD {\"id\":1}",
@@ -886,7 +886,7 @@
   ,
   {
     "name": "wal_recover_multi_shard",
-    "config": { "engine": { "flush_threshold": 100, "shard_count": 2 }, "wal": { "enabled": true, "fsync_every_n": 1 } },
+    "config": { "engine": { "flush_threshold": 100, "shard_count": 2 }, "wal": { "enabled": true } },
     "input_commands": [
       "DEFINE ping FIELDS { \"x\": \"int\" }",
       "STORE ping FOR shard-a PAYLOAD {\"x\":1}",
