@@ -62,6 +62,26 @@ mod dispatcher_tests {
     }
 
     #[test]
+    fn test_parse_command_query_with_return_clause() {
+        let input = r#"QUERY orders RETURN [id, "status"] WHERE status = "pending" LIMIT 10"#;
+        let command = parse_command(input).expect("Failed to parse QUERY with RETURN");
+
+        if let Command::Query {
+            event_type,
+            where_clause,
+            limit,
+            ..
+        } = command
+        {
+            assert_eq!(event_type, "orders");
+            assert_eq!(limit, Some(10));
+            assert!(where_clause.is_some());
+        } else {
+            panic!("Expected Command::Query");
+        }
+    }
+
+    #[test]
     fn test_parse_command_replay_with_full_arguments() {
         let input = r#"REPLAY orders FOR user-123 SINCE "2024-01-01T00:00:00Z""#;
         let command = parse_command(input).expect("Failed to parse REPLAY command");
@@ -70,11 +90,32 @@ mod dispatcher_tests {
             event_type,
             context_id,
             since,
+            ..
         } = command
         {
             assert_eq!(event_type.unwrap(), "orders");
             assert_eq!(context_id, "user-123");
             assert_eq!(since.unwrap(), "2024-01-01T00:00:00Z");
+        } else {
+            panic!("Expected Command::Replay");
+        }
+    }
+
+    #[test]
+    fn test_parse_command_replay_with_return_clause() {
+        let input = r#"REPLAY orders FOR user-123 RETURN [id, "status"]"#;
+        let command = parse_command(input).expect("Failed to parse REPLAY with RETURN");
+
+        if let Command::Replay {
+            event_type,
+            context_id,
+            since,
+            ..
+        } = command
+        {
+            assert_eq!(event_type.unwrap(), "orders");
+            assert_eq!(context_id, "user-123");
+            assert_eq!(since, None);
         } else {
             panic!("Expected Command::Replay");
         }
@@ -89,6 +130,7 @@ mod dispatcher_tests {
             event_type,
             context_id,
             since,
+            ..
         } = command
         {
             assert_eq!(event_type, None);

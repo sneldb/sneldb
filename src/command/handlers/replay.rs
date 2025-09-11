@@ -21,6 +21,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
         event_type,
         context_id,
         since,
+        ..
     } = cmd
     else {
         warn!(target: "sneldb::replay", "Invalid Replay command received");

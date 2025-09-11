@@ -68,6 +68,7 @@ impl From<JsonCommand> for Command {
                 since,
                 where_clause: where_clause.map(Into::into),
                 limit,
+                return_fields: None,
             },
             JsonCommand::Replay {
                 event_type,
@@ -77,6 +78,7 @@ impl From<JsonCommand> for Command {
                 event_type,
                 context_id,
                 since,
+                return_fields: None,
             },
             JsonCommand::Ping => Command::Ping,
             JsonCommand::Flush => Command::Flush,

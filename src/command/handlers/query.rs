@@ -24,6 +24,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
         since,
         where_clause,
         limit,
+        ..
     } = cmd
     else {
         warn!(target: "sneldb::query", "Invalid Query command received");

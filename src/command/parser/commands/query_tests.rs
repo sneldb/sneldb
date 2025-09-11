@@ -22,6 +22,7 @@ mod query_tests {
                 since: None,
                 where_clause: None,
                 limit: None,
+                return_fields: None,
             }
         );
     }
@@ -41,6 +42,7 @@ mod query_tests {
                 since: None,
                 where_clause: None,
                 limit: None,
+                return_fields: None,
             }
         );
     }
@@ -60,6 +62,7 @@ mod query_tests {
                 since: Some("2024-01-01T00:00:00Z".to_string()),
                 where_clause: None,
                 limit: None,
+                return_fields: None,
             }
         );
     }
@@ -79,6 +82,7 @@ mod query_tests {
                 since: None,
                 where_clause: None,
                 limit: Some(100),
+                return_fields: None,
             }
         );
     }
@@ -102,6 +106,7 @@ mod query_tests {
                     value: json!("pending"),
                 }),
                 limit: None,
+                return_fields: None,
             }
         );
     }
@@ -140,6 +145,7 @@ mod query_tests {
                     )),
                 )),
                 limit: None,
+                return_fields: None,
             }
         );
     }
@@ -163,6 +169,7 @@ mod query_tests {
                     value: json!("cancelled"),
                 }))),
                 limit: None,
+                return_fields: None,
             }
         );
     }
@@ -186,6 +193,7 @@ mod query_tests {
                     value: json!(500.0),
                 }),
                 limit: Some(50),
+                return_fields: None,
             }
         );
     }
@@ -209,6 +217,7 @@ mod query_tests {
                     value: json!(0.0),
                 }))))),
                 limit: None,
+                return_fields: None,
             }
         );
     }
@@ -232,6 +241,7 @@ mod query_tests {
                     value: json!(100.0),
                 }),
                 limit: None,
+                return_fields: None,
             }
         );
     }
@@ -255,6 +265,7 @@ mod query_tests {
                     value: json!("pending"),
                 }),
                 limit: None,
+                return_fields: None,
             }
         );
     }
@@ -285,6 +296,7 @@ mod query_tests {
                     })))
                 )),
                 limit: None,
+                return_fields: None,
             }
         );
     }
@@ -312,6 +324,75 @@ mod query_tests {
         assert!(
             result.is_err(),
             "Expected failure due to trailing garbage after WHERE in QUERY"
+        );
+    }
+
+    #[test]
+    fn test_parse_query_with_return_ignored() {
+        let input = r#"QUERY order_created RETURN [context_id, event_type, "timestamp", payload] WHERE status = "pending" LIMIT 10"#;
+        let tokens = tokenize(input);
+
+        let command = query::parse(&tokens).expect("Failed to parse QUERY with RETURN");
+
+        assert_eq!(
+            command,
+            Command::Query {
+                event_type: "order_created".to_string(),
+                context_id: None,
+                since: None,
+                where_clause: Some(Expr::Compare {
+                    field: "status".to_string(),
+                    op: CompareOp::Eq,
+                    value: json!("pending"),
+                }),
+                limit: Some(10),
+                return_fields: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_query_with_return_empty_list() {
+        let input = r#"QUERY order_created RETURN [] WHERE status = "pending""#;
+        let tokens = tokenize(input);
+
+        let command = query::parse(&tokens).expect("Failed to parse QUERY with empty RETURN");
+
+        assert_eq!(
+            command,
+            Command::Query {
+                event_type: "order_created".to_string(),
+                context_id: None,
+                since: None,
+                where_clause: Some(Expr::Compare {
+                    field: "status".to_string(),
+                    op: CompareOp::Eq,
+                    value: json!("pending"),
+                }),
+                limit: None,
+                return_fields: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_query_with_return_and_since() {
+        let input =
+            r#"QUERY order_created SINCE "2024-01-01T00:00:00Z" RETURN ["plan", country] LIMIT 5"#;
+        let tokens = tokenize(input);
+
+        let command = query::parse(&tokens).expect("Failed to parse QUERY with SINCE and RETURN");
+
+        assert_eq!(
+            command,
+            Command::Query {
+                event_type: "order_created".to_string(),
+                context_id: None,
+                since: Some("2024-01-01T00:00:00Z".to_string()),
+                where_clause: None,
+                limit: Some(5),
+                return_fields: None,
+            }
         );
     }
 }
