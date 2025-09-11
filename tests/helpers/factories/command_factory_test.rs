@@ -50,6 +50,7 @@ fn test_command_replay_with_custom_values() {
         event_type,
         context_id,
         since,
+        ..
     } = cmd
     {
         assert_eq!(event_type, Some("login".into()));
@@ -57,5 +58,46 @@ fn test_command_replay_with_custom_values() {
         assert_eq!(since, Some("2024-01-01T12:00:00Z".into()));
     } else {
         panic!("Expected Command::Replay variant");
+    }
+}
+
+#[test]
+fn test_command_query_with_return_fields() {
+    let cmd = CommandFactory::query()
+        .with_return_fields(vec!["context_id", "country", "plan"])
+        .create();
+
+    if let Command::Query {
+        return_fields: Some(f),
+        ..
+    } = cmd
+    {
+        assert_eq!(
+            f,
+            vec![
+                "context_id".to_string(),
+                "country".to_string(),
+                "plan".to_string()
+            ]
+        );
+    } else {
+        panic!("Expected query command with return_fields");
+    }
+}
+
+#[test]
+fn test_command_replay_with_return_fields() {
+    let cmd = CommandFactory::replay()
+        .with_return_fields(vec!["event_type", "timestamp"])
+        .create();
+
+    if let Command::Replay {
+        return_fields: Some(f),
+        ..
+    } = cmd
+    {
+        assert_eq!(f, vec!["event_type".to_string(), "timestamp".to_string()]);
+    } else {
+        panic!("Expected replay command with return_fields");
     }
 }

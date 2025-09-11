@@ -74,7 +74,58 @@ pub fn parse(tokens: &[Token]) -> Result<Command, ParseError> {
         }
     }
 
-    // 4. optional WHERE clause
+    // 4. optional RETURN [fields] — parse and ignore
+    if let Some(Word(word)) = iter.peek() {
+        if word.eq_ignore_ascii_case("RETURN") {
+            iter.next();
+
+            // Expect '['
+            match iter.next() {
+                Some(LeftSquareBracket) => {}
+                Some(other) => {
+                    return Err(ParseError::UnexpectedToken(format!(
+                        "Expected '[' after RETURN, found {:?}",
+                        other
+                    )));
+                }
+                None => {
+                    return Err(ParseError::MissingArgument(
+                        "Expected '[' after RETURN".to_string(),
+                    ));
+                }
+            }
+
+            // Parse zero or more field names until ']'
+            loop {
+                match iter.peek() {
+                    Some(RightSquareBracket) => {
+                        iter.next();
+                        break;
+                    }
+                    Some(Word(_)) | Some(StringLiteral(_)) => {
+                        iter.next();
+                    }
+                    Some(Symbol(',')) => {
+                        iter.next();
+                        continue;
+                    }
+                    Some(other) => {
+                        return Err(ParseError::UnexpectedToken(format!(
+                            "Unexpected token in RETURN list: {:?}",
+                            other
+                        )));
+                    }
+                    None => {
+                        return Err(ParseError::MissingArgument(
+                            "Unterminated RETURN list, expected ']'".to_string(),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    // 5. optional WHERE clause
     let mut where_clause = None;
     if let Some(Word(word)) = iter.peek() {
         if word.eq_ignore_ascii_case("WHERE") {
@@ -83,7 +134,7 @@ pub fn parse(tokens: &[Token]) -> Result<Command, ParseError> {
         }
     }
 
-    // 5. optional LIMIT
+    // 6. optional LIMIT
     let mut limit = None;
     if let Some(Word(word)) = iter.peek() {
         if word.eq_ignore_ascii_case("LIMIT") {
@@ -118,6 +169,7 @@ pub fn parse(tokens: &[Token]) -> Result<Command, ParseError> {
         since,
         where_clause,
         limit,
+        return_fields: None,
     })
 }
 

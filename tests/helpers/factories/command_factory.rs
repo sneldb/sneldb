@@ -37,6 +37,7 @@ impl CommandFactory {
                 since: None,
                 where_clause: None,
                 limit: Some(10),
+                return_fields: None,
             },
         }
     }
@@ -47,6 +48,7 @@ impl CommandFactory {
                 event_type: Some("test_event".into()),
                 context_id: "ctx1".into(),
                 since: Some("2023-01-01T00:00:00Z".into()),
+                return_fields: None,
             },
         }
     }
@@ -111,6 +113,20 @@ impl CommandFactory {
             }
             Command::Replay { since: s, .. } => {
                 *s = Some(since.to_string());
+            }
+            _ => {}
+        }
+        self
+    }
+
+    pub fn with_return_fields(mut self, fields: Vec<&str>) -> Self {
+        let values: Vec<String> = fields.into_iter().map(|s| s.to_string()).collect();
+        match &mut self.inner {
+            Command::Query { return_fields, .. } => {
+                *return_fields = Some(values);
+            }
+            Command::Replay { return_fields, .. } => {
+                *return_fields = Some(values);
             }
             _ => {}
         }

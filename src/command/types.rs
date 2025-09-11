@@ -20,11 +20,13 @@ pub enum Command {
         since: Option<String>,
         where_clause: Option<Expr>,
         limit: Option<u32>,
+        return_fields: Option<Vec<String>>,
     },
     Replay {
         event_type: Option<String>,
         context_id: String,
         since: Option<String>,
+        return_fields: Option<Vec<String>>,
     },
     Ping,
     Flush,
@@ -37,6 +39,7 @@ impl Command {
             event_type,
             context_id,
             since,
+            return_fields,
         } = self
         {
             Some(Command::Query {
@@ -45,6 +48,7 @@ impl Command {
                 since: since.clone(),
                 where_clause: None,
                 limit: None,
+                return_fields: return_fields.clone(),
             })
         } else {
             None

@@ -19,6 +19,7 @@ mod replay_tests {
                 event_type: None,
                 context_id: "user-123".to_string(),
                 since: None,
+                return_fields: None,
             }
         );
     }
@@ -36,6 +37,7 @@ mod replay_tests {
                 event_type: Some("order_created".to_string()),
                 context_id: "user-123".to_string(),
                 since: None,
+                return_fields: None,
             }
         );
     }
@@ -53,6 +55,7 @@ mod replay_tests {
                 event_type: None,
                 context_id: "user-123".to_string(),
                 since: Some("2024-01-01T00:00:00Z".to_string()),
+                return_fields: None,
             }
         );
     }
@@ -71,6 +74,7 @@ mod replay_tests {
                 event_type: Some("order_created".to_string()),
                 context_id: "user-123".to_string(),
                 since: Some("2024-01-01T00:00:00Z".to_string()),
+                return_fields: None,
             }
         );
     }
@@ -111,6 +115,60 @@ mod replay_tests {
         assert!(
             result.is_err(),
             "Expected failure due to missing space after FOR"
+        );
+    }
+
+    #[test]
+    fn test_parse_replay_with_return_ignored() {
+        let input = r#"REPLAY order_created FOR user-123 RETURN [context_id, event_type, "timestamp", payload]"#;
+        let tokens = tokenize(input);
+
+        let command = replay::parse(&tokens).expect("Failed to parse REPLAY with RETURN");
+
+        assert_eq!(
+            command,
+            Command::Replay {
+                event_type: Some("order_created".to_string()),
+                context_id: "user-123".to_string(),
+                since: None,
+                return_fields: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_replay_with_return_and_since() {
+        let input = r#"REPLAY FOR user-123 SINCE "2024-01-01T00:00:00Z" RETURN ["plan", country]"#;
+        let tokens = tokenize(input);
+
+        let command = replay::parse(&tokens).expect("Failed to parse REPLAY with SINCE and RETURN");
+
+        assert_eq!(
+            command,
+            Command::Replay {
+                event_type: None,
+                context_id: "user-123".to_string(),
+                since: Some("2024-01-01T00:00:00Z".to_string()),
+                return_fields: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_replay_with_return_empty_list() {
+        let input = r#"REPLAY FOR user-123 RETURN []"#;
+        let tokens = tokenize(input);
+
+        let command = replay::parse(&tokens).expect("Failed to parse REPLAY with empty RETURN");
+
+        assert_eq!(
+            command,
+            Command::Replay {
+                event_type: None,
+                context_id: "user-123".to_string(),
+                since: None,
+                return_fields: None,
+            }
         );
     }
 }
