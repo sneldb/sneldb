@@ -11,6 +11,8 @@ pub struct TestScenario {
     pub matcher: Option<Matcher>,
     /// Multiple matchers (new, preferred)
     pub matchers: Option<Vec<Matcher>>,
+    /// Optional per-scenario config overrides merged into default test config
+    pub config: Option<serde_json::Value>,
 }
 
 pub fn load_scenarios_from_json(path: &str) -> Vec<TestScenario> {
