@@ -9,6 +9,7 @@ pub struct TestConfig {
     pub server: ServerConfig,
     pub logging: LoggingConfig,
     pub schema: SchemaConfig,
+    pub playground: PlaygroundConfig,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -55,6 +56,12 @@ pub struct LoggingConfig {
     pub log_dir: String,
     pub stdout_level: String,
     pub file_level: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PlaygroundConfig {
+    pub enabled: bool,
+    pub allow_unauthenticated: bool,
 }
 
 /// Paths used by the test configuration of a single scenario.
@@ -112,6 +119,10 @@ fn default_test_config(paths: &TestPaths) -> TestConfig {
         },
         schema: SchemaConfig {
             def_dir: format!("{}/schema", paths.base_dir),
+        },
+        playground: PlaygroundConfig {
+            enabled: true,
+            allow_unauthenticated: true,
         },
     }
 }
