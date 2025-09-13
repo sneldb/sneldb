@@ -50,7 +50,7 @@ indoc = "2"
 
 [[bin]]
 name = "test_runner"
-path = "tests/test_runner.rs"
+path = "src/bin/test_runner.rs"
 
 [[bin]]
 name = "convertor"
