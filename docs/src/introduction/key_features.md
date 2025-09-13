@@ -73,6 +73,11 @@ It runs anywhere — from a laptop dev setup to production servers — without h
 
 You can drop it into your stack as a focused, reliable event database.
 
+### Built-in Playground
+
+SnelDB ships with a tiny single-page Playground so you can try commands without any client code.
+Start the server and open `http://127.0.0.1:8085/` to experiment with `DEFINE`, `STORE`, `QUERY`, and `REPLAY` instantly.
+
 ## 8. Safety by design
 
 SnelDB is built in Rust, which brings **memory safety, thread safety, and performance** without garbage collection.

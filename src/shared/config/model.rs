@@ -7,6 +7,7 @@ pub struct Settings {
     pub server: ServerConfig,
     pub logging: LoggingConfig,
     pub schema: SchemaConfig,
+    pub playground: PlaygroundConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -53,6 +54,12 @@ pub struct ServerConfig {
     pub tcp_addr: String,
     pub http_addr: String,
     pub auth_token: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PlaygroundConfig {
+    pub enabled: bool,
+    pub allow_unauthenticated: bool,
 }
 
 #[derive(Debug, Deserialize)]

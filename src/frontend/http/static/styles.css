@@ -1,0 +1,24 @@
+:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; font-family: -apple-system, Segoe UI, Roboto, sans-serif; }
+#app { display: flex; flex-direction: column; height: 100%; }
+header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid #4444; }
+main { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px; height: calc(100% - 54px); }
+.input, .output { display: flex; flex-direction: column; height: 100%; }
+.editor { position: relative; flex: 1; border: 1px solid #4444; }
+.editor textarea, .editor code { font-family: Menlo, ui-monospace, SFMono-Regular, monospace; font-size: 13px; line-height: 1.5; letter-spacing: 0; tab-size: 2; -moz-tab-size: 2; }
+.editor pre { position: absolute; inset: 0; margin: 0; pointer-events: none; overflow: auto; padding: 10px; background: transparent !important; line-height: 1.5; }
+.editor pre code { background: transparent !important; }
+.editor pre code.hljs { padding: 0 !important; margin: 0 !important; border: 0 !important; }
+.editor code { display: block; height: 100%; white-space: pre-wrap; word-break: break-word; }
+textarea { position: absolute; inset: 0; width: 100%; height: 100%; background: transparent; color: transparent; caret-color: #fff; border: 0; padding: 10px; resize: none; }
+@media (prefers-color-scheme: light) {
+  textarea { caret-color: #111; }
+}
+textarea::selection { background: rgba(83, 155, 245, 0.35); }
+.actions { margin-top: 8px; display: flex; gap: 8px; align-items: center; }
+.output pre { background: #0002; border: 1px solid #4444; padding: 10px; margin: 0; white-space: pre-wrap; word-break: break-word; overflow: auto; flex: 1; }
+.status { font-size: 12px; opacity: .8; }
+.fmt-toggle { font-size: 12px; opacity: .9; }
+
+

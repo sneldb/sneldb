@@ -2,6 +2,8 @@
 
 SnelDB is built to be small and simple. It keeps track of what happened, in order, and makes it easy to get those facts back out quickly. That’s it. This guide will walk you through how to think about events, how to design them so they’re useful, and how to use SnelDB’s tiny set of commands—`DEFINE`, `STORE`, `QUERY`, and `REPLAY`. Along the way we’ll use a retail shop as an example, but the same ideas apply in many domains.
 
+> Quick start: the easiest way to try SnelDB is to open the embedded Playground at `http://127.0.0.1:8085/` (enabled by default in dev). Type commands directly and see results immediately.
+
 ## Why events?
 
 An event is just a record that something happened: _an order was created_, _a customer signed up_, _a parcel was delivered_. Events don’t change once they’re stored. By keeping them all, you get a trustworthy history. Your application can look back, replay them, and figure out the current state whenever it needs. SnelDB focuses on storing these events and letting you fetch them again quickly. The “what do these events mean?” part stays in your application.

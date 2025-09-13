@@ -9,6 +9,7 @@ pub struct TestConfig {
     pub server: ServerConfig,
     pub logging: LoggingConfig,
     pub schema: SchemaConfig,
+    pub playground: PlaygroundConfig,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -57,6 +58,12 @@ pub struct LoggingConfig {
     pub file_level: String,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct PlaygroundConfig {
+    pub enabled: bool,
+    pub allow_unauthenticated: bool,
+}
+
 /// Paths used by the test configuration of a single scenario.
 struct TestPaths {
     base_dir: String,
@@ -101,8 +108,8 @@ fn default_test_config(paths: &TestPaths) -> TestConfig {
             socket_path: paths.socket_path.clone(),
             log_level: "debug".into(),
             output_format: "json".into(),
-            tcp_addr: "127.0.0.1:8080".into(),
-            http_addr: "127.0.0.1:8080".into(),
+            tcp_addr: "127.0.0.1:8085".into(),
+            http_addr: "127.0.0.1:8085".into(),
             auth_token: "test".into(),
         },
         logging: LoggingConfig {
@@ -112,6 +119,10 @@ fn default_test_config(paths: &TestPaths) -> TestConfig {
         },
         schema: SchemaConfig {
             def_dir: format!("{}/schema", paths.base_dir),
+        },
+        playground: PlaygroundConfig {
+            enabled: true,
+            allow_unauthenticated: true,
         },
     }
 }
