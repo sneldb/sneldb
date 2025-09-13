@@ -146,3 +146,14 @@ Sizing example:
 - **Async workers** (flush and compaction) are throttled so foreground writes and reads stay responsive.
 
 This is the spine of the engine: durable append, fast memory, immutable segments with rich metadata, and just enough background work to keep reads snappy as data grows.
+
+## Read-time Projection & Column Pruning
+
+- The query planner derives a minimal column set to load based on:
+  - Core fields: `context_id`, `event_type`, `timestamp` (always loaded)
+  - Filter fields used in `WHERE`
+  - Requested payload fields from `RETURN [ ... ]` (if provided)
+- If `RETURN` is omitted or empty (`RETURN []`), all payload fields are considered eligible.
+- Unknown fields in `RETURN` are ignored (schema-driven).
+- Only the selected columns are mmap’d and read; others are skipped entirely, reducing I/O and memory.
+- Projection decisions are logged under the `query::projection` target for debugging.
