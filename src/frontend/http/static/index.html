@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SnelDB Playground</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/highlight.css" />
+  <link rel="icon" href="data:," />
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>SnelDB Playground</h1>
+      <div class="status" id="status">Ready</div>
+    </header>
+    <main>
+      <section class="input">
+        <div class="editor">
+          <pre aria-hidden="true"><code id="hl" class="language-sneldb"></code></pre>
+          <textarea id="command">DEFINE subscription FIELDS { "id": "int", "plan": "string" }
+STORE subscription FOR ctx1 PAYLOAD {"id": 1, "plan": "free"}
+STORE subscription FOR ctx2 PAYLOAD {"id": 2, "plan": "pro"}
+QUERY subscription WHERE id=1</textarea>
+        </div>
+        <div class="actions">
+          <button id="run">Run (Ctrl+Enter)</button>
+          <button id="clear">Clear</button>
+          <label class="fmt-toggle"><input id="fmt" type="checkbox" /> JSON output</label>
+        </div>
+      </section>
+      <section class="output">
+        <pre><code id="output" class="language-json"></code></pre>
+      </section>
+    </main>
+  </div>
+  <script src="/static/app.js"></script>
+  <script src="/static/highlight.js"></script>
+  <script src="/static/sneldb.js"></script>
+  <script>
+    (function(){
+      var el = document.getElementById('hl');
+      if (window.hljs && typeof hljs.highlightElement === 'function') {
+        hljs.highlightElement(el);
+      } else if (window.hljs && typeof hljs.highlightBlock === 'function') {
+        hljs.highlightBlock(el);
+      } else if (window.hljs && typeof hljs.initHighlightingOnLoad === 'function') {
+        hljs.initHighlightingOnLoad();
+      }
+    })();
+  </script>
+  <script>window.SNELDB_AUTH_TOKEN = 'mysecrettoken';</script>
+</body>
+<!-- Minimal single-file SPA served from static assets. -->
+</html>
+
+

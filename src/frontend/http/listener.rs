@@ -26,7 +26,7 @@ pub async fn run_http_server() -> anyhow::Result<()> {
         Arc::new(ShardManager::new(CONFIG.engine.shard_count, base_dir, wal_dir).await);
 
     loop {
-        let (stream, _) = listener.accept().await?;
+        let (stream, _peer_addr) = listener.accept().await?;
         let io = TokioIo::new(stream);
 
         let registry = Arc::clone(&registry);

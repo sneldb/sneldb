@@ -10,10 +10,35 @@ use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
 use crate::frontend::http::json_command::JsonCommand;
 use crate::shared::config::CONFIG;
-use crate::shared::response::{Response as ResponseType, json::JsonRenderer, render::Renderer};
+use crate::shared::response::{
+    Response as ResponseType, json::JsonRenderer, render::Renderer, unix::UnixRenderer,
+};
 use tracing::info;
 
 fn is_authorized(req: &Request<Incoming>) -> bool {
+    // Allow unauthenticated on loopback if playground says so
+    if CONFIG.playground.allow_unauthenticated {
+        if let Some(addr) = req
+            .headers()
+            .get("X-Forwarded-For")
+            .and_then(|h| h.to_str().ok())
+        {
+            if addr == "127.0.0.1" || addr == "::1" {
+                return true;
+            }
+        }
+        if let Some(host) = req
+            .headers()
+            .get(header::HOST)
+            .and_then(|h| h.to_str().ok())
+        {
+            if host.starts_with("127.0.0.1") || host.starts_with("localhost") {
+                return true;
+            }
+        }
+    }
+
+    // Otherwise require bearer token
     req.headers().get(header::AUTHORIZATION)
         == Some(
             &format!("Bearer {}", CONFIG.server.auth_token)
@@ -36,7 +61,10 @@ pub async fn handle_line_command(
 
     let body = req.collect().await.unwrap().to_bytes();
     let input = String::from_utf8_lossy(&body).trim().to_string();
-    let renderer: Arc<dyn Renderer + Send + Sync> = Arc::new(JsonRenderer);
+    let renderer: Arc<dyn Renderer + Send + Sync> = match CONFIG.server.output_format.as_str() {
+        "json" => Arc::new(JsonRenderer),
+        _ => Arc::new(UnixRenderer),
+    };
 
     if input.is_empty() {
         return render_error("Empty command", StatusCode::BAD_REQUEST, renderer);
@@ -100,9 +128,14 @@ async fn dispatch_and_respond(
             .unwrap());
     }
 
+    let content_type = match CONFIG.server.output_format.as_str() {
+        "json" => "application/json",
+        _ => "text/plain",
+    };
+
     Ok(Response::builder()
         .status(StatusCode::OK)
-        .header(hyper::header::CONTENT_TYPE, "application/json")
+        .header(hyper::header::CONTENT_TYPE, content_type)
         .body(String::from_utf8_lossy(&output).to_string())
         .unwrap())
 }
