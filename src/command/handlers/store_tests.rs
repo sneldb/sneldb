@@ -26,7 +26,7 @@ async fn test_store_handle_valid_event_is_routed() {
     let registry = factory.registry();
 
     // Create shard manager
-    let shard_manager = ShardManager::new(1, registry.clone(), base_dir, wal_dir).await;
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
 
     // Build valid store command
     let cmd = CommandFactory::store()
@@ -80,7 +80,7 @@ async fn test_store_handle_rejects_empty_event_type() {
         .await
         .unwrap();
     let registry = factory.registry();
-    let shard_manager = ShardManager::new(1, registry.clone(), base_dir, wal_dir).await;
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
 
     let cmd = CommandFactory::store()
         .with_event_type("") // empty
@@ -114,7 +114,7 @@ async fn test_store_handle_rejects_empty_context_id() {
         .await
         .unwrap();
     let registry = factory.registry();
-    let shard_manager = ShardManager::new(1, registry.clone(), base_dir, wal_dir).await;
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
 
     let cmd = CommandFactory::store()
         .with_context_id("") // empty
@@ -144,7 +144,7 @@ async fn test_store_handle_rejects_undefined_schema() {
 
     let factory = SchemaRegistryFactory::new();
     let registry = factory.registry();
-    let shard_manager = ShardManager::new(1, registry.clone(), base_dir, wal_dir).await;
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
 
     let cmd = CommandFactory::store()
         .with_event_type("unknown_event")
@@ -178,7 +178,7 @@ async fn test_store_handle_rejects_missing_field() {
         .await
         .unwrap();
     let registry = factory.registry();
-    let shard_manager = ShardManager::new(1, registry.clone(), base_dir, wal_dir).await;
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
 
     let cmd = CommandFactory::store()
         .with_payload(serde_json::json!({ "id": 123 })) // missing "name"
@@ -211,7 +211,7 @@ async fn test_store_handle_rejects_extra_fields_in_payload() {
         .await
         .unwrap();
     let registry = factory.registry();
-    let shard_manager = ShardManager::new(1, registry.clone(), base_dir, wal_dir).await;
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
 
     let cmd = CommandFactory::store()
         .with_payload(serde_json::json!({ "id": 123, "name": "John", "invalid_field": "a string" }))
@@ -244,7 +244,7 @@ async fn test_store_handle_accepts_missing_optional_field() {
         .await
         .unwrap();
     let registry = factory.registry();
-    let shard_manager = ShardManager::new(1, registry.clone(), base_dir, wal_dir).await;
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
 
     let cmd = CommandFactory::store()
         .with_event_type("opt_event")

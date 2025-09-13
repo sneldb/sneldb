@@ -22,7 +22,7 @@ async fn test_query_returns_no_results_when_nothing_matches() {
     let registry = factory.registry();
 
     // Start shard manager
-    let shard_manager = ShardManager::new(1, registry.clone(), base_dir, wal_dir).await;
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
 
     // No STORE command beforehand → should result in no matches
     let cmd = CommandFactory::query()
@@ -66,7 +66,7 @@ async fn test_query_returns_matching_event_as_json() {
         .await
         .unwrap();
     let registry = factory.registry();
-    let shard_manager = ShardManager::new(1, registry.clone(), base_dir, wal_dir).await;
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
 
     // Store a matching event
     let store_cmd = CommandFactory::store()
@@ -122,7 +122,7 @@ async fn test_query_returns_error_for_empty_event_type() {
     let wal_dir = tempdir().unwrap().into_path();
 
     let registry = SchemaRegistryFactory::new().registry();
-    let shard_manager = ShardManager::new(1, registry.clone(), base_dir, wal_dir).await;
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
 
     let cmd = CommandFactory::query()
         .with_event_type("") // Invalid

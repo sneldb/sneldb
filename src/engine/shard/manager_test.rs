@@ -7,13 +7,13 @@ use tempfile::tempdir;
 async fn test_shard_manager_initialization_and_routing() {
     // Setup
 
-    let registry = Arc::new(tokio::sync::RwLock::new(
+    let _registry = Arc::new(tokio::sync::RwLock::new(
         SchemaRegistry::new().expect("Failed to initialize SchemaRegistry"),
     ));
     let base_dir = tempdir().unwrap().into_path();
     let wal_dir = tempdir().unwrap().into_path();
     let num_shards = 4;
-    let manager = ShardManager::new(num_shards, Arc::clone(&registry), base_dir, wal_dir).await;
+    let manager = ShardManager::new(num_shards, base_dir, wal_dir).await;
 
     // Verify correct number of shards created
     assert_eq!(manager.all_shards().len(), num_shards);

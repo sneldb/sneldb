@@ -20,7 +20,7 @@ async fn test_define_handler_success() {
     let registry = Arc::new(RwLock::new(
         SchemaRegistry::new_with_path(schema_path).unwrap(),
     ));
-    let shard_manager = ShardManager::new(1, registry.clone(), base_dir, wal_dir).await;
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
 
     let cmd = Command::Define {
         event_type: "signup".to_string(),
@@ -72,7 +72,7 @@ async fn test_define_handler_with_enum_field() {
     let registry = Arc::new(RwLock::new(
         SchemaRegistry::new_with_path(schema_path).unwrap(),
     ));
-    let shard_manager = ShardManager::new(1, registry.clone(), base_dir, wal_dir).await;
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
 
     let cmd = Command::Define {
         event_type: "subscription".to_string(),
@@ -121,7 +121,7 @@ async fn test_define_handler_with_optional_field() {
     let registry = Arc::new(RwLock::new(
         SchemaRegistry::new_with_path(schema_path).unwrap(),
     ));
-    let shard_manager = ShardManager::new(1, registry.clone(), base_dir, wal_dir).await;
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
 
     let cmd = Command::Define {
         event_type: "user_profile".to_string(),
@@ -164,7 +164,7 @@ async fn test_define_handler_engine_error() {
     let registry = Arc::new(RwLock::new(
         SchemaRegistry::new_with_path(schema_path).unwrap(),
     ));
-    let shard_manager = ShardManager::new(1, registry.clone(), base_dir, wal_dir).await;
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
 
     let cmd = Command::Define {
         event_type: "invalid".to_string(),

@@ -13,7 +13,7 @@ use tokio::sync::{RwLock, mpsc::channel};
 use tracing::{debug, info};
 
 pub async fn handle<W: AsyncWrite + Unpin>(
-    cmd: &Command,
+    _cmd: &Command,
     shard_manager: &ShardManager,
     registry: &Arc<RwLock<SchemaRegistry>>,
     writer: &mut W,

@@ -25,7 +25,6 @@ impl Shard {
         id: usize,
         base_dir: PathBuf,
         wal_dir: PathBuf,
-        registry: Arc<RwLock<SchemaRegistry>>,
     ) -> (
         Self,
         Receiver<(

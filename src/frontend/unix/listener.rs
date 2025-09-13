@@ -37,15 +37,8 @@ pub async fn run_server() -> anyhow::Result<()> {
     let base_dir = PathBuf::from(&CONFIG.engine.data_dir);
     let wal_dir = PathBuf::from(&CONFIG.wal.dir);
 
-    let shard_manager = Arc::new(
-        ShardManager::new(
-            CONFIG.engine.shard_count,
-            Arc::clone(&registry),
-            base_dir,
-            wal_dir,
-        )
-        .await,
-    );
+    let shard_manager =
+        Arc::new(ShardManager::new(CONFIG.engine.shard_count, base_dir, wal_dir).await);
 
     loop {
         match listener.accept().await {

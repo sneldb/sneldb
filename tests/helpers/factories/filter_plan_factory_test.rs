@@ -1,5 +1,4 @@
 use crate::command::types::CompareOp;
-use crate::engine::core::FilterPlan;
 use crate::test_helpers::factories::FilterPlanFactory;
 use serde_json::json;
 

@@ -20,15 +20,8 @@ pub async fn run_tcp_server() -> anyhow::Result<()> {
     let base_dir = PathBuf::from(&CONFIG.engine.data_dir);
     let wal_dir = PathBuf::from(&CONFIG.wal.dir);
 
-    let shard_manager = Arc::new(
-        ShardManager::new(
-            CONFIG.engine.shard_count,
-            Arc::clone(&registry),
-            base_dir,
-            wal_dir,
-        )
-        .await,
-    );
+    let shard_manager =
+        Arc::new(ShardManager::new(CONFIG.engine.shard_count, base_dir, wal_dir).await);
 
     let listener = TcpListener::bind(addr).await?;
     info!("TCP listener active on {}", addr);

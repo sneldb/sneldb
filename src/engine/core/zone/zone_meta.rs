@@ -3,7 +3,7 @@ use crate::engine::errors::{StoreError, ZoneMetaError};
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Seek, SeekFrom};
+use std::io::{BufReader, BufWriter};
 use std::path::Path;
 use tracing::{debug, error, trace, warn};
 

@@ -1,12 +1,9 @@
 use crate::engine::compactor::background::start_background_compactor;
 use crate::engine::core::FlushWorker;
-use crate::engine::schema::registry::SchemaRegistry;
 use crate::engine::shard::Shard;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use tracing::{error, info};
 
 #[derive(Debug)]
@@ -16,30 +13,18 @@ pub struct ShardManager {
 
 impl ShardManager {
     /// Create and initialize all shards with WAL, flush workers, and background compactors.
-    pub async fn new(
-        num_shards: usize,
-        registry: Arc<RwLock<SchemaRegistry>>,
-        base_dir: PathBuf,
-        wal_dir: PathBuf,
-    ) -> Self {
+    pub async fn new(num_shards: usize, base_dir: PathBuf, wal_dir: PathBuf) -> Self {
         info!(target: "shard::manager", "Initializing ShardManager with {num_shards} shards");
         let mut shards = Vec::with_capacity(num_shards);
 
         for id in 0..num_shards {
             info!(target: "shard::manager", shard_id = id, "Spawning shard");
 
-            let registry_for_shard = Arc::clone(&registry);
             let shard_base_dir = base_dir.join(format!("shard-{id}"));
             let shard_wal_dir = wal_dir.join(format!("shard-{id}"));
 
             // Spawn shard and get its flush channel
-            let (shard, flush_rx) = Shard::spawn(
-                id,
-                shard_base_dir.clone(),
-                shard_wal_dir,
-                registry_for_shard,
-            )
-            .await;
+            let (shard, flush_rx) = Shard::spawn(id, shard_base_dir.clone(), shard_wal_dir).await;
 
             // Spawn flush worker
             let flush_worker = FlushWorker::new(id, shard_base_dir.clone());

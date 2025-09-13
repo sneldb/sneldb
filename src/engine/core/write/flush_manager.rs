@@ -11,7 +11,6 @@ use tracing::{debug, error, info};
 #[derive(Debug, Clone)]
 pub struct FlushManager {
     shard_id: usize,
-    base_dir: PathBuf,
     flush_sender: Sender<(
         u64,
         MemTable,
@@ -38,7 +37,6 @@ impl FlushManager {
         info!(target: "sneldb::flush", shard_id, "FlushManager started");
         Self {
             shard_id,
-            base_dir,
             flush_sender: tx,
             segment_ids,
         }
