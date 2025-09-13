@@ -46,7 +46,7 @@ QUERY payment SINCE "2025-08-01T00:00:00Z" WHERE amount >= 500 LIMIT 100
 ```
 
 ```sneldb
-QUERY product RETURN ["name", price] WHERE price > 10
+QUERY product RETURN [name, "price"] WHERE price > 10
 ```
 
 ## Notes
