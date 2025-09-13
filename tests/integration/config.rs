@@ -108,8 +108,8 @@ fn default_test_config(paths: &TestPaths) -> TestConfig {
             socket_path: paths.socket_path.clone(),
             log_level: "debug".into(),
             output_format: "json".into(),
-            tcp_addr: "127.0.0.1:8080".into(),
-            http_addr: "127.0.0.1:8080".into(),
+            tcp_addr: "127.0.0.1:8085".into(),
+            http_addr: "127.0.0.1:8085".into(),
             auth_token: "test".into(),
         },
         logging: LoggingConfig {

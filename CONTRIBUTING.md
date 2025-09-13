@@ -64,7 +64,7 @@ SNELDB_CONFIG='config/dev.toml' cargo run
 ```
 
 - Unix socket: `/tmp/sneldb.sock`
-- HTTP: `127.0.0.1:8080`
+- HTTP: `127.0.0.1:8085`
 
 Note: `main.rs` clears data directories on startup (based on `SNELDB_CONFIG`), intended for a clean dev loop.
 
