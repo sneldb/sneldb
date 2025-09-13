@@ -42,7 +42,7 @@ pub fn run_scenario(scenario: &TestScenario) {
     std::thread::sleep(std::time::Duration::from_secs(2));
 
     // Helper to (re)connect socat
-    let mut spawn_socat = || -> (std::process::Child, std::process::ChildStdin) {
+    let spawn_socat = || -> (std::process::Child, std::process::ChildStdin) {
         let mut sp = Command::new("socat")
             .arg("-")
             .arg(format!("UNIX-CONNECT:{}", socket_path))
@@ -167,27 +167,4 @@ pub fn run_scenario(scenario: &TestScenario) {
     // Clean up tmp directory for this scenario
     let tmp_path = format!("tests/integration/tmp/{}", scenario.name);
     let _ = std::fs::remove_dir_all(tmp_path);
-}
-
-use std::str;
-
-fn kill_process_using_socket(socket_path: &str) {
-    // Find the PID using lsof
-    let output = Command::new("lsof")
-        .arg("-t")
-        .arg(socket_path)
-        .output()
-        .expect("Failed to execute lsof");
-
-    if output.status.success() {
-        let pid_str = str::from_utf8(&output.stdout).unwrap().trim();
-        if !pid_str.is_empty() {
-            println!("Killing process with PID: {}", pid_str);
-            let _ = Command::new("kill").arg("-9").arg(pid_str).status();
-        } else {
-            println!("No process is using the socket: {}", socket_path);
-        }
-    } else {
-        println!("lsof failed or no process is using the socket.");
-    }
 }

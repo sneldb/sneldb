@@ -1,3 +1,4 @@
+#[path = "../../tests/integration/mod.rs"]
 mod integration;
 
 use crate::integration::runner::run_scenario;
@@ -8,7 +9,6 @@ use rand::thread_rng;
 use tracing_subscriber::EnvFilter;
 
 fn main() {
-    // Initialize tracing with debug level
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::from_default_env()
@@ -21,7 +21,6 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut all_scenarios = load_scenarios_from_json("tests/integration/scenarios.json");
 
-    // Shuffle all scenarios
     let mut rng = thread_rng();
     all_scenarios.shuffle(&mut rng);
 

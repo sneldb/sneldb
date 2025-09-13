@@ -28,7 +28,6 @@ async fn test_store_flush_query_lifecycle() {
     // === ShardManager setup ===
     let manager = ShardManager::new(
         1,
-        Arc::clone(&registry),
         tmp_dir.path().to_path_buf(),
         wal_dir,
     )

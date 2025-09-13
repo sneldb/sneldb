@@ -29,24 +29,6 @@ pub struct Matcher {
 }
 
 impl Matcher {
-    pub fn from_json(kind: &str, value: &str) -> Option<Self> {
-        let kind = match kind {
-            "include" => MatcherKind::Include,
-            "not_include" => MatcherKind::NotInclude,
-            "eq" => MatcherKind::Eq,
-            "match" => MatcherKind::Match,
-            "include_all" => MatcherKind::IncludeAll,
-            "include_none" => MatcherKind::IncludeNone, // Added
-            "regex" => MatcherKind::Regex,
-            "regex_all" => MatcherKind::RegexAll,
-            _ => return None,
-        };
-        Some(Self {
-            kind,
-            value: MatcherValue::Single(value.to_string()),
-        })
-    }
-
     pub fn matches(&self, actual: &str) -> bool {
         debug!("Matching against actual output:\n{}", actual);
         match (&self.kind, &self.value) {

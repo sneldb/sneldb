@@ -22,7 +22,7 @@ async fn test_flush_dispatches_message_to_all_shards() {
     let registry = Arc::new(RwLock::new(SchemaRegistry::new().unwrap()));
 
     // Use 2 shards for this test
-    let shard_manager = ShardManager::new(3, Arc::clone(&registry), base_dir, wal_dir).await;
+    let shard_manager = ShardManager::new(3, base_dir, wal_dir).await;
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // Create dummy command (content is irrelevant for flush)

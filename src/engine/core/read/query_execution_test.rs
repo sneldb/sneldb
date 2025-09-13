@@ -181,7 +181,6 @@ async fn executes_query_with_only_segment_match() {
         )
         .await
         .unwrap();
-    let uid = registry.read().await.get_uid(event_type).unwrap();
 
     // Store 2 events: one matches query
     let event1 = EventFactory::new()

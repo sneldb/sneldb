@@ -19,7 +19,7 @@ async fn test_replay_returns_matching_event() {
         .await
         .unwrap();
     let registry = factory.registry();
-    let shard_manager = ShardManager::new(1, registry.clone(), base_dir, wal_dir).await;
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
 
     // First, store the event
     let store_cmd = CommandFactory::store()
@@ -67,7 +67,7 @@ async fn test_replay_returns_error_for_empty_context_id() {
     let wal_dir = tempdir().unwrap().into_path();
 
     let registry = SchemaRegistryFactory::new().registry();
-    let shard_manager = ShardManager::new(1, registry.clone(), base_dir, wal_dir).await;
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
 
     let cmd = CommandFactory::replay()
         .with_event_type("replay_event")
@@ -97,7 +97,7 @@ async fn test_replay_returns_no_results() {
         .await
         .unwrap();
     let registry = factory.registry();
-    let shard_manager = ShardManager::new(1, registry.clone(), base_dir, wal_dir).await;
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
 
     let cmd = CommandFactory::replay()
         .with_event_type("replay_event")

@@ -1,31 +1,15 @@
 use crate::engine::core::ColumnOffsets;
 use crate::engine::errors::{ColumnLoadError, QueryExecutionError};
 use crate::shared::storage_header::{BinaryHeader, FileKind};
-use memmap2::{Mmap, MmapOptions};
+use memmap2::MmapOptions;
 use std::fs::File;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tracing::{debug, error, info};
 
 #[derive(Debug)]
-pub struct ColumnReader {
-    uid: String,
-    field: String,
-    segment_dir: PathBuf,
-    zone_mmap: Option<Mmap>,
-    data_mmap: Option<Mmap>,
-}
+pub struct ColumnReader;
 
 impl ColumnReader {
-    pub fn new(uid: String, field: String, segment_dir: PathBuf) -> Self {
-        Self {
-            uid,
-            field,
-            segment_dir,
-            zone_mmap: None,
-            data_mmap: None,
-        }
-    }
-
     pub fn load_for_zone(
         segment_dir: &Path,
         segment_id: &str,

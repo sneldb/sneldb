@@ -5,13 +5,12 @@ use tracing::{info, warn};
 
 /// Handles range-based zone pruning using XOR filters
 pub struct RangeQueryHandler {
-    filter: FieldXorFilter,
     segment_id: String,
 }
 
 impl RangeQueryHandler {
-    pub fn new(filter: FieldXorFilter, segment_id: String) -> Self {
-        Self { filter, segment_id }
+    pub fn new(_filter: FieldXorFilter, segment_id: String) -> Self {
+        Self { segment_id }
     }
 
     /// Returns a list of candidate zones for a given range query

@@ -1,12 +1,12 @@
 use crate::engine::errors::StoreError;
 use crate::shared::config::CONFIG;
+use crate::shared::storage_header::{BinaryHeader, FileKind};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::{BufReader, BufWriter, Seek, SeekFrom};
+use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
-use crate::shared::storage_header::{BinaryHeader, FileKind};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SegmentEntry {
@@ -30,7 +30,9 @@ impl SegmentIndex {
             let mut file = fs::File::open(&path)?;
             let header = BinaryHeader::read_from(&mut file)?;
             if header.magic != FileKind::ShardSegmentIndex.magic() {
-                return Err(StoreError::FlushFailed("invalid magic for segments.idx".into()));
+                return Err(StoreError::FlushFailed(
+                    "invalid magic for segments.idx".into(),
+                ));
             }
             let reader = BufReader::new(file);
             let entries: Vec<SegmentEntry> = bincode::deserialize_from(reader)?;

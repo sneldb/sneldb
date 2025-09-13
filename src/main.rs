@@ -1,7 +1,5 @@
 use snel_db::frontend::start_all;
 use snel_db::logging;
-use snel_db::shared::config::CONFIG;
-use std::fs;
 use tracing::info;
 
 #[tokio::main]

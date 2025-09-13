@@ -2,7 +2,7 @@ use crate::engine::schema::errors::SchemaError;
 use crate::engine::schema::registry::SchemaRecord;
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 use std::fs::{File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use tracing::warn;
 
