@@ -1,6 +1,7 @@
 pub mod execution_step;
 pub mod memtable_query;
 pub mod memtable_query_runner;
+pub mod projection;
 pub mod query_execution;
 pub mod query_plan;
 pub mod range_query_handler;
@@ -12,6 +13,8 @@ mod execution_step_test;
 mod memtable_query_runner_test;
 #[cfg(test)]
 mod memtable_query_test;
+#[cfg(test)]
+mod projection_test;
 #[cfg(test)]
 mod query_execution_test;
 #[cfg(test)]

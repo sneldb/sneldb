@@ -131,7 +131,12 @@ mod replay_tests {
                 event_type: Some("order_created".to_string()),
                 context_id: "user-123".to_string(),
                 since: None,
-                return_fields: None,
+                return_fields: Some(vec![
+                    "context_id".to_string(),
+                    "event_type".to_string(),
+                    "timestamp".to_string(),
+                    "payload".to_string(),
+                ]),
             }
         );
     }
@@ -149,7 +154,7 @@ mod replay_tests {
                 event_type: None,
                 context_id: "user-123".to_string(),
                 since: Some("2024-01-01T00:00:00Z".to_string()),
-                return_fields: None,
+                return_fields: Some(vec!["plan".to_string(), "country".to_string()]),
             }
         );
     }
@@ -167,8 +172,81 @@ mod replay_tests {
                 event_type: None,
                 context_id: "user-123".to_string(),
                 since: None,
-                return_fields: None,
+                return_fields: Some(vec![]),
             }
         );
+    }
+
+    #[test]
+    fn test_parse_replay_with_return_mixed_whitespace_and_quotes() {
+        let input = r#"REPLAY order_created FOR user-123 RETURN [ name , "country" , plan ]"#;
+        let tokens = tokenize(input);
+
+        let command =
+            replay::parse(&tokens).expect("Failed to parse REPLAY with mixed RETURN list");
+
+        assert_eq!(
+            command,
+            Command::Replay {
+                event_type: Some("order_created".to_string()),
+                context_id: "user-123".to_string(),
+                since: None,
+                return_fields: Some(vec![
+                    "name".to_string(),
+                    "country".to_string(),
+                    "plan".to_string(),
+                ]),
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_replay_with_return_duplicates_preserved() {
+        let input = r#"REPLAY FOR user-123 RETURN [name, name, "name"]"#;
+        let tokens = tokenize(input);
+
+        let command =
+            replay::parse(&tokens).expect("Failed to parse REPLAY with duplicate RETURN fields");
+
+        assert_eq!(
+            command,
+            Command::Replay {
+                event_type: None,
+                context_id: "user-123".to_string(),
+                since: None,
+                return_fields: Some(vec![
+                    "name".to_string(),
+                    "name".to_string(),
+                    "name".to_string(),
+                ]),
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_replay_with_return_missing_right_bracket_should_fail() {
+        let input = r#"REPLAY FOR user-123 RETURN ["name", country"#; // missing closing ]
+        let tokens = tokenize(input);
+
+        let result = replay::parse(&tokens);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_replay_with_return_missing_left_bracket_should_fail() {
+        let input = r#"REPLAY FOR user-123 RETURN name]"#; // missing opening [
+        let tokens = tokenize(input);
+
+        let result = replay::parse(&tokens);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_replay_with_return_invalid_token_should_fail() {
+        let input = r#"REPLAY FOR user-123 RETURN [123, name]"#; // 123 is invalid token for field
+        let tokens = tokenize(input);
+
+        let result = replay::parse(&tokens);
+        assert!(result.is_err());
     }
 }

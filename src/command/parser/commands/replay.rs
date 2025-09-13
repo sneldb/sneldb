@@ -97,7 +97,8 @@ pub fn parse(tokens: &[Token]) -> Result<Command, ParseError> {
         }
     }
 
-    // Optional: RETURN [fields] — parse and ignore
+    // Optional: RETURN [fields]
+    let mut return_fields: Option<Vec<String>> = None;
     if let Some(Word(word)) = iter.peek() {
         if word.eq_ignore_ascii_case("RETURN") {
             iter.next();
@@ -118,14 +119,22 @@ pub fn parse(tokens: &[Token]) -> Result<Command, ParseError> {
                 }
             }
 
+            let mut fields: Vec<String> = Vec::new();
             loop {
                 match iter.peek() {
                     Some(RightSquareBracket) => {
                         iter.next();
                         break;
                     }
-                    Some(Word(_)) | Some(StringLiteral(_)) => {
+                    Some(Word(w)) => {
+                        let w = w.clone();
                         iter.next();
+                        fields.push(w);
+                    }
+                    Some(StringLiteral(s)) => {
+                        let s = s.clone();
+                        iter.next();
+                        fields.push(s);
                     }
                     Some(Symbol(',')) => {
                         iter.next();
@@ -144,6 +153,9 @@ pub fn parse(tokens: &[Token]) -> Result<Command, ParseError> {
                     }
                 }
             }
+
+            // Empty list => Some(vec![]) meaning "all payload" is handled downstream
+            return_fields = Some(fields);
         }
     }
 
@@ -159,6 +171,6 @@ pub fn parse(tokens: &[Token]) -> Result<Command, ParseError> {
         event_type,
         context_id,
         since,
-        return_fields: None,
+        return_fields,
     })
 }

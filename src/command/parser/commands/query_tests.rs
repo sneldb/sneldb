@@ -346,7 +346,12 @@ mod query_tests {
                     value: json!("pending"),
                 }),
                 limit: Some(10),
-                return_fields: None,
+                return_fields: Some(vec![
+                    "context_id".to_string(),
+                    "event_type".to_string(),
+                    "timestamp".to_string(),
+                    "payload".to_string(),
+                ]),
             }
         );
     }
@@ -370,7 +375,7 @@ mod query_tests {
                     value: json!("pending"),
                 }),
                 limit: None,
-                return_fields: None,
+                return_fields: Some(vec![]),
             }
         );
     }
@@ -391,8 +396,88 @@ mod query_tests {
                 since: Some("2024-01-01T00:00:00Z".to_string()),
                 where_clause: None,
                 limit: Some(5),
-                return_fields: None,
+                return_fields: Some(vec!["plan".to_string(), "country".to_string()]),
             }
         );
+    }
+
+    #[test]
+    fn test_parse_query_with_return_mixed_whitespace_and_quotes() {
+        let input = r#"QUERY order_created RETURN [ name , "country" , plan ] WHERE status = "ok""#;
+        let tokens = tokenize(input);
+
+        let command = query::parse(&tokens).expect("Failed to parse QUERY with mixed RETURN list");
+
+        assert_eq!(
+            command,
+            Command::Query {
+                event_type: "order_created".to_string(),
+                context_id: None,
+                since: None,
+                where_clause: Some(Expr::Compare {
+                    field: "status".to_string(),
+                    op: CompareOp::Eq,
+                    value: json!("ok"),
+                }),
+                limit: None,
+                return_fields: Some(vec![
+                    "name".to_string(),
+                    "country".to_string(),
+                    "plan".to_string(),
+                ]),
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_query_with_return_duplicates_preserved() {
+        let input = r#"QUERY order_created RETURN [name, name, "name"]"#;
+        let tokens = tokenize(input);
+
+        let command =
+            query::parse(&tokens).expect("Failed to parse QUERY with duplicate RETURN fields");
+
+        assert_eq!(
+            command,
+            Command::Query {
+                event_type: "order_created".to_string(),
+                context_id: None,
+                since: None,
+                where_clause: None,
+                limit: None,
+                return_fields: Some(vec![
+                    "name".to_string(),
+                    "name".to_string(),
+                    "name".to_string(),
+                ]),
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_query_with_return_missing_right_bracket_should_fail() {
+        let input = r#"QUERY order_created RETURN ["name", country"#; // missing closing ]
+        let tokens = tokenize(input);
+
+        let result = query::parse(&tokens);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_query_with_return_missing_left_bracket_should_fail() {
+        let input = r#"QUERY order_created RETURN name]"#; // missing opening [
+        let tokens = tokenize(input);
+
+        let result = query::parse(&tokens);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_query_with_return_invalid_token_should_fail() {
+        let input = r#"QUERY order_created RETURN [123, name]"#; // 123 is invalid token for field
+        let tokens = tokenize(input);
+
+        let result = query::parse(&tokens);
+        assert!(result.is_err());
     }
 }

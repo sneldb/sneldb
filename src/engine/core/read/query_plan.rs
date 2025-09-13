@@ -89,6 +89,13 @@ impl QueryPlan {
         }
     }
 
+    /// Delegates to the ProjectionPlanner to compute required columns.
+    pub async fn columns_to_load(&self) -> Vec<String> {
+        crate::engine::core::read::projection::ProjectionPlanner::new(self)
+            .columns_to_load()
+            .await
+    }
+
     pub async fn event_type_uid(&self) -> Option<String> {
         let guard = self.registry.read().await;
         let uid = guard.get_uid(self.event_type());
