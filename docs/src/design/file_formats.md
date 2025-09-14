@@ -37,6 +37,8 @@ Magic strings per file kind:
 - Shard Segment Index (`segments.idx`): `EVDBSIX\0`
 - Schemas (`schemas.bin`): `EVDBSCH\0`
 - Enum Bitmap Index (`.ebm`): `EVDBEBM\0`
+- Event Snapshots (`.snp`): `EVDBSNP\0`
+- Snapshot Metadata (`.smt`): `EVDBSMT\0`
 
 Compatibility and migration:
 
@@ -64,6 +66,8 @@ data/
 └── schema/
     └── schemas.bin
 ```
+
+Snapshots are ad-hoc utility files and can be written anywhere (not tied to the segment layout). Typical usage writes them to a caller-provided path.
 
 ## Column files: `{uid}_{field}.col`
 
@@ -157,3 +161,29 @@ data/
 - [Storage Engine](./storage_engine.md)
 - [Sharding](./sharding.md)
 - [Query & Replay](./query_replay.md)
+
+## Event snapshots: `*.snp`
+
+- Purpose: portable bundles of events (potentially mixed types) for export, testing, or replay.
+- File begins with a binary header (MAGIC `EVDBSNP\0`).
+- Binary layout after header:
+  - `[u32] num_events`
+  - Repeated `num_events` times:
+    - `[u32] len_bytes`
+    - `[bytes] JSON-serialized Event` (same schema as API/Event struct)
+- Notes:
+  - Events are serialized as JSON for compatibility (payloads can contain arbitrary JSON values).
+  - Readers stop gracefully on truncated data (warn and return successfully with the parsed prefix).
+
+## Snapshot metadata: `*.smt`
+
+- Purpose: describes snapshot ranges per `(uid, context_id)` with min/max timestamps.
+- File begins with a binary header (MAGIC `EVDBSMT\0`).
+- Binary layout after header:
+  - `[u32] num_records`
+  - Repeated `num_records` times:
+    - `[u32] len_bytes`
+    - `[bytes] JSON-serialized SnapshotMeta { uid, context_id, from_ts, to_ts }`
+- Notes:
+  - JSON is used for the same reasons as snapshots (arbitrary strings/IDs, forward-compat fields).
+  - Readers stop gracefully on truncated data (warn and return successfully with the parsed prefix).

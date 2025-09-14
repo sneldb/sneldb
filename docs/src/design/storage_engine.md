@@ -10,6 +10,7 @@ The storage engine turns incoming events into durable, immutable data you can qu
 - **MemTable**: In-memory buffer for recent events. Fast inserts; swapped out when full.
 - **Flush worker**: Converts a full MemTable into an immutable on-disk segment in the background.
 - **Segments**: On-disk building blocks (columns, zone metadata, filters, lightweight indexes).
+- **Snapshots**: Optional utility files (`.snp` events, `.smt` metadata) for export/replay and range bookkeeping.
 - **Compactor** (covered later): Merges small segments into larger ones to keep reads predictable.
 
 ## Write Path (At a Glance)
@@ -95,6 +96,9 @@ Small example:
   - **Zone metadata**: Per-zone min/max timestamps, row ranges, and presence stats for pruning.
   - **Filters**: Compact structures (for example, XOR filters) for “definitely-not-here” checks before touching columns.
   - **Offsets/Index**: Jump tables and per-field offsets (`.zf` files) to locate values efficiently.
+- - **Snapshots** (optional):
+- - Event Snapshots (`.snp`): portable arrays of events with a binary header + length‑prefixed JSON entries.
+- - Snapshot Metadata (`.smt`): arrays of `{uid, context_id, from_ts, to_ts}` entries with a binary header + length‑prefixed JSON.
 - **Publication**: Segment creation is atomic at the directory level; once complete, readers can discover and scan it.
 
 See the diagram below:
