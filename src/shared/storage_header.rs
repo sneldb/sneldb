@@ -120,6 +120,8 @@ pub enum FileKind {
     ShardSegmentIndex,
     SchemaStore,
     EnumBitmap,
+    EventSnapshot,
+    EventSnapshotMeta,
 }
 
 impl FileKind {
@@ -133,6 +135,8 @@ impl FileKind {
             FileKind::ShardSegmentIndex => *b"EVDBSIX\0",
             FileKind::SchemaStore => *b"EVDBSCH\0",
             FileKind::EnumBitmap => *b"EVDBEBM\0",
+            FileKind::EventSnapshot => *b"EVDBSNP\0",
+            FileKind::EventSnapshotMeta => *b"EVDBSMT\0",
         }
     }
 }
