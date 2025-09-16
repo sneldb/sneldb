@@ -55,3 +55,7 @@ path = "src/bin/test_runner.rs"
 [[bin]]
 name = "convertor"
 path = "src/bin/convertor.rs"
+
+[[bin]]
+name = "stress_tcp"
+path = "src/bin/stress_tcp.rs"
