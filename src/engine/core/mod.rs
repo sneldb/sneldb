@@ -47,6 +47,7 @@ pub use snapshot::snapshot_meta_reader::SnapshotMetaReader;
 pub use snapshot::snapshot_meta_writer::SnapshotMetaWriter;
 pub use snapshot::snapshot_reader::SnapshotReader;
 pub use snapshot::snapshot_writer::SnapshotWriter;
+pub use snapshot::snapshot_registry::{SnapshotRegistry, SnapshotKey, ReplayStrategy};
 pub use utils::io_monitor::IoMonitor;
 pub use utils::uid_resolver::UidResolver;
 pub use wal::inner_wal_writer::InnerWalWriter;
