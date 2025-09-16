@@ -156,9 +156,9 @@ async fn finds_event_type_zones_with_mock_index() {
 
     let finder = ZoneFinder::new(&filter_plan, &query_plan, &binding, &shard_dir);
     let found = finder.find();
-
-    assert_eq!(found.len(), 2);
-    assert_eq!(found[0].segment_id, "segment-002");
+    // With per-zone XOR (.zxf), equality pruning should narrow to zones in segment-002 only
+    assert!(!found.is_empty());
+    assert!(found.iter().all(|z| z.segment_id == "segment-002"));
 
     // when range query is used
     let filter_plan = FilterPlanFactory::new()
@@ -171,15 +171,23 @@ async fn finds_event_type_zones_with_mock_index() {
     let finder = ZoneFinder::new(&filter_plan, &query_plan, &binding, &shard_dir);
     let found = finder.find();
 
-    assert_eq!(found.len(), 4);
-    assert_eq!(found[0].zone_id, 0);
-    assert_eq!(found[0].segment_id, "segment-001");
-    assert_eq!(found[1].zone_id, 1);
-    assert_eq!(found[1].segment_id, "segment-001");
-    assert_eq!(found[2].zone_id, 0);
-    assert_eq!(found[2].segment_id, "segment-002");
-    assert_eq!(found[3].zone_id, 1);
-    assert_eq!(found[3].segment_id, "segment-002");
+    // Range query currently returns all zones per segment
+    use crate::shared::config::CONFIG;
+    let per_segment = CONFIG.engine.fill_factor();
+    assert_eq!(found.len(), per_segment * 2);
+    // Ensure each segment contributes [0..per_segment) zone ids
+    for seg in ["segment-001", "segment-002"] {
+        for zid in 0..per_segment {
+            assert!(
+                found
+                    .iter()
+                    .any(|z| z.segment_id == seg && z.zone_id == zid as u32),
+                "missing zone {} in {}",
+                zid,
+                seg
+            );
+        }
+    }
 
     // when just context_id is used
     let filter_plan = FilterPlanFactory::new()

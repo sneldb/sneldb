@@ -1,6 +1,7 @@
 use crate::engine::core::ColumnWriter;
 use crate::engine::core::FieldXorFilter;
 use crate::engine::core::zone::enum_bitmap_index::EnumBitmapBuilder;
+use crate::engine::core::zone::zone_xor_index::build_all_zxf;
 use crate::engine::core::{ZoneIndex, ZoneMeta, ZonePlan};
 use crate::engine::errors::StoreError;
 use crate::engine::schema::registry::SchemaRegistry;
@@ -67,6 +68,16 @@ impl<'a> ZoneWriter<'a> {
         );
         FieldXorFilter::build_all(zone_plans, self.segment_dir)
             .map_err(|e| StoreError::FlushFailed(format!("Failed to build XOR filters: {}", e)))?;
+
+        // Build per-zone XOR index (.zxf)
+        debug!(
+            target: "sneldb::flush",
+            uid = self.uid,
+            "Building zone XOR filters (.zxf)"
+        );
+        if let Err(e) = build_all_zxf(zone_plans, self.segment_dir) {
+            debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping .zxf due to error");
+        }
 
         // Build Enum Bitmap Indexes for enum fields (best-effort)
         debug!(

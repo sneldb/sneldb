@@ -1,6 +1,7 @@
 use crate::command::types::CompareOp;
 use crate::engine::core::zone::enum_bitmap_index::EnumBitmapIndex;
 use crate::engine::core::zone::enum_zone_pruner::EnumZonePruner;
+use crate::engine::core::zone::zone_xor_index::ZoneXorFilterIndex;
 use crate::engine::core::{
     CandidateZone, FieldXorFilter, FilterPlan, QueryPlan, RangeQueryHandler, ZoneIndex,
 };
@@ -126,6 +127,24 @@ impl<'a> ZoneFinder<'a> {
             }
         };
 
+        // Prefer zone-level XOR index (.zxf) if available
+        let zxf_path = self.zxf_path(segment_id, uid, &self.plan.column);
+        if let Ok(zxf) = ZoneXorFilterIndex::load(&zxf_path) {
+            if let Some(op) = &self.plan.operation {
+                // Range ops are not handled by XOR;
+                if matches!(op, CompareOp::Eq | CompareOp::Neq) {
+                    let maybe_zones = zxf
+                        .zones_maybe_containing(value)
+                        .into_iter()
+                        .map(|z| CandidateZone::new(z, segment_id.to_string()))
+                        .collect::<Vec<_>>();
+                    if !maybe_zones.is_empty() {
+                        return maybe_zones;
+                    }
+                }
+            }
+        }
+
         let path = self.filter_path(segment_id, uid, &self.plan.column);
         let filter = match FieldXorFilter::load(&path) {
             Ok(f) => f,
@@ -175,6 +194,12 @@ impl<'a> ZoneFinder<'a> {
         self.base_dir
             .join(segment_id)
             .join(format!("{}_{}.ebm", uid, column))
+    }
+
+    fn zxf_path(&self, segment_id: &str, uid: &str, column: &str) -> PathBuf {
+        self.base_dir
+            .join(segment_id)
+            .join(format!("{}_{}.zxf", uid, column))
     }
 
     fn try_ebm_prune(
