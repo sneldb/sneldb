@@ -1,3 +1,7 @@
+use crate::engine::core::snapshot::snapshot_reader::SnapshotReader;
+use crate::engine::core::snapshot::snapshot_registry::{
+    ReplayStrategy, SnapshotKey, SnapshotRegistry,
+};
 use crate::engine::core::{FlushManager, MemTable, SegmentIdLoader};
 use crate::engine::query::scan::scan;
 use crate::engine::replay::scan::scan as replay_scan;
@@ -18,7 +22,7 @@ pub async fn run_worker_loop(mut ctx: ShardContext, mut rx: Receiver<ShardMessag
     info!(target: LOG_TARGET, shard_id = id, "Shard worker started");
 
     let mut counter = 0;
-    const SLEEP_EVERY: usize = 10;
+    const SLEEP_EVERY: usize = 100;
 
     while let Some(msg) = rx.recv().await {
         match msg {
@@ -89,25 +93,125 @@ async fn on_query(
     tx.send(results).await.map_err(|e| e.to_string())
 }
 
-/// Handles Replay messages.
 async fn on_replay(
     command: crate::command::types::Command,
     tx: tokio::sync::mpsc::Sender<Vec<crate::engine::core::Event>>,
     ctx: &ShardContext,
     registry: &Arc<tokio::sync::RwLock<SchemaRegistry>>,
 ) -> Result<(), String> {
-    let results = replay_scan(
-        &command,
-        registry,
-        &ctx.base_dir,
-        &ctx.segment_ids,
-        &ctx.memtable,
-        &ctx.passive_buffers,
-    )
-    .await
-    .map_err(|e| e.to_string())?;
-    debug!(target: LOG_TARGET, shard_id = ctx.id, results_count = results.len(), "Replay completed");
-    tx.send(results).await.map_err(|e| e.to_string())
+    // Determine snapshot strategy
+    use crate::command::types::Command;
+    let (event_type_opt, context_id, since_opt) = match &command {
+        Command::Replay {
+            event_type,
+            context_id,
+            since,
+            ..
+        } => (event_type.clone(), context_id.clone(), since.clone()),
+        _ => unreachable!(),
+    };
+
+    // Resolve UID; if not resolvable, we will ignore snapshots entirely.
+    let maybe_key = {
+        let et = event_type_opt.clone().unwrap_or_else(|| "*".to_string());
+        let maybe_uid = registry.read().await.get_uid(&et);
+        maybe_uid.map(|uid| SnapshotKey {
+            uid,
+            context_id: context_id.clone(),
+        })
+    };
+
+    // Parse since -> u64 if provided
+    let since_ts_opt = parse_since_to_ts(&since_opt);
+
+    // If no SINCE provided, per policy ignore snapshot and rebuild full replay
+    let strategy = if let (Some(key), Some(since_ts)) = (maybe_key.as_ref(), since_ts_opt) {
+        let mut registry = SnapshotRegistry::new(ctx.base_dir.join("snapshots"));
+        let _ = registry.load();
+        registry.decide_replay_strategy(key, since_ts)
+    } else {
+        ReplayStrategy::IgnoreSnapshot
+    };
+
+    // Execute according to strategy
+    let mut combined: Vec<crate::engine::core::Event> = Vec::new();
+
+    match strategy {
+        ReplayStrategy::IgnoreSnapshot => {
+            let mut results = replay_scan(
+                &command,
+                registry,
+                &ctx.base_dir,
+                &ctx.segment_ids,
+                &ctx.memtable,
+                &ctx.passive_buffers,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+
+            if let Some(since_ts) = since_ts_opt {
+                results.retain(|e| e.timestamp >= since_ts);
+            }
+            combined = results;
+        }
+        ReplayStrategy::UseSnapshot {
+            start_ts: _,
+            end_ts,
+            path,
+        } => {
+            // 1) Load snapshot and filter by optional constraints
+            let mut snap_events = SnapshotReader::new(&path)
+                .read_all()
+                .map_err(|e| e.to_string())?;
+            if let Some(et) = &event_type_opt {
+                snap_events.retain(|e| &e.event_type == et);
+            }
+            if let Some(since_ts) = since_ts_opt {
+                snap_events.retain(|e| e.timestamp >= since_ts);
+            }
+
+            // 2) Fetch deltas from raw storage and filter ts >= max(end_ts+1, since_ts)
+            let mut delta_events = replay_scan(
+                &command,
+                registry,
+                &ctx.base_dir,
+                &ctx.segment_ids,
+                &ctx.memtable,
+                &ctx.passive_buffers,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+            let delta_start = since_ts_opt
+                .map(|s| s.max(end_ts.saturating_add(1)))
+                .unwrap_or_else(|| end_ts.saturating_add(1));
+            delta_events.retain(|e| e.timestamp >= delta_start);
+
+            combined.reserve(snap_events.len() + delta_events.len());
+            combined.extend(snap_events);
+            combined.extend(delta_events);
+        }
+    }
+
+    // Ensure append order by timestamp
+    combined.sort_by_key(|e| e.timestamp);
+
+    debug!(target: LOG_TARGET, shard_id = ctx.id, results_count = combined.len(), "Replay completed");
+    tx.send(combined).await.map_err(|e| e.to_string())
+}
+
+fn parse_since_to_ts(since: &Option<String>) -> Option<u64> {
+    let raw = since.as_ref()?;
+    if let Ok(n) = raw.parse::<u64>() {
+        return Some(n);
+    }
+    // Try RFC3339
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(raw) {
+        let ts_ms = dt.timestamp_millis();
+        if ts_ms >= 0 {
+            return Some(ts_ms as u64);
+        }
+    }
+    None
 }
 
 /// Handles Flush messages.

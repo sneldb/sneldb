@@ -106,7 +106,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
     );
 
     let send_result = timeout(
-        Duration::from_millis(200),
+        Duration::from_millis(800),
         shard.tx.send(ShardMessage::Store(event, registry_clone)),
     )
     .await;
