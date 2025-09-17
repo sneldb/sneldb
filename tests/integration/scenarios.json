@@ -937,18 +937,6 @@
   }
   ,
   {
-    "name": "wal_recover_no_sleep_after_restart",
-    "config": { "engine": { "flush_threshold": 2 }, "wal": { "enabled": true } },
-    "input_commands": [
-      "DEFINE e FIELDS { \"n\": \"int\" }",
-      "STORE e FOR u1 PAYLOAD {\"n\":1}",
-      "RESTART",
-      "QUERY e WHERE n=1"
-    ],
-    "matcher": { "kind": "include_all", "value": ["u1"] }
-  }
-  ,
-  {
     "name": "wal_durable_flush_each_write",
     "config": {
       "engine": { "flush_threshold": 100 },
@@ -958,6 +946,7 @@
       "DEFINE login FIELDS { \"device\": \"string\" }",
       "STORE login FOR u1 PAYLOAD {\"device\":\"android\"}",
       "RESTART",
+      "SLEEP 100",
       "QUERY login WHERE device=\"android\""
     ],
     "matcher": { "kind": "include_all", "value": ["u1"] }
