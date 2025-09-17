@@ -60,6 +60,7 @@ More examples: [Query](../commands/query.md) and [Replay](../commands/replay.md)
 2. Plan shard tasks (fan‑out unless narrowed by `context_id`).
 3. Per shard, scan MemTable and pick relevant segments.
 4. Prune zones by time and per‑field filters; read only needed columns.
+   - Range predicates (`>`, `>=`, `<`, `<=`) are pruned using Zone SuRF (`{uid}_{field}.zsrf`) when present, falling back to XOR/EBM only if unavailable. SuRF is an order‑preserving trie using succinct arrays for fast range overlap checks.
 5. Evaluate predicates and apply `WHERE` condition.
 6. Merge shard results; apply global `LIMIT` if set.
 

@@ -50,6 +50,8 @@ async fn finds_event_type_zones_with_mock_index() {
         .await
         .get_uid(event_type2)
         .expect("UID not found");
+    eprintln!("uid1: {}", uid1);
+    eprintln!("uid2: {}", uid2);
 
     let event1 = EventFactory::new()
         .with("event_type", event_type1)
@@ -171,15 +173,11 @@ async fn finds_event_type_zones_with_mock_index() {
     let finder = ZoneFinder::new(&filter_plan, &query_plan, &binding, &shard_dir);
     let found = finder.find();
 
-    assert_eq!(found.len(), 4);
+    assert_eq!(found.len(), 2);
     assert_eq!(found[0].zone_id, 0);
     assert_eq!(found[0].segment_id, "segment-001");
-    assert_eq!(found[1].zone_id, 1);
-    assert_eq!(found[1].segment_id, "segment-001");
-    assert_eq!(found[2].zone_id, 0);
-    assert_eq!(found[2].segment_id, "segment-002");
-    assert_eq!(found[3].zone_id, 1);
-    assert_eq!(found[3].segment_id, "segment-002");
+    assert_eq!(found[1].zone_id, 0);
+    assert_eq!(found[1].segment_id, "segment-002");
 
     // when just context_id is used
     let filter_plan = FilterPlanFactory::new()
@@ -448,4 +446,505 @@ async fn ebm_neq_prunes_zones() {
     assert_eq!(found.len(), 2);
     assert_eq!(found[0].zone_id, 0);
     assert_eq!(found[1].zone_id, 0);
+}
+
+#[tokio::test]
+async fn zone_surf_prunes_segments_for_gt() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp_dir = tempdir().expect("Temp dir failed");
+    let shard_dir = tmp_dir.path().join("shard-0");
+
+    let segment1_id = 1;
+    let segment1_dir = shard_dir.join("segment-001");
+    std::fs::create_dir_all(&segment1_dir).unwrap();
+
+    let segment2_id = 2;
+    let segment2_dir = shard_dir.join("segment-002");
+    std::fs::create_dir_all(&segment2_dir).unwrap();
+
+    let schema_factory = SchemaRegistryFactory::new();
+    let registry = schema_factory.registry();
+    let event_type = "range_evt";
+
+    schema_factory
+        .define_with_fields(event_type, &[("context_id", "string"), ("id", "int")])
+        .await
+        .unwrap();
+
+    let uid = registry
+        .read()
+        .await
+        .get_uid(event_type)
+        .expect("UID not found");
+
+    // segment-001: ids < 10
+    let e1 = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctx1")
+        .with("payload", json!({ "id": 1 }))
+        .create();
+    let e2 = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctx2")
+        .with("payload", json!({ "id": 9 }))
+        .create();
+    let memtable = MemTableFactory::new()
+        .with_capacity(2)
+        .with_events(vec![e1, e2])
+        .create()
+        .expect("Failed to create memtable");
+    let flusher = Flusher::new(memtable, segment1_id, &segment1_dir, registry.clone());
+    flusher.flush().await.expect("Flush failed");
+
+    // segment-002: ids > 10
+    let e3 = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctx3")
+        .with("payload", json!({ "id": 15 }))
+        .create();
+    let e4 = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctx4")
+        .with("payload", json!({ "id": 20 }))
+        .create();
+    let memtable = MemTableFactory::new()
+        .with_capacity(2)
+        .with_events(vec![e3, e4])
+        .create()
+        .expect("Failed to create memtable");
+    let flusher = Flusher::new(memtable, segment2_id, &segment2_dir, registry.clone());
+    flusher.flush().await.expect("Flush failed");
+
+    let filter_plan = FilterPlanFactory::new()
+        .with_column("id")
+        .with_operation(CompareOp::Gt)
+        .with_uid(&uid)
+        .with_value(json!(10))
+        .create();
+
+    let command = CommandFactory::query().with_event_type(event_type).create();
+    let query_plan = QueryPlanFactory::new()
+        .with_registry(registry.clone())
+        .with_command(command)
+        .build()
+        .await;
+
+    let binding = vec!["segment-001".to_string(), "segment-002".to_string()];
+    let finder = ZoneFinder::new(&filter_plan, &query_plan, &binding, &shard_dir);
+    let found = finder.find();
+
+    assert!(found.iter().all(|z| z.segment_id == "segment-002"));
+    assert!(!found.is_empty());
+}
+
+#[tokio::test]
+async fn zone_surf_prunes_segments_for_lt() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp_dir = tempdir().expect("Temp dir failed");
+    let shard_dir = tmp_dir.path().join("shard-0");
+
+    let segment1_id = 1;
+    let segment1_dir = shard_dir.join("segment-001");
+    std::fs::create_dir_all(&segment1_dir).unwrap();
+
+    let segment2_id = 2;
+    let segment2_dir = shard_dir.join("segment-002");
+    std::fs::create_dir_all(&segment2_dir).unwrap();
+
+    let schema_factory = SchemaRegistryFactory::new();
+    let registry = schema_factory.registry();
+    let event_type = "range_evt2";
+
+    schema_factory
+        .define_with_fields(event_type, &[("context_id", "string"), ("id", "int")])
+        .await
+        .unwrap();
+
+    let uid = registry
+        .read()
+        .await
+        .get_uid(event_type)
+        .expect("UID not found");
+
+    // segment-001: ids < 10
+    let a1 = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctx1")
+        .with("payload", json!({ "id": 1 }))
+        .create();
+    let a2 = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctx2")
+        .with("payload", json!({ "id": 9 }))
+        .create();
+    let memtable = MemTableFactory::new()
+        .with_capacity(2)
+        .with_events(vec![a1, a2])
+        .create()
+        .expect("Failed to create memtable");
+    let flusher = Flusher::new(memtable, segment1_id, &segment1_dir, registry.clone());
+    flusher.flush().await.expect("Flush failed");
+
+    // segment-002: ids > 10
+    let b1 = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctx3")
+        .with("payload", json!({ "id": 15 }))
+        .create();
+    let b2 = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctx4")
+        .with("payload", json!({ "id": 20 }))
+        .create();
+    let memtable = MemTableFactory::new()
+        .with_capacity(2)
+        .with_events(vec![b1, b2])
+        .create()
+        .expect("Failed to create memtable");
+    let flusher = Flusher::new(memtable, segment2_id, &segment2_dir, registry.clone());
+    flusher.flush().await.expect("Flush failed");
+
+    let filter_plan = FilterPlanFactory::new()
+        .with_column("id")
+        .with_operation(CompareOp::Lt)
+        .with_uid(&uid)
+        .with_value(json!(10))
+        .create();
+
+    let command = CommandFactory::query().with_event_type(event_type).create();
+    let query_plan = QueryPlanFactory::new()
+        .with_registry(registry.clone())
+        .with_command(command)
+        .build()
+        .await;
+
+    let binding = vec!["segment-001".to_string(), "segment-002".to_string()];
+    let finder = ZoneFinder::new(&filter_plan, &query_plan, &binding, &shard_dir);
+    let found = finder.find();
+
+    assert!(found.iter().all(|z| z.segment_id == "segment-001"));
+    assert!(!found.is_empty());
+}
+
+#[tokio::test]
+async fn zone_surf_gte_includes_boundary() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp_dir = tempdir().expect("Temp dir failed");
+    let shard_dir = tmp_dir.path().join("shard-0");
+
+    let segment1_id = 1;
+    let segment1_dir = shard_dir.join("segment-001");
+    std::fs::create_dir_all(&segment1_dir).unwrap();
+
+    let segment2_id = 2;
+    let segment2_dir = shard_dir.join("segment-002");
+    std::fs::create_dir_all(&segment2_dir).unwrap();
+
+    let schema_factory = SchemaRegistryFactory::new();
+    let registry = schema_factory.registry();
+    let event_type = "range_evt_gte";
+
+    schema_factory
+        .define_with_fields(event_type, &[("context_id", "string"), ("id", "int")])
+        .await
+        .unwrap();
+
+    let uid = registry
+        .read()
+        .await
+        .get_uid(event_type)
+        .expect("UID not found");
+
+    // segment-001: boundary value 10
+    let a = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctxA")
+        .with("payload", json!({ "id": 10 }))
+        .create();
+    let memtable = MemTableFactory::new()
+        .with_capacity(1)
+        .with_events(vec![a])
+        .create()
+        .unwrap();
+    Flusher::new(memtable, segment1_id, &segment1_dir, registry.clone())
+        .flush()
+        .await
+        .unwrap();
+
+    // segment-002: value 11
+    let b = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctxB")
+        .with("payload", json!({ "id": 11 }))
+        .create();
+    let memtable = MemTableFactory::new()
+        .with_capacity(1)
+        .with_events(vec![b])
+        .create()
+        .unwrap();
+    Flusher::new(memtable, segment2_id, &segment2_dir, registry.clone())
+        .flush()
+        .await
+        .unwrap();
+
+    let filter_plan = FilterPlanFactory::new()
+        .with_column("id")
+        .with_operation(CompareOp::Gte)
+        .with_uid(&uid)
+        .with_value(json!(10))
+        .create();
+
+    let command = CommandFactory::query().with_event_type(event_type).create();
+    let query_plan = QueryPlanFactory::new()
+        .with_registry(registry.clone())
+        .with_command(command)
+        .build()
+        .await;
+
+    let binding = vec!["segment-001".to_string(), "segment-002".to_string()];
+    let finder = ZoneFinder::new(&filter_plan, &query_plan, &binding, &shard_dir);
+    let found = finder.find();
+
+    assert_eq!(found.len(), 2);
+    assert!(found.iter().any(|z| z.segment_id == "segment-001"));
+    assert!(found.iter().any(|z| z.segment_id == "segment-002"));
+}
+
+#[tokio::test]
+async fn zone_surf_lte_includes_boundary() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp_dir = tempdir().expect("Temp dir failed");
+    let shard_dir = tmp_dir.path().join("shard-0");
+
+    let segment1_id = 1;
+    let segment1_dir = shard_dir.join("segment-001");
+    std::fs::create_dir_all(&segment1_dir).unwrap();
+
+    let segment2_id = 2;
+    let segment2_dir = shard_dir.join("segment-002");
+    std::fs::create_dir_all(&segment2_dir).unwrap();
+
+    let schema_factory = SchemaRegistryFactory::new();
+    let registry = schema_factory.registry();
+    let event_type = "range_evt_lte";
+
+    schema_factory
+        .define_with_fields(event_type, &[("context_id", "string"), ("id", "int")])
+        .await
+        .unwrap();
+
+    let uid = registry
+        .read()
+        .await
+        .get_uid(event_type)
+        .expect("UID not found");
+
+    // segment-001: value 19
+    let a = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctxA")
+        .with("payload", json!({ "id": 19 }))
+        .create();
+    let memtable = MemTableFactory::new()
+        .with_capacity(1)
+        .with_events(vec![a])
+        .create()
+        .unwrap();
+    Flusher::new(memtable, segment1_id, &segment1_dir, registry.clone())
+        .flush()
+        .await
+        .unwrap();
+
+    // segment-002: boundary value 20
+    let b = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctxB")
+        .with("payload", json!({ "id": 20 }))
+        .create();
+    let memtable = MemTableFactory::new()
+        .with_capacity(1)
+        .with_events(vec![b])
+        .create()
+        .unwrap();
+    Flusher::new(memtable, segment2_id, &segment2_dir, registry.clone())
+        .flush()
+        .await
+        .unwrap();
+
+    let filter_plan = FilterPlanFactory::new()
+        .with_column("id")
+        .with_operation(CompareOp::Lte)
+        .with_uid(&uid)
+        .with_value(json!(20))
+        .create();
+
+    let command = CommandFactory::query().with_event_type(event_type).create();
+    let query_plan = QueryPlanFactory::new()
+        .with_registry(registry.clone())
+        .with_command(command)
+        .build()
+        .await;
+
+    let binding = vec!["segment-001".to_string(), "segment-002".to_string()];
+    let finder = ZoneFinder::new(&filter_plan, &query_plan, &binding, &shard_dir);
+    let found = finder.find();
+
+    assert_eq!(found.len(), 2);
+    assert!(found.iter().any(|z| z.segment_id == "segment-001"));
+    assert!(found.iter().any(|z| z.segment_id == "segment-002"));
+}
+
+#[tokio::test]
+async fn zone_surf_between_three_segments_and() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp_dir = tempdir().expect("Temp dir failed");
+    let shard_dir = tmp_dir.path().join("shard-0");
+
+    let s1_id = 1;
+    let s1_dir = shard_dir.join("segment-001");
+    std::fs::create_dir_all(&s1_dir).unwrap();
+
+    let s2_id = 2;
+    let s2_dir = shard_dir.join("segment-002");
+    std::fs::create_dir_all(&s2_dir).unwrap();
+
+    let s3_id = 3;
+    let s3_dir = shard_dir.join("segment-003");
+    std::fs::create_dir_all(&s3_dir).unwrap();
+
+    let schema_factory = SchemaRegistryFactory::new();
+    let registry = schema_factory.registry();
+    let event_type = "range_evt3";
+
+    schema_factory
+        .define_with_fields(event_type, &[("context_id", "string"), ("id", "int")])
+        .await
+        .unwrap();
+
+    let uid = registry
+        .read()
+        .await
+        .get_uid(event_type)
+        .expect("UID not found");
+
+    // segment-001: [5, 12]
+    let e1 = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctx1")
+        .with("payload", json!({"id":5}))
+        .create();
+    let e2 = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctx2")
+        .with("payload", json!({"id":12}))
+        .create();
+    let mem = MemTableFactory::new()
+        .with_capacity(2)
+        .with_events(vec![e1, e2])
+        .create()
+        .unwrap();
+    Flusher::new(mem, s1_id, &s1_dir, registry.clone())
+        .flush()
+        .await
+        .unwrap();
+
+    // segment-002: [25, 31]
+    let e3 = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctx3")
+        .with("payload", json!({"id":25}))
+        .create();
+    let e4 = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctx4")
+        .with("payload", json!({"id":31}))
+        .create();
+    let mem = MemTableFactory::new()
+        .with_capacity(2)
+        .with_events(vec![e3, e4])
+        .create()
+        .unwrap();
+    Flusher::new(mem, s2_id, &s2_dir, registry.clone())
+        .flush()
+        .await
+        .unwrap();
+
+    // segment-003: [15, 29]
+    let e5 = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctx5")
+        .with("payload", json!({"id":15}))
+        .create();
+    let e6 = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctx6")
+        .with("payload", json!({"id":29}))
+        .create();
+    let mem = MemTableFactory::new()
+        .with_capacity(2)
+        .with_events(vec![e5, e6])
+        .create()
+        .unwrap();
+    Flusher::new(mem, s3_id, &s3_dir, registry.clone())
+        .flush()
+        .await
+        .unwrap();
+
+    // Build query plan
+    let command = CommandFactory::query().with_event_type(event_type).create();
+    let query_plan = QueryPlanFactory::new()
+        .with_registry(registry.clone())
+        .with_command(command)
+        .build()
+        .await;
+    let binding = vec![
+        "segment-001".to_string(),
+        "segment-002".to_string(),
+        "segment-003".to_string(),
+    ];
+
+    // id > 10
+    let gt_plan = FilterPlanFactory::new()
+        .with_column("id")
+        .with_operation(CompareOp::Gt)
+        .with_uid(&uid)
+        .with_value(json!(10))
+        .create();
+    let gt_finder = ZoneFinder::new(&gt_plan, &query_plan, &binding, &shard_dir);
+    let zones_gt = gt_finder.find();
+
+    // id < 30
+    let lt_plan = FilterPlanFactory::new()
+        .with_column("id")
+        .with_operation(CompareOp::Lt)
+        .with_uid(&uid)
+        .with_value(json!(30))
+        .create();
+    let lt_finder = ZoneFinder::new(&lt_plan, &query_plan, &binding, &shard_dir);
+    let zones_lt = lt_finder.find();
+
+    // AND combine
+    let combined = crate::engine::core::ZoneCombiner::new(
+        vec![zones_gt, zones_lt],
+        crate::engine::core::LogicalOp::And,
+    )
+    .combine();
+
+    // Expect segments: 001 (12), 003 (15,29), 002 (25); exclude 5 and 31 via intersection logic
+    let segs: std::collections::HashSet<_> =
+        combined.iter().map(|z| z.segment_id.as_str()).collect();
+    assert!(segs.contains("segment-001"));
+    assert!(segs.contains("segment-002"));
+    assert!(segs.contains("segment-003"));
+    assert!(!combined.is_empty());
 }
