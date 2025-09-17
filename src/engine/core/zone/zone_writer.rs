@@ -1,5 +1,6 @@
 use crate::engine::core::ColumnWriter;
 use crate::engine::core::FieldXorFilter;
+use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
 use crate::engine::core::zone::enum_bitmap_index::EnumBitmapBuilder;
 use crate::engine::core::{ZoneIndex, ZoneMeta, ZonePlan};
 use crate::engine::errors::StoreError;
@@ -67,6 +68,16 @@ impl<'a> ZoneWriter<'a> {
         );
         FieldXorFilter::build_all(zone_plans, self.segment_dir)
             .map_err(|e| StoreError::FlushFailed(format!("Failed to build XOR filters: {}", e)))?;
+
+        // Build Zone-level SuRF filters (best-effort)
+        debug!(
+            target: "sneldb::flush",
+            uid = self.uid,
+            "Building Zone-level SuRF filters"
+        );
+        if let Err(e) = ZoneSurfFilter::build_all(zone_plans, self.segment_dir) {
+            debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping Zone SuRF due to error");
+        }
 
         // Build Enum Bitmap Indexes for enum fields (best-effort)
         debug!(

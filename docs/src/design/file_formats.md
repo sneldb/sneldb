@@ -14,6 +14,7 @@
 - Zone Index — `{uid}.idx` mapping context_id values to zone ids.
 - XOR Filters — `{uid}_{field}.xf` per-field filters for fast membership tests.
 - Enum Bitmap Indexes — `{uid}_{field}.ebm` per-enum-field bitmaps for zone pruning.
+- Zone SuRF Filters — `{uid}_{field}.zsrf` per-field per-zone succinct range filters for range pruning.
 - Schemas — `schema/schemas.bin` append-only records of event type schemas and UIDs.
 
 ## Binary headers
@@ -34,6 +35,7 @@ Magic strings per file kind:
 - Zone Metadata (`.zones`): `EVDBZON\0`
 - Zone Index (`.idx` per-UID/context): `EVDBUID\0`
 - XOR Filters (`.xf`): `EVDBXRF\0`
+- Zone SuRF Filters (`.zsrf`): `EVDBZSF\0`
 - Shard Segment Index (`segments.idx`): `EVDBSIX\0`
 - Schemas (`schemas.bin`): `EVDBSCH\0`
 - Enum Bitmap Index (`.ebm`): `EVDBEBM\0`
@@ -58,6 +60,7 @@ data/
 │   │       ├── {uid}.zones
 │   │       ├── {uid}.idx
 │   │       ├── {uid}_{field}.xf
+│   │       ├── {uid}_{field}.zsrf
 │   │       └── {uid}_{field}.ebm
 │   └── shard-1/
 │       └── segment-00000/
@@ -111,6 +114,18 @@ Snapshots are ad-hoc utility files and can be written anywhere (not tied to the 
 - Bincode-serialized `BinaryFuse8` filter over unique field values.
 - Used for fast approximate membership checks during planning.
 - File begins with a binary header (MAGIC `EVDBXRF\0`).
+
+## Zone SuRF filters: `{uid}_{field}.zsrf`
+
+- Bincode-serialized `ZoneSurfFilter` containing `Vec<ZoneSurfEntry>`.
+- Purpose: zone-level range pruning for numeric, string, and boolean fields using a succinct trie.
+- File begins with a binary header (MAGIC `EVDBZSF\0`).
+- Contents:
+  - `entries: Vec<ZoneSurfEntry>` where each entry is `{ zone_id: u32, trie: SurfTrie }`.
+  - `SurfTrie` stores compact arrays of degrees, child offsets, labels, and terminal flags.
+- Built during flush/compaction by `ZoneWriter::write_all`.
+- Used by `ZoneFinder` for `Gt/Gte/Lt/Lte` operations before falling back to XOR/EBM.
+- Naming mirrors `.xf`/`.ebm`: per `uid` and `field`.
 
 ## Enum bitmap index: `{uid}_{field}.ebm`
 

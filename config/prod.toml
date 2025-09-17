@@ -1,22 +1,22 @@
 [wal]
-enabled = true
+enabled = false
 fsync = false
 buffered = true
-buffer_size = 102400
+buffer_size = 8388608
 dir = "../data/wal/"
 flush_each_write = false
-fsync_every_n = 1024
+fsync_every_n = 50000
 
 [engine]
-flush_threshold = 16384
+flush_threshold =8000
 data_dir = "../data/cols"
 index_dir = "../data/index/"
-shard_count = 8
-event_per_zone = 2048
-compaction_threshold = 8
-compaction_interval = 300
-sys_io_threshold = 100
-max_inflight_passives = 32
+shard_count = 16
+event_per_zone = 1000
+compaction_threshold = 1000
+compaction_interval = 1800
+sys_io_threshold = 1000
+max_inflight_passives = 128
 
 
 [schema]
@@ -36,5 +36,5 @@ allow_unauthenticated = false
 
 [logging]
 log_dir = "../data/logs"
-stdout_level = "warn"
+stdout_level = "error"
 file_level = "error"

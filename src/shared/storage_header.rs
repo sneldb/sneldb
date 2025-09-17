@@ -122,6 +122,7 @@ pub enum FileKind {
     EnumBitmap,
     EventSnapshot,
     EventSnapshotMeta,
+    ZoneSurfFilter,
 }
 
 impl FileKind {
@@ -137,6 +138,7 @@ impl FileKind {
             FileKind::EnumBitmap => *b"EVDBEBM\0",
             FileKind::EventSnapshot => *b"EVDBSNP\0",
             FileKind::EventSnapshotMeta => *b"EVDBSMT\0",
+            FileKind::ZoneSurfFilter => *b"EVDBZSF\0",
         }
     }
 }
