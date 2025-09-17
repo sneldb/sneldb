@@ -155,38 +155,38 @@
   {
     "name": "query_with_optional_field",
     "input_commands": [
-      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"status\": \"string\", \"optional_field\": \"string | null\" }",
-      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":123, \"status\":\"confirmed\", \"optional_field\":\"a string\"}",
-      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":124, \"status\":\"confirmed\"}",
-      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":125, \"status\":\"confirmed\"}",
-      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":126, \"status\":\"confirmed\", \"optional_field\":\"a string\"}",
-      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":127, \"status\":\"confirmed\"}",
-      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":128, \"status\":\"confirmed\", \"optional_field\":\"a string\"}",
-      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":129, \"status\":\"confirmed\"}",
-      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":130, \"status\":\"confirmed\", \"optional_field\":\"a string\"}",
-      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":131, \"status\":\"confirmed\", \"optional_field\":\"a string\"}",
-      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":132, \"status\":\"confirmed\"}",
+      "DEFINE order_created FIELDS { \"order_id\": \"string\", \"status\": \"string\", \"optional_field\": \"string | null\" }",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":\"order-123\", \"status\":\"confirmed\", \"optional_field\":\"a string\"}",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":\"order-124\", \"status\":\"confirmed\"}",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":\"order-125\", \"status\":\"confirmed\"}",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":\"order-126\", \"status\":\"confirmed\", \"optional_field\":\"a string\"}",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":\"order-127\", \"status\":\"confirmed\"}",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":\"order-128\", \"status\":\"confirmed\", \"optional_field\":\"a string\"}",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":\"order-129\", \"status\":\"confirmed\"}",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":\"order-130\", \"status\":\"confirmed\", \"optional_field\":\"a string\"}",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":\"order-131\", \"status\":\"confirmed\", \"optional_field\":\"a string\"}",
+      "STORE order_created FOR customer-1 PAYLOAD {\"order_id\":\"order-132\", \"status\":\"confirmed\"}",
       "QUERY order_created WHERE optional_field=\"a string\""
     ],
     "matchers": [
       {
       "kind": "include_all",
       "value": [
-        "123",
-        "126",
-        "128",
-        "130",
-        "131"
+        "order-123",
+        "order-126",
+        "order-128",
+        "order-130",
+        "order-131"
       ]
     },
     {
       "kind": "include_none",
       "value": [
-        "124",
-        "125",
-        "127",
-        "129",
-        "132"
+        "order-124",
+        "order-125",
+        "order-127",
+        "order-129",
+        "order-132"
       ]
     }
     ]
