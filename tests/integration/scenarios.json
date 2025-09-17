@@ -962,7 +962,9 @@
     "input_commands": [
       "DEFINE evt FIELDS { \"v\": \"int\" }",
       "STORE evt FOR u1 PAYLOAD {\"v\":1}",
+      "SLEEP 10",
       "RESTART",
+      "SLEEP 10",
       "QUERY evt WHERE v=1"
     ],
     "matcher": { "kind": "include", "value": "No matching events found" }
