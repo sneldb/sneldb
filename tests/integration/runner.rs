@@ -1,6 +1,7 @@
 use crate::integration::config::write_config_for_with_overrides;
 use crate::integration::scenarios::TestScenario;
-use std::io::Write;
+use std::io::{Read, Write};
+use std::net::{Shutdown, TcpStream};
 use std::process::{Command, Stdio};
 use tracing::{debug, error, info};
 
@@ -24,10 +25,11 @@ pub fn run_scenario(scenario: &TestScenario) {
     let tmp_path = format!("tests/integration/tmp/");
     let _ = std::fs::remove_dir_all(tmp_path);
 
-    let (config_path, socket_path) =
+    let (config_path, socket_path, tcp_addr) =
         write_config_for_with_overrides(&scenario.name, scenario.config.as_ref());
     debug!("Using config path: {}", config_path);
     debug!("Using socket path: {}", socket_path);
+    debug!("Using tcp addr: {}", tcp_addr);
 
     let mut server = Command::new("cargo")
         .args(&["run", "--bin", "snel_db"])
@@ -41,22 +43,22 @@ pub fn run_scenario(scenario: &TestScenario) {
 
     std::thread::sleep(std::time::Duration::from_secs(2));
 
-    // Helper to (re)connect socat
-    let spawn_socat = || -> (std::process::Child, std::process::ChildStdin) {
-        let mut sp = Command::new("socat")
-            .arg("-")
-            .arg(format!("UNIX-CONNECT:{}", socket_path))
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("Failed to start socat");
-        let stdin = sp.stdin.take().expect("Failed to get stdin");
-        (sp, stdin)
+    // Helper to (re)connect TCP
+    let connect_tcp = || -> TcpStream {
+        for _ in 0..20 {
+            match TcpStream::connect(&tcp_addr) {
+                Ok(s) => return s,
+                Err(e) => {
+                    debug!("TCP connect failed: {} (retrying)", e);
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+            }
+        }
+        panic!("Failed to connect to TCP at {}", tcp_addr);
     };
 
     // Send commands one by one to handle FLUSH delays
-    let (mut socat_process, mut stdin) = spawn_socat();
+    let mut stream = connect_tcp();
 
     // Accumulate outputs across reconnects (e.g., after RESTART)
     let mut accumulated_output = String::new();
@@ -69,24 +71,22 @@ pub fn run_scenario(scenario: &TestScenario) {
             continue;
         }
 
-        // Handle RESTART pseudo-command: restart server and reconnect socat
+        // Handle RESTART pseudo-command: restart server and reconnect TCP
         if command.trim().eq_ignore_ascii_case("RESTART") {
             debug!(
                 "RESTART command received (step {}), restarting server",
                 i + 1
             );
 
-            // Close current socat input and collect its output
-            drop(stdin);
-            let out = socat_process
-                .wait_with_output()
-                .expect("Failed to get socat output during restart");
-            accumulated_output.push_str(&String::from_utf8_lossy(&out.stdout));
+            // Close write half and collect output from current TCP connection
+            let _ = stream.shutdown(Shutdown::Write);
+            let mut buf = Vec::new();
+            let _ = stream.read_to_end(&mut buf);
+            accumulated_output.push_str(&String::from_utf8_lossy(&buf));
 
             // Restart server
             let _ = server.kill();
             let _ = server.wait();
-            let _ = std::fs::remove_file(&socket_path);
 
             server = Command::new("cargo")
                 .args(&["run", "--bin", "snel_db"])
@@ -100,16 +100,14 @@ pub fn run_scenario(scenario: &TestScenario) {
 
             std::thread::sleep(std::time::Duration::from_secs(2));
 
-            // Reconnect socat
-            let pair = spawn_socat();
-            socat_process = pair.0;
-            stdin = pair.1;
+            // Reconnect TCP
+            stream = connect_tcp();
             continue;
         }
 
         debug!("Sending command {}: {}", i + 1, command);
-        writeln!(stdin, "{}", command).expect("Failed to write command");
-        stdin.flush().expect("Failed to flush stdin");
+        writeln!(stream, "{}", command).expect("Failed to write command");
+        stream.flush().expect("Failed to flush stream");
 
         // If this is a FLUSH command, wait briefly before sending the next command
         if command.trim().eq_ignore_ascii_case("FLUSH") {
@@ -118,14 +116,11 @@ pub fn run_scenario(scenario: &TestScenario) {
         }
     }
 
-    // Close stdin to signal end of input
-    drop(stdin);
-
-    // Wait for socat to finish and get output (append to accumulated)
-    let output_result = socat_process
-        .wait_with_output()
-        .expect("Failed to get socat output");
-    accumulated_output.push_str(&String::from_utf8_lossy(&output_result.stdout));
+    // Close write half to signal end of input and read remaining output
+    let _ = stream.shutdown(Shutdown::Write);
+    let mut buf = Vec::new();
+    let _ = stream.read_to_end(&mut buf);
+    accumulated_output.push_str(&String::from_utf8_lossy(&buf));
     let actual = accumulated_output;
     debug!("Actual output:\n{}", actual);
 
@@ -161,7 +156,7 @@ pub fn run_scenario(scenario: &TestScenario) {
     let _ = server.kill();
     let _ = server.wait();
 
-    // Clean up socket file if it still exists
+    // Clean up socket file if it still exists (noop for TCP-only runs)
     let _ = std::fs::remove_file(socket_path);
 
     // Clean up tmp directory for this scenario

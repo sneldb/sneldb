@@ -72,10 +72,7 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install socat
-        run: sudo apt-get install -y socat
-
-      - name: Prepare runtime dirs (if your runner uses sockets/dirs)
+      - name: Prepare runtime dirs
         run: mkdir -p /tmp/sneldb /var/run/sneldb || true
 
       - name: Build (ensure binaries present on this runner)

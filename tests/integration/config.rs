@@ -108,8 +108,8 @@ fn default_test_config(paths: &TestPaths) -> TestConfig {
             socket_path: paths.socket_path.clone(),
             log_level: "debug".into(),
             output_format: "json".into(),
-            tcp_addr: "127.0.0.1:8085".into(),
-            http_addr: "127.0.0.1:8085".into(),
+            tcp_addr: "127.0.0.1:7172".into(),
+            http_addr: "127.0.0.1:8086".into(),
             auth_token: "test".into(),
         },
         logging: LoggingConfig {
@@ -156,7 +156,7 @@ fn deep_merge_json(base: &mut Value, overrides: &Value) {
 pub fn write_config_for_with_overrides(
     name: &str,
     overrides: Option<&serde_json::Value>,
-) -> (String, String) {
+) -> (String, String, String) {
     let paths = derive_paths(name);
     let default = default_test_config(&paths);
 
@@ -172,5 +172,9 @@ pub fn write_config_for_with_overrides(
     let toml = toml::to_string_pretty(&final_config).unwrap();
     fs::write(&paths.config_path, toml).unwrap();
 
-    (paths.config_path.clone(), paths.socket_path.clone())
+    (
+        paths.config_path.clone(),
+        paths.socket_path.clone(),
+        final_config.server.tcp_addr.clone(),
+    )
 }
