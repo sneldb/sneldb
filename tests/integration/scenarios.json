@@ -945,8 +945,9 @@
     "input_commands": [
       "DEFINE login FIELDS { \"device\": \"string\" }",
       "STORE login FOR u1 PAYLOAD {\"device\":\"android\"}",
+      "SLEEP 10",
       "RESTART",
-      "SLEEP 100",
+      "SLEEP 10",
       "QUERY login WHERE device=\"android\""
     ],
     "matcher": { "kind": "include_all", "value": ["u1"] }
