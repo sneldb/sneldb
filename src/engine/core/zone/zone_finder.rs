@@ -1,4 +1,5 @@
 use crate::command::types::CompareOp;
+use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
 use crate::engine::core::zone::enum_bitmap_index::EnumBitmapIndex;
 use crate::engine::core::zone::enum_zone_pruner::EnumZonePruner;
 use crate::engine::core::zone::zone_xor_index::ZoneXorFilterIndex;
@@ -189,10 +190,33 @@ impl<'a> ZoneFinder<'a> {
         };
 
         if let Some(op) = &self.plan.operation {
-            if let Some(zones) = RangeQueryHandler::new(filter.clone(), segment_id.to_string())
-                .handle_range_query(value, op)
-            {
-                return zones;
+            // Prefer zone-level SuRF only for range operations
+            if matches!(
+                op,
+                CompareOp::Gt | CompareOp::Gte | CompareOp::Lt | CompareOp::Lte
+            ) {
+                let zsurf_path = self.zone_surf_path(segment_id, uid, &self.plan.column);
+                if let Ok(zsf) = ZoneSurfFilter::load(&zsurf_path) {
+                    if let Some(bytes) =
+                        crate::engine::core::filter::surf_encoding::encode_value(value).as_deref()
+                    {
+                        let zones = match op {
+                            CompareOp::Gt => zsf.zones_overlapping_ge(bytes, false, segment_id),
+                            CompareOp::Gte => zsf.zones_overlapping_ge(bytes, true, segment_id),
+                            CompareOp::Lt => zsf.zones_overlapping_le(bytes, false, segment_id),
+                            CompareOp::Lte => zsf.zones_overlapping_le(bytes, true, segment_id),
+                            _ => unreachable!(),
+                        };
+                        warn!(target: "sneldb::query", "Zone Surf filter found for value {:?} in segment {} zones: {:?}", value, segment_id, zones);
+                        return zones;
+                    }
+                }
+                if let Some(zones) =
+                    RangeQueryHandler::new(FieldXorFilter::new(&Vec::new()), segment_id.to_string())
+                        .handle_range_query(value, op)
+                {
+                    return zones;
+                }
             }
         }
 
@@ -245,6 +269,12 @@ impl<'a> ZoneFinder<'a> {
         self.base_dir
             .join(segment_id)
             .join(format!("{}_{}.xf", uid, column))
+    }
+
+    fn zone_surf_path(&self, segment_id: &str, uid: &str, column: &str) -> PathBuf {
+        self.base_dir
+            .join(segment_id)
+            .join(format!("{}_{}.zsrf", uid, column))
     }
 
     fn ebm_path(&self, segment_id: &str, uid: &str, column: &str) -> PathBuf {

@@ -1,5 +1,6 @@
 use crate::engine::core::ColumnWriter;
 use crate::engine::core::FieldXorFilter;
+use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
 use crate::engine::core::zone::enum_bitmap_index::EnumBitmapBuilder;
 use crate::engine::core::zone::zone_xor_index::build_all_zxf;
 use crate::engine::core::{ZoneIndex, ZoneMeta, ZonePlan};
@@ -77,6 +78,16 @@ impl<'a> ZoneWriter<'a> {
         );
         if let Err(e) = build_all_zxf(zone_plans, self.segment_dir) {
             debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping .zxf due to error");
+        }
+        
+        // Build Zone-level SuRF filters (best-effort)
+        debug!(
+            target: "sneldb::flush",
+            uid = self.uid,
+            "Building Zone-level SuRF filters"
+        );
+        if let Err(e) = ZoneSurfFilter::build_all(zone_plans, self.segment_dir) {
+            debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping Zone SuRF due to error");
         }
 
         // Build Enum Bitmap Indexes for enum fields (best-effort)

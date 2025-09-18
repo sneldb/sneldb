@@ -20,8 +20,12 @@ impl RangeQueryHandler {
         operation: &CompareOp,
     ) -> Option<Vec<CandidateZone>> {
         match operation {
-            CompareOp::Gt | CompareOp::Gte => self.handle_greater_than(value),
-            CompareOp::Lt | CompareOp::Lte => self.handle_less_than(value),
+            CompareOp::Gt | CompareOp::Gte => {
+                self.handle_greater_than(value, matches!(operation, CompareOp::Gte))
+            }
+            CompareOp::Lt | CompareOp::Lte => {
+                self.handle_less_than(value, matches!(operation, CompareOp::Lte))
+            }
             _ => {
                 warn!(
                     target: "sneldb::query::range",
@@ -33,27 +37,25 @@ impl RangeQueryHandler {
         }
     }
 
-    fn handle_greater_than(&self, value: &Value) -> Option<Vec<CandidateZone>> {
+    fn handle_greater_than(&self, value: &Value, _inclusive: bool) -> Option<Vec<CandidateZone>> {
         info!(
             target: "sneldb::query::range",
             "Range query (>) - value: {:?}, segment: {}",
             value, self.segment_id
         );
 
-        // TODO: Use self.filter.min_value / max_value / zone-hints to exclude zones
         Some(CandidateZone::create_all_zones_for_segment(
             &self.segment_id,
         ))
     }
 
-    fn handle_less_than(&self, value: &Value) -> Option<Vec<CandidateZone>> {
+    fn handle_less_than(&self, value: &Value, _inclusive: bool) -> Option<Vec<CandidateZone>> {
         info!(
             target: "sneldb::query::range",
             "Range query (<) - value: {:?}, segment: {}",
             value, self.segment_id
         );
 
-        // TODO: Use self.filter.min_value / max_value / zone-hints to exclude zones
         Some(CandidateZone::create_all_zones_for_segment(
             &self.segment_id,
         ))
