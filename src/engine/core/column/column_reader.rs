@@ -113,7 +113,7 @@ impl ColumnReader {
             }
 
             let val_bytes = &mmap[base + 2..end];
-            match String::from_utf8(val_bytes.to_vec()) {
+            match std::str::from_utf8(val_bytes) {
                 Ok(val) => {
                     debug!(
                         target: "col_reader::value",
@@ -122,7 +122,7 @@ impl ColumnReader {
                         value = %val,
                         "Read string value"
                     );
-                    values.push(val);
+                    values.push(val.to_owned());
                 }
                 Err(e) => {
                     error!(
