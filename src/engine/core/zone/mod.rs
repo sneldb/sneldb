@@ -15,6 +15,7 @@ pub mod zone_planner;
 pub mod zone_row;
 pub mod zone_value_loader;
 pub mod zone_writer;
+pub mod zone_xor_index;
 
 #[cfg(test)]
 mod candidate_zone_test;
@@ -46,3 +47,5 @@ mod zone_plan_tests;
 mod zone_planner_tests;
 #[cfg(test)]
 mod zone_writer_test;
+#[cfg(test)]
+mod zone_xor_index_test;

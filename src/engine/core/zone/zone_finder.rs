@@ -2,6 +2,7 @@ use crate::command::types::CompareOp;
 use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
 use crate::engine::core::zone::enum_bitmap_index::EnumBitmapIndex;
 use crate::engine::core::zone::enum_zone_pruner::EnumZonePruner;
+use crate::engine::core::zone::zone_xor_index::ZoneXorFilterIndex;
 use crate::engine::core::{
     CandidateZone, FieldXorFilter, FilterPlan, QueryPlan, RangeQueryHandler, ZoneIndex,
 };
@@ -127,6 +128,58 @@ impl<'a> ZoneFinder<'a> {
             }
         };
 
+        // Prefer zone-level XOR index (.zxf) if available
+        let zxf_path = self.zxf_path(segment_id, uid, &self.plan.column);
+        match ZoneXorFilterIndex::load(&zxf_path) {
+            Ok(zxf) => {
+                debug!(
+                    target: "sneldb::query",
+                    column = %self.plan.column,
+                    path = %zxf_path.display(),
+                    "Loaded .zxf zone index"
+                );
+                if let Some(op) = &self.plan.operation {
+                    // Range ops are not handled by XOR;
+                    if matches!(op, CompareOp::Eq) {
+                        let zone_ids = zxf.zones_maybe_containing(value);
+                        debug!(
+                            target: "sneldb::query",
+                            column = %self.plan.column,
+                            op = ?op,
+                            value = ?value,
+                            zone_count = zone_ids.len(),
+                            zones = ?zone_ids,
+                            "Zone XOR candidate zones"
+                        );
+                        if !zone_ids.is_empty() {
+                            let maybe_zones = zone_ids
+                                .into_iter()
+                                .map(|z| CandidateZone::new(z, segment_id.to_string()))
+                                .collect::<Vec<_>>();
+                            return maybe_zones;
+                        } else {
+                            debug!(
+                                target: "sneldb::query",
+                                column = %self.plan.column,
+                                op = ?op,
+                                value = ?value,
+                                "Zone XOR returned no zones; falling back"
+                            );
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                debug!(
+                    target: "sneldb::query",
+                    column = %self.plan.column,
+                    path = %zxf_path.display(),
+                    error = %e,
+                    "No .zxf index or failed to load; skipping"
+                );
+            }
+        }
+
         let path = self.filter_path(segment_id, uid, &self.plan.column);
         let filter = match FieldXorFilter::load(&path) {
             Ok(f) => f,
@@ -176,12 +229,35 @@ impl<'a> ZoneFinder<'a> {
             }
         }
 
+        // XOR-based pruning for Eq/Neq (non-enum):
+        // - Eq: if value possibly present -> include all zones; if definitely absent -> exclude segment
+        // - Neq: cannot prune; include all zones regardless of presence
+        if let Some(op) = &self.plan.operation {
+            match op {
+                CompareOp::Eq => {
+                    if filter.contains_value(value) {
+                        debug!(target: "sneldb::query", "XOR EQ hit -> include all zones for {:?}", value);
+                        return CandidateZone::create_all_zones_for_segment(segment_id);
+                    } else {
+                        debug!(target: "sneldb::query", "XOR EQ miss -> exclude segment for {:?}", value);
+                        return vec![];
+                    }
+                }
+                CompareOp::Neq => {
+                    debug!(target: "sneldb::query", "XOR NEQ -> cannot prune; include all zones for {:?}", value);
+                    return CandidateZone::create_all_zones_for_segment(segment_id);
+                }
+                _ => {}
+            }
+        }
+
+        // No op or unsupported op: fall back to presence check like EQ
         if filter.contains_value(value) {
-            debug!(target: "sneldb::query", "XOR filter positive hit for value {:?}", value);
+            debug!(target: "sneldb::query", "XOR default hit for value {:?}", value);
             return CandidateZone::create_all_zones_for_segment(segment_id);
         }
 
-        debug!(target: "sneldb::query", "XOR filter miss for value {:?}", value);
+        debug!(target: "sneldb::query", "XOR default miss for value {:?}", value);
         vec![]
     }
 
@@ -205,6 +281,12 @@ impl<'a> ZoneFinder<'a> {
         self.base_dir
             .join(segment_id)
             .join(format!("{}_{}.ebm", uid, column))
+    }
+
+    fn zxf_path(&self, segment_id: &str, uid: &str, column: &str) -> PathBuf {
+        self.base_dir
+            .join(segment_id)
+            .join(format!("{}_{}.zxf", uid, column))
     }
 
     fn try_ebm_prune(

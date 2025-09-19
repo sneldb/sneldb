@@ -1,5 +1,7 @@
+use crate::engine::core::zone::zone_xor_index::ZoneXorFilterIndex;
 use crate::engine::core::{FieldXorFilter, ZoneIndex, ZoneMeta, ZonePlanner, ZoneWriter};
 use crate::test_helpers::factories::{EventFactory, SchemaRegistryFactory};
+use serde_json::json;
 
 #[tokio::test]
 async fn test_zone_writer_creates_all_outputs_correctly() {
@@ -75,4 +77,17 @@ async fn test_zone_writer_creates_all_outputs_correctly() {
         !filter.contains("not_in_data"),
         "XOR filter should not contain 'not_in_data'"
     );
+
+    // Validate per-zone XOR index (.zxf) for payload field "key" if present
+    let zxf_path = segment_dir.join(format!("{}_key.zxf", uid));
+
+    let zxf = ZoneXorFilterIndex::load(&zxf_path).expect("Failed to load .zxf index for key");
+    // Default payload in EventFactory has key="value" for all events
+    for zone_id in 0..plans.len() {
+        assert!(
+            zxf.contains_in_zone(zone_id as u32, &json!("value")),
+            "Zone {} should maybe contain payload key=value",
+            zone_id
+        );
+    }
 }
