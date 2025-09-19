@@ -2,6 +2,8 @@ use crate::engine::core::ZonePlan;
 use crate::engine::core::filter::surf_encoding::encode_value;
 use crate::engine::core::filter::surf_trie::SurfTrie;
 use crate::shared::storage_header::{BinaryHeader, FileKind};
+use base64::{Engine, engine::general_purpose::STANDARD as B64};
+use memmap2::MmapOptions;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::OpenOptions;
@@ -34,8 +36,9 @@ impl ZoneSurfFilter {
     }
 
     pub fn load(path: &Path) -> std::io::Result<Self> {
-        let data = std::fs::read(path)?;
-        let mut slice = &data[..];
+        let file = OpenOptions::new().read(true).open(path)?;
+        let mmap = unsafe { MmapOptions::new().map(&file)? };
+        let mut slice = &mmap[..];
         let header = BinaryHeader::read_from(&mut slice)?;
         if header.magic != FileKind::ZoneSurfFilter.magic() {
             return Err(std::io::Error::new(
@@ -43,7 +46,7 @@ impl ZoneSurfFilter {
                 "invalid zonesurffilter magic",
             ));
         }
-        let filter: ZoneSurfFilter = bincode::deserialize(&data[BinaryHeader::TOTAL_LEN..])
+        let filter: ZoneSurfFilter = bincode::deserialize(&mmap[BinaryHeader::TOTAL_LEN..])
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
         Ok(filter)
     }
@@ -58,7 +61,7 @@ impl ZoneSurfFilter {
 
         for zp in zone_plans {
             // fixed fields
-            for field in ["context_id", "event_type", "timestamp"] {
+            for field in ["timestamp"] {
                 let mut values: Vec<Vec<u8>> = Vec::new();
                 for ev in &zp.events {
                     if let Some(v) = ev.get_field(field) {
@@ -121,9 +124,20 @@ impl ZoneSurfFilter {
         segment_id: &str,
     ) -> Vec<crate::engine::core::zone::candidate_zone::CandidateZone> {
         let mut result = Vec::new();
+        let mut total_nodes_visited: usize = 0;
+        let mut total_edges_examined: usize = 0;
+        let mut total_backtracks: usize = 0;
+        let mut total_left_descents: usize = 0;
+
         for e in &self.entries {
             let q = SurfQuery { trie: &e.trie };
-            if q.may_overlap_ge(lower, inclusive) {
+            let (overlaps, stats) = q.may_overlap_ge_with_stats(lower, inclusive);
+            total_nodes_visited += stats.nodes_visited;
+            total_edges_examined += stats.edges_examined;
+            total_backtracks += stats.backtracks;
+            total_left_descents += stats.leftmost_descents;
+
+            if overlaps {
                 result.push(
                     crate::engine::core::zone::candidate_zone::CandidateZone::new(
                         e.zone_id,
@@ -132,6 +146,21 @@ impl ZoneSurfFilter {
                 );
             }
         }
+
+        info!(
+            target: "sneldb::surf",
+            segment_id = %segment_id,
+            zones_total = self.entries.len(),
+            zones_matched = result.len(),
+            nodes_visited = total_nodes_visited,
+            edges_examined = total_edges_examined,
+            backtracks = total_backtracks,
+            left_descents = total_left_descents,
+            inclusive,
+            lower_b64 = %B64.encode(lower),
+            "SuRF GE probe summary"
+        );
+
         result
     }
 
@@ -142,9 +171,20 @@ impl ZoneSurfFilter {
         segment_id: &str,
     ) -> Vec<crate::engine::core::zone::candidate_zone::CandidateZone> {
         let mut result = Vec::new();
+        let mut total_nodes_visited: usize = 0;
+        let mut total_edges_examined: usize = 0;
+        let mut total_backtracks: usize = 0;
+        let mut total_right_descents: usize = 0;
+
         for e in &self.entries {
             let q = SurfQuery { trie: &e.trie };
-            if q.may_overlap_le(upper, inclusive) {
+            let (overlaps, stats) = q.may_overlap_le_with_stats(upper, inclusive);
+            total_nodes_visited += stats.nodes_visited;
+            total_edges_examined += stats.edges_examined;
+            total_backtracks += stats.backtracks;
+            total_right_descents += stats.rightmost_descents;
+
+            if overlaps {
                 result.push(
                     crate::engine::core::zone::candidate_zone::CandidateZone::new(
                         e.zone_id,
@@ -153,6 +193,21 @@ impl ZoneSurfFilter {
                 );
             }
         }
+
+        info!(
+            target: "sneldb::surf",
+            segment_id = %segment_id,
+            zones_total = self.entries.len(),
+            zones_matched = result.len(),
+            nodes_visited = total_nodes_visited,
+            edges_examined = total_edges_examined,
+            backtracks = total_backtracks,
+            right_descents = total_right_descents,
+            inclusive,
+            upper_b64 = %B64.encode(upper),
+            "SuRF LE probe summary"
+        );
+
         result
     }
 }
@@ -161,12 +216,25 @@ struct SurfQuery<'a> {
     trie: &'a SurfTrie,
 }
 
+#[derive(Default, Debug, Clone, Copy)]
+struct SurfProbeStats {
+    nodes_visited: usize,
+    edges_examined: usize,
+    backtracks: usize,
+    leftmost_descents: usize,
+    rightmost_descents: usize,
+}
+
 impl<'a> SurfQuery<'a> {
     fn child_range(&self, node_idx: usize) -> (usize, usize) {
         self.trie.child_range(node_idx)
     }
 
-    fn find_first_key_geq(&self, target: &[u8]) -> Option<Vec<u8>> {
+    fn find_first_key_geq_with_stats(
+        &self,
+        target: &[u8],
+        stats: &mut SurfProbeStats,
+    ) -> Option<Vec<u8>> {
         // Stack of backtrack points: (node_idx, s, e, chosen_edge_idx, path_len)
         let mut stack: Vec<(usize, usize, usize, usize, usize)> = Vec::new();
         let mut node = 0usize;
@@ -174,9 +242,10 @@ impl<'a> SurfQuery<'a> {
         let mut path: Vec<u8> = Vec::new();
 
         // Helper: descend to the leftmost terminal from node, appending to path
-        let descend_leftmost = |mut node_idx: usize, mut out: Vec<u8>| -> Option<Vec<u8>> {
+        let mut descend_leftmost = |mut node_idx: usize, mut out: Vec<u8>| -> Option<Vec<u8>> {
             loop {
-                if self.trie.is_terminal[node_idx] != 0 {
+                stats.leftmost_descents += 1;
+                if self.trie.is_terminal(node_idx) {
                     return Some(out);
                 }
                 let (s, e) = self.child_range(node_idx);
@@ -190,6 +259,7 @@ impl<'a> SurfQuery<'a> {
         };
 
         loop {
+            stats.nodes_visited += 1;
             let (s, e) = self.child_range(node);
             if depth == target.len() {
                 return descend_leftmost(node, path);
@@ -200,6 +270,7 @@ impl<'a> SurfQuery<'a> {
             let mut equal_idx: Option<usize> = None;
             let mut first_ge_idx: Option<usize> = None;
             for i in s..e {
+                stats.edges_examined += 1;
                 let lbl = self.trie.labels[i];
                 if lbl == tb && equal_idx.is_none() {
                     equal_idx = Some(i);
@@ -228,21 +299,27 @@ impl<'a> SurfQuery<'a> {
 
             // No child >= tb at this level: backtrack to find next greater sibling at some ancestor
             while let Some((bnode, _bs, be, chosen, plen)) = stack.pop() {
+                let _ = bnode;
                 if chosen + 1 < be {
+                    stats.backtracks += 1;
                     let nxt = chosen + 1;
                     path.truncate(plen);
                     path.push(self.trie.labels[nxt]);
                     let child = self.trie.edge_to_child[nxt] as usize;
                     return descend_leftmost(child, path);
                 } else {
-                    let _ = bnode; // continue backtracking
+                    // continue backtracking
                 }
             }
             return None;
         }
     }
 
-    fn find_last_key_leq(&self, target: &[u8]) -> Option<Vec<u8>> {
+    fn find_last_key_leq_with_stats(
+        &self,
+        target: &[u8],
+        stats: &mut SurfProbeStats,
+    ) -> Option<Vec<u8>> {
         // Stack of backtrack points: (node_idx, s, e, chosen_edge_idx, path_len)
         let mut stack: Vec<(usize, usize, usize, usize, usize)> = Vec::new();
         let mut node = 0usize;
@@ -250,11 +327,11 @@ impl<'a> SurfQuery<'a> {
         let mut path: Vec<u8> = Vec::new();
 
         // Helper: descend to the rightmost terminal from node, appending to path
-        let descend_rightmost = |mut node_idx: usize, mut out: Vec<u8>| -> Option<Vec<u8>> {
+        let mut descend_rightmost = |mut node_idx: usize, mut out: Vec<u8>| -> Option<Vec<u8>> {
             loop {
                 let (s, e) = self.child_range(node_idx);
                 if s == e {
-                    return if self.trie.is_terminal[node_idx] != 0 {
+                    return if self.trie.is_terminal(node_idx) {
                         Some(out)
                     } else {
                         None
@@ -263,17 +340,19 @@ impl<'a> SurfQuery<'a> {
                 let edge = e - 1;
                 out.push(self.trie.labels[edge]);
                 node_idx = self.trie.edge_to_child[edge] as usize;
+                stats.rightmost_descents += 1;
             }
         };
 
         loop {
+            stats.nodes_visited += 1;
             let (s, e) = self.child_range(node);
             if depth == target.len() {
                 // We have matched full target; prefer the rightmost under current node
                 if let Some(k) = descend_rightmost(node, path.clone()) {
                     return Some(k);
                 }
-                return if self.trie.is_terminal[node] != 0 {
+                return if self.trie.is_terminal(node) {
                     Some(path)
                 } else {
                     None
@@ -285,6 +364,7 @@ impl<'a> SurfQuery<'a> {
             let mut equal_idx: Option<usize> = None;
             let mut last_le_idx: Option<usize> = None;
             for i in s..e {
+                stats.edges_examined += 1;
                 let lbl = self.trie.labels[i];
                 if lbl == tb {
                     equal_idx = Some(i);
@@ -315,6 +395,7 @@ impl<'a> SurfQuery<'a> {
             // No child <= tb at this level: backtrack to find previous smaller sibling at an ancestor
             while let Some((bnode, bs, _be, chosen, plen)) = stack.pop() {
                 if chosen > bs {
+                    stats.backtracks += 1;
                     let prev = chosen - 1;
                     path.truncate(plen);
                     path.push(self.trie.labels[prev]);
@@ -325,7 +406,7 @@ impl<'a> SurfQuery<'a> {
                 }
             }
             // If no backtrack available, and current node is terminal, it itself may be <= target
-            return if self.trie.is_terminal[node] != 0 {
+            return if self.trie.is_terminal(node) {
                 Some(path)
             } else {
                 None
@@ -339,7 +420,7 @@ impl<'a> SurfQuery<'a> {
         loop {
             let (s, e) = self.child_range(node_idx);
             if s == e {
-                return if self.trie.is_terminal[node_idx] != 0 {
+                return if self.trie.is_terminal(node_idx) {
                     Some(out)
                 } else {
                     None
@@ -355,7 +436,7 @@ impl<'a> SurfQuery<'a> {
         let mut out: Vec<u8> = Vec::new();
         let mut node_idx = 0usize;
         loop {
-            if self.trie.is_terminal[node_idx] != 0 {
+            if self.trie.is_terminal(node_idx) {
                 return Some(out);
             }
             let (s, e) = self.child_range(node_idx);
@@ -368,38 +449,46 @@ impl<'a> SurfQuery<'a> {
         }
     }
 
-    fn may_overlap_ge(&self, lower: &[u8], inclusive: bool) -> bool {
+    fn may_overlap_ge_with_stats(&self, lower: &[u8], inclusive: bool) -> (bool, SurfProbeStats) {
+        let mut stats = SurfProbeStats::default();
         if inclusive {
-            self.find_first_key_geq(lower).is_some()
+            let found = self
+                .find_first_key_geq_with_stats(lower, &mut stats)
+                .is_some();
+            return (found, stats);
         } else {
-            match self.find_first_key_geq(lower) {
-                Some(k) if k.as_slice() > lower => true,
+            match self.find_first_key_geq_with_stats(lower, &mut stats) {
+                Some(k) if k.as_slice() > lower => (true, stats),
                 Some(_k_eq) => {
                     if let Some(last) = self.find_last_key() {
-                        last.as_slice() > lower
+                        (last.as_slice() > lower, stats)
                     } else {
-                        false
+                        (false, stats)
                     }
                 }
-                None => false,
+                None => (false, stats),
             }
         }
     }
 
-    fn may_overlap_le(&self, upper: &[u8], inclusive: bool) -> bool {
+    fn may_overlap_le_with_stats(&self, upper: &[u8], inclusive: bool) -> (bool, SurfProbeStats) {
+        let mut stats = SurfProbeStats::default();
         if inclusive {
-            self.find_last_key_leq(upper).is_some()
+            let found = self
+                .find_last_key_leq_with_stats(upper, &mut stats)
+                .is_some();
+            return (found, stats);
         } else {
-            match self.find_last_key_leq(upper) {
-                Some(k) if k.as_slice() < upper => true,
+            match self.find_last_key_leq_with_stats(upper, &mut stats) {
+                Some(k) if k.as_slice() < upper => (true, stats),
                 Some(_k_eq) => {
                     if let Some(min_k) = self.find_first_key() {
-                        min_k.as_slice() < upper
+                        (min_k.as_slice() < upper, stats)
                     } else {
-                        false
+                        (false, stats)
                     }
                 }
-                None => false,
+                None => (false, stats),
             }
         }
     }

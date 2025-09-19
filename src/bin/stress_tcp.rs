@@ -50,9 +50,9 @@ async fn main() -> Result<()> {
     control.set_nodelay(true)?;
     let mut control_reader = BufReader::new(control);
 
-    // Define schema
+    // Define schema (add enum field `plan` with 20 variants)
     let schema_cmd = format!(
-        "DEFINE {} FIELDS {{ id: \"u64\", v: \"string\", flag: \"bool\" }}\n",
+        "DEFINE {} FIELDS {{ id: \"u64\", v: \"string\", flag: \"bool\", plan: [\"type01\", \"type02\", \"type03\", \"type04\", \"type05\", \"type06\", \"type07\", \"type08\", \"type09\", \"type10\", \"type11\", \"type12\", \"type13\", \"type14\", \"type15\", \"type16\", \"type17\", \"type18\", \"type19\", \"type20\"] }}\n",
         event_type
     );
     send_and_drain(&mut control_reader, &schema_cmd, wait_dur).await?;
@@ -207,10 +207,12 @@ async fn main() -> Result<()> {
 
 fn random_event_payload(seq: u64) -> String {
     let v = Alphanumeric.sample_string(&mut rand::thread_rng(), 12);
+    let plan = format!("type{:02}", (seq % 20) + 1);
     let obj = json!({
         "id": seq,
         "v": v,
-        "flag": (seq % 2 == 0)
+        "flag": (seq % 2 == 0),
+        "plan": plan
     });
     obj.to_string()
 }
