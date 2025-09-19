@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::fs::OpenOptions;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Error, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 
+use memmap2::MmapOptions;
 use serde_json::Value;
 use tracing::{debug, info, warn};
 use xorf::{BinaryFuse8, Filter};
@@ -125,29 +126,45 @@ impl ZoneXorFilterIndex {
     }
 
     pub fn load(path: &Path) -> std::io::Result<Self> {
-        let (mut file, offset) = open_and_header_offset(path, FileKind::ZoneXorFilter.magic())?;
-        file.seek(SeekFrom::Start(offset as u64))?;
+        let (file, offset) = open_and_header_offset(path, FileKind::ZoneXorFilter.magic())?;
+        let mmap = unsafe { MmapOptions::new().map(&file)? };
 
-        let mut count_buf = [0u8; 4];
-        file.read_exact(&mut count_buf)?;
-        let count = u32::from_le_bytes(count_buf);
+        let mut pos = offset as usize;
+        if mmap.len() < pos + 4 {
+            return Err(Error::new(
+                ErrorKind::UnexpectedEof,
+                "Incomplete .zxf header: missing count",
+            ));
+        }
+        let count = u32::from_le_bytes(mmap[pos..pos + 4].try_into().unwrap());
+        pos += 4;
 
         // We do not store uid/field inside the file; derive from filename if needed
         let (uid, field) = parse_uid_field_from_filename(path);
         let mut filters: HashMap<u32, BinaryFuse8> = HashMap::with_capacity(count as usize);
         for _ in 0..count {
-            let mut zb = [0u8; 4];
-            file.read_exact(&mut zb)?;
-            let zone_id = u32::from_le_bytes(zb);
+            if mmap.len() < pos + 8 {
+                return Err(Error::new(
+                    ErrorKind::UnexpectedEof,
+                    "Incomplete .zxf entry header",
+                ));
+            }
+            let zone_id = u32::from_le_bytes(mmap[pos..pos + 4].try_into().unwrap());
+            pos += 4;
+            let len = u32::from_le_bytes(mmap[pos..pos + 4].try_into().unwrap()) as usize;
+            pos += 4;
 
-            let mut lb = [0u8; 4];
-            file.read_exact(&mut lb)?;
-            let len = u32::from_le_bytes(lb) as usize;
+            if mmap.len() < pos + len {
+                return Err(Error::new(
+                    ErrorKind::UnexpectedEof,
+                    "Incomplete .zxf entry payload",
+                ));
+            }
+            let buf = &mmap[pos..pos + len];
+            pos += len;
 
-            let mut buf = vec![0u8; len];
-            file.read_exact(&mut buf)?;
-            let filter: BinaryFuse8 = bincode::deserialize(&buf)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+            let filter: BinaryFuse8 =
+                bincode::deserialize(buf).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
             filters.insert(zone_id, filter);
         }
 
