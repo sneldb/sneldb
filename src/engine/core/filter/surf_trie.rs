@@ -3,11 +3,16 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SurfTrie {
-    pub degrees: Vec<u32>,
+    // Number of children per node (fits safely in u16; max 256)
+    pub degrees: Vec<u16>,
+    // Cumulative edge start index per node
     pub child_offsets: Vec<u32>,
+    // Edge labels (one per edge)
     pub labels: Vec<u8>,
+    // Mapping from edge index to child node index (BFS order)
     pub edge_to_child: Vec<u32>,
-    pub is_terminal: Vec<u8>,
+    // Bit-packed terminal flags: ith bit indicates whether node i is terminal
+    pub is_terminal_bits: Vec<u8>,
 }
 
 impl SurfTrie {
@@ -39,7 +44,7 @@ impl SurfTrie {
         let mut child_offsets = Vec::with_capacity(nodes.len());
         let mut labels = Vec::new();
         let mut edge_to_child = Vec::new();
-        let mut is_terminal = vec![0u8; nodes.len()];
+        let mut is_terminal_bits = vec![0u8; (nodes.len() + 7) / 8];
 
         let mut queue: VecDeque<usize> = VecDeque::new();
         queue.push_back(0);
@@ -60,9 +65,13 @@ impl SurfTrie {
         let mut next_edge_idx: u32 = 0;
         while let Some(u) = q2.pop_front() {
             let bi = *bfs_index_of.get(&u).unwrap();
-            is_terminal[bi] = if nodes[u].terminal { 1 } else { 0 };
+            if nodes[u].terminal {
+                let byte = bi / 8;
+                let bit = bi % 8;
+                is_terminal_bits[byte] |= 1u8 << bit;
+            }
             child_offsets.push(next_edge_idx);
-            let deg = nodes[u].children.len() as u32;
+            let deg = nodes[u].children.len() as u16;
             degrees.push(deg);
             for (&lbl, &v) in &nodes[u].children {
                 labels.push(lbl);
@@ -78,7 +87,7 @@ impl SurfTrie {
             child_offsets,
             labels,
             edge_to_child,
-            is_terminal,
+            is_terminal_bits,
         }
     }
 
@@ -87,5 +96,16 @@ impl SurfTrie {
         let start = self.child_offsets[node_idx] as usize;
         let len = self.degrees[node_idx] as usize;
         (start, start + len)
+    }
+
+    #[inline]
+    pub fn is_terminal(&self, node_idx: usize) -> bool {
+        let byte = node_idx / 8;
+        let bit = node_idx % 8;
+        if let Some(&b) = self.is_terminal_bits.get(byte) {
+            (b & (1u8 << bit)) != 0
+        } else {
+            false
+        }
     }
 }

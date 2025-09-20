@@ -8,11 +8,11 @@ flush_each_write = false
 fsync_every_n = 50000
 
 [engine]
-flush_threshold =48000
+flush_threshold =32000
 data_dir = "../data/cols"
 index_dir = "../data/index/"
 shard_count = 8
-event_per_zone = 16000
+event_per_zone = 8000
 compaction_threshold = 1000
 compaction_interval = 1800
 sys_io_threshold = 1000
@@ -36,5 +36,5 @@ allow_unauthenticated = false
 
 [logging]
 log_dir = "../data/logs"
-stdout_level = "error"
+stdout_level = "warn"
 file_level = "error"
