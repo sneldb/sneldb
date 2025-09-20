@@ -35,8 +35,8 @@ impl Shard {
         )>,
     ) {
         // Channels: one for shard messages, one for flush notifications
-        let (flush_tx, flush_rx) = channel(4096);
-        let (tx, rx) = channel(4096);
+        let (flush_tx, flush_rx) = channel(8096);
+        let (tx, rx) = channel(8096);
 
         // Ensure shard directory exists
         if let Err(e) = std::fs::create_dir_all(&base_dir) {

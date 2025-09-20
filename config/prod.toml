@@ -8,15 +8,15 @@ flush_each_write = false
 fsync_every_n = 50000
 
 [engine]
-flush_threshold =8000
+flush_threshold =48000
 data_dir = "../data/cols"
 index_dir = "../data/index/"
-shard_count = 16
-event_per_zone = 1000
+shard_count = 8
+event_per_zone = 16000
 compaction_threshold = 1000
 compaction_interval = 1800
 sys_io_threshold = 1000
-max_inflight_passives = 128
+max_inflight_passives = 256
 
 
 [schema]

@@ -1,4 +1,5 @@
-use crate::engine::core::ColumnOffsets;
+// .zf offsets removed; compressed-only path
+use crate::engine::core::column::compression::{CompressedColumnIndex, CompressionCodec, Lz4Codec};
 use crate::engine::errors::{ColumnLoadError, QueryExecutionError};
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 use memmap2::MmapOptions;
@@ -25,24 +26,74 @@ impl ColumnReader {
             zone_id,
             "Loading column values for specific zone"
         );
+        // Compressed-only
+        Self::load_zone_compressed(segment_dir, segment_id, uid, field, zone_id)
+    }
 
-        let offsets = ColumnOffsets::load(segment_dir, segment_id, uid, field)
-            .map_err(|e| QueryExecutionError::OffsetLoad(e.to_string()))?;
+    fn load_zone_compressed(
+        segment_dir: &Path,
+        _segment_id: &str,
+        uid: &str,
+        field: &str,
+        zone_id: u32,
+    ) -> Result<Vec<String>, QueryExecutionError> {
+        let zfc_path = segment_dir.join(format!("{}_{}.zfc", uid, field));
+        let index = CompressedColumnIndex::load_from_path(&zfc_path)
+            .map_err(|e| QueryExecutionError::ColRead(format!("zfc load: {}", e)))?;
+        let Some(entry) = index.entries.get(&zone_id) else {
+            return Ok(Vec::new());
+        };
 
-        if let Some(offset_vec) = offsets.get(&zone_id) {
-            if offset_vec.len() >= 2 {
-                return Self::load(segment_dir, segment_id, uid, field, offset_vec);
-            } else {
-                debug!(
-                    target: "col_reader::zone_load",
-                    zone_id,
-                    count = offset_vec.len(),
-                    "Zone has too few offsets"
-                );
-            }
+        let col_path = segment_dir.join(format!("{}_{}.col", uid, field));
+        // Validate header
+        let mut f = File::open(&col_path)
+            .map_err(|e| QueryExecutionError::ColLoad(ColumnLoadError::Io(e)))?;
+        let header = BinaryHeader::read_from(&mut f)
+            .map_err(|e| QueryExecutionError::ColRead(format!("Header read failed: {}", e)))?;
+        if header.magic != FileKind::SegmentColumn.magic() {
+            return Err(QueryExecutionError::ColRead(
+                "invalid magic for .col".into(),
+            ));
         }
+        let file = File::open(&col_path)
+            .map_err(|e| QueryExecutionError::ColLoad(ColumnLoadError::Io(e)))?;
+        let mmap = unsafe {
+            MmapOptions::new()
+                .map(&file)
+                .map_err(|e| QueryExecutionError::ColLoad(ColumnLoadError::Io(e)))?
+        };
+        let start = entry.block_start as usize;
+        let end = start + entry.comp_len as usize;
+        if end > mmap.len() {
+            return Err(QueryExecutionError::ColRead(
+                "Compressed block out of bounds".into(),
+            ));
+        }
+        let compressed = &mmap[start..end];
 
-        Ok(Vec::new())
+        let codec = Lz4Codec;
+        let decompressed =
+            CompressionCodec::decompress(&codec, compressed, entry.uncomp_len as usize)
+                .map_err(|e| QueryExecutionError::ColRead(format!("decompress: {}", e)))?;
+
+        let mut out = Vec::with_capacity(entry.num_rows as usize);
+        for &off in &entry.in_block_offsets {
+            let base = off as usize;
+            if base + 2 > decompressed.len() {
+                return Err(QueryExecutionError::ColRead("Offset out of bounds".into()));
+            }
+            let len = u16::from_le_bytes(decompressed[base..base + 2].try_into().unwrap()) as usize;
+            let end = base + 2 + len;
+            if end > decompressed.len() {
+                return Err(QueryExecutionError::ColRead(
+                    "Value length out of bounds".into(),
+                ));
+            }
+            let val = String::from_utf8(decompressed[base + 2..end].to_vec())
+                .map_err(|e| QueryExecutionError::ColRead(format!("Invalid UTF-8: {}", e)))?;
+            out.push(val);
+        }
+        Ok(out)
     }
 
     pub fn load(
@@ -52,6 +103,7 @@ impl ColumnReader {
         field: &str,
         offsets: &[u64],
     ) -> Result<Vec<String>, QueryExecutionError> {
+        // Unused in compressed-only mode; keep signature for compatibility
         let col_path = segment_dir.join(format!("{}_{}.col", uid, field));
         info!(
             target: "col_reader::load",

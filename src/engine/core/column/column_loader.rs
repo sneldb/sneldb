@@ -1,4 +1,4 @@
-use crate::engine::core::{CandidateZone, ColumnOffsets, ColumnReader};
+use crate::engine::core::{CandidateZone, ColumnReader};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tracing::{debug, info};
@@ -56,43 +56,14 @@ impl ColumnLoader {
     /// Collects offsets for all columns in a zone
     fn collect_zone_offsets(
         &self,
-        zone: &CandidateZone,
+        _zone: &CandidateZone,
         columns: &[String],
     ) -> HashMap<String, Vec<u64>> {
         let mut all_offsets = HashMap::new();
-
         for column in columns {
-            debug!(
-                target: "col_loader::offsets",
-                column = %column,
-                "Loading offsets for column"
-            );
-            let offsets = ColumnOffsets::load(
-                &self.segment_base_dir.join(&zone.segment_id),
-                &zone.segment_id,
-                &self.uid,
-                column,
-            );
-
-            match offsets {
-                Ok(offset_map) => {
-                    if let Some(offset_vec) = offset_map.get(&zone.zone_id) {
-                        if !offset_vec.is_empty() {
-                            all_offsets.insert(column.clone(), offset_vec.clone());
-                        }
-                    }
-                }
-                Err(e) => {
-                    debug!(
-                        target: "col_loader::offsets",
-                        column = %column,
-                        error = ?e,
-                        "Failed to load offsets"
-                    );
-                }
-            }
+            debug!(target: "col_loader::offsets", column = %column, "Registering column for zone read");
+            all_offsets.insert(column.clone(), Vec::new());
         }
-
         all_offsets
     }
 
@@ -103,13 +74,21 @@ impl ColumnLoader {
         column: &str,
         offsets: &[u64],
     ) -> Vec<String> {
-        ColumnReader::load(
-            &self.segment_base_dir.join(&zone.segment_id),
-            &zone.segment_id,
-            &self.uid,
-            column,
-            offsets,
-        )
-        .unwrap_or_default()
+        let segment_dir = self.segment_base_dir.join(&zone.segment_id);
+        let zfc_path = segment_dir.join(format!("{}_{}.zfc", self.uid, column));
+        if zfc_path.exists() {
+            // Use compressed zone path; offsets are ignored in this mode
+            ColumnReader::load_for_zone(
+                &segment_dir,
+                &zone.segment_id,
+                &self.uid,
+                column,
+                zone.zone_id,
+            )
+            .unwrap_or_default()
+        } else {
+            ColumnReader::load(&segment_dir, &zone.segment_id, &self.uid, column, offsets)
+                .unwrap_or_default()
+        }
     }
 }

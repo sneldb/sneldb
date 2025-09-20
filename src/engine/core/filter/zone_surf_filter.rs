@@ -21,6 +21,11 @@ pub struct ZoneSurfFilter {
 }
 
 impl ZoneSurfFilter {
+    fn is_id_like_field(field: &str) -> bool {
+        let lower = field.to_ascii_lowercase();
+        lower == "id" || lower.ends_with("_id") || field.ends_with("Id") || field.ends_with("ID")
+    }
+
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         let file = OpenOptions::new().create(true).write(true).open(path)?;
         let mut writer = BufWriter::new(file);
@@ -79,6 +84,9 @@ impl ZoneSurfFilter {
                 dynamic_keys.extend(obj.keys().cloned());
             }
             for key in dynamic_keys {
+                if !Self::is_id_like_field(&key) {
+                    continue;
+                }
                 let mut values: Vec<Vec<u8>> = Vec::new();
                 for ev in &zp.events {
                     if let Some(val) = ev.payload.get(&key) {

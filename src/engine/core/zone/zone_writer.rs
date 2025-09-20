@@ -8,7 +8,7 @@ use crate::engine::schema::registry::SchemaRegistry;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, trace};
+use tracing::{debug, info};
 
 /// Writes all zone-related files for a given event type (uid)
 pub struct ZoneWriter<'a> {
@@ -52,13 +52,6 @@ impl<'a> ZoneWriter<'a> {
             "Writing .col files"
         );
         let col_offsets = writer.write_all(zone_plans).await?;
-
-        trace!(
-            target: "sneldb::flush",
-            uid = self.uid,
-            "Writing column offset metadata"
-        );
-        col_offsets.write(self.segment_dir, &self.registry).await?;
 
         // Build XOR filters
         debug!(
