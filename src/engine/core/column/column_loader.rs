@@ -1,4 +1,4 @@
-use crate::engine::core::{CandidateZone, ColumnOffsets, ColumnReader};
+use crate::engine::core::{CandidateZone, ColumnReader};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tracing::{debug, info};
@@ -39,76 +39,26 @@ impl ColumnLoader {
             "Loading columns for zone"
         );
 
-        let offsets = self.collect_zone_offsets(zone, columns);
-        debug!(target: "col_loader::offsets", ?offsets, "Resolved offsets per column");
-
         let mut result = HashMap::new();
 
-        for (column, offsets) in offsets {
-            let values = self.read_column_at_offsets(zone, &column, &offsets);
+        for column in columns {
+            let values = self.read_column_for_zone(zone, column);
             debug!(target: "col_loader::values", column = %column, values_len = values.len(), "Loaded values for column");
-            result.insert(column, values);
+            result.insert(column.clone(), values);
         }
 
         result
     }
 
-    /// Collects offsets for all columns in a zone
-    fn collect_zone_offsets(
-        &self,
-        zone: &CandidateZone,
-        columns: &[String],
-    ) -> HashMap<String, Vec<u64>> {
-        let mut all_offsets = HashMap::new();
-
-        for column in columns {
-            debug!(
-                target: "col_loader::offsets",
-                column = %column,
-                "Loading offsets for column"
-            );
-            let offsets = ColumnOffsets::load(
-                &self.segment_base_dir.join(&zone.segment_id),
-                &zone.segment_id,
-                &self.uid,
-                column,
-            );
-
-            match offsets {
-                Ok(offset_map) => {
-                    if let Some(offset_vec) = offset_map.get(&zone.zone_id) {
-                        if !offset_vec.is_empty() {
-                            all_offsets.insert(column.clone(), offset_vec.clone());
-                        }
-                    }
-                }
-                Err(e) => {
-                    debug!(
-                        target: "col_loader::offsets",
-                        column = %column,
-                        error = ?e,
-                        "Failed to load offsets"
-                    );
-                }
-            }
-        }
-
-        all_offsets
-    }
-
-    /// Reads values from a column file at the specified offsets
-    fn read_column_at_offsets(
-        &self,
-        zone: &CandidateZone,
-        column: &str,
-        offsets: &[u64],
-    ) -> Vec<String> {
-        ColumnReader::load(
-            &self.segment_base_dir.join(&zone.segment_id),
+    /// Reads values for a column using the compressed zone index (.zfc)
+    fn read_column_for_zone(&self, zone: &CandidateZone, column: &str) -> Vec<String> {
+        let segment_dir = self.segment_base_dir.join(&zone.segment_id);
+        ColumnReader::load_for_zone(
+            &segment_dir,
             &zone.segment_id,
             &self.uid,
             column,
-            offsets,
+            zone.zone_id,
         )
         .unwrap_or_default()
     }

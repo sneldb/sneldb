@@ -1,10 +1,11 @@
-use crate::engine::core::ColumnOffsets;
+// Compressed-only column reader
+use crate::engine::core::column::compression::{CompressedColumnIndex, CompressionCodec, Lz4Codec};
 use crate::engine::errors::{ColumnLoadError, QueryExecutionError};
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 use memmap2::MmapOptions;
 use std::fs::File;
 use std::path::Path;
-use tracing::{debug, error, info};
+use tracing::info;
 
 #[derive(Debug)]
 pub struct ColumnReader;
@@ -25,45 +26,26 @@ impl ColumnReader {
             zone_id,
             "Loading column values for specific zone"
         );
-
-        let offsets = ColumnOffsets::load(segment_dir, segment_id, uid, field)
-            .map_err(|e| QueryExecutionError::OffsetLoad(e.to_string()))?;
-
-        if let Some(offset_vec) = offsets.get(&zone_id) {
-            if offset_vec.len() >= 2 {
-                return Self::load(segment_dir, segment_id, uid, field, offset_vec);
-            } else {
-                debug!(
-                    target: "col_reader::zone_load",
-                    zone_id,
-                    count = offset_vec.len(),
-                    "Zone has too few offsets"
-                );
-            }
-        }
-
-        Ok(Vec::new())
+        // Compressed-only
+        Self::load_zone_compressed(segment_dir, segment_id, uid, field, zone_id)
     }
 
-    pub fn load(
+    fn load_zone_compressed(
         segment_dir: &Path,
-        segment_id: &str,
+        _segment_id: &str,
         uid: &str,
         field: &str,
-        offsets: &[u64],
+        zone_id: u32,
     ) -> Result<Vec<String>, QueryExecutionError> {
-        let col_path = segment_dir.join(format!("{}_{}.col", uid, field));
-        info!(
-            target: "col_reader::load",
-            path = %col_path.display(),
-            %segment_id,
-            %uid,
-            %field,
-            count = offsets.len(),
-            "Loading column data"
-        );
+        let zfc_path = segment_dir.join(format!("{}_{}.zfc", uid, field));
+        let index = CompressedColumnIndex::load_from_path(&zfc_path)
+            .map_err(|e| QueryExecutionError::ColRead(format!("zfc load: {}", e)))?;
+        let Some(entry) = index.entries.get(&zone_id) else {
+            return Ok(Vec::new());
+        };
 
-        // Strict header validation
+        let col_path = segment_dir.join(format!("{}_{}.col", uid, field));
+        // Validate header
         let mut f = File::open(&col_path)
             .map_err(|e| QueryExecutionError::ColLoad(ColumnLoadError::Io(e)))?;
         let header = BinaryHeader::read_from(&mut f)
@@ -73,7 +55,6 @@ impl ColumnReader {
                 "invalid magic for .col".into(),
             ));
         }
-
         let file = File::open(&col_path)
             .map_err(|e| QueryExecutionError::ColLoad(ColumnLoadError::Io(e)))?;
         let mmap = unsafe {
@@ -81,64 +62,37 @@ impl ColumnReader {
                 .map(&file)
                 .map_err(|e| QueryExecutionError::ColLoad(ColumnLoadError::Io(e)))?
         };
+        let start = entry.block_start as usize;
+        let end = start + entry.comp_len as usize;
+        if end > mmap.len() {
+            return Err(QueryExecutionError::ColRead(
+                "Compressed block out of bounds".into(),
+            ));
+        }
+        let compressed = &mmap[start..end];
 
-        let mut values = Vec::with_capacity(offsets.len());
+        let codec = Lz4Codec;
+        let decompressed =
+            CompressionCodec::decompress(&codec, compressed, entry.uncomp_len as usize)
+                .map_err(|e| QueryExecutionError::ColRead(format!("decompress: {}", e)))?;
 
-        for &start in offsets {
-            let base = start as usize;
-            if base + 2 > mmap.len() {
-                error!(
-                    target: "col_reader::error",
-                    offset = base,
-                    file_len = mmap.len(),
-                    "Offset out of bounds"
-                );
+        let mut out = Vec::with_capacity(entry.num_rows as usize);
+        for &off in &entry.in_block_offsets {
+            let base = off as usize;
+            if base + 2 > decompressed.len() {
                 return Err(QueryExecutionError::ColRead("Offset out of bounds".into()));
             }
-
-            let len = u16::from_le_bytes(mmap[base..base + 2].try_into().unwrap()) as usize;
+            let len = u16::from_le_bytes(decompressed[base..base + 2].try_into().unwrap()) as usize;
             let end = base + 2 + len;
-            if end > mmap.len() {
-                error!(
-                    target: "col_reader::error",
-                    base,
-                    len,
-                    end,
-                    file_len = mmap.len(),
-                    "Value length out of bounds"
-                );
+            if end > decompressed.len() {
                 return Err(QueryExecutionError::ColRead(
                     "Value length out of bounds".into(),
                 ));
             }
-
-            let val_bytes = &mmap[base + 2..end];
-            match String::from_utf8(val_bytes.to_vec()) {
-                Ok(val) => {
-                    debug!(
-                        target: "col_reader::value",
-                        offset = base,
-                        length = len,
-                        value = %val,
-                        "Read string value"
-                    );
-                    values.push(val);
-                }
-                Err(e) => {
-                    error!(
-                        target: "col_reader::error",
-                        offset = base,
-                        length = len,
-                        "Invalid UTF-8: {e}"
-                    );
-                    return Err(QueryExecutionError::ColRead(format!(
-                        "Invalid UTF-8: {}",
-                        e
-                    )));
-                }
-            }
+            let val = String::from_utf8(decompressed[base + 2..end].to_vec())
+                .map_err(|e| QueryExecutionError::ColRead(format!("Invalid UTF-8: {}", e)))?;
+            out.push(val);
         }
-
-        Ok(values)
+        Ok(out)
     }
 }

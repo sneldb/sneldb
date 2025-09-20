@@ -1,5 +1,4 @@
 pub mod candidate_zone_factory;
-pub mod column_offsets_factory;
 pub mod command_factory;
 pub mod compare_op_factory;
 pub mod condition_factory;
@@ -19,8 +18,8 @@ pub mod shard_context_factory;
 pub mod shard_message_factory;
 pub mod snapshot_meta_factory;
 pub mod wal_entry_factory;
+pub mod write_job_factory;
 pub mod zone_cursor_factory;
-pub mod zone_data_factory;
 pub mod zone_index_factory;
 pub mod zone_meta_factory;
 pub mod zone_plan_factory;
@@ -29,7 +28,6 @@ pub mod zone_row_factory;
 pub mod zone_value_loader_factory;
 
 pub use candidate_zone_factory::CandidateZoneFactory;
-pub use column_offsets_factory::ColumnOffsetsFactory;
 pub use command_factory::CommandFactory;
 pub use compare_op_factory::CompareOpFactory;
 pub use condition_factory::ConditionFactory;
@@ -49,8 +47,8 @@ pub use shard_context_factory::ShardContextFactory;
 pub use shard_message_factory::ShardMessageFactory;
 pub use snapshot_meta_factory::SnapshotMetaFactory;
 pub use wal_entry_factory::WalEntryFactory;
+pub use write_job_factory::WriteJobFactory;
 pub use zone_cursor_factory::ZoneCursorFactory;
-pub use zone_data_factory::ZoneDataFactory;
 pub use zone_index_factory::ZoneIndexFactory;
 pub use zone_meta_factory::ZoneMetaFactory;
 pub use zone_plan_factory::ZonePlanFactory;
@@ -60,8 +58,6 @@ pub use zone_value_loader_factory::ZoneValueLoaderFactory;
 
 #[cfg(test)]
 mod candidate_zone_factory_test;
-#[cfg(test)]
-mod column_offsets_factory_test;
 #[cfg(test)]
 mod command_factory_test;
 #[cfg(test)]
@@ -95,9 +91,9 @@ mod shard_message_factory_test;
 #[cfg(test)]
 mod wal_entry_factory_test;
 #[cfg(test)]
-mod zone_cursor_factory_test;
+mod write_job_factory_test;
 #[cfg(test)]
-mod zone_data_factory_test;
+mod zone_cursor_factory_test;
 #[cfg(test)]
 mod zone_index_factory_test;
 #[cfg(test)]
