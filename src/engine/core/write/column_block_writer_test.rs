@@ -1,8 +1,8 @@
 use tempfile::tempdir;
 
 use crate::engine::core::column::column_reader::ColumnReader;
-use crate::engine::core::column::compression::codec::Lz4Codec;
-use crate::engine::core::column::compression::index::CompressedColumnIndex;
+use crate::engine::core::column::compression::compressed_column_index::CompressedColumnIndex;
+use crate::engine::core::column::compression::compression_codec::Lz4Codec;
 use crate::engine::core::write::column_block_writer::ColumnBlockWriter;
 use crate::engine::core::write::column_group_builder::ColumnGroupBuilder;
 use crate::test_helpers::factories::WriteJobFactory;

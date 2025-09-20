@@ -7,8 +7,10 @@ use crate::engine::core::ColumnKey;
 use crate::engine::errors::StoreError;
 use crate::shared::storage_header::{FileKind, ensure_header_if_new};
 
-use crate::engine::core::column::compression::codec::CompressionCodec;
-use crate::engine::core::column::compression::index::{CompressedColumnIndex, ZoneBlockEntry};
+use crate::engine::core::column::compression::compressed_column_index::{
+    CompressedColumnIndex, ZoneBlockEntry,
+};
+use crate::engine::core::column::compression::compression_codec::CompressionCodec;
 
 pub struct ColumnBlockWriter {
     segment_dir: PathBuf,

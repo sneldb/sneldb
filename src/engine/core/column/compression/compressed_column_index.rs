@@ -5,6 +5,9 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use crate::engine::core::column::compression::{LeSliceReader, SIZE_U32, SIZE_U64};
+const MIN_ENTRY_SIZE: usize = SIZE_U32 + SIZE_U64 + SIZE_U32 + SIZE_U32 + SIZE_U32;
+
 #[derive(Clone, Debug)]
 pub struct ZoneBlockEntry {
     pub zone_id: u32,
@@ -51,29 +54,48 @@ impl CompressedColumnIndex {
         let (file, header_offset) =
             open_and_header_offset(path, FileKind::ZoneCompressedOffsets.magic())?;
         let mmap = unsafe { MmapOptions::new().map(&file)? };
-        let mut pos = header_offset;
+        let slice = &mmap[header_offset..];
+        let mut reader = LeSliceReader::new(slice);
         let mut entries = HashMap::new();
-        while pos + 4 + 8 + 4 + 4 + 4 <= mmap.len() {
-            let zone_id = u32::from_le_bytes(mmap[pos..pos + 4].try_into().unwrap());
-            pos += 4;
-            let block_start = u64::from_le_bytes(mmap[pos..pos + 8].try_into().unwrap());
-            pos += 8;
-            let comp_len = u32::from_le_bytes(mmap[pos..pos + 4].try_into().unwrap());
-            pos += 4;
-            let uncomp_len = u32::from_le_bytes(mmap[pos..pos + 4].try_into().unwrap());
-            pos += 4;
-            let num_rows = u32::from_le_bytes(mmap[pos..pos + 4].try_into().unwrap());
-            pos += 4;
-            let need = (num_rows as usize) * 4;
-            if pos + need > mmap.len() {
+        loop {
+            if reader.remaining() < MIN_ENTRY_SIZE {
                 break;
             }
+            let zone_id = match reader.read_u32() {
+                Some(v) => v,
+                None => break,
+            };
+            let block_start = match reader.read_u64() {
+                Some(v) => v,
+                None => break,
+            };
+            let comp_len = match reader.read_u32() {
+                Some(v) => v,
+                None => break,
+            };
+            let uncomp_len = match reader.read_u32() {
+                Some(v) => v,
+                None => break,
+            };
+            let num_rows = match reader.read_u32() {
+                Some(v) => v,
+                None => break,
+            };
+
+            let needed = (num_rows as usize) * SIZE_U32;
+            if !reader.has_bytes(needed) {
+                break;
+            }
+
             let mut in_block_offsets = Vec::with_capacity(num_rows as usize);
             for _ in 0..num_rows {
-                let off = u32::from_le_bytes(mmap[pos..pos + 4].try_into().unwrap());
-                pos += 4;
-                in_block_offsets.push(off);
+                if let Some(off) = reader.read_u32() {
+                    in_block_offsets.push(off);
+                } else {
+                    break;
+                }
             }
+
             entries.insert(
                 zone_id,
                 ZoneBlockEntry {
@@ -89,29 +111,3 @@ impl CompressedColumnIndex {
         Ok(Self { entries })
     }
 }
-
-pub fn zfc_path_for_key_in_jobs(
-    key: &(String, String),
-    write_jobs: &Vec<crate::engine::core::WriteJob>,
-) -> PathBuf {
-    let col = column_path_for_key_in_jobs(key, write_jobs);
-    let mut s = col.to_string_lossy().to_string();
-    if s.ends_with(".col") {
-        s.truncate(s.len() - 4);
-    }
-    s.push_str(".zfc");
-    PathBuf::from(s)
-}
-
-pub fn column_path_for_key_in_jobs(
-    key: &(String, String),
-    write_jobs: &Vec<crate::engine::core::WriteJob>,
-) -> PathBuf {
-    for job in write_jobs {
-        if &job.key == key {
-            return job.path.clone();
-        }
-    }
-    PathBuf::from(format!("{}_{}.col", key.0, key.1))
-}
-

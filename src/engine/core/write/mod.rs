@@ -1,5 +1,8 @@
 pub mod column_block_writer;
 pub mod column_group_builder;
+pub mod column_paths;
+pub use column_paths::ColumnPathResolver;
+
 pub mod column_writer;
 pub mod flush_manager;
 pub mod flush_worker;
@@ -10,6 +13,8 @@ pub mod write_job;
 mod column_block_writer_test;
 #[cfg(test)]
 mod column_group_builder_test;
+#[cfg(test)]
+mod column_paths_test;
 #[cfg(test)]
 mod column_writer_test;
 #[cfg(test)]

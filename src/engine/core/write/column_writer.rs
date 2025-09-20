@@ -4,12 +4,11 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
 
-use crate::engine::core::column::compression::codec::Lz4Codec;
-use crate::engine::core::column::compression::index::{
-    CompressedColumnIndex, zfc_path_for_key_in_jobs,
-};
+use crate::engine::core::column::compression::compressed_column_index::CompressedColumnIndex;
+use crate::engine::core::column::compression::compression_codec::Lz4Codec;
 use crate::engine::core::write::column_block_writer::ColumnBlockWriter;
 use crate::engine::core::write::column_group_builder::ColumnGroupBuilder;
+use crate::engine::core::write::column_paths::ColumnPathResolver;
 use crate::engine::core::{UidResolver, WriteJob, ZonePlan};
 use crate::engine::errors::StoreError;
 use crate::engine::schema::SchemaRegistry;
@@ -49,6 +48,7 @@ impl ColumnWriter {
                 key_to_path.insert(j.key.clone(), j.path.clone());
             }
             let mut block_writer = ColumnBlockWriter::with_paths(segment_dir.clone(), key_to_path);
+            let path_resolver = ColumnPathResolver::new(&write_jobs);
 
             for ((key, zone_id), (buf, offs, values)) in groups {
                 let index = indexes_by_key.entry(key.clone()).or_default();
@@ -58,7 +58,7 @@ impl ColumnWriter {
 
             block_writer.finish()?;
             for (key, index) in indexes_by_key {
-                let path = zfc_path_for_key_in_jobs(&key, &write_jobs);
+                let path = path_resolver.zfc_path_for_key(&key);
                 index.write_to_path(&path)?;
             }
 
