@@ -7,7 +7,7 @@ use crate::engine::core::{
     CandidateZone, FieldXorFilter, FilterPlan, QueryPlan, RangeQueryHandler, ZoneIndex,
 };
 use std::path::PathBuf;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 pub struct ZoneFinder<'a> {
     plan: &'a FilterPlan,
@@ -128,6 +128,62 @@ impl<'a> ZoneFinder<'a> {
             }
         };
 
+
+        if let Some(op) = &self.plan.operation {
+            // Prefer zone-level SuRF only for range operations
+            if matches!(
+                op,
+                CompareOp::Gt | CompareOp::Gte | CompareOp::Lt | CompareOp::Lte
+            ) {
+                let zsurf_path = self.zone_surf_path(segment_id, uid, &self.plan.column);
+                if let Ok(zsf) = ZoneSurfFilter::load(&zsurf_path) {
+                    if let Some(bytes) =
+                        crate::engine::core::filter::surf_encoding::encode_value(value).as_deref()
+                    {
+                        let zones = match op {
+                            CompareOp::Gt => zsf.zones_overlapping_ge(bytes, false, segment_id),
+                            CompareOp::Gte => zsf.zones_overlapping_ge(bytes, true, segment_id),
+                            CompareOp::Lt => zsf.zones_overlapping_le(bytes, false, segment_id),
+                            CompareOp::Lte => zsf.zones_overlapping_le(bytes, true, segment_id),
+                            _ => unreachable!(),
+                        };
+                        info!(target: "sneldb::query", "Zone Surf filter found for value {:?} in segment {} zones: {:?}", value, segment_id, zones);
+                        return zones;
+                    }
+                }
+                if let Some(zones) =
+                    RangeQueryHandler::new(FieldXorFilter::new(&Vec::new()), segment_id.to_string())
+                        .handle_range_query(value, op)
+                {
+                    return zones;
+                }
+            }
+        }
+
+        // Try EBM-based pruning only for enum fields and Eq/Neq.
+        // Avoid blocking the Tokio runtime thread; use try_read and skip if unavailable.
+        if self
+            .query_plan
+            .registry
+            .try_read()
+            .map(|reg| reg.is_enum_field_by_uid(uid, &self.plan.column))
+            .unwrap_or(false)
+        {
+            if let (Some(op), Some(val_str)) = (&self.plan.operation, value.as_str()) {
+                if let Some(pruned) =
+                    self.try_ebm_prune(segment_id, uid, &self.plan.column, op, val_str)
+                {
+                    return pruned;
+                }
+            }
+        }
+
+        // XOR-based pruning for Eq/Neq (non-enum):
+        // - Eq: if value possibly present -> include all zones; if definitely absent -> exclude segment
+        // - Neq: cannot prune; include all zones regardless of presence
+        if let Some(op) = &self.plan.operation {
+            match op {
+                CompareOp::Eq => {
         // Prefer zone-level XOR index (.zxf) if available
         let zxf_path = self.zxf_path(segment_id, uid, &self.plan.column);
         match ZoneXorFilterIndex::load(&zxf_path) {
@@ -179,69 +235,6 @@ impl<'a> ZoneFinder<'a> {
                 );
             }
         }
-
-        let path = self.filter_path(segment_id, uid, &self.plan.column);
-        let filter = match FieldXorFilter::load(&path) {
-            Ok(f) => f,
-            Err(err) => {
-                error!(target: "sneldb::query", "Failed to load XOR filter from {:?}: {:?}", path, err);
-                return vec![];
-            }
-        };
-
-        if let Some(op) = &self.plan.operation {
-            // Prefer zone-level SuRF only for range operations
-            if matches!(
-                op,
-                CompareOp::Gt | CompareOp::Gte | CompareOp::Lt | CompareOp::Lte
-            ) {
-                let zsurf_path = self.zone_surf_path(segment_id, uid, &self.plan.column);
-                if let Ok(zsf) = ZoneSurfFilter::load(&zsurf_path) {
-                    if let Some(bytes) =
-                        crate::engine::core::filter::surf_encoding::encode_value(value).as_deref()
-                    {
-                        let zones = match op {
-                            CompareOp::Gt => zsf.zones_overlapping_ge(bytes, false, segment_id),
-                            CompareOp::Gte => zsf.zones_overlapping_ge(bytes, true, segment_id),
-                            CompareOp::Lt => zsf.zones_overlapping_le(bytes, false, segment_id),
-                            CompareOp::Lte => zsf.zones_overlapping_le(bytes, true, segment_id),
-                            _ => unreachable!(),
-                        };
-                        warn!(target: "sneldb::query", "Zone Surf filter found for value {:?} in segment {} zones: {:?}", value, segment_id, zones);
-                        return zones;
-                    }
-                }
-                if let Some(zones) =
-                    RangeQueryHandler::new(FieldXorFilter::new(&Vec::new()), segment_id.to_string())
-                        .handle_range_query(value, op)
-                {
-                    return zones;
-                }
-            }
-        }
-
-        // Try EBM-based pruning for enum Eq/Neq
-        if let (Some(op), Some(val_str)) = (&self.plan.operation, value.as_str()) {
-            if let Some(pruned) =
-                self.try_ebm_prune(segment_id, uid, &self.plan.column, op, val_str)
-            {
-                return pruned;
-            }
-        }
-
-        // XOR-based pruning for Eq/Neq (non-enum):
-        // - Eq: if value possibly present -> include all zones; if definitely absent -> exclude segment
-        // - Neq: cannot prune; include all zones regardless of presence
-        if let Some(op) = &self.plan.operation {
-            match op {
-                CompareOp::Eq => {
-                    if filter.contains_value(value) {
-                        debug!(target: "sneldb::query", "XOR EQ hit -> include all zones for {:?}", value);
-                        return CandidateZone::create_all_zones_for_segment(segment_id);
-                    } else {
-                        debug!(target: "sneldb::query", "XOR EQ miss -> exclude segment for {:?}", value);
-                        return vec![];
-                    }
                 }
                 CompareOp::Neq => {
                     debug!(target: "sneldb::query", "XOR NEQ -> cannot prune; include all zones for {:?}", value);
@@ -255,6 +248,24 @@ impl<'a> ZoneFinder<'a> {
         if filter.contains_value(value) {
             debug!(target: "sneldb::query", "XOR default hit for value {:?}", value);
             return CandidateZone::create_all_zones_for_segment(segment_id);
+        }
+        if let Some(op) = &self.plan.operation {
+            // Prefer XOR filter only for Eq operation
+            if matches!(op, CompareOp::Eq) {
+                let path = self.filter_path(segment_id, uid, &self.plan.column);
+                let filter = match FieldXorFilter::load(&path) {
+                    Ok(f) => f,
+                    Err(err) => {
+                        error!(target: "sneldb::query", "Failed to load XOR filter from {:?}: {:?}", path, err);
+                        return vec![];
+                    }
+                };
+
+                if filter.contains_value(value) {
+                    debug!(target: "sneldb::query", "XOR filter positive hit for value {:?}", value);
+                    return CandidateZone::create_all_zones_for_segment(segment_id);
+                }
+            }
         }
 
         debug!(target: "sneldb::query", "XOR default miss for value {:?}", value);

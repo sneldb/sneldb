@@ -114,21 +114,11 @@ async fn test_insert_and_maybe_flush_e2e() {
         col_path
     );
 
-    // verify .zf file exists and is valid
-    let zf_path = segment_path.join(format!("{}_{}.zf", uid, "event_type"));
-    assert!(zf_path.exists(), ".zf file should exist at {:?}", zf_path);
-
-    let zf_path = segment_path.join(format!("{}_{}.zf", uid, "timestamp"));
-    assert!(zf_path.exists(), ".zf file should exist at {:?}", zf_path);
-
-    let zf_path = segment_path.join(format!("{}_{}.zf", uid, "context_id"));
-    assert!(zf_path.exists(), ".zf file should exist at {:?}", zf_path);
-
-    let zf_path = segment_path.join(format!("{}_{}.zf", uid, "key"));
-    assert!(zf_path.exists(), ".zf file should exist at {:?}", zf_path);
-
-    let zf_path = segment_path.join(format!("{}_{}.zf", uid, "value"));
-    assert!(zf_path.exists(), ".zf file should exist at {:?}", zf_path);
+    // verify offset file exists (.zfc only)
+    for field in ["event_type", "timestamp", "context_id", "key", "value"] {
+        let zfc = segment_path.join(format!("{}_{}.zfc", uid, field));
+        assert!(zfc.exists(), ".zfc should exist for {}", field);
+    }
 
     // verify .xf file exists and is valid
     let xf_path = segment_path.join(format!("{}_{}.xf", uid, "event_type"));

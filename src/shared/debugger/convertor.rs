@@ -167,11 +167,11 @@ pub fn main() {
             let segment_path = Path::new(&args[2]);
             let uid = &args[3];
             let field = &args[4];
-            let offset_path = segment_path.join(format!("{}_{}.zf", uid, field));
+            let offset_path = segment_path.join(format!("{}_{}.zfc", uid, field));
             let file = match File::open(&offset_path) {
                 Ok(f) => f,
                 Err(e) => {
-                    eprintln!("Failed to open .zf file: {}", e);
+                    eprintln!("Failed to open .zfc file: {}", e);
                     std::process::exit(1);
                 }
             };
@@ -180,12 +180,12 @@ pub fn main() {
             match BinaryHeader::read_from(&mut reader) {
                 Ok(h) => {
                     if h.magic != FileKind::ZoneOffsets.magic() {
-                        eprintln!("Invalid .zf magic");
+                        eprintln!("Invalid .zfc magic");
                         std::process::exit(1);
                     }
                 }
                 Err(e) => {
-                    eprintln!("Failed to read .zf header: {}", e);
+                    eprintln!("Failed to read .zfc header: {}", e);
                     std::process::exit(1);
                 }
             }

@@ -1,16 +1,17 @@
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufWriter, Seek, SeekFrom, Write};
+// Map alias removed; no longer used after refactor
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::info;
 
-use crate::engine::core::{ColumnKey, ColumnOffsets, UidResolver, WriteJob, ZonePlan};
+use crate::engine::core::column::compression::compressed_column_index::CompressedColumnIndex;
+use crate::engine::core::column::compression::compression_codec::Lz4Codec;
+use crate::engine::core::write::column_block_writer::ColumnBlockWriter;
+use crate::engine::core::write::column_group_builder::ColumnGroupBuilder;
+use crate::engine::core::write::column_paths::ColumnPathResolver;
+use crate::engine::core::{UidResolver, WriteJob, ZonePlan};
 use crate::engine::errors::StoreError;
 use crate::engine::schema::SchemaRegistry;
-use crate::shared::storage_header::{FileKind, ensure_header_if_new};
-
 pub struct ColumnWriter {
     pub segment_dir: PathBuf,
     pub registry: Arc<RwLock<SchemaRegistry>>,
@@ -24,58 +25,51 @@ impl ColumnWriter {
         }
     }
 
-    pub async fn write_all(&self, zone_plans: &[ZonePlan]) -> Result<ColumnOffsets, StoreError> {
+    pub async fn write_all(&self, zone_plans: &[ZonePlan]) -> Result<(), StoreError> {
         let resolver = UidResolver::from_events(zone_plans, &self.registry).await?;
         let write_jobs = WriteJob::build(zone_plans, &self.segment_dir, &resolver);
+        let segment_dir = self.segment_dir.clone();
 
-        let write_result =
-            tokio::task::spawn_blocking(move || -> Result<ColumnOffsets, StoreError> {
-                let mut writers: HashMap<ColumnKey, BufWriter<File>> = HashMap::new();
-                let mut current_offsets: HashMap<ColumnKey, u64> = HashMap::new();
-                let mut offsets = ColumnOffsets::new();
+        tokio::task::spawn_blocking(move || -> Result<(), StoreError> {
+            let mut builder = ColumnGroupBuilder::new();
+            for job in &write_jobs {
+                builder.add(job);
+            }
+            let groups = builder.finish();
 
-                for job in write_jobs {
-                    let writer = writers.entry(job.key.clone()).or_insert_with(|| {
-                        let file = ensure_header_if_new(&job.path, FileKind::SegmentColumn.magic())
-                            .expect("Failed to open/create .col file with header");
-                        BufWriter::new(file)
-                    });
+            let codec = Lz4Codec;
+            let mut indexes_by_key: std::collections::HashMap<
+                (String, String),
+                CompressedColumnIndex,
+            > = std::collections::HashMap::new();
+            // Precompute exact .col paths from jobs to ensure the same paths used in tests
+            let mut key_to_path = std::collections::HashMap::new();
+            for j in &write_jobs {
+                key_to_path.insert(j.key.clone(), j.path.clone());
+            }
+            let mut block_writer = ColumnBlockWriter::with_paths(segment_dir.clone(), key_to_path);
+            let path_resolver = ColumnPathResolver::new(&write_jobs);
 
-                    let offset = current_offsets.entry(job.key.clone()).or_insert_with(|| {
-                        writer
-                            .seek(SeekFrom::End(0))
-                            .expect("Failed to seek to end of file")
-                    });
+            for ((key, zone_id), (buf, offs, values)) in groups {
+                let index = indexes_by_key.entry(key.clone()).or_default();
+                block_writer.append_zone(index, key.clone(), zone_id, &buf, offs, &codec)?;
+                let _ = values; // values used only for compressed data; index built elsewhere
+            }
 
-                    let this_offset = *offset;
-                    let bytes = job.value.as_bytes();
+            block_writer.finish()?;
+            for (key, index) in indexes_by_key {
+                let path = path_resolver.zfc_path_for_key(&key);
+                index.write_to_path(&path)?;
+            }
 
-                    if bytes.len() > u16::MAX as usize {
-                        return Err(StoreError::FlushFailed(format!(
-                            "value too long for field {}",
-                            job.key.1
-                        )));
-                    }
-
-                    writer.write_all(&(bytes.len() as u16).to_le_bytes())?;
-                    writer.write_all(bytes)?;
-
-                    *offset += 2 + bytes.len() as u64;
-                    offsets.insert_offset(job.key, job.zone_id, this_offset, job.value);
-                }
-
-                for (key, mut writer) in writers {
-                    writer.flush()?;
-                    writer.get_ref().sync_data()?;
-                    debug!("flushed writer for {:?}", key);
-                }
-
-                Ok(offsets)
-            })
-            .await
-            .map_err(|e| StoreError::FlushFailed(format!("join error: {e}")))??;
+            Ok(())
+        })
+        .await
+        .map_err(|e| StoreError::FlushFailed(format!("join error: {e}")))??;
 
         info!("wrote all columns");
-        Ok(write_result)
+        Ok(())
     }
 }
+
+// path helpers moved to column::compressed

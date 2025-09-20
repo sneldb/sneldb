@@ -77,4 +77,8 @@ impl FieldType {
             FieldType::from_primitive_str(s)
         }
     }
+
+    pub fn is_enum(&self) -> bool {
+        matches!(self, FieldType::Enum(_))
+    }
 }

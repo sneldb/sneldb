@@ -9,7 +9,7 @@ use crate::engine::schema::registry::SchemaRegistry;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, trace};
+use tracing::{debug, info};
 
 /// Writes all zone-related files for a given event type (uid)
 pub struct ZoneWriter<'a> {
@@ -45,21 +45,14 @@ impl<'a> ZoneWriter<'a> {
         );
         ZoneMeta::save(self.uid, &zone_meta, self.segment_dir)?;
 
-        // Write .col files and collect offsets
+        // Write .col files
         let writer = ColumnWriter::new(self.segment_dir.to_path_buf(), self.registry.clone());
         debug!(
             target: "sneldb::flush",
             uid = self.uid,
             "Writing .col files"
         );
-        let col_offsets = writer.write_all(zone_plans).await?;
-
-        trace!(
-            target: "sneldb::flush",
-            uid = self.uid,
-            "Writing column offset metadata"
-        );
-        col_offsets.write(self.segment_dir, &self.registry).await?;
+        writer.write_all(zone_plans).await?;
 
         // Build XOR filters
         debug!(
@@ -109,7 +102,11 @@ impl<'a> ZoneWriter<'a> {
             "Building zone index"
         );
         let mut index = ZoneIndex::default();
-        index.populate(col_offsets.as_map(), "context_id");
+        for zp in zone_plans {
+            for ev in &zp.events {
+                index.insert(&zp.event_type, &ev.context_id, zp.id);
+            }
+        }
 
         let index_path = self.segment_dir.join(format!("{}.idx", self.uid));
         debug!(
