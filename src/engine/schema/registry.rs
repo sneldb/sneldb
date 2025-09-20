@@ -20,6 +20,14 @@ impl MiniSchema {
     pub fn fields(&self) -> impl Iterator<Item = &String> {
         self.fields.keys()
     }
+
+    pub fn field_type(&self, name: &str) -> Option<&FieldType> {
+        self.fields.get(name)
+    }
+
+    pub fn is_enum_field(&self, name: &str) -> bool {
+        self.field_type(name).map_or(false, FieldType::is_enum)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -103,6 +111,12 @@ impl SchemaRegistry {
         self.reverse_uid_map
             .get(uid)
             .and_then(|event_type| self.schemas.get(event_type))
+    }
+
+    pub fn is_enum_field_by_uid(&self, uid: &str, field: &str) -> bool {
+        self.get_schema_by_uid(uid)
+            .map(|s| s.is_enum_field(field))
+            .unwrap_or(false)
     }
 
     fn load_all(&mut self) -> Result<(), SchemaError> {
