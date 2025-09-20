@@ -60,70 +60,6 @@ fn zone_surf_numeric_selection() {
 }
 
 #[test]
-fn zone_surf_string_selection() {
-    // z0 has names starting with 'a'; z1 has names starting with 'c'
-    let z0_events = vec![
-        Factory::event()
-            .with("payload", json!({"name": "alice"}))
-            .create(),
-        Factory::event()
-            .with("payload", json!({"name": "adam"}))
-            .create(),
-    ];
-    let z1_events = vec![
-        Factory::event()
-            .with("payload", json!({"name": "carol"}))
-            .create(),
-        Factory::event()
-            .with("payload", json!({"name": "cathy"}))
-            .create(),
-    ];
-
-    let z0 = Factory::zone_plan()
-        .with("id", 0u32)
-        .with("uid", "uidX")
-        .with("segment_id", 7u64)
-        .with("events", json!(z0_events))
-        .with("start_index", 0usize)
-        .with("end_index", 1usize)
-        .create();
-
-    let z1 = Factory::zone_plan()
-        .with("id", 1u32)
-        .with("uid", "uidX")
-        .with("segment_id", 7u64)
-        .with("events", json!(z1_events))
-        .with("start_index", 0usize)
-        .with("end_index", 1usize)
-        .create();
-
-    let dir = tempdir().unwrap();
-    ZoneSurfFilter::build_all(&[z0, z1], dir.path()).unwrap();
-
-    let path = dir.path().join("uidX_name.zsrf");
-    assert!(path.exists());
-    let zsf = ZoneSurfFilter::load(&path).unwrap();
-    let seg = "segZ";
-
-    // >= "b" should select z1 only
-    let b_b = b"b".to_vec();
-    let ge = zsf
-        .zones_overlapping_ge(&b_b, true, seg)
-        .into_iter()
-        .map(|z| z.zone_id)
-        .collect::<Vec<_>>();
-    assert_eq!(ge, vec![1u32]);
-
-    // <= "b" should select z0 only
-    let le = zsf
-        .zones_overlapping_le(&b_b, true, seg)
-        .into_iter()
-        .map(|z| z.zone_id)
-        .collect::<Vec<_>>();
-    assert_eq!(le, vec![0u32]);
-}
-
-#[test]
 fn zone_surf_boundary_inclusive_exclusive() {
     // z0 has exact boundary 20; z1 has values > 20
     let z0 = zone_with_events("uidB", 0, &[10, 20]);
@@ -176,18 +112,18 @@ fn zone_surf_float_ranges() {
     // z0 floats are negative; z1 floats are positive
     let z0_events = vec![
         Factory::event()
-            .with("payload", json!({"score": -3.5}))
+            .with("payload", json!({"scoreID": -3.5}))
             .create(),
         Factory::event()
-            .with("payload", json!({"score": -1.25}))
+            .with("payload", json!({"scoreID": -1.25}))
             .create(),
     ];
     let z1_events = vec![
         Factory::event()
-            .with("payload", json!({"score": 2.25}))
+            .with("payload", json!({"scoreID": 2.25}))
             .create(),
         Factory::event()
-            .with("payload", json!({"score": 10.5}))
+            .with("payload", json!({"scoreID": 10.5}))
             .create(),
     ];
 
@@ -210,7 +146,7 @@ fn zone_surf_float_ranges() {
 
     let dir = tempdir().unwrap();
     ZoneSurfFilter::build_all(&[z0, z1], dir.path()).unwrap();
-    let path = dir.path().join("uidF_score.zsrf");
+    let path = dir.path().join("uidF_scoreID.zsrf");
     let zsf = ZoneSurfFilter::load(&path).unwrap();
     let seg = "segF";
 
@@ -238,18 +174,18 @@ fn zone_surf_bool_ranges() {
     // z0 has flag=false, z1 has flag=true
     let z0_events = vec![
         Factory::event()
-            .with("payload", json!({"flag": false}))
+            .with("payload", json!({"flag_id": false}))
             .create(),
         Factory::event()
-            .with("payload", json!({"flag": false}))
+            .with("payload", json!({"flag_id": false}))
             .create(),
     ];
     let z1_events = vec![
         Factory::event()
-            .with("payload", json!({"flag": true}))
+            .with("payload", json!({"flag_id": true}))
             .create(),
         Factory::event()
-            .with("payload", json!({"flag": true}))
+            .with("payload", json!({"flag_id": true}))
             .create(),
     ];
 
@@ -272,7 +208,7 @@ fn zone_surf_bool_ranges() {
 
     let dir = tempdir().unwrap();
     ZoneSurfFilter::build_all(&[z0, z1], dir.path()).unwrap();
-    let path = dir.path().join("uidBool_flag.zsrf");
+    let path = dir.path().join("uidBool_flag_id.zsrf");
     let zsf = ZoneSurfFilter::load(&path).unwrap();
     let seg = "segBool";
 

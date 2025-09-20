@@ -114,6 +114,7 @@ pub trait MagicFile {
 pub enum FileKind {
     SegmentColumn,
     ZoneOffsets,
+    ZoneCompressedOffsets,
     ZoneMeta,
     ZoneIndex,
     XorFilter,
@@ -130,6 +131,7 @@ impl FileKind {
         match self {
             FileKind::SegmentColumn => *b"EVDBCOL\0",
             FileKind::ZoneOffsets => *b"EVDBZOF\0",
+            FileKind::ZoneCompressedOffsets => *b"EVDBZCF\0",
             FileKind::ZoneMeta => *b"EVDBZON\0",
             FileKind::ZoneIndex => *b"EVDBUID\0",
             FileKind::XorFilter => *b"EVDBXRF\0",

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use sysinfo::{Disks, System};
 use tokio::time::sleep;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 pub async fn start_background_compactor(shard_id: u32, shard_dir: PathBuf) {
     tokio::spawn(async move {
@@ -20,19 +20,19 @@ pub async fn start_background_compactor(shard_id: u32, shard_dir: PathBuf) {
             sys.refresh_all();
             let disks = Disks::new_with_refreshed_list();
             if monitor.is_under_pressure(&disks) {
-                info!(shard_id, "IO pressure detected — skipping compaction");
+                warn!(shard_id, "IO pressure detected — skipping compaction");
                 continue;
             }
 
             match SegmentIndex::load(&shard_dir).await {
                 Ok(segment_index) => {
                     if segment_index.needs_compaction() {
-                        info!(shard_id, "Background compaction triggered");
+                        warn!(shard_id, "Background compaction triggered");
                         let registry = Arc::new(tokio::sync::RwLock::new(
                             SchemaRegistry::new().expect("Failed to initialize SchemaRegistry"),
                         ));
 
-                        info!(
+                        warn!(
                             "Compaction worker initialized for shard {} and shard_dir {}",
                             shard_id,
                             shard_dir.display()
@@ -47,7 +47,7 @@ pub async fn start_background_compactor(shard_id: u32, shard_dir: PathBuf) {
                             error!(shard_id, "Background compaction failed: {}", e);
                         }
                     } else {
-                        info!(shard_id, "No compaction needed");
+                        warn!(shard_id, "No compaction needed");
                     }
                 }
                 Err(e) => {

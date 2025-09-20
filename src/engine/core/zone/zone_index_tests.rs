@@ -1,7 +1,6 @@
 use crate::engine::core::ZoneIndex;
-use crate::engine::core::{CandidateZone, ColumnKey, ZoneData, ZoneId};
-use crate::test_helpers::factories::ColumnOffsetsFactory;
-use std::collections::{BTreeMap, HashMap};
+use crate::engine::core::CandidateZone;
+use std::collections::BTreeMap;
 use tempfile::tempdir;
 
 #[test]
@@ -9,24 +8,10 @@ fn test_zone_index_roundtrip() {
     let tmp = tempdir().unwrap();
     let path = tmp.path().join("index.bin");
 
-    let col_offsets = ColumnOffsetsFactory::new()
-        .with_entry("signup", "context_id", 0, vec![10], vec!["ctx42"])
-        .with_entry("signup", "context_id", 1, vec![20], vec!["ctx99"])
-        .with_entry("login", "context_id", 0, vec![5], vec!["ctx42"])
-        .create();
-
     let mut index = ZoneIndex::default();
-
-    for event_type in &["signup", "login"] {
-        let filtered: HashMap<ColumnKey, HashMap<ZoneId, ZoneData>> = col_offsets
-            .as_map()
-            .iter()
-            .filter(|((etype, _), _)| etype == event_type)
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-
-        index.populate(&filtered, "context_id");
-    }
+    index.insert("signup", "ctx42", 10);
+    index.insert("signup", "ctx99", 20);
+    index.insert("login", "ctx42", 5);
 
     index.write_to_path(&path).unwrap();
     let loaded = ZoneIndex::load_from_path(&path).unwrap();

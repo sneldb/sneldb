@@ -98,7 +98,7 @@ Small example:
     - XOR: `<uid>_<field>.xf` (approximate membership)
     - Enum Bitmap (EBM): `<uid>_<field>.ebm` (eq/neq for enums)
     - Zone SuRF: `<uid>_<field>.zsrf` (succinct range filter for `>`, `>=`, `<`, `<=`)
-  - **Offsets/Index**: Jump tables and per-field offsets (`.zf` files) to locate values efficiently.
+  - **Offsets/Index**: Per-zone compressed offsets (`.zfc` files) describing compressed block ranges and in-block offsets.
 - - **Snapshots** (optional):
 - - Event Snapshots (`.snp`): portable arrays of events with a binary header + length‑prefixed JSON entries.
 - - Snapshot Metadata (`.smt`): arrays of `{uid, context_id, from_ts, to_ts}` entries with a binary header + length‑prefixed JSON.

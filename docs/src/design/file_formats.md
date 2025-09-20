@@ -9,7 +9,7 @@
 
 - Segments — `segment-xxxxx/` directories under each shard.
 - Columns — `{uid}_{field}.col` files storing values with length prefixes.
-- Zone Offsets — `{uid}_{field}.zf` files listing byte offsets per zone.
+- Zone Compressed Offsets — `{uid}_{field}.zfc` files listing per-zone compressed block metadata and in-block offsets.
 - Zone Metadata — `{uid}.zones` containing per-zone min/max timestamps and row ranges.
 - Zone Index — `{uid}.idx` mapping context_id values to zone ids.
 - XOR Filters — `{uid}_{field}.xf` per-field filters for fast membership tests.
@@ -31,7 +31,7 @@
 Magic strings per file kind:
 
 - Columns (`.col`): `EVDBCOL\0`
-- Zone Offsets (`.zf`): `EVDBZOF\0`
+- Zone Compressed Offsets (`.zfc`): `EVDBZCF\0`
 - Zone Metadata (`.zones`): `EVDBZON\0`
 - Zone Index (`.idx` per-UID/context): `EVDBUID\0`
 - XOR Filters (`.xf`): `EVDBXRF\0`
@@ -56,7 +56,7 @@ data/
 │   ├── shard-0/
 │   │   └── segment-00000/
 │   │       ├── {uid}_{field}.col
-│   │       ├── {uid}_{field}.zf
+│   │       ├── {uid}_{field}.zfc
 │   │       ├── {uid}.zones
 │   │       ├── {uid}.idx
 │   │       ├── {uid}_{field}.xf
@@ -80,14 +80,14 @@ Snapshots are ad-hoc utility files and can be written anywhere (not tied to the 
   - `[bytes]` UTF‑8 string of the value
 - Access pattern: memory-mapped and sliced using offsets.
 
-## Zone offsets: `{uid}_{field}.zf`
+## Zone compressed offsets: `{uid}_{field}.zfc`
 
 - Binary layout per zone (repeated):
   - File begins with a binary header (MAGIC `EVDBZOF\0`).
   - `[u32] zone_id`
   - `[u32] count` number of offsets
   - `[u64] * count` byte offsets into the corresponding `.col`
-- Purpose: enables loading only the rows for a given zone.
+- Purpose: enables loading only the rows for a given zone by first reading and decompressing the zone block, then slicing values using in-block offsets.
 
 ## Zone metadata: `{uid}.zones`
 
@@ -169,7 +169,7 @@ Snapshots are ad-hoc utility files and can be written anywhere (not tied to the 
 
 - Segment directories are named `segment-00000`, `segment-00001`, ...
 - UIDs are per-event-type identifiers generated at DEFINE; filenames use `{uid}` not the event type.
-- New fields simply create new `.col/.zf/.xf` files in subsequent segments.
+- New fields simply create new `.col/.zfc/.xf` files in subsequent segments.
 
 ## Further Reading
 

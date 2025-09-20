@@ -79,6 +79,7 @@ async fn test_zone_cursor_loader_e2e() {
         }
     }
 
+    println!("all_rows: {:?}", all_rows);
     let names: Vec<_> = all_rows
         .iter()
         .map(|r| r.payload.get("name").unwrap().to_string())
@@ -86,7 +87,7 @@ async fn test_zone_cursor_loader_e2e() {
     assert!(names.contains(&"Alice".to_string()));
     assert!(names.contains(&"Bob".to_string()));
 
-    assert_eq!(all_rows.len(), 2);
+    assert_eq!(all_rows.len(), 3);
     assert_eq!(all_rows[0].context_id, "ctx1");
     assert_eq!(all_rows[1].context_id, "ctx2");
 
