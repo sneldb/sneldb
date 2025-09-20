@@ -158,12 +158,14 @@ impl<'a> ZoneFinder<'a> {
             }
         }
 
-        // Try EBM-based pruning only for enum fields and Eq/Neq
+        // Try EBM-based pruning only for enum fields and Eq/Neq.
+        // Avoid blocking the Tokio runtime thread; use try_read and skip if unavailable.
         if self
             .query_plan
             .registry
-            .blocking_read()
-            .is_enum_field_by_uid(uid, &self.plan.column)
+            .try_read()
+            .map(|reg| reg.is_enum_field_by_uid(uid, &self.plan.column))
+            .unwrap_or(false)
         {
             if let (Some(op), Some(val_str)) = (&self.plan.operation, value.as_str()) {
                 if let Some(pruned) =
