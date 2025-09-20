@@ -11,12 +11,8 @@ pub mod wal;
 pub mod write;
 pub mod zone;
 
+pub use column::column_key::ColumnKey;
 pub use column::column_loader::ColumnLoader;
-pub use column::column_offsets::ColumnKey;
-pub use column::column_offsets::ColumnOffsets;
-pub use column::column_offsets::Offsets;
-pub use column::column_offsets::ZoneData;
-pub use column::column_offsets::ZoneId;
 pub use column::column_reader::ColumnReader;
 pub use compaction::compaction_worker::CompactionWorker;
 pub use compaction::compactor::Compactor;

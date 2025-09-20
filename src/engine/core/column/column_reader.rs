@@ -1,11 +1,11 @@
-// .zf offsets removed; compressed-only path
+// Compressed-only column reader
 use crate::engine::core::column::compression::{CompressedColumnIndex, CompressionCodec, Lz4Codec};
 use crate::engine::errors::{ColumnLoadError, QueryExecutionError};
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 use memmap2::MmapOptions;
 use std::fs::File;
 use std::path::Path;
-use tracing::{debug, error, info};
+use tracing::info;
 
 #[derive(Debug)]
 pub struct ColumnReader;
@@ -94,103 +94,5 @@ impl ColumnReader {
             out.push(val);
         }
         Ok(out)
-    }
-
-    pub fn load(
-        segment_dir: &Path,
-        segment_id: &str,
-        uid: &str,
-        field: &str,
-        offsets: &[u64],
-    ) -> Result<Vec<String>, QueryExecutionError> {
-        // Unused in compressed-only mode; keep signature for compatibility
-        let col_path = segment_dir.join(format!("{}_{}.col", uid, field));
-        info!(
-            target: "col_reader::load",
-            path = %col_path.display(),
-            %segment_id,
-            %uid,
-            %field,
-            count = offsets.len(),
-            "Loading column data"
-        );
-
-        // Strict header validation
-        let mut f = File::open(&col_path)
-            .map_err(|e| QueryExecutionError::ColLoad(ColumnLoadError::Io(e)))?;
-        let header = BinaryHeader::read_from(&mut f)
-            .map_err(|e| QueryExecutionError::ColRead(format!("Header read failed: {}", e)))?;
-        if header.magic != FileKind::SegmentColumn.magic() {
-            return Err(QueryExecutionError::ColRead(
-                "invalid magic for .col".into(),
-            ));
-        }
-
-        let file = File::open(&col_path)
-            .map_err(|e| QueryExecutionError::ColLoad(ColumnLoadError::Io(e)))?;
-        let mmap = unsafe {
-            MmapOptions::new()
-                .map(&file)
-                .map_err(|e| QueryExecutionError::ColLoad(ColumnLoadError::Io(e)))?
-        };
-
-        let mut values = Vec::with_capacity(offsets.len());
-
-        for &start in offsets {
-            let base = start as usize;
-            if base + 2 > mmap.len() {
-                error!(
-                    target: "col_reader::error",
-                    offset = base,
-                    file_len = mmap.len(),
-                    "Offset out of bounds"
-                );
-                return Err(QueryExecutionError::ColRead("Offset out of bounds".into()));
-            }
-
-            let len = u16::from_le_bytes(mmap[base..base + 2].try_into().unwrap()) as usize;
-            let end = base + 2 + len;
-            if end > mmap.len() {
-                error!(
-                    target: "col_reader::error",
-                    base,
-                    len,
-                    end,
-                    file_len = mmap.len(),
-                    "Value length out of bounds"
-                );
-                return Err(QueryExecutionError::ColRead(
-                    "Value length out of bounds".into(),
-                ));
-            }
-
-            let val_bytes = &mmap[base + 2..end];
-            match String::from_utf8(val_bytes.to_vec()) {
-                Ok(val) => {
-                    debug!(
-                        target: "col_reader::value",
-                        offset = base,
-                        length = len,
-                        value = %val,
-                        "Read string value"
-                    );
-                    values.push(val);
-                }
-                Err(e) => {
-                    error!(
-                        target: "col_reader::error",
-                        offset = base,
-                        length = len,
-                        "Invalid UTF-8: {e}"
-                    );
-                    return Err(QueryExecutionError::ColRead(format!(
-                        "Invalid UTF-8: {}",
-                        e
-                    )));
-                }
-            }
-        }
-
-        Ok(values)
     }
 }

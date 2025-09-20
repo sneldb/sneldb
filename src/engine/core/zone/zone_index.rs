@@ -1,10 +1,9 @@
-use crate::engine::core::{CandidateZone, ColumnKey, ZoneData, ZoneId};
+use crate::engine::core::CandidateZone;
 use crate::engine::errors::StoreError;
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 use memmap2::Mmap;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -87,21 +86,7 @@ impl ZoneIndex {
             .push(id);
     }
 
-    pub fn populate(
-        &mut self,
-        column_offsets: &HashMap<ColumnKey, HashMap<ZoneId, ZoneData>>,
-        field: &str,
-    ) {
-        for (key, offsets) in column_offsets {
-            if key.1 == field {
-                for (zone_id, zone_data) in offsets {
-                    for value in &zone_data.values {
-                        self.insert(&key.0, value, *zone_id as u32);
-                    }
-                }
-            }
-        }
-    }
+    // populate removed; index built directly during write
 
     pub fn write_to_path<P: AsRef<Path>>(&self, path: P) -> Result<(), StoreError> {
         let file = File::create(&path).map_err(|e| {

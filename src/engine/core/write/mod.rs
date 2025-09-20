@@ -7,6 +7,10 @@ pub mod flusher;
 pub mod write_job;
 
 #[cfg(test)]
+mod column_block_writer_test;
+#[cfg(test)]
+mod column_group_builder_test;
+#[cfg(test)]
 mod column_writer_test;
 #[cfg(test)]
 mod flush_manager_test;

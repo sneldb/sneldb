@@ -1,8 +1,7 @@
 pub use super::factories::{
-    CandidateZoneFactory, ColumnOffsetsFactory, CommandFactory, CompareOpFactory, EventFactory,
-    ExprFactory, QueryPlanFactory, ResolverFactory, SchemaRegistryFactory, ZoneCursorFactory,
-    ZoneDataFactory, ZoneIndexFactory, ZoneMetaFactory, ZonePlanFactory, ZoneRowFactory,
-    ZoneValueLoaderFactory,
+    CandidateZoneFactory, CommandFactory, CompareOpFactory, EventFactory, ExprFactory,
+    QueryPlanFactory, ResolverFactory, SchemaRegistryFactory, ZoneCursorFactory, ZoneIndexFactory,
+    ZoneMetaFactory, ZonePlanFactory, ZoneRowFactory, ZoneValueLoaderFactory,
 };
 
 pub struct Factory;
@@ -62,14 +61,6 @@ impl Factory {
 
     pub fn expr() -> ExprFactory {
         ExprFactory::new()
-    }
-
-    pub fn column_offsets() -> ColumnOffsetsFactory {
-        ColumnOffsetsFactory::new()
-    }
-
-    pub fn zone_data() -> ZoneDataFactory {
-        ZoneDataFactory::new()
     }
 
     pub fn schema_registry() -> SchemaRegistryFactory {

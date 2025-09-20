@@ -3,7 +3,7 @@ use crate::test_helpers::factories::{EventFactory, SchemaRegistryFactory};
 use serde_json::json;
 use tempfile::tempdir;
 #[tokio::test]
-async fn writes_columns_and_returns_offsets() {
+async fn writes_columns() {
     // Setup temporary dir and registry
     let dir = tempdir().unwrap();
     let registry_factory = SchemaRegistryFactory::new();
@@ -44,14 +44,7 @@ async fn writes_columns_and_returns_offsets() {
     let writer = ColumnWriter::new(dir.path().to_path_buf(), registry);
 
     // Run the writer
-    let offsets = writer.write_all(&[zone]).await.expect("write failed");
-
-    // There should be offsets per field
-    assert!(!offsets.as_map().is_empty());
-
-    // Should have 6 fields × 2 events = 12 offsets
-    let total_offsets: usize = offsets.as_flat_map().values().map(|v| v.len()).sum();
-    assert_eq!(total_offsets, 12);
+    writer.write_all(&[zone]).await.expect("write failed");
 
     // Verify some expected files exist
     let file_names = std::fs::read_dir(dir.path())
