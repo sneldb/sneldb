@@ -15,6 +15,11 @@ impl WalCleaner {
         Self { shard_id, wal_dir }
     }
 
+    /// Create a new cleaner for a given shard with a custom WAL directory
+    pub fn with_wal_dir(shard_id: usize, wal_dir: PathBuf) -> Self {
+        Self { shard_id, wal_dir }
+    }
+
     /// Deletes all WAL logs with ID < `keep_from_log_id`.
     /// This should be called after segment flushes.
     pub fn cleanup_up_to(&self, keep_from_log_id: u64) {

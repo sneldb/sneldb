@@ -17,17 +17,9 @@ pub async fn run_worker_loop(mut ctx: ShardContext, mut rx: Receiver<ShardMessag
     let id = ctx.id;
     info!(target: LOG_TARGET, shard_id = id, "Shard worker started");
 
-    let mut counter = 0;
-    const SLEEP_EVERY: usize = 10;
-
     while let Some(msg) = rx.recv().await {
         match msg {
             ShardMessage::Store(event, registry) => {
-                counter += 1;
-                if counter % SLEEP_EVERY == 0 {
-                    tokio::time::sleep(tokio::time::Duration::from_micros(1)).await;
-                }
-
                 debug!(target: LOG_TARGET, shard_id = id, "Received Store message");
                 if let Err(e) = on_store(event, &mut ctx, &registry).await {
                     error!(target: LOG_TARGET, shard_id = id, error = %e, "Failed to store event");

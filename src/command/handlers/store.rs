@@ -91,7 +91,10 @@ pub async fn handle<W: AsyncWrite + Unpin>(
     }
 
     let event = Event {
-        timestamp: chrono::Utc::now().timestamp_millis() as u64,
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
         event_type: event_type.clone(),
         context_id: context_id.clone(),
         payload: payload.clone(),
@@ -106,7 +109,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
     );
 
     let send_result = timeout(
-        Duration::from_millis(500),
+        Duration::from_millis(1000),
         shard.tx.send(ShardMessage::Store(event, registry_clone)),
     )
     .await;

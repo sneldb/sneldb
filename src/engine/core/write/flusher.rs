@@ -1,6 +1,7 @@
 use crate::engine::core::{Event, MemTable, SegmentIndexBuilder, ZonePlanner, ZoneWriter};
 use crate::engine::errors::StoreError;
 use crate::engine::schema::registry::SchemaRegistry;
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -30,40 +31,66 @@ impl Flusher {
     }
 
     #[instrument(skip(self), fields(segment_id = self.segment_id))]
-    pub async fn flush(&self) -> Result<(), StoreError> {
-        fs::create_dir_all(&self.segment_dir)?;
+    pub async fn flush(self) -> Result<(), StoreError> {
+        // Extract fields we need after moving out memtable
+        let segment_id = self.segment_id;
+        let segment_dir = self.segment_dir.clone();
+        let registry = self.registry.clone();
 
-        let all_events: Vec<Event> = self.memtable.iter().cloned().collect();
+        fs::create_dir_all(&segment_dir)?;
+
+        // Move events out of the MemTable without cloning
+        let table = self.memtable.take(); // BTreeMap<String, Vec<Event>> grouped by context_id
+
+        // Re-group by event_type, moving Events into buckets
+        let mut by_event_type: HashMap<String, Vec<Event>> = HashMap::new();
+        let mut total_count: usize = 0;
+        for (_ctx, mut bucket) in table.into_iter() {
+            total_count += bucket.len();
+            for ev in bucket.drain(..) {
+                by_event_type
+                    .entry(ev.event_type.clone())
+                    .or_default()
+                    .push(ev);
+            }
+        }
+
         debug!(
             target: "sneldb::flush",
-            count = all_events.len(),
-            segment_id = self.segment_id,
+            count = total_count,
+            segment_id = segment_id,
             "Collected events from MemTable"
         );
 
-        let grouped = Event::group_by(&all_events, "event_type");
         info!(
             target: "sneldb::flush",
-            segment_id = self.segment_id,
-            event_types = grouped.len(),
+            segment_id = segment_id,
+            event_types = by_event_type.len(),
             "Grouped events by event_type"
         );
 
-        for (event_type, entries) in &grouped {
+        for (event_type, events) in by_event_type.iter() {
             debug!(
                 target: "sneldb::flush",
-                segment_id = self.segment_id,
+                segment_id = segment_id,
                 event_type,
-                count = entries.len(),
+                count = events.len(),
                 "Flushing entries for event_type"
             );
-            self.flush_one_type(event_type, entries).await?;
+            Self::flush_one_type_inner(
+                segment_id,
+                &segment_dir,
+                Arc::clone(&registry),
+                event_type,
+                events,
+            )
+            .await?;
         }
 
-        let uids = self.resolve_uids(grouped.keys()).await?;
+        let uids = Self::resolve_uids_with(&registry, by_event_type.keys()).await?;
         SegmentIndexBuilder {
-            segment_id: self.segment_id,
-            segment_dir: &self.segment_dir,
+            segment_id,
+            segment_dir: &segment_dir,
             event_type_uids: uids,
         }
         .add_segment_entry(None)
@@ -71,16 +98,21 @@ impl Flusher {
 
         info!(
             target: "sneldb::flush",
-            segment_id = self.segment_id,
+            segment_id = segment_id,
             "Flush completed successfully"
         );
         Ok(())
     }
 
-    #[instrument(skip(self, events), fields(event_type, count = events.len()))]
-    async fn flush_one_type(&self, event_type: &str, events: &[&Event]) -> Result<(), StoreError> {
-        let uid = self
-            .registry
+    #[instrument(skip(events, registry, segment_dir), fields(event_type, count = events.len()))]
+    async fn flush_one_type_inner(
+        segment_id: u64,
+        segment_dir: &PathBuf,
+        registry: Arc<RwLock<SchemaRegistry>>,
+        event_type: &str,
+        events: &[Event],
+    ) -> Result<(), StoreError> {
+        let uid = registry
             .read()
             .await
             .get_uid(event_type)
@@ -88,34 +120,37 @@ impl Flusher {
 
         trace!(
             target: "sneldb::flush",
-            segment_id = self.segment_id,
+            segment_id = segment_id,
             event_type,
             uid,
             "Planning zones"
         );
 
-        let planner = ZonePlanner::new(&uid, self.segment_id);
-        let zone_plans = planner.plan(&events.iter().cloned().cloned().collect::<Vec<_>>())?;
+        let planner = ZonePlanner::new(&uid, segment_id);
+        let zone_plans = planner.plan(events)?;
 
         trace!(
             target: "sneldb::flush",
-            segment_id = self.segment_id,
+            segment_id = segment_id,
             event_type,
             zones = zone_plans.len(),
             "Writing zones to disk"
         );
 
-        let writer = ZoneWriter::new(&uid, &self.segment_dir, self.registry.clone());
+        let writer = ZoneWriter::new(&uid, segment_dir, registry.clone());
         writer.write_all(&zone_plans).await?;
 
         Ok(())
     }
 
-    async fn resolve_uids<'a, I>(&self, event_types: I) -> Result<Vec<String>, StoreError>
+    async fn resolve_uids_with<'a, I>(
+        registry: &Arc<RwLock<SchemaRegistry>>,
+        event_types: I,
+    ) -> Result<Vec<String>, StoreError>
     where
         I: IntoIterator<Item = &'a String>,
     {
-        let registry = self.registry.read().await;
+        let registry = registry.read().await;
         event_types
             .into_iter()
             .map(|et| {
