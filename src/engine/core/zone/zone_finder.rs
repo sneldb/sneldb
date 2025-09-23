@@ -128,7 +128,6 @@ impl<'a> ZoneFinder<'a> {
             }
         };
 
-
         if let Some(op) = &self.plan.operation {
             // Prefer zone-level SuRF only for range operations
             if matches!(
@@ -184,87 +183,63 @@ impl<'a> ZoneFinder<'a> {
         if let Some(op) = &self.plan.operation {
             match op {
                 CompareOp::Eq => {
-        // Prefer zone-level XOR index (.zxf) if available
-        let zxf_path = self.zxf_path(segment_id, uid, &self.plan.column);
-        match ZoneXorFilterIndex::load(&zxf_path) {
-            Ok(zxf) => {
-                debug!(
-                    target: "sneldb::query",
-                    column = %self.plan.column,
-                    path = %zxf_path.display(),
-                    "Loaded .zxf zone index"
-                );
-                if let Some(op) = &self.plan.operation {
-                    // Range ops are not handled by XOR;
-                    if matches!(op, CompareOp::Eq) {
-                        let zone_ids = zxf.zones_maybe_containing(value);
-                        debug!(
-                            target: "sneldb::query",
-                            column = %self.plan.column,
-                            op = ?op,
-                            value = ?value,
-                            zone_count = zone_ids.len(),
-                            zones = ?zone_ids,
-                            "Zone XOR candidate zones"
-                        );
-                        if !zone_ids.is_empty() {
-                            let maybe_zones = zone_ids
-                                .into_iter()
-                                .map(|z| CandidateZone::new(z, segment_id.to_string()))
-                                .collect::<Vec<_>>();
-                            return maybe_zones;
-                        } else {
+                    // Prefer zone-level XOR index (.zxf) if available
+                    let zxf_path = self.zxf_path(segment_id, uid, &self.plan.column);
+                    match ZoneXorFilterIndex::load(&zxf_path) {
+                        Ok(zxf) => {
                             debug!(
                                 target: "sneldb::query",
                                 column = %self.plan.column,
-                                op = ?op,
-                                value = ?value,
-                                "Zone XOR returned no zones; falling back"
+                                path = %zxf_path.display(),
+                                "Loaded .zxf zone index"
+                            );
+                            if let Some(op) = &self.plan.operation {
+                                // Range ops are not handled by XOR;
+                                if matches!(op, CompareOp::Eq) {
+                                    let zone_ids = zxf.zones_maybe_containing(value);
+                                    debug!(
+                                        target: "sneldb::query",
+                                        column = %self.plan.column,
+                                        op = ?op,
+                                        value = ?value,
+                                        zone_count = zone_ids.len(),
+                                        zones = ?zone_ids,
+                                        "Zone XOR candidate zones"
+                                    );
+                                    if !zone_ids.is_empty() {
+                                        let maybe_zones = zone_ids
+                                            .into_iter()
+                                            .map(|z| CandidateZone::new(z, segment_id.to_string()))
+                                            .collect::<Vec<_>>();
+                                        return maybe_zones;
+                                    } else {
+                                        debug!(
+                                            target: "sneldb::query",
+                                            column = %self.plan.column,
+                                            op = ?op,
+                                            value = ?value,
+                                            "Zone XOR returned no zones; falling back"
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            debug!(
+                                target: "sneldb::query",
+                                column = %self.plan.column,
+                                path = %zxf_path.display(),
+                                error = %e,
+                                "No .zxf index or failed to load; skipping"
                             );
                         }
                     }
-                }
-            }
-            Err(e) => {
-                debug!(
-                    target: "sneldb::query",
-                    column = %self.plan.column,
-                    path = %zxf_path.display(),
-                    error = %e,
-                    "No .zxf index or failed to load; skipping"
-                );
-            }
-        }
                 }
                 CompareOp::Neq => {
                     debug!(target: "sneldb::query", "XOR NEQ -> cannot prune; include all zones for {:?}", value);
                     return CandidateZone::create_all_zones_for_segment(segment_id);
                 }
                 _ => {}
-            }
-        }
-
-        // No op or unsupported op: fall back to presence check like EQ
-        if filter.contains_value(value) {
-            debug!(target: "sneldb::query", "XOR default hit for value {:?}", value);
-            return CandidateZone::create_all_zones_for_segment(segment_id);
-        }
-        if let Some(op) = &self.plan.operation {
-            // Prefer XOR filter only for Eq operation
-            if matches!(op, CompareOp::Eq) {
-                let path = self.filter_path(segment_id, uid, &self.plan.column);
-                let filter = match FieldXorFilter::load(&path) {
-                    Ok(f) => f,
-                    Err(err) => {
-                        error!(target: "sneldb::query", "Failed to load XOR filter from {:?}: {:?}", path, err);
-                        return vec![];
-                    }
-                };
-
-                if filter.contains_value(value) {
-                    debug!(target: "sneldb::query", "XOR filter positive hit for value {:?}", value);
-                    return CandidateZone::create_all_zones_for_segment(segment_id);
-                }
             }
         }
 
