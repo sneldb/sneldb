@@ -39,18 +39,20 @@ impl<'a> ZoneFinder<'a> {
 
     pub fn find(&self) -> Vec<CandidateZone> {
         debug!(target: "sneldb::query", "Finding candidate zones for filter: {:?}", self.plan);
-        self.segment_ids
-            .iter()
-            .flat_map(|segment_id| {
-                let zones = match self.plan.column.as_str() {
-                    "event_type" => self.find_event_type_zones(segment_id),
-                    "context_id" => self.find_context_id_zones(segment_id),
-                    _ => self.find_field_zones(segment_id),
-                };
-                debug!(target: "sneldb::query", "Found {} zones in segment {} for column {}", zones.len(), segment_id, self.plan.column);
-                zones
-            })
-            .collect()
+        let mut out: Vec<CandidateZone> = Vec::new();
+        out.reserve(self.segment_ids.len());
+        for segment_id in self.segment_ids.iter() {
+            let zones = match self.plan.column.as_str() {
+                "event_type" => self.find_event_type_zones(segment_id),
+                "context_id" => self.find_context_id_zones(segment_id),
+                _ => self.find_field_zones(segment_id),
+            };
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                debug!(target: "sneldb::query", segment = %segment_id, column = %self.plan.column, zones = zones.len(), "Segment zones computed");
+            }
+            out.extend(zones);
+        }
+        out
     }
 
     fn find_event_type_zones(&self, segment_id: &str) -> Vec<CandidateZone> {
