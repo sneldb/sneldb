@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use sysinfo::{Disks, System};
 use tokio::time::sleep;
-use tracing::{error, info, warn};
+use tracing::{error, warn};
 
 pub async fn start_background_compactor(shard_id: u32, shard_dir: PathBuf) {
     tokio::spawn(async move {

@@ -1,4 +1,4 @@
-use crate::engine::core::{CandidateZone, FilterPlan, QueryPlan, ZoneFinder};
+use crate::engine::core::{CandidateZone, FilterPlan, QueryCaches, QueryPlan, ZoneFinder};
 use tracing::debug;
 
 /// Represents a single step in the query execution
@@ -20,7 +20,7 @@ impl<'a> ExecutionStep<'a> {
     }
 
     /// Runs zone finding logic for this step and stores the results
-    pub fn get_candidate_zones(&mut self) {
+    pub fn get_candidate_zones(&mut self, _caches: Option<&QueryCaches>) {
         let segment_ids = self.plan.segment_ids.read().unwrap();
         debug!(
             target: "sneldb::query::step",
@@ -34,7 +34,8 @@ impl<'a> ExecutionStep<'a> {
             self.plan,
             &segment_ids,
             &self.plan.segment_base_dir,
-        );
+        )
+        .with_caches(_caches);
 
         self.candidate_zones = finder.find();
 

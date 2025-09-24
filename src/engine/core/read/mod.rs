@@ -2,6 +2,7 @@ pub mod execution_step;
 pub mod memtable_query;
 pub mod memtable_query_runner;
 pub mod projection;
+pub mod cache;
 pub mod query_execution;
 pub mod query_plan;
 pub mod range_query_handler;

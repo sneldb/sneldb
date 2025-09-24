@@ -1,5 +1,5 @@
 use crate::engine::core::{
-    Event, ExecutionStep, MemTable, MemTableQueryRunner, QueryPlan, SegmentQueryRunner,
+    Event, ExecutionStep, MemTable, MemTableQueryRunner, QueryCaches, QueryPlan, SegmentQueryRunner,
 };
 use crate::engine::errors::QueryExecutionError;
 use std::collections::HashMap;
@@ -14,6 +14,7 @@ pub struct QueryExecution<'a> {
     metadata: HashMap<String, String>,
     memtable: Option<&'a MemTable>,
     passive_memtables: Vec<&'a Arc<tokio::sync::Mutex<MemTable>>>,
+    caches: Option<&'a QueryCaches>,
 }
 
 impl<'a> QueryExecution<'a> {
@@ -36,6 +37,7 @@ impl<'a> QueryExecution<'a> {
             metadata: HashMap::new(),
             memtable: None,
             passive_memtables: Vec::new(),
+            caches: None,
         }
     }
 
@@ -49,6 +51,11 @@ impl<'a> QueryExecution<'a> {
         passives: Vec<&'a Arc<tokio::sync::Mutex<MemTable>>>,
     ) -> Self {
         self.passive_memtables = passives;
+        self
+    }
+
+    pub fn with_caches(mut self, caches: &'a QueryCaches) -> Self {
+        self.caches = Some(caches);
         self
     }
 
@@ -100,6 +107,7 @@ impl<'a> QueryExecution<'a> {
 
         // Step 2: Disk segments
         let segment_events = SegmentQueryRunner::new(self.plan, self.steps.clone())
+            .with_caches(self.caches)
             .run()
             .await;
         debug!(
