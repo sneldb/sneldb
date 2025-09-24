@@ -18,23 +18,20 @@ impl ColumnReader {
         uid: &str,
         field: &str,
         zone_id: u32,
-        caches: Option<*const QueryCaches>,
+
+        caches: Option<&QueryCaches>,
     ) -> Result<Vec<String>, QueryExecutionError> {
-        if let Some(ptr) = caches {
-            // Safety: only used as a shared reference; provenance controlled by caller
-            let caches_ref = unsafe { ptr.as_ref() };
-            if let Some(caches_ref) = caches_ref {
-                if let Ok(handle) = caches_ref.get_or_load_column_handle(segment_id, uid, field) {
-                    info!(
-                        target: "cache::column_handle::hit",
-                        %segment_id,
-                        %uid,
-                        %field,
-                        zone_id,
-                        "Using cached ColumnHandle"
-                    );
-                    return Self::load_from_handle(&handle, zone_id);
-                }
+        if let Some(caches_ref) = caches {
+            if let Ok(handle) = caches_ref.get_or_load_column_handle(segment_id, uid, field) {
+                info!(
+                    target: "cache::column_handle::hit",
+                    %segment_id,
+                    %uid,
+                    %field,
+                    zone_id,
+                    "Using cached ColumnHandle"
+                );
+                return Self::load_from_handle(&handle, zone_id);
             }
         }
 

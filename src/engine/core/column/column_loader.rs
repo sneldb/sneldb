@@ -4,13 +4,13 @@ use std::path::PathBuf;
 use tracing::{debug, info};
 
 /// Handles loading column values for a specific zone
-pub struct ColumnLoader {
+pub struct ColumnLoader<'a> {
     segment_base_dir: PathBuf,
     uid: String,
-    caches: Option<*const QueryCaches>,
+    caches: Option<&'a QueryCaches>,
 }
 
-impl ColumnLoader {
+impl<'a> ColumnLoader<'a> {
     /// Creates a new ColumnLoader for the given segment and event type
     pub fn new(segment_base_dir: PathBuf, uid: String) -> Self {
         info!(
@@ -26,7 +26,7 @@ impl ColumnLoader {
         }
     }
 
-    pub fn with_caches(mut self, caches: Option<*const QueryCaches>) -> Self {
+    pub fn with_caches(mut self, caches: Option<&'a QueryCaches>) -> Self {
         self.caches = caches;
         self
     }

@@ -1,16 +1,16 @@
-use crate::engine::core::{CandidateZone, QueryCaches};
 use crate::engine::core::ColumnLoader;
+use crate::engine::core::{CandidateZone, QueryCaches};
 use std::path::PathBuf;
 use tracing::{debug, info};
 
 /// Handles loading values for zones
-pub struct ZoneValueLoader {
+pub struct ZoneValueLoader<'a> {
     segment_base_dir: PathBuf,
     uid: String,
-    caches: Option<*const QueryCaches>,
+    caches: Option<&'a QueryCaches>,
 }
 
-impl ZoneValueLoader {
+impl<'a> ZoneValueLoader<'a> {
     /// Creates a new ZoneValueLoader for the given segment and event type
     pub fn new(segment_base_dir: PathBuf, uid: String) -> Self {
         Self {
@@ -20,8 +20,8 @@ impl ZoneValueLoader {
         }
     }
 
-    pub fn with_caches(mut self, caches: Option<&QueryCaches>) -> Self {
-        self.caches = caches.map(|c| c as *const QueryCaches);
+    pub fn with_caches(mut self, caches: Option<&'a QueryCaches>) -> Self {
+        self.caches = caches;
         self
     }
 

@@ -1,8 +1,8 @@
 use crate::engine::core::{
     CandidateZone, ExecutionStep, LogicalOp, QueryCaches, QueryPlan, ZoneCombiner,
 };
-use rayon::prelude::*;
 use std::thread;
+use std::time::Instant;
 use tracing::info;
 
 /// Handles collection and combination of zones from execution steps
@@ -22,35 +22,47 @@ impl<'a> ZoneCollector<'a> {
         }
     }
 
-    /// Collects and combines zones from all execution steps in parallel
+    /// Collects and combines zones from all execution steps
     pub fn collect_zones(&mut self) -> Vec<CandidateZone> {
-        info!(target: "sneldb::zone_collector", step_count = self.steps.len(), "Starting parallel zone collection");
+        info!(target: "sneldb::zone_collector", step_count = self.steps.len(), "Starting zone collection");
 
-        let columns: Vec<String> = self.steps.iter().map(|s| s.filter.column.clone()).collect();
-        info!(target: "sneldb::zone_collector", ?columns, "Columns to process");
+        if tracing::enabled!(tracing::Level::INFO) {
+            let columns: Vec<&str> = self
+                .steps
+                .iter()
+                .map(|s| s.filter.column.as_str())
+                .collect();
+            info!(target: "sneldb::zone_collector", columns = ?columns, "Columns to process");
+        }
 
-        let all_zones: Vec<Vec<CandidateZone>> = self
-            .steps
-            .par_iter_mut()
-            .map(|step| {
-                let thread_id = format!("{:?}", thread::current().id());
-                let col = step.filter.column.clone();
-
-                info!(target: "sneldb::zone_collector", %thread_id, %col, "Step started");
-                step.get_candidate_zones(self.caches);
+        let mut all_zones: Vec<Vec<CandidateZone>> = Vec::with_capacity(self.steps.len());
+        for step in self.steps.iter_mut() {
+            if tracing::enabled!(tracing::Level::INFO) {
                 info!(
                     target: "sneldb::zone_collector",
-                    %thread_id,
-                    %col,
+                    thread_id = ?thread::current().id(),
+                    column = %step.filter.column,
+                    "Step started"
+                );
+            }
+            let t0 = Instant::now();
+            step.get_candidate_zones(self.caches);
+            let elapsed_ms = t0.elapsed().as_millis();
+            if tracing::enabled!(tracing::Level::INFO) {
+                info!(
+                    target: "sneldb::zone_collector",
+                    thread_id = ?thread::current().id(),
+                    column = %step.filter.column,
                     zone_count = step.candidate_zones.len(),
+                    elapsed_ms,
                     "Step finished"
                 );
+            }
 
-                step.candidate_zones.clone()
-            })
-            .collect();
+            all_zones.push(std::mem::take(&mut step.candidate_zones));
+        }
 
-        info!(target: "sneldb::zone_collector", "All parallel steps completed");
+        info!(target: "sneldb::zone_collector", "All steps completed");
 
         let op = LogicalOp::from_expr(self.plan.where_clause());
         info!(target: "sneldb::zone_collector", ?op, "Combining zones with logical operation");

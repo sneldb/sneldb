@@ -24,7 +24,7 @@ impl ZoneValueLoaderFactory {
         self
     }
 
-    pub fn create(self) -> ZoneValueLoader {
+    pub fn create(self) -> ZoneValueLoader<'static> {
         ZoneValueLoader::new(self.segment_base_dir, self.uid)
     }
 }
