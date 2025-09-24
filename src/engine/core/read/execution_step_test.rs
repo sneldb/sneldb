@@ -74,7 +74,7 @@ async fn execution_step_resolves_candidate_zones_from_filter_and_plan() {
 
     // Step 5: Create ExecutionStep and resolve candidate zones
     let mut step = ExecutionStep::new(filter, &plan);
-    step.get_candidate_zones();
+    step.get_candidate_zones(None);
 
     // Step 6: Validate
     assert!(

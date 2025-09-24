@@ -3,7 +3,7 @@ use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
 use crate::engine::core::zone::enum_bitmap_index::EnumBitmapIndex;
 use crate::engine::core::zone::enum_zone_pruner::EnumZonePruner;
 use crate::engine::core::{
-    CandidateZone, FieldXorFilter, FilterPlan, QueryPlan, RangeQueryHandler, ZoneIndex,
+    CandidateZone, FieldXorFilter, FilterPlan, QueryCaches, QueryPlan, RangeQueryHandler, ZoneIndex,
 };
 use std::path::PathBuf;
 use tracing::{debug, error, info, warn};
@@ -13,6 +13,7 @@ pub struct ZoneFinder<'a> {
     query_plan: &'a QueryPlan,
     segment_ids: &'a [String],
     base_dir: &'a PathBuf,
+    caches: Option<&'a QueryCaches>,
 }
 
 impl<'a> ZoneFinder<'a> {
@@ -27,7 +28,13 @@ impl<'a> ZoneFinder<'a> {
             query_plan,
             segment_ids,
             base_dir,
+            caches: None,
         }
+    }
+
+    pub fn with_caches(mut self, caches: Option<&'a QueryCaches>) -> Self {
+        self.caches = caches;
+        self
     }
 
     pub fn find(&self) -> Vec<CandidateZone> {
@@ -68,6 +75,19 @@ impl<'a> ZoneFinder<'a> {
             .context_id_plan()
             .and_then(|p| p.value.as_ref().and_then(|v| v.as_str()));
 
+        // Try cache first; fall back to disk
+        if let Some(caches) = self.caches {
+            if let Ok(index) = caches.get_or_load_zone_index(segment_id, uid) {
+                info!(
+                    target: "cache::zone_index::hit",
+                    %segment_id,
+                    %uid,
+                    "Using cached ZoneIndex"
+                );
+                return index.find_candidate_zones(event_type, context_id, segment_id);
+            }
+        }
+
         let path = self.index_path(segment_id, uid);
         ZoneIndex::load_from_path(&path)
             .map(|index| index.find_candidate_zones(event_type, context_id, segment_id))
@@ -95,6 +115,19 @@ impl<'a> ZoneFinder<'a> {
 
         match event_type {
             Some(event_type) => {
+                // Try cache first; fall back to disk
+                if let Some(caches) = self.caches {
+                    if let Ok(index) = caches.get_or_load_zone_index(segment_id, uid) {
+                        info!(
+                            target: "cache::zone_index::hit",
+                            %segment_id,
+                            %uid,
+                            "Using cached ZoneIndex"
+                        );
+                        return index.find_candidate_zones(event_type, context_id, segment_id);
+                    }
+                }
+
                 let path = self.index_path(segment_id, uid);
                 ZoneIndex::load_from_path(&path)
                     .map(|index| index.find_candidate_zones(event_type, context_id, segment_id))

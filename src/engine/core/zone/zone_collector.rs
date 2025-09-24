@@ -1,4 +1,6 @@
-use crate::engine::core::{CandidateZone, ExecutionStep, LogicalOp, QueryPlan, ZoneCombiner};
+use crate::engine::core::{
+    CandidateZone, ExecutionStep, LogicalOp, QueryCaches, QueryPlan, ZoneCombiner,
+};
 use rayon::prelude::*;
 use std::thread;
 use tracing::info;
@@ -7,12 +9,17 @@ use tracing::info;
 pub struct ZoneCollector<'a> {
     plan: &'a QueryPlan,
     steps: Vec<ExecutionStep<'a>>,
+    caches: Option<&'a QueryCaches>,
 }
 
 impl<'a> ZoneCollector<'a> {
     /// Creates a new ZoneCollector for the given query plan and steps
     pub fn new(plan: &'a QueryPlan, steps: Vec<ExecutionStep<'a>>) -> Self {
-        Self { plan, steps }
+        Self {
+            plan,
+            steps,
+            caches: None,
+        }
     }
 
     /// Collects and combines zones from all execution steps in parallel
@@ -30,7 +37,7 @@ impl<'a> ZoneCollector<'a> {
                 let col = step.filter.column.clone();
 
                 info!(target: "sneldb::zone_collector", %thread_id, %col, "Step started");
-                step.get_candidate_zones();
+                step.get_candidate_zones(self.caches);
                 info!(
                     target: "sneldb::zone_collector",
                     %thread_id,
@@ -57,5 +64,10 @@ impl<'a> ZoneCollector<'a> {
         );
 
         result
+    }
+
+    pub fn with_caches(mut self, caches: Option<&'a QueryCaches>) -> Self {
+        self.caches = caches;
+        self
     }
 }
