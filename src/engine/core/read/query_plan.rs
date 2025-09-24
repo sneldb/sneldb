@@ -29,11 +29,13 @@ impl QueryPlan {
         match &command {
             Command::Query { .. } => {
                 let filter_plans = FilterPlan::build_all(&command, registry).await;
-                info!(
-                    target: "sneldb::query_plan",
-                    filters = ?filter_plans,
-                    "Built filter plans for query"
-                );
+                if tracing::enabled!(tracing::Level::INFO) {
+                    info!(
+                        target: "sneldb::query_plan",
+                        filters = ?filter_plans,
+                        "Built filter plans for query"
+                    );
+                }
                 Some(Self {
                     command,
                     metadata: HashMap::new(),
@@ -111,11 +113,13 @@ impl QueryPlan {
 
     pub async fn build(command: &Command, registry: Arc<RwLock<SchemaRegistry>>) -> Self {
         let filter_plans = FilterPlan::build_all(command, &registry).await;
-        info!(
-            target: "sneldb::query_plan",
-            "Building inline query plan with {} filters",
-            filter_plans.len()
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::query_plan",
+                "Building inline query plan with {} filters",
+                filter_plans.len()
+            );
+        }
         Self {
             command: command.clone(),
             registry,

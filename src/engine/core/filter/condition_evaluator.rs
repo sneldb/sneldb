@@ -25,11 +25,13 @@ impl ConditionEvaluator {
         operation: super::condition::CompareOp,
         value: i64,
     ) {
-        info!(
-            target: "sneldb::evaluator",
-            "Adding numeric condition: {} {:?} {}",
-            field, operation, value
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::evaluator",
+                "Adding numeric condition: {} {:?} {}",
+                field, operation, value
+            );
+        }
         self.conditions
             .push(Box::new(NumericCondition::new(field, operation, value)));
     }
@@ -40,21 +42,25 @@ impl ConditionEvaluator {
         operation: super::condition::CompareOp,
         value: String,
     ) {
-        info!(
-            target: "sneldb::evaluator",
-            "Adding string condition: {} {:?} '{}'",
-            field, operation, value
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::evaluator",
+                "Adding string condition: {} {:?} '{}'",
+                field, operation, value
+            );
+        }
         self.conditions
             .push(Box::new(StringCondition::new(field, operation, value)));
     }
 
     pub fn add_logical_condition(&mut self, condition: LogicalCondition) {
-        info!(
-            target: "sneldb::evaluator",
-            "Adding logical condition: {:?}",
-            condition
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::evaluator",
+                "Adding logical condition: {:?}",
+                condition
+            );
+        }
         self.conditions.push(Box::new(condition));
     }
 
@@ -64,7 +70,9 @@ impl ConditionEvaluator {
 
     /// Evaluates all conditions against a single event
     pub fn evaluate_event(&self, event: &Event) -> bool {
-        info!(target: "sneldb::evaluator", "Evaluating single event");
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(target: "sneldb::evaluator", "Evaluating single event");
+        }
 
         let mut event_values = HashMap::new();
         event_values.insert("event_type".to_string(), vec![event.event_type.clone()]);
@@ -77,12 +85,14 @@ impl ConditionEvaluator {
             }
         }
 
-        info!(
-            target: "sneldb::evaluator",
-            "Event values: {:?}, Evaluating against {} condition(s)",
-            event_values,
-            self.conditions.len()
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::evaluator",
+                "Event values: {:?}, Evaluating against {} condition(s)",
+                event_values,
+                self.conditions.len()
+            );
+        }
 
         self.conditions
             .iter()
@@ -90,11 +100,13 @@ impl ConditionEvaluator {
     }
 
     pub fn evaluate_zones(&self, zones: Vec<CandidateZone>) -> Vec<Event> {
-        info!(
-            target: "sneldb::evaluator",
-            "Starting parallel condition evaluation on {} zones",
-            zones.len()
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::evaluator",
+                "Starting parallel condition evaluation on {} zones",
+                zones.len()
+            );
+        }
 
         let mut results: Vec<Event> = Vec::new();
         for zone in zones.into_iter() {
@@ -133,11 +145,13 @@ impl ConditionEvaluator {
             }
         }
 
-        info!(
-            target: "sneldb::evaluator",
-            "Parallel evaluation complete: {} total matching events",
-            results.len()
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::evaluator",
+                "Parallel evaluation complete: {} total matching events",
+                results.len()
+            );
+        }
 
         results
     }

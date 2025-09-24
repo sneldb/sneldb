@@ -26,8 +26,6 @@ impl<'a> SegmentQueryRunner<'a> {
             .hydrate()
             .await;
 
-        debug!(target: "sneldb::query::segment", "Candidate zones: {:?}", candidate_zones);
-
         let evaluator = ConditionEvaluatorBuilder::build_from_plan(self.plan);
         let events = evaluator.evaluate_zones(candidate_zones);
 
