@@ -1,3 +1,4 @@
+use crate::engine::core::filter::condition::PreparedAccessor;
 use crate::engine::core::{
     CandidateZone, Condition, Event, EventBuilder, LogicalCondition, NumericCondition,
     StringCondition,
@@ -122,17 +123,12 @@ impl ConditionEvaluator {
             }
 
             let event_count = zone.values.values().next().map(|v| v.len()).unwrap_or(0);
+            let accessor = PreparedAccessor::new(&zone.values);
             for i in 0..event_count {
-                let mut event_values = HashMap::new();
-                for (field, values) in &zone.values {
-                    if let Some(value) = values.get(i) {
-                        event_values.insert(field.clone(), vec![value.clone()]);
-                    }
-                }
                 let passes = self
                     .conditions
                     .iter()
-                    .all(|condition| condition.evaluate(&event_values));
+                    .all(|condition| condition.evaluate_at(&accessor, i));
                 if passes {
                     let mut builder = EventBuilder::new();
                     for (field, values) in &zone.values {

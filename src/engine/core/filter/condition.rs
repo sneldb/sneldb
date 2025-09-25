@@ -6,6 +6,60 @@ use std::fmt::Debug;
 /// Represents a condition that can be evaluated against zone values
 pub trait Condition: Send + Sync + Debug {
     fn evaluate(&self, values: &HashMap<String, Vec<String>>) -> bool;
+
+    /// Fast path evaluation against a zone by index without constructing
+    /// per-event HashMaps. Implementors should override this for performance.
+    fn evaluate_at(&self, _accessor: &dyn FieldAccessor, _index: usize) -> bool {
+        // Default fallback (slow path): materialize a single-value map
+        // for all available fields using the accessor. Since the accessor
+        // does not expose iteration over fields, we return false by default.
+        // All current implementors override this method.
+        false
+    }
+}
+
+/// Provides indexed access to field values for a candidate zone.
+pub trait FieldAccessor {
+    fn get_str_at(&self, field: &str, index: usize) -> Option<&str>;
+    fn get_i64_at(&self, field: &str, index: usize) -> Option<i64>;
+    fn event_count(&self) -> usize;
+}
+
+/// A concrete accessor over a zone's columnar values that lazily builds
+/// per-column numeric caches to avoid repeated string parsing.
+pub struct PreparedAccessor<'a> {
+    columns: &'a HashMap<String, Vec<String>>,
+    event_count: usize,
+}
+
+impl<'a> PreparedAccessor<'a> {
+    pub fn new(columns: &'a HashMap<String, Vec<String>>) -> Self {
+        let event_count = columns.values().next().map(|v| v.len()).unwrap_or(0);
+        Self {
+            columns,
+            event_count,
+        }
+    }
+}
+
+impl<'a> FieldAccessor for PreparedAccessor<'a> {
+    fn get_str_at(&self, field: &str, index: usize) -> Option<&str> {
+        self.columns
+            .get(field)
+            .and_then(|col| col.get(index))
+            .map(|s| s.as_str())
+    }
+
+    fn get_i64_at(&self, field: &str, index: usize) -> Option<i64> {
+        self.columns
+            .get(field)
+            .and_then(|col| col.get(index))
+            .and_then(|s| s.parse::<i64>().ok())
+    }
+
+    fn event_count(&self) -> usize {
+        self.event_count
+    }
 }
 
 /// Numeric comparison condition
@@ -48,6 +102,21 @@ impl Condition for NumericCondition {
             false
         }
     }
+
+    fn evaluate_at(&self, accessor: &dyn FieldAccessor, index: usize) -> bool {
+        if let Some(num) = accessor.get_i64_at(&self.field, index) {
+            match self.operation {
+                CompareOp::Gt => num > self.value,
+                CompareOp::Gte => num >= self.value,
+                CompareOp::Lt => num < self.value,
+                CompareOp::Lte => num <= self.value,
+                CompareOp::Eq => num == self.value,
+                CompareOp::Neq => num != self.value,
+            }
+        } else {
+            false
+        }
+    }
 }
 
 /// String comparison condition
@@ -80,6 +149,18 @@ impl Condition for StringCondition {
             false
         }
     }
+
+    fn evaluate_at(&self, accessor: &dyn FieldAccessor, index: usize) -> bool {
+        if let Some(val) = accessor.get_str_at(&self.field, index) {
+            match self.operation {
+                CompareOp::Eq => val == self.value,
+                CompareOp::Neq => val != self.value,
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
 }
 
 /// Logical combination of conditions
@@ -104,6 +185,20 @@ impl Condition for LogicalCondition {
             LogicalOp::And => self.conditions.iter().all(|c| c.evaluate(values)),
             LogicalOp::Or => self.conditions.iter().any(|c| c.evaluate(values)),
             LogicalOp::Not => !self.conditions[0].evaluate(values),
+        }
+    }
+
+    fn evaluate_at(&self, accessor: &dyn FieldAccessor, index: usize) -> bool {
+        match self.operation {
+            LogicalOp::And => self
+                .conditions
+                .iter()
+                .all(|c| c.evaluate_at(accessor, index)),
+            LogicalOp::Or => self
+                .conditions
+                .iter()
+                .any(|c| c.evaluate_at(accessor, index)),
+            LogicalOp::Not => !self.conditions[0].evaluate_at(accessor, index),
         }
     }
 }
