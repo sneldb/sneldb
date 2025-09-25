@@ -1,12 +1,13 @@
 use crate::command::types::Command;
 use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
+use crate::engine::core::read::cache::global_zone_index_cache::GlobalZoneIndexCache;
 use crate::engine::core::{Event, MemTable, QueryCaches, QueryExecution, QueryPlan};
 use crate::engine::errors::QueryExecutionError;
 use crate::engine::schema::registry::SchemaRegistry;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 /// Executes a query by scanning memtables and on-disk segments.
 pub async fn scan(
@@ -56,5 +57,7 @@ pub async fn scan(
         "Query execution completed"
     );
 
+    // let s = GlobalZoneIndexCache::instance().stats();
+    // warn!(target: "engine::query::scan", hits=%s.hits, misses=%s.misses, reloads=%s.reloads, evictions=%s.evictions, "Cache totals");
     Ok(results)
 }

@@ -8,6 +8,7 @@ pub struct Settings {
     pub logging: LoggingConfig,
     pub schema: SchemaConfig,
     pub playground: PlaygroundConfig,
+    pub query: Option<QueryConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -44,6 +45,11 @@ impl EngineConfig {
     pub fn fill_factor(&self) -> usize {
         (self.flush_threshold + self.event_per_zone - 1) / self.event_per_zone
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct QueryConfig {
+    pub zone_index_cache_max_entries: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
