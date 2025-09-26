@@ -16,18 +16,26 @@ pub struct QueryCaches {
     zone_index_hits: AtomicU64,
     zone_index_misses: AtomicU64,
     zone_index_reloads: AtomicU64,
+    // Per-query memoization to avoid repeated global cache hits/validation in one query
+    zone_index_by_key: Mutex<HashMap<(String, String), Arc<ZoneIndex>>>,
     column_handle_by_key: Mutex<HashMap<(String, String, String), Arc<ColumnHandle>>>,
 }
 
 impl QueryCaches {
     pub fn new(base_dir: PathBuf) -> Self {
-        let shard_id = parse_shard_id(&base_dir);
+        let abs_base_dir = if base_dir.is_absolute() {
+            base_dir
+        } else {
+            std::fs::canonicalize(&base_dir).unwrap_or(base_dir)
+        };
+        let shard_id = parse_shard_id(&abs_base_dir);
         Self {
-            base_dir,
+            base_dir: abs_base_dir,
             shard_id,
             zone_index_hits: AtomicU64::new(0),
             zone_index_misses: AtomicU64::new(0),
             zone_index_reloads: AtomicU64::new(0),
+            zone_index_by_key: Mutex::new(HashMap::new()),
             column_handle_by_key: Mutex::new(HashMap::new()),
         }
     }
@@ -42,6 +50,22 @@ impl QueryCaches {
         segment_id: &str,
         uid: &str,
     ) -> Result<Arc<ZoneIndex>, std::io::Error> {
+        let key = (segment_id.to_string(), uid.to_string());
+
+        // Fast path: per-query memoization
+        if let Some(v) = self
+            .zone_index_by_key
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(&key)
+            .cloned()
+        {
+            // Count as a per-query hit
+            self.zone_index_hits.fetch_add(1, Ordering::Relaxed);
+            return Ok(v);
+        }
+
+        // Fallback to global cache
         let (arc, outcome) = GlobalZoneIndexCache::instance()
             .get_or_load(&self.base_dir, segment_id, uid, self.shard_id)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
@@ -57,6 +81,14 @@ impl QueryCaches {
                 self.zone_index_reloads.fetch_add(1, Ordering::Relaxed);
             }
         }
+
+        // Memoize for subsequent lookups within this query
+        let mut map = self
+            .zone_index_by_key
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        map.entry(key).or_insert_with(|| Arc::clone(&arc));
+
         Ok(arc)
     }
 

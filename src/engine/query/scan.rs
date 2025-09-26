@@ -7,7 +7,7 @@ use crate::engine::schema::registry::SchemaRegistry;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 /// Executes a query by scanning memtables and on-disk segments.
 pub async fn scan(
@@ -57,7 +57,10 @@ pub async fn scan(
         "Query execution completed"
     );
 
-    // let s = GlobalZoneIndexCache::instance().stats();
-    // warn!(target: "engine::query::scan", hits=%s.hits, misses=%s.misses, reloads=%s.reloads, evictions=%s.evictions, "Cache totals");
+    if tracing::enabled!(tracing::Level::DEBUG) {
+        let s = GlobalZoneIndexCache::instance().stats();
+        debug!(target: "engine::query::scan", hits=%s.hits, misses=%s.misses, reloads=%s.reloads, evictions=%s.evictions, "Cache totals");
+    }
+
     Ok(results)
 }

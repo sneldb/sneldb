@@ -1,7 +1,7 @@
 use std::fs;
 use std::io;
 use std::num::NonZeroUsize;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 // no global UNIX_EPOCH import; only used under non-unix cfg inside function
@@ -86,21 +86,18 @@ impl GlobalZoneIndexCache {
         shard_id: Option<usize>,
     ) -> Result<(Arc<ZoneIndex>, CacheOutcome), io::Error> {
         let index_path = base_dir.join(segment_id).join(format!("{}.idx", uid));
-        let abs_path = canonicalize_or_identity(&index_path);
+        let abs_path = index_path.clone();
         let key = ZoneIndexCacheKey {
             path: abs_path.clone(),
         };
 
-        // Try hit with validation
+        // Try hit: trust cache; skip fs validation
         if let Ok(mut guard) = self.inner.lock() {
             if let Some(entry_arc) = guard.get(&key) {
-                let (cur_ino, cur_mtime, cur_size) = file_identity(&abs_path)?;
                 let entry = entry_arc.read().unwrap();
-                if entry.ino == cur_ino && entry.mtime == cur_mtime && entry.size == cur_size {
-                    let zi = entry.zone_index.clone();
-                    self.hits.fetch_add(1, Ordering::Relaxed);
-                    return Ok((zi, CacheOutcome::Hit));
-                }
+                let zi = entry.zone_index.clone();
+                self.hits.fetch_add(1, Ordering::Relaxed);
+                return Ok((zi, CacheOutcome::Hit));
             }
         }
 
@@ -116,26 +113,37 @@ impl GlobalZoneIndexCache {
         // Re-check under singleflight guard
         if let Ok(mut guard) = self.inner.lock() {
             if let Some(entry_arc) = guard.get(&key) {
-                let (cur_ino, cur_mtime, cur_size) = file_identity(&abs_path)?;
                 let entry = entry_arc.read().unwrap();
-                if entry.ino == cur_ino && entry.mtime == cur_mtime && entry.size == cur_size {
-                    let zi = entry.zone_index.clone();
-                    self.hits.fetch_add(1, Ordering::Relaxed);
-                    // Clean inflight entry before return
-                    let mut map = self.inflight.lock().unwrap();
-                    map.remove(&key);
-                    return Ok((zi, CacheOutcome::Hit));
-                }
+                let zi = entry.zone_index.clone();
+                self.hits.fetch_add(1, Ordering::Relaxed);
+                let mut map = self.inflight.lock().unwrap();
+                map.remove(&key);
+                return Ok((zi, CacheOutcome::Hit));
             }
         }
 
         // Load outside inner cache lock
-        let zi = ZoneIndex::load_from_path(&abs_path)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        let zi = match ZoneIndex::load_from_path(&abs_path) {
+            Ok(z) => z,
+            Err(e) => {
+                // Ensure inflight entry is cleared on error
+                let mut map = self.inflight.lock().unwrap();
+                map.remove(&key);
+                return Err(io::Error::new(io::ErrorKind::Other, e));
+            }
+        };
         let zone_arc = Arc::new(zi);
 
-        // Snapshot
-        let (ino, mtime, size) = file_identity(&abs_path)?;
+        // Snapshot identity (kept for introspection)
+        let (ino, mtime, size) = match file_identity(&abs_path) {
+            Ok(t) => t,
+            Err(e) => {
+                // Ensure inflight entry is cleared on error
+                let mut map = self.inflight.lock().unwrap();
+                map.remove(&key);
+                return Err(e);
+            }
+        };
 
         let entry = ZoneIndexEntry::new(
             Arc::clone(&zone_arc),
@@ -179,13 +187,6 @@ impl GlobalZoneIndexCache {
 
 pub static GLOBAL_ZONE_INDEX_CACHE: Lazy<GlobalZoneIndexCache> =
     Lazy::new(|| GlobalZoneIndexCache::new(1024));
-
-fn canonicalize_or_identity(path: &Path) -> PathBuf {
-    match fs::canonicalize(path) {
-        Ok(p) => p,
-        Err(_) => path.to_path_buf(),
-    }
-}
 
 fn file_identity(path: &Path) -> Result<(u64, i64, u64), io::Error> {
     let meta = fs::metadata(path)?;
