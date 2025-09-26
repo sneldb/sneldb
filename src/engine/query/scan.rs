@@ -1,5 +1,6 @@
 use crate::command::types::Command;
 use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
+use crate::engine::core::read::cache::global_zone_index_cache::GlobalZoneIndexCache;
 use crate::engine::core::{Event, MemTable, QueryCaches, QueryExecution, QueryPlan};
 use crate::engine::errors::QueryExecutionError;
 use crate::engine::schema::registry::SchemaRegistry;
@@ -55,6 +56,11 @@ pub async fn scan(
         count = results.len(),
         "Query execution completed"
     );
+
+    if tracing::enabled!(tracing::Level::DEBUG) {
+        let s = GlobalZoneIndexCache::instance().stats();
+        debug!(target: "engine::query::scan", hits=%s.hits, misses=%s.misses, reloads=%s.reloads, evictions=%s.evictions, "Cache totals");
+    }
 
     Ok(results)
 }

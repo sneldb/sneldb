@@ -38,3 +38,6 @@ allow_unauthenticated = true
 log_dir = "../data/logs"
 stdout_level = "debug"
 file_level = "error"
+
+[query]
+zone_index_cache_max_entries = 256
