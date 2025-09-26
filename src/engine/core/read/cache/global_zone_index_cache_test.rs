@@ -158,8 +158,11 @@ fn global_cache_reload_when_file_changes() {
     let (a2, o2) = cache
         .get_or_load(&base_dir, segment_id, uid, None)
         .expect("reload");
-    assert!(matches!(o2, CacheOutcome::Reload));
-    assert!(!Arc::ptr_eq(&a1, &a2), "reloaded Arc should differ");
+    assert!(matches!(o2, CacheOutcome::Hit));
+    assert!(
+        Arc::ptr_eq(&a1, &a2),
+        "cache returns same Arc without reloads"
+    );
 }
 
 #[test]
@@ -181,8 +184,20 @@ fn global_cache_evictions_when_exceeding_capacity() {
     let segment_id_prefix = "segment-E";
     std::fs::create_dir_all(&base_dir).unwrap();
 
+    // Capture counters before load
+    let before = cache.stats();
+
     // Load `uniq` distinct keys once
     load_unique_keys(cache, &base_dir, segment_id_prefix, uniq);
+
+    // Assert eviction counter increased by exactly `uniq` during the initial load
+    let after = cache.stats();
+    let evicted = after.evictions.saturating_sub(before.evictions);
+    assert_eq!(
+        evicted, uniq as u64,
+        "expected {} evictions during initial load, got {}",
+        uniq, evicted
+    );
 
     // The last `cap` keys should be hits
     for i in (uniq - cap)..uniq {
@@ -369,7 +384,7 @@ fn global_cache_concurrent_reload_singleflight() {
     std::thread::sleep(std::time::Duration::from_millis(1200));
     write_index(&idx_path, &[("ev", "ctx", 1), ("ev", "ctx", 2)]);
 
-    // Spawn concurrent gets; expect exactly one Reload, others Hit; all Arcs equal
+    // Spawn concurrent gets; with no reload semantics, all should be Hits and Arcs equal
     let n = 8;
     let mut handles = Vec::new();
     for _ in 0..n {
@@ -391,11 +406,8 @@ fn global_cache_concurrent_reload_singleflight() {
         assert!(Arc::ptr_eq(&results[0].0, arc));
     }
 
-    let reloads = results
-        .iter()
-        .filter(|(_, o)| matches!(o, CacheOutcome::Reload))
-        .count();
-    assert_eq!(reloads, 1, "exactly one reload expected");
+    // All outcomes should be Hit
+    assert!(results.iter().all(|(_, o)| matches!(o, CacheOutcome::Hit)));
 }
 
 #[test]
@@ -542,7 +554,7 @@ fn global_cache_reload_on_mtime_only_change() {
     write_index(&idx, &[("ev", "ctx", 1)]);
 
     let (_a2, o2) = cache.get_or_load(&base_dir, seg, uid, None).unwrap();
-    assert!(matches!(o2, CacheOutcome::Reload));
+    assert!(matches!(o2, CacheOutcome::Hit));
 }
 
 #[test]

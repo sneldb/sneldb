@@ -65,16 +65,14 @@ fn zone_index_cache_per_query_counters_miss_hit_reload() {
 
     let a3 = caches.get_or_load_zone_index(segment_id, uid).unwrap();
 
-    // Arc should differ after rewrite (either Reload or Miss if evicted globally)
-    assert!(!Arc::ptr_eq(&a2, &a3));
+    // With no reload semantics in global cache, per-query memoization should return same Arc and count as Hit
+    assert!(Arc::ptr_eq(&a2, &a3));
 
-    // Summary should reflect either a reload or an extra miss depending on global LRU interference
     let summary = caches.zone_index_summary_line();
-    let ok_reload_path =
-        summary.contains("hits=1") && summary.contains("misses=1") && summary.contains("reloads=1");
-    let ok_evicted_path =
-        summary.contains("hits=1") && summary.contains("misses=2") && summary.contains("reloads=0");
-    assert!(ok_reload_path || ok_evicted_path, "summary: {}", summary);
+    // Expect 2 hits (second and third call) and 1 miss (first call), 0 reloads
+    assert!(summary.contains("hits=2"), "summary: {}", summary);
+    assert!(summary.contains("misses=1"), "summary: {}", summary);
+    assert!(summary.contains("reloads=0"), "summary: {}", summary);
 }
 
 #[test]
