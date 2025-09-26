@@ -55,6 +55,13 @@ impl GlobalZoneIndexCache {
         &GLOBAL_ZONE_INDEX_CACHE
     }
 
+    /// Resizes the LRU capacity.
+    ///
+    /// Semantics:
+    /// - Increasing capacity preserves all current entries and their recency order.
+    /// - Decreasing capacity drops the least-recently-used entries until the size fits.
+    /// - Recency for remaining entries is preserved, so the most recently used items survive.
+    /// - Counters and inflight state are unaffected by resizing.
     pub fn resize(&self, new_capacity: usize) {
         if let Ok(mut guard) = self.inner.lock() {
             let nz = NonZeroUsize::new(new_capacity.max(1)).unwrap();
@@ -170,15 +177,8 @@ impl GlobalZoneIndexCache {
     }
 }
 
-pub static GLOBAL_ZONE_INDEX_CACHE: Lazy<GlobalZoneIndexCache> = Lazy::new(|| {
-    let default_cap = 1024usize;
-    let cap = crate::shared::config::CONFIG
-        .query
-        .as_ref()
-        .and_then(|q| q.zone_index_cache_max_entries)
-        .unwrap_or(default_cap);
-    GlobalZoneIndexCache::new(cap)
-});
+pub static GLOBAL_ZONE_INDEX_CACHE: Lazy<GlobalZoneIndexCache> =
+    Lazy::new(|| GlobalZoneIndexCache::new(1024));
 
 fn canonicalize_or_identity(path: &Path) -> PathBuf {
     match fs::canonicalize(path) {
