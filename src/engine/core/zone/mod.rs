@@ -13,6 +13,8 @@ pub mod zone_meta;
 pub mod zone_plan;
 pub mod zone_planner;
 pub mod zone_row;
+pub mod zone_step_planner;
+pub mod zone_step_runner;
 pub mod zone_value_loader;
 pub mod zone_writer;
 
@@ -44,5 +46,9 @@ mod zone_meta_tests;
 mod zone_plan_tests;
 #[cfg(test)]
 mod zone_planner_tests;
+#[cfg(test)]
+mod zone_step_planner_tests;
+#[cfg(test)]
+mod zone_step_runner_tests;
 #[cfg(test)]
 mod zone_writer_test;

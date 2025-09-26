@@ -1,9 +1,11 @@
 use crate::engine::core::{
     CandidateZone, ExecutionStep, LogicalOp, QueryCaches, QueryPlan, ZoneCombiner,
 };
-use std::thread;
-use std::time::Instant;
-use tracing::info;
+
+use tracing::{info, warn};
+
+use super::zone_step_planner::ZoneStepPlanner;
+use super::zone_step_runner::ZoneStepRunner;
 
 /// Handles collection and combination of zones from execution steps
 pub struct ZoneCollector<'a> {
@@ -35,32 +37,13 @@ impl<'a> ZoneCollector<'a> {
             info!(target: "sneldb::zone_collector", columns = ?columns, "Columns to process");
         }
 
-        let mut all_zones: Vec<Vec<CandidateZone>> = Vec::with_capacity(self.steps.len());
-        for step in self.steps.iter_mut() {
-            if tracing::enabled!(tracing::Level::INFO) {
-                info!(
-                    target: "sneldb::zone_collector",
-                    thread_id = ?thread::current().id(),
-                    column = %step.filter.column,
-                    "Step started"
-                );
-            }
-            let t0 = Instant::now();
-            step.get_candidate_zones(self.caches);
-            let elapsed_ms = t0.elapsed().as_millis();
-            if tracing::enabled!(tracing::Level::INFO) {
-                info!(
-                    target: "sneldb::zone_collector",
-                    thread_id = ?thread::current().id(),
-                    column = %step.filter.column,
-                    zone_count = step.candidate_zones.len(),
-                    elapsed_ms,
-                    "Step finished"
-                );
-            }
+        // Plan order/pruning separately
+        let planner = ZoneStepPlanner::new(self.plan);
+        let order = planner.plan(&self.steps);
 
-            all_zones.push(std::mem::take(&mut step.candidate_zones));
-        }
+        // Execute steps in planned order using the runner
+        let runner = ZoneStepRunner::new(self.plan).with_caches(self.caches);
+        let (all_zones, _pruned) = runner.run(&mut self.steps, &order);
 
         info!(target: "sneldb::zone_collector", "All steps completed");
 
