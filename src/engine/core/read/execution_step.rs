@@ -19,20 +19,23 @@ impl<'a> ExecutionStep<'a> {
         }
     }
 
-    /// Runs zone finding logic for this step and stores the results
-    pub fn get_candidate_zones(&mut self, _caches: Option<&QueryCaches>) {
-        let segment_ids = self.plan.segment_ids.read().unwrap();
+    /// Runs zone finding logic for this step restricted to the provided segment list
+    pub fn get_candidate_zones_with_segments(
+        &mut self,
+        _caches: Option<&QueryCaches>,
+        segments: &[String],
+    ) {
         debug!(
             target: "sneldb::query::step",
             column = %self.filter.column,
-            segments = segment_ids.len(),
-            "Finding candidate zones"
+            segments = segments.len(),
+            "Finding candidate zones (pruned segments)"
         );
 
         let finder = ZoneFinder::new(
             &self.filter,
             self.plan,
-            &segment_ids,
+            segments,
             &self.plan.segment_base_dir,
         )
         .with_caches(_caches);
@@ -43,7 +46,7 @@ impl<'a> ExecutionStep<'a> {
             target: "sneldb::query::step",
             column = %self.filter.column,
             zones = self.candidate_zones.len(),
-            "Found candidate zones"
+            "Found candidate zones (pruned segments)"
         );
     }
 }
