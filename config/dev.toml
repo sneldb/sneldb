@@ -38,3 +38,7 @@ allow_unauthenticated = true
 log_dir = "../data/logs"
 stdout_level = "debug"
 file_level = "error"
+
+[query]
+# Default capacity for process-wide ZoneIndex LRU cache
+zone_index_cache_max_entries = 1024

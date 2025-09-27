@@ -18,7 +18,7 @@ pub struct ZoneBlockEntry {
     pub in_block_offsets: Vec<u32>,
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct CompressedColumnIndex {
     pub entries: HashMap<u32, ZoneBlockEntry>,
 }

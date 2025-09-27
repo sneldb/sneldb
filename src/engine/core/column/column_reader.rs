@@ -1,5 +1,6 @@
 // Compressed-only column reader
 use crate::engine::core::column::compression::{CompressedColumnIndex, CompressionCodec, Lz4Codec};
+use crate::engine::core::{ColumnHandle, QueryCaches};
 use crate::engine::errors::{ColumnLoadError, QueryExecutionError};
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 use memmap2::MmapOptions;
@@ -11,6 +12,33 @@ use tracing::info;
 pub struct ColumnReader;
 
 impl ColumnReader {
+    pub fn load_for_zone_with_cache(
+        segment_dir: &Path,
+        segment_id: &str,
+        uid: &str,
+        field: &str,
+        zone_id: u32,
+
+        caches: Option<&QueryCaches>,
+    ) -> Result<Vec<String>, QueryExecutionError> {
+        if let Some(caches_ref) = caches {
+            if let Ok(handle) = caches_ref.get_or_load_column_handle(segment_id, uid, field) {
+                info!(
+                    target: "cache::column_handle::hit",
+                    %segment_id,
+                    %uid,
+                    %field,
+                    zone_id,
+                    "Using cached ColumnHandle"
+                );
+                return Self::load_from_handle(&handle, zone_id);
+            }
+        }
+
+        // Fallback to disk load
+        Self::load_for_zone(segment_dir, segment_id, uid, field, zone_id)
+    }
+
     pub fn load_for_zone(
         segment_dir: &Path,
         segment_id: &str,
@@ -28,6 +56,48 @@ impl ColumnReader {
         );
         // Compressed-only
         Self::load_zone_compressed(segment_dir, segment_id, uid, field, zone_id)
+    }
+
+    fn load_from_handle(
+        handle: &ColumnHandle,
+        zone_id: u32,
+    ) -> Result<Vec<String>, QueryExecutionError> {
+        let Some(entry) = handle.zfc_index.entries.get(&zone_id) else {
+            return Ok(Vec::new());
+        };
+
+        let start = entry.block_start as usize;
+        let end = start + entry.comp_len as usize;
+        if end > handle.col_mmap.len() {
+            return Err(QueryExecutionError::ColRead(
+                "Compressed block out of bounds".into(),
+            ));
+        }
+        let compressed = &handle.col_mmap[start..end];
+
+        let codec = Lz4Codec;
+        let decompressed =
+            CompressionCodec::decompress(&codec, compressed, entry.uncomp_len as usize)
+                .map_err(|e| QueryExecutionError::ColRead(format!("decompress: {}", e)))?;
+
+        let mut out = Vec::with_capacity(entry.num_rows as usize);
+        for &off in &entry.in_block_offsets {
+            let base = off as usize;
+            if base + 2 > decompressed.len() {
+                return Err(QueryExecutionError::ColRead("Offset out of bounds".into()));
+            }
+            let len = u16::from_le_bytes(decompressed[base..base + 2].try_into().unwrap()) as usize;
+            let end = base + 2 + len;
+            if end > decompressed.len() {
+                return Err(QueryExecutionError::ColRead(
+                    "Value length out of bounds".into(),
+                ));
+            }
+            let val = String::from_utf8(decompressed[base + 2..end].to_vec())
+                .map_err(|e| QueryExecutionError::ColRead(format!("Invalid UTF-8: {}", e)))?;
+            out.push(val);
+        }
+        Ok(out)
     }
 
     fn load_zone_compressed(

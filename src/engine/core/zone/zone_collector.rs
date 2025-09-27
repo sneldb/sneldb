@@ -1,49 +1,51 @@
-use crate::engine::core::{CandidateZone, ExecutionStep, LogicalOp, QueryPlan, ZoneCombiner};
-use rayon::prelude::*;
-use std::thread;
-use tracing::info;
+use crate::engine::core::{
+    CandidateZone, ExecutionStep, LogicalOp, QueryCaches, QueryPlan, ZoneCombiner,
+};
+
+use tracing::{info, warn};
+
+use super::zone_step_planner::ZoneStepPlanner;
+use super::zone_step_runner::ZoneStepRunner;
 
 /// Handles collection and combination of zones from execution steps
 pub struct ZoneCollector<'a> {
     plan: &'a QueryPlan,
     steps: Vec<ExecutionStep<'a>>,
+    caches: Option<&'a QueryCaches>,
 }
 
 impl<'a> ZoneCollector<'a> {
     /// Creates a new ZoneCollector for the given query plan and steps
     pub fn new(plan: &'a QueryPlan, steps: Vec<ExecutionStep<'a>>) -> Self {
-        Self { plan, steps }
+        Self {
+            plan,
+            steps,
+            caches: None,
+        }
     }
 
-    /// Collects and combines zones from all execution steps in parallel
+    /// Collects and combines zones from all execution steps
     pub fn collect_zones(&mut self) -> Vec<CandidateZone> {
-        info!(target: "sneldb::zone_collector", step_count = self.steps.len(), "Starting parallel zone collection");
+        info!(target: "sneldb::zone_collector", step_count = self.steps.len(), "Starting zone collection");
 
-        let columns: Vec<String> = self.steps.iter().map(|s| s.filter.column.clone()).collect();
-        info!(target: "sneldb::zone_collector", ?columns, "Columns to process");
+        if tracing::enabled!(tracing::Level::INFO) {
+            let columns: Vec<&str> = self
+                .steps
+                .iter()
+                .map(|s| s.filter.column.as_str())
+                .collect();
+            info!(target: "sneldb::zone_collector", columns = ?columns, "Columns to process");
+        }
 
-        let all_zones: Vec<Vec<CandidateZone>> = self
-            .steps
-            .par_iter_mut()
-            .map(|step| {
-                let thread_id = format!("{:?}", thread::current().id());
-                let col = step.filter.column.clone();
+        // Plan order/pruning separately
+        let planner = ZoneStepPlanner::new(self.plan);
+        let order = planner.plan(&self.steps);
 
-                info!(target: "sneldb::zone_collector", %thread_id, %col, "Step started");
-                step.get_candidate_zones();
-                info!(
-                    target: "sneldb::zone_collector",
-                    %thread_id,
-                    %col,
-                    zone_count = step.candidate_zones.len(),
-                    "Step finished"
-                );
+        // Execute steps in planned order using the runner
+        let runner = ZoneStepRunner::new(self.plan).with_caches(self.caches);
+        let (all_zones, _pruned) = runner.run(&mut self.steps, &order);
 
-                step.candidate_zones.clone()
-            })
-            .collect();
-
-        info!(target: "sneldb::zone_collector", "All parallel steps completed");
+        info!(target: "sneldb::zone_collector", "All steps completed");
 
         let op = LogicalOp::from_expr(self.plan.where_clause());
         info!(target: "sneldb::zone_collector", ?op, "Combining zones with logical operation");
@@ -57,5 +59,10 @@ impl<'a> ZoneCollector<'a> {
         );
 
         result
+    }
+
+    pub fn with_caches(mut self, caches: Option<&'a QueryCaches>) -> Self {
+        self.caches = caches;
+        self
     }
 }

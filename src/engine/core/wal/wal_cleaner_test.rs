@@ -1,12 +1,13 @@
 use crate::engine::core::WalCleaner;
-use crate::shared::config::CONFIG;
 use std::fs::{self, File};
 use std::io::Write;
-use std::path::PathBuf;
+use tempfile::TempDir;
 
 #[test]
 fn test_wal_cleaner_removes_old_logs() {
-    let wal_dir = PathBuf::from(&CONFIG.wal.dir);
+    // Create a temporary directory for testing
+    let temp_dir = TempDir::new().expect("Failed to create temporary directory");
+    let wal_dir = temp_dir.path().to_path_buf();
     let shard_id = 7;
     let shard_dir = wal_dir.join(format!("shard-{}", shard_id));
 
@@ -33,7 +34,7 @@ fn test_wal_cleaner_removes_old_logs() {
     assert_eq!(existing[0], "wal-00000.log");
 
     // Run cleaner to keep only log ID >= 3
-    let cleaner = WalCleaner::new(shard_id);
+    let cleaner = WalCleaner::with_wal_dir(shard_id, shard_dir.clone());
     cleaner.cleanup_up_to(3);
 
     // Check remaining files
@@ -45,6 +46,5 @@ fn test_wal_cleaner_removes_old_logs() {
 
     assert_eq!(remaining, vec!["wal-00003.log", "wal-00004.log"]);
 
-    // Clean up
-    fs::remove_dir_all(&shard_dir).unwrap();
+    // Temporary directory will be automatically cleaned up when temp_dir goes out of scope
 }

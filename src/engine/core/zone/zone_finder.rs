@@ -4,7 +4,7 @@ use crate::engine::core::zone::enum_bitmap_index::EnumBitmapIndex;
 use crate::engine::core::zone::enum_zone_pruner::EnumZonePruner;
 use crate::engine::core::zone::zone_xor_index::ZoneXorFilterIndex;
 use crate::engine::core::{
-    CandidateZone, FieldXorFilter, FilterPlan, QueryPlan, RangeQueryHandler, ZoneIndex,
+    CandidateZone, FieldXorFilter, FilterPlan, QueryCaches, QueryPlan, RangeQueryHandler, ZoneIndex,
 };
 use std::path::PathBuf;
 use tracing::{debug, error, info, warn};
@@ -14,6 +14,7 @@ pub struct ZoneFinder<'a> {
     query_plan: &'a QueryPlan,
     segment_ids: &'a [String],
     base_dir: &'a PathBuf,
+    caches: Option<&'a QueryCaches>,
 }
 
 impl<'a> ZoneFinder<'a> {
@@ -28,23 +29,35 @@ impl<'a> ZoneFinder<'a> {
             query_plan,
             segment_ids,
             base_dir,
+            caches: None,
         }
     }
 
+    pub fn with_caches(mut self, caches: Option<&'a QueryCaches>) -> Self {
+        self.caches = caches;
+        self
+    }
+
     pub fn find(&self) -> Vec<CandidateZone> {
-        debug!(target: "sneldb::query", "Finding candidate zones for filter: {:?}", self.plan);
-        self.segment_ids
-            .iter()
-            .flat_map(|segment_id| {
-                let zones = match self.plan.column.as_str() {
-                    "event_type" => self.find_event_type_zones(segment_id),
-                    "context_id" => self.find_context_id_zones(segment_id),
-                    _ => self.find_field_zones(segment_id),
-                };
-                debug!(target: "sneldb::query", "Found {} zones in segment {} for column {}", zones.len(), segment_id, self.plan.column);
-                zones
-            })
-            .collect()
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(target: "sneldb::query", "Finding candidate zones for filter: {:?}", self.plan);
+        }
+        let mut out: Vec<CandidateZone> = Vec::new();
+        out.reserve(self.segment_ids.len());
+        for segment_id in self.segment_ids.iter() {
+            let t0 = std::time::Instant::now();
+            let zones = match self.plan.column.as_str() {
+                "event_type" => self.find_event_type_zones(segment_id),
+                "context_id" => self.find_context_id_zones(segment_id),
+                _ => self.find_field_zones(segment_id),
+            };
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                let elapsed_ms = t0.elapsed().as_millis();
+                debug!(target: "sneldb::query", segment = %segment_id, column = %self.plan.column, zones = zones.len(), elapsed_ms, "Segment zones computed");
+            }
+            out.extend(zones);
+        }
+        out
     }
 
     fn find_event_type_zones(&self, segment_id: &str) -> Vec<CandidateZone> {
@@ -68,6 +81,19 @@ impl<'a> ZoneFinder<'a> {
             .query_plan
             .context_id_plan()
             .and_then(|p| p.value.as_ref().and_then(|v| v.as_str()));
+
+        // Try cache first; fall back to disk
+        if let Some(caches) = self.caches {
+            if let Ok(index) = caches.get_or_load_zone_index(segment_id, uid) {
+                info!(
+                    target: "cache::zone_index::hit",
+                    %segment_id,
+                    %uid,
+                    "Using cached ZoneIndex"
+                );
+                return index.find_candidate_zones(event_type, context_id, segment_id);
+            }
+        }
 
         let path = self.index_path(segment_id, uid);
         ZoneIndex::load_from_path(&path)
@@ -96,6 +122,19 @@ impl<'a> ZoneFinder<'a> {
 
         match event_type {
             Some(event_type) => {
+                // Try cache first; fall back to disk
+                if let Some(caches) = self.caches {
+                    if let Ok(index) = caches.get_or_load_zone_index(segment_id, uid) {
+                        info!(
+                            target: "cache::zone_index::hit",
+                            %segment_id,
+                            %uid,
+                            "Using cached ZoneIndex"
+                        );
+                        return index.find_candidate_zones(event_type, context_id, segment_id);
+                    }
+                }
+
                 let path = self.index_path(segment_id, uid);
                 ZoneIndex::load_from_path(&path)
                     .map(|index| index.find_candidate_zones(event_type, context_id, segment_id))
@@ -146,7 +185,9 @@ impl<'a> ZoneFinder<'a> {
                             CompareOp::Lte => zsf.zones_overlapping_le(bytes, true, segment_id),
                             _ => unreachable!(),
                         };
-                        info!(target: "sneldb::query", "Zone Surf filter found for value {:?} in segment {} zones: {:?}", value, segment_id, zones);
+                        if tracing::enabled!(tracing::Level::INFO) {
+                            info!(target: "sneldb::query", "Zone Surf filter found for value {:?} in segment {} zones: {:?}", value, segment_id, zones);
+                        }
                         return zones;
                     }
                 }
@@ -235,15 +276,21 @@ impl<'a> ZoneFinder<'a> {
                         }
                     }
                 }
-                CompareOp::Neq => {
-                    debug!(target: "sneldb::query", "XOR NEQ -> cannot prune; include all zones for {:?}", value);
+            }
+
+                if filter.contains_value(value) {
+                    if tracing::enabled!(tracing::Level::DEBUG) {
+                        debug!(target: "sneldb::query", "XOR filter positive hit for value {:?}", value);
+                    }
                     return CandidateZone::create_all_zones_for_segment(segment_id);
                 }
                 _ => {}
             }
         }
 
-        debug!(target: "sneldb::query", "XOR default miss for value {:?}", value);
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(target: "sneldb::query", "XOR filter miss for value {:?}", value);
+        }
         vec![]
     }
 

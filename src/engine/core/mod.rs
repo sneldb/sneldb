@@ -32,6 +32,7 @@ pub use read::execution_step::ExecutionStep;
 pub use read::memtable_query::MemTableQuery;
 pub use read::memtable_query_runner::MemTableQueryRunner;
 pub use read::query_execution::QueryExecution;
+pub use read::cache::{QueryCaches, ZoneIndexProvider, ColumnProvider, ColumnHandle};
 pub use read::query_plan::QueryPlan;
 pub use read::range_query_handler::RangeQueryHandler;
 pub use read::segment_query_runner::SegmentQueryRunner;

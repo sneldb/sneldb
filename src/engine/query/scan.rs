@@ -1,6 +1,7 @@
 use crate::command::types::Command;
-use crate::engine::core::{Event, MemTable, QueryExecution, QueryPlan};
 use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
+use crate::engine::core::read::cache::global_zone_index_cache::GlobalZoneIndexCache;
+use crate::engine::core::{Event, MemTable, QueryCaches, QueryExecution, QueryPlan};
 use crate::engine::errors::QueryExecutionError;
 use crate::engine::schema::registry::SchemaRegistry;
 use std::path::Path;
@@ -42,9 +43,12 @@ pub async fn scan(
     let passives = passive_buffers.non_empty().await;
     let passive_refs: Vec<&Arc<Mutex<MemTable>>> = passives.iter().collect();
 
+    let caches = QueryCaches::new(segment_base_dir.to_path_buf());
+
     let mut execution = QueryExecution::new(&plan)
         .with_memtable(memtable)
-        .with_passive_memtables(passive_refs);
+        .with_passive_memtables(passive_refs)
+        .with_caches(&caches);
 
     let results = execution.run().await?;
     info!(
@@ -52,6 +56,11 @@ pub async fn scan(
         count = results.len(),
         "Query execution completed"
     );
+
+    if tracing::enabled!(tracing::Level::DEBUG) {
+        let s = GlobalZoneIndexCache::instance().stats();
+        debug!(target: "engine::query::scan", hits=%s.hits, misses=%s.misses, reloads=%s.reloads, evictions=%s.evictions, "Cache totals");
+    }
 
     Ok(results)
 }

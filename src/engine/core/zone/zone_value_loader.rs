@@ -1,21 +1,28 @@
-use crate::engine::core::CandidateZone;
 use crate::engine::core::ColumnLoader;
+use crate::engine::core::{CandidateZone, QueryCaches};
 use std::path::PathBuf;
 use tracing::{debug, info};
 
 /// Handles loading values for zones
-pub struct ZoneValueLoader {
+pub struct ZoneValueLoader<'a> {
     segment_base_dir: PathBuf,
     uid: String,
+    caches: Option<&'a QueryCaches>,
 }
 
-impl ZoneValueLoader {
+impl<'a> ZoneValueLoader<'a> {
     /// Creates a new ZoneValueLoader for the given segment and event type
     pub fn new(segment_base_dir: PathBuf, uid: String) -> Self {
         Self {
             segment_base_dir,
             uid,
+            caches: None,
         }
+    }
+
+    pub fn with_caches(mut self, caches: Option<&'a QueryCaches>) -> Self {
+        self.caches = caches;
+        self
     }
 
     /// Loads values for all zones
@@ -28,7 +35,8 @@ impl ZoneValueLoader {
             "Loading values for candidate zones"
         );
 
-        let loader = ColumnLoader::new(self.segment_base_dir.clone(), self.uid.clone());
+        let loader = ColumnLoader::new(self.segment_base_dir.clone(), self.uid.clone())
+            .with_caches(self.caches);
 
         for zone in zones {
             debug!(

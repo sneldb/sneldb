@@ -1,6 +1,8 @@
 pub mod candidate_zone_factory;
+pub mod column_factory;
 pub mod command_factory;
 pub mod compare_op_factory;
+pub mod compressed_column_index_factory;
 pub mod condition_factory;
 pub mod enum_bitmap_index_factory;
 pub mod event_factory;
@@ -29,8 +31,10 @@ pub mod zone_value_loader_factory;
 pub mod zone_xor_filter_index_factory;
 
 pub use candidate_zone_factory::CandidateZoneFactory;
+pub use column_factory::ColumnFactory;
 pub use command_factory::CommandFactory;
 pub use compare_op_factory::CompareOpFactory;
+pub use compressed_column_index_factory::CompressedColumnIndexFactory;
 pub use condition_factory::ConditionFactory;
 pub use enum_bitmap_index_factory::EnumBitmapIndexFactory;
 pub use event_factory::EventFactory;
