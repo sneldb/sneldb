@@ -17,6 +17,7 @@ pub mod zone_step_planner;
 pub mod zone_step_runner;
 pub mod zone_value_loader;
 pub mod zone_writer;
+pub mod zone_xor_index;
 
 #[cfg(test)]
 mod candidate_zone_test;
@@ -52,3 +53,5 @@ mod zone_step_planner_tests;
 mod zone_step_runner_tests;
 #[cfg(test)]
 mod zone_writer_test;
+#[cfg(test)]
+mod zone_xor_index_test;
