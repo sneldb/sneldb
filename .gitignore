@@ -12,3 +12,4 @@
 /.cursor/*
 /docs/book
 .DS_Store
+flamegraph.svg

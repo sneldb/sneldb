@@ -1,6 +1,8 @@
 pub mod candidate_zone;
 pub mod enum_bitmap_index;
 pub mod enum_zone_pruner;
+pub mod selector;
+pub mod zone_artifacts;
 pub mod zone_collector;
 pub mod zone_combiner;
 pub mod zone_cursor;

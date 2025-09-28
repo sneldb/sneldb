@@ -1,5 +1,5 @@
-use crate::engine::core::ZoneIndex;
 use crate::engine::core::CandidateZone;
+use crate::engine::core::ZoneIndex;
 use std::collections::BTreeMap;
 use tempfile::tempdir;
 
@@ -41,12 +41,13 @@ fn test_zone_index_write_and_load_from_path() {
 fn test_find_candidate_zones_with_context_id() {
     let mut index = ZoneIndex::default();
     index.insert("login", "ctxA", 1);
-    index.insert("login", "ctxA", 2); // Should only pick the first (1)
+    index.insert("login", "ctxA", 2);
 
     let candidates = index.find_candidate_zones("login", Some("ctxA"), "segment-001");
-
-    assert_eq!(candidates.len(), 1);
-    assert_eq!(candidates[0], CandidateZone::new(1, "segment-001".into()));
+    let mut ids: Vec<u32> = candidates.iter().map(|c| c.zone_id).collect();
+    ids.sort_unstable();
+    assert_eq!(ids, vec![1, 2]);
+    assert!(candidates.iter().all(|c| c.segment_id == "segment-001"));
 }
 
 #[test]
@@ -54,10 +55,14 @@ fn test_find_candidate_zones_without_context_id() {
     let mut index = ZoneIndex::default();
     index.insert("signup", "ctxX", 5);
     index.insert("signup", "ctxY", 7);
+    // overlap across contexts and duplicates within the same context
+    index.insert("signup", "ctxX", 7);
+    index.insert("signup", "ctxY", 7);
 
     let mut result = index.find_candidate_zones("signup", None, "segment-002");
     result.sort_by_key(|c| c.zone_id);
 
+    // Expect unique ids only
     assert_eq!(result.len(), 2);
     assert_eq!(result[0], CandidateZone::new(5, "segment-002".into()));
     assert_eq!(result[1], CandidateZone::new(7, "segment-002".into()));
@@ -117,21 +122,30 @@ fn test_zone_index_find_candidates_after_roundtrip() {
     let mut signup_candidates = reloaded.find_candidate_zones("signup", None, "segment-01");
     signup_candidates.sort_by_key(|c| c.zone_id);
 
-    assert_eq!(signup_candidates.len(), 2);
+    assert_eq!(signup_candidates.len(), 3);
     assert_eq!(
         signup_candidates[0],
         CandidateZone::new(10, "segment-01".into())
     );
     assert_eq!(
         signup_candidates[1],
+        CandidateZone::new(20, "segment-01".into())
+    );
+    assert_eq!(
+        signup_candidates[2],
         CandidateZone::new(30, "segment-01".into())
     );
 
-    let ctx42_candidates = reloaded.find_candidate_zones("signup", Some("ctx42"), "segment-02");
-    assert_eq!(ctx42_candidates.len(), 1);
+    let mut ctx42_candidates = reloaded.find_candidate_zones("signup", Some("ctx42"), "segment-02");
+    ctx42_candidates.sort_by_key(|c| c.zone_id);
+    assert_eq!(ctx42_candidates.len(), 2);
     assert_eq!(
         ctx42_candidates[0],
         CandidateZone::new(10, "segment-02".into())
+    );
+    assert_eq!(
+        ctx42_candidates[1],
+        CandidateZone::new(20, "segment-02".into())
     );
 
     let login_candidates = reloaded.find_candidate_zones("login", Some("ctxA"), "segment-03");
