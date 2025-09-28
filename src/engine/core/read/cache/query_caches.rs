@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use crate::engine::core::column::compression::compressed_column_index::ZoneBlockEntry;
+use crate::engine::core::read::cache::{DecompressedBlock, GlobalColumnBlockCache};
 use crate::engine::core::zone::zone_index::ZoneIndex;
 
 use super::column_handle::ColumnHandle;
@@ -19,6 +21,9 @@ pub struct QueryCaches {
     // Per-query memoization to avoid repeated global cache hits/validation in one query
     zone_index_by_key: Mutex<HashMap<(String, String), Arc<ZoneIndex>>>,
     column_handle_by_key: Mutex<HashMap<(String, String, String), Arc<ColumnHandle>>>,
+    // Per-query memoization for decompressed blocks: (segment, uid, field, zone_id)
+    decompressed_block_by_key:
+        Mutex<HashMap<(String, String, String, u32), Arc<DecompressedBlock>>>,
 }
 
 impl QueryCaches {
@@ -37,12 +42,72 @@ impl QueryCaches {
             zone_index_reloads: AtomicU64::new(0),
             zone_index_by_key: Mutex::new(HashMap::new()),
             column_handle_by_key: Mutex::new(HashMap::new()),
+            decompressed_block_by_key: Mutex::new(HashMap::new()),
         }
     }
 
     #[inline]
     fn segment_dir(&self, segment_id: &str) -> PathBuf {
         self.base_dir.join(segment_id)
+    }
+
+    /// Get or load a decompressed block for a given column zone, with per-query memoization
+    pub fn get_or_load_decompressed_block(
+        &self,
+        handle: &ColumnHandle,
+        segment_id: &str,
+        uid: &str,
+        field: &str,
+        zone_id: u32,
+        entry: &ZoneBlockEntry,
+    ) -> Result<Arc<DecompressedBlock>, std::io::Error> {
+        let key = (
+            segment_id.to_string(),
+            uid.to_string(),
+            field.to_string(),
+            zone_id,
+        );
+        if let Some(v) = self
+            .decompressed_block_by_key
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(&key)
+            .cloned()
+        {
+            return Ok(v);
+        }
+
+        let (block, _outcome) =
+            GlobalColumnBlockCache::instance().get_or_load(&handle.col_path, zone_id, || {
+                let start = entry.block_start as usize;
+                let end = start + entry.comp_len as usize;
+                if end > handle.col_mmap.len() {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Compressed block out of bounds",
+                    ));
+                }
+                let compressed = &handle.col_mmap[start..end];
+                let codec = crate::engine::core::column::compression::Lz4Codec;
+                let decompressed =
+                    crate::engine::core::column::compression::CompressionCodec::decompress(
+                        &codec,
+                        compressed,
+                        entry.uncomp_len as usize,
+                    )
+                    .map_err(|e| {
+                        std::io::Error::new(std::io::ErrorKind::Other, format!("decompress: {}", e))
+                    })?;
+                Ok(decompressed)
+            })?;
+
+        let arc = Arc::clone(&block);
+        let mut map = self
+            .decompressed_block_by_key
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        map.entry(key).or_insert_with(|| arc.clone());
+        Ok(arc)
     }
 
     pub fn get_or_load_zone_index(

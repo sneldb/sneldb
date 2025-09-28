@@ -42,3 +42,4 @@ file_level = "error"
 [query]
 # Default capacity for process-wide ZoneIndex LRU cache
 zone_index_cache_max_entries = 1024
+column_block_cache_max_bytes = 268435456
