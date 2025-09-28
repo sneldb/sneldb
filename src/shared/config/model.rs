@@ -50,6 +50,7 @@ impl EngineConfig {
 #[derive(Debug, Deserialize)]
 pub struct QueryConfig {
     pub zone_index_cache_max_entries: Option<usize>,
+    pub column_block_cache_max_bytes: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]

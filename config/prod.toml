@@ -41,3 +41,4 @@ file_level = "error"
 
 [query]
 zone_index_cache_max_entries = 8000
+column_block_cache_max_bytes = 1073741824

@@ -1,7 +1,12 @@
+use crate::engine::core::column::column_reader::ColumnReader;
+use crate::engine::core::column::compression::{CompressionCodec, Lz4Codec};
 use crate::engine::core::read::cache::QueryCaches;
+use crate::shared::storage_header::BinaryHeader;
 use crate::test_helpers::factories::column_factory::ColumnFactory;
 use crate::test_helpers::factories::zone_index_factory::ZoneIndexFactory;
+use std::fs::OpenOptions;
 use std::fs::create_dir_all;
+use std::io::{Seek, SeekFrom, Write};
 use std::sync::Arc;
 
 #[test]
@@ -182,4 +187,147 @@ fn column_handle_cache_reuses_arc() {
         .get_or_load_column_handle(segment_id, uid, field)
         .unwrap();
     assert!(Arc::ptr_eq(&h1, &h2), "expected same Arc from cache");
+}
+
+fn write_decompressed_values(values: &[&str]) -> (Vec<u8>, Vec<u32>) {
+    let mut buf = Vec::new();
+    let mut offsets = Vec::new();
+    let mut cursor: u32 = 0;
+    for v in values {
+        offsets.push(cursor);
+        let bytes = v.as_bytes();
+        let len = bytes.len() as u16;
+        buf.extend_from_slice(&len.to_le_bytes());
+        buf.extend_from_slice(bytes);
+        cursor += 2 + bytes.len() as u32;
+    }
+    (buf, offsets)
+}
+
+#[test]
+fn per_query_memo_for_decompressed_blocks_reuses_arc() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base_dir = tmp.path().to_path_buf();
+    let segment_id = "segment-arc";
+    let uid = "uid_z";
+    let field = "f";
+    let seg_dir = base_dir.join(segment_id);
+    create_dir_all(&seg_dir).unwrap();
+
+    // Build decompressed payload and offsets
+    let (decomp, offsets) = write_decompressed_values(&["a", "bb"]);
+    let codec = Lz4Codec;
+    let comp = CompressionCodec::compress(&codec, &decomp).expect("compress");
+
+    let block_start = BinaryHeader::TOTAL_LEN as u64;
+    let zone_id = 7u32;
+    // Write zfc and col header
+    let _ = ColumnFactory::new()
+        .with_segment_dir(&seg_dir)
+        .with_uid(uid)
+        .with_field(field)
+        .with_zfc_entry(
+            zone_id,
+            block_start,
+            comp.len() as u32,
+            decomp.len() as u32,
+            offsets.len() as u32,
+            offsets.clone(),
+        )
+        .write_minimal();
+
+    // Append compressed block at the specified offset
+    let col_path = seg_dir.join(format!("{}_{}.col", uid, field));
+    let mut f = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&col_path)
+        .unwrap();
+    f.seek(SeekFrom::Start(block_start)).unwrap();
+    f.write_all(&comp).unwrap();
+    f.flush().unwrap();
+
+    let caches = QueryCaches::new(base_dir.clone());
+    let handle = caches
+        .get_or_load_column_handle(segment_id, uid, field)
+        .expect("handle");
+    let entry = handle.zfc_index.entries.get(&zone_id).expect("entry");
+
+    let b1 = caches
+        .get_or_load_decompressed_block(&handle, segment_id, uid, field, zone_id, entry)
+        .expect("block1");
+    let b2 = caches
+        .get_or_load_decompressed_block(&handle, segment_id, uid, field, zone_id, entry)
+        .expect("block2");
+    assert!(
+        Arc::ptr_eq(&b1, &b2),
+        "expected same Arc from per-query memo"
+    );
+}
+
+#[test]
+fn column_reader_loads_values_using_per_query_memo() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base_dir = tmp.path().to_path_buf();
+    let segment_id = "segment-read";
+    let uid = "uid_r";
+    let field = "f";
+    let seg_dir = base_dir.join(segment_id);
+    create_dir_all(&seg_dir).unwrap();
+
+    let (decomp, offsets) = write_decompressed_values(&["hello", "z"]);
+    let codec = Lz4Codec;
+    let comp = CompressionCodec::compress(&codec, &decomp).expect("compress");
+    let block_start = BinaryHeader::TOTAL_LEN as u64;
+    let zone_id = 5u32;
+
+    let _ = ColumnFactory::new()
+        .with_segment_dir(&seg_dir)
+        .with_uid(uid)
+        .with_field(field)
+        .with_zfc_entry(
+            zone_id,
+            block_start,
+            comp.len() as u32,
+            decomp.len() as u32,
+            offsets.len() as u32,
+            offsets.clone(),
+        )
+        .write_minimal();
+
+    let col_path = seg_dir.join(format!("{}_{}.col", uid, field));
+    let mut f = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&col_path)
+        .unwrap();
+    f.seek(SeekFrom::Start(block_start)).unwrap();
+    f.write_all(&comp).unwrap();
+    f.flush().unwrap();
+
+    let caches = QueryCaches::new(base_dir.clone());
+
+    // First load
+    let vals1 = ColumnReader::load_for_zone_with_cache(
+        &base_dir,
+        segment_id,
+        uid,
+        field,
+        zone_id,
+        Some(&caches),
+    )
+    .expect("load1");
+    assert_eq!(vals1, vec!["hello".to_string(), "z".to_string()]);
+
+    // Second load should reuse per-query memo/global cache transparently
+    let vals2 = ColumnReader::load_for_zone_with_cache(
+        &base_dir,
+        segment_id,
+        uid,
+        field,
+        zone_id,
+        Some(&caches),
+    )
+    .expect("load2");
+    assert_eq!(vals2, vals1);
 }

@@ -10,6 +10,7 @@ use crate::shared::storage_header::{BinaryHeader, FileKind};
 pub struct ColumnHandle {
     pub col_mmap: Arc<Mmap>,
     pub zfc_index: Arc<CompressedColumnIndex>,
+    pub col_path: std::path::PathBuf,
 }
 
 impl ColumnHandle {
@@ -36,6 +37,7 @@ impl ColumnHandle {
         Ok(Self {
             col_mmap: Arc::new(mmap),
             zfc_index: Arc::new(zfc_index),
+            col_path,
         })
     }
 }
