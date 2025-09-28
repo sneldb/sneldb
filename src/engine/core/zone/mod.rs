@@ -1,6 +1,8 @@
 pub mod candidate_zone;
 pub mod enum_bitmap_index;
 pub mod enum_zone_pruner;
+pub mod selector;
+pub mod zone_artifacts;
 pub mod zone_collector;
 pub mod zone_combiner;
 pub mod zone_cursor;
@@ -17,6 +19,7 @@ pub mod zone_step_planner;
 pub mod zone_step_runner;
 pub mod zone_value_loader;
 pub mod zone_writer;
+pub mod zone_xor_index;
 
 #[cfg(test)]
 mod candidate_zone_test;
@@ -52,3 +55,5 @@ mod zone_step_planner_tests;
 mod zone_step_runner_tests;
 #[cfg(test)]
 mod zone_writer_test;
+#[cfg(test)]
+mod zone_xor_index_test;

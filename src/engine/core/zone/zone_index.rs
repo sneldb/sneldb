@@ -2,6 +2,7 @@ use crate::engine::core::CandidateZone;
 use crate::engine::errors::StoreError;
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 use memmap2::Mmap;
+use rustc_hash::FxHashSet as FastHashSet;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -165,7 +166,8 @@ impl ZoneIndex {
         context_id: Option<&str>,
         segment_id: &str,
     ) -> Vec<CandidateZone> {
-        let mut candidate_zones = Vec::new();
+        // Pre-dedupe using a fast integer hash set
+        let mut unique_zone_ids: FastHashSet<u32> = FastHashSet::default();
 
         info!(target: "sneldb::index", event_type, ?context_id, segment_id, "Looking up candidate zones");
 
@@ -173,25 +175,33 @@ impl ZoneIndex {
             match context_id {
                 Some(ctx_id) => {
                     if let Some(row_ids) = context_map.get(ctx_id) {
-                        if let Some(&zone_id) = row_ids.first() {
-                            candidate_zones
-                                .push(CandidateZone::new(zone_id, segment_id.to_string()));
+                        unique_zone_ids.reserve(row_ids.len());
+                        for &zone_id in row_ids {
+                            unique_zone_ids.insert(zone_id);
                         }
                     }
                 }
                 None => {
+                    // Estimate capacity to reduce rehashing
+                    let est: usize = context_map.values().map(|v| v.len()).sum();
+                    unique_zone_ids.reserve(est);
                     for (_, row_ids) in context_map {
-                        if let Some(&zone_id) = row_ids.first() {
-                            candidate_zones
-                                .push(CandidateZone::new(zone_id, segment_id.to_string()));
+                        for &zone_id in row_ids {
+                            unique_zone_ids.insert(zone_id);
                         }
                     }
                 }
             }
         }
 
-        info!(target: "sneldb::index", found = candidate_zones.len(), "Candidate zones found");
-        candidate_zones
+        // Construct CandidateZone instances only for unique zone ids
+        let mut out = Vec::with_capacity(unique_zone_ids.len());
+        for zone_id in unique_zone_ids {
+            out.push(CandidateZone::new(zone_id, segment_id.to_string()));
+        }
+
+        info!(target: "sneldb::index", found = out.len(), "Candidate zones found");
+        out
     }
 
     pub fn get(&self, uid: &str) -> Option<&BTreeMap<String, Vec<u32>>> {

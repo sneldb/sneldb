@@ -57,6 +57,7 @@ impl<'a> ZoneCollector<'a> {
             zone_count = result.len(),
             "Zone collection complete"
         );
+        //   warn!("result: {:?}", result);
 
         result
     }
