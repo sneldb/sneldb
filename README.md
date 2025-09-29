@@ -12,9 +12,10 @@ Why this matters: when events are immutable, history is trustworthy. You can reb
 
 Refer to the guide for narrative intros and examples:
 
-- Introduction (what/why/how)
-- Key Features (at a glance)
-- A Gentle Guide for Engineers (mental model)
+- [Introduction](https://sneldb.com/introduction.html) (what/why/how)
+- [Key Features](https://sneldb.com/introduction/key_features.html) (at a glance)
+- [A Gentle Guide for Engineers](https://sneldb.com/quickstart/gentle_intro.html) (mental model)
+- [Why SnelDB?](https://sneldb.com/introduction/why_sneldb.html)
 
 ## Core ideas
 
@@ -26,25 +27,25 @@ Refer to the guide for narrative intros and examples:
 
 Deep dives in the guide:
 
-- Event design and schema evolution
-- Query vs. replay: when to use each
-- Scaling model: shards, zones, and compaction
+- [Design overview](https://sneldb.com/design/overview.html) and schema evolution
+- [Query vs. replay](https://sneldb.com/design/query_replay.html): when to use each
+- Scaling model: [shards & zones](https://sneldb.com/design/sharding.html), [compaction](https://sneldb.com/design/compaction.html)
 
 ## How you work with it
 
 You interact with SnelDB using a tiny, human‑friendly command language:
 
-- `DEFINE` — describe the shape of an event type
-- `STORE` — append a new fact with a JSON payload
-- `QUERY` — filter events by type, context, time, and conditions
-- `REPLAY` — stream events back in original order for a context
-- `FLUSH` — create an on‑disk segment checkpoint (useful in tests)
+- [`DEFINE`](https://sneldb.com/commands/define.html) — describe the shape of an event type
+- [`STORE`](https://sneldb.com/commands/store.html) — append a new fact with a JSON payload
+- [`QUERY`](https://sneldb.com/commands/query.html) — filter events by type, context, time, and conditions
+- [`REPLAY`](https://sneldb.com/commands/replay.html) — stream events back in original order for a context
+- [`FLUSH`](https://sneldb.com/commands/flush.html) — create an on‑disk segment checkpoint (useful in tests)
 
 See the guide’s Commands section for syntax and examples:
 
-- Commands overview
-- Syntax & Operators
-- DEFINE / STORE / QUERY / REPLAY / FLUSH
+- [Commands overview](https://sneldb.com/commands.html)
+- [Syntax & Operators](https://sneldb.com/commands/syntax.html)
+- [DEFINE](https://sneldb.com/commands/define.html) / [STORE](https://sneldb.com/commands/store.html) / [QUERY](https://sneldb.com/commands/query.html) / [REPLAY](https://sneldb.com/commands/replay.html) / [FLUSH](https://sneldb.com/commands/flush.html)
 
 ## When to use SnelDB
 
@@ -71,10 +72,10 @@ It’s small on purpose: a focused event database that’s easy to embed and rea
 
 Start with the guide:
 
-- Introduction
-- A Gentle Guide for Engineers
-- Commands (overview and syntax)
-- Design (overview, storage engine, sharding, replay & query, compaction)
+- [Introduction](https://sneldb.com/introduction.html)
+- [A Gentle Guide for Engineers](https://sneldb.com/quickstart/gentle_intro.html)
+- [Commands](https://sneldb.com/commands.html) (overview and syntax)
+- [Design](https://sneldb.com/design.html) (overview, storage engine, sharding, replay & query, compaction)
 
 ---
 
