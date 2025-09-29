@@ -26,6 +26,14 @@ pub fn parse_command(input: &str) -> Result<Command, ParseError> {
         Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("QUERY") => {
             commands::query::parse(&tokens)
         }
+        Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("FIND") => {
+            // Alias: FIND behaves the same as QUERY
+            let mut aliased = tokens.clone();
+            if let Some(Token::Word(w)) = aliased.first_mut() {
+                *w = "QUERY".to_string();
+            }
+            commands::query::parse(&aliased)
+        }
         Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("REPLAY") => {
             commands::replay::parse(&tokens)
         }

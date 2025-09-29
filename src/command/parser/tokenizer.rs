@@ -39,7 +39,7 @@ pub fn tokenize(input: &str) -> Vec<Token> {
             '0'..='9' | '-' => {
                 tokens.push(parse_number(&mut chars));
             }
-            ':' | ',' | '=' | '>' | '<' | '!' => {
+            ':' | ',' | '=' | '>' | '<' | '!' | '.' => {
                 tokens.push(Token::Symbol(chars.next().unwrap()));
             }
             '[' => {

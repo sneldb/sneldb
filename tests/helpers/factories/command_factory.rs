@@ -1,4 +1,4 @@
-use crate::command::types::{Command, Expr, FieldSpec, MiniSchema};
+use crate::command::types::{AggSpec, Command, Expr, FieldSpec, MiniSchema, TimeGranularity};
 use serde_json::{Value, json};
 
 pub struct CommandFactory {
@@ -38,6 +38,11 @@ impl CommandFactory {
                 where_clause: None,
                 limit: Some(10),
                 return_fields: None,
+                link_field: None,
+                aggs: None,
+                time_bucket: None,
+                group_by: None,
+                event_sequence: None,
             },
         }
     }
@@ -129,6 +134,93 @@ impl CommandFactory {
                 *return_fields = Some(values);
             }
             _ => {}
+        }
+        self
+    }
+
+    pub fn with_link_field(mut self, field: &str) -> Self {
+        if let Command::Query { link_field, .. } = &mut self.inner {
+            *link_field = Some(field.to_string());
+        }
+        self
+    }
+
+    pub fn with_aggs(mut self, aggs: Vec<AggSpec>) -> Self {
+        if let Command::Query { aggs: a, .. } = &mut self.inner {
+            *a = Some(aggs);
+        }
+        self
+    }
+
+    pub fn add_count(mut self) -> Self {
+        if let Command::Query { aggs, .. } = &mut self.inner {
+            let list = aggs.get_or_insert_with(Vec::new);
+            list.push(AggSpec::Count { unique_field: None });
+        }
+        self
+    }
+
+    pub fn add_count_unique(mut self, field: &str) -> Self {
+        if let Command::Query { aggs, .. } = &mut self.inner {
+            let list = aggs.get_or_insert_with(Vec::new);
+            list.push(AggSpec::Count {
+                unique_field: Some(field.to_string()),
+            });
+        }
+        self
+    }
+
+    pub fn add_total(mut self, field: &str) -> Self {
+        if let Command::Query { aggs, .. } = &mut self.inner {
+            let list = aggs.get_or_insert_with(Vec::new);
+            list.push(AggSpec::Total {
+                field: field.to_string(),
+            });
+        }
+        self
+    }
+
+    pub fn add_avg(mut self, field: &str) -> Self {
+        if let Command::Query { aggs, .. } = &mut self.inner {
+            let list = aggs.get_or_insert_with(Vec::new);
+            list.push(AggSpec::Avg {
+                field: field.to_string(),
+            });
+        }
+        self
+    }
+
+    pub fn add_min(mut self, field: &str) -> Self {
+        if let Command::Query { aggs, .. } = &mut self.inner {
+            let list = aggs.get_or_insert_with(Vec::new);
+            list.push(AggSpec::Min {
+                field: field.to_string(),
+            });
+        }
+        self
+    }
+
+    pub fn add_max(mut self, field: &str) -> Self {
+        if let Command::Query { aggs, .. } = &mut self.inner {
+            let list = aggs.get_or_insert_with(Vec::new);
+            list.push(AggSpec::Max {
+                field: field.to_string(),
+            });
+        }
+        self
+    }
+
+    pub fn with_time_bucket(mut self, gran: TimeGranularity) -> Self {
+        if let Command::Query { time_bucket, .. } = &mut self.inner {
+            *time_bucket = Some(gran);
+        }
+        self
+    }
+
+    pub fn with_group_by(mut self, fields: Vec<&str>) -> Self {
+        let values: Vec<String> = fields.into_iter().map(|s| s.to_string()).collect();
+        if let Command::Query { group_by, .. } = &mut self.inner {
+            *group_by = Some(values);
         }
         self
     }
