@@ -2,6 +2,7 @@ use crate::command::types::CompareOp as CommandCompareOp;
 use crate::command::types::Expr;
 use crate::engine::core::Condition;
 use crate::engine::core::filter::condition::CompareOp;
+use crate::engine::core::filter::condition::PreparedAccessor;
 use crate::engine::core::{LogicalCondition, LogicalOp, NumericCondition, StringCondition};
 use std::collections::HashMap;
 
@@ -87,4 +88,65 @@ fn logical_op_from_expr_and_requires_special_handling() {
 
     assert_eq!(op, LogicalOp::Not);
     assert!(op.requires_special_handling());
+}
+
+#[test]
+fn numeric_condition_evaluate_mask_works() {
+    let mut values = HashMap::new();
+    values.insert(
+        "age".to_string(),
+        vec!["18".to_string(), "25".to_string(), "30".to_string()],
+    );
+
+    let accessor = PreparedAccessor::new(&values);
+    let cond = NumericCondition::new("age".into(), CompareOp::Gte, 20);
+    let mask = cond.evaluate_mask(&accessor);
+    assert_eq!(mask, vec![false, true, true]);
+}
+
+#[test]
+fn string_condition_evaluate_mask_works() {
+    let mut values = HashMap::new();
+    values.insert(
+        "status".to_string(),
+        vec![
+            "active".to_string(),
+            "pending".to_string(),
+            "active".to_string(),
+        ],
+    );
+
+    let accessor = PreparedAccessor::new(&values);
+    let cond = StringCondition::new("status".into(), CompareOp::Eq, "active".into());
+    let mask = cond.evaluate_mask(&accessor);
+    assert_eq!(mask, vec![true, false, true]);
+}
+
+#[test]
+fn logical_condition_evaluate_mask_works() {
+    let mut values = HashMap::new();
+    values.insert(
+        "age".to_string(),
+        vec!["18".to_string(), "25".to_string(), "30".to_string()],
+    );
+    values.insert(
+        "status".to_string(),
+        vec![
+            "active".to_string(),
+            "pending".to_string(),
+            "active".to_string(),
+        ],
+    );
+
+    let accessor = PreparedAccessor::new(&values);
+    let c1 = Box::new(NumericCondition::new("age".into(), CompareOp::Gte, 20));
+    let c2 = Box::new(StringCondition::new(
+        "status".into(),
+        CompareOp::Eq,
+        "active".into(),
+    ));
+    let and = LogicalCondition::new(vec![c1, c2], LogicalOp::And);
+
+    let mask = and.evaluate_mask(&accessor);
+    assert_eq!(mask, vec![false, false, true]);
 }

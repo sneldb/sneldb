@@ -124,20 +124,35 @@ impl ConditionEvaluator {
 
             let event_count = zone.values.values().next().map(|v| v.len()).unwrap_or(0);
             let accessor = PreparedAccessor::new(&zone.values);
-            for i in 0..event_count {
-                let passes = self
-                    .conditions
-                    .iter()
-                    .all(|condition| condition.evaluate_at(&accessor, i));
-                if passes {
-                    let mut builder = EventBuilder::new();
-                    for (field, values) in &zone.values {
-                        if let Some(value) = values.get(i) {
-                            builder.add_field(field, value);
-                        }
-                    }
-                    results.push(builder.build());
+
+            // Build combined bitset mask for this zone
+            let mut mask = super::condition::BitMask::new_ones(event_count);
+            for condition in &self.conditions {
+                condition.evaluate_mask_bits_into(&accessor, &mut mask);
+                if !mask.any() {
+                    break;
                 }
+            }
+
+            // Collect matching row indices first
+            let matching_rows: Vec<usize> = mask.collect_ones();
+
+            // Pre-size builder payload based on number of dynamic fields
+            let dynamic_fields = zone
+                .values
+                .keys()
+                .filter(|k| *k != "event_type" && *k != "context_id" && *k != "timestamp")
+                .count();
+
+            // Materialize matching events in a tight loop with a reused builder per event
+            for &row in &matching_rows {
+                let mut builder = EventBuilder::with_payload_capacity(dynamic_fields);
+                for (field, values) in &zone.values {
+                    if let Some(value) = values.get(row) {
+                        builder.add_field(field, value);
+                    }
+                }
+                results.push(builder.build());
             }
         }
 
