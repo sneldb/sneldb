@@ -69,6 +69,12 @@ impl<'a> ZoneArtifacts<'a> {
         uid: &str,
         column: &str,
     ) -> Result<ZoneSurfFilter, String> {
+        if let Some(caches) = self.caches {
+            if let Ok(filter) = caches.get_or_load_zone_surf(segment_id, uid, column) {
+                return Ok((*filter).clone());
+            }
+        }
+        // Fallback to direct file load
         let path = self.zone_surf_path(segment_id, uid, column);
         ZoneSurfFilter::load(&path).map_err(|e| format!("{:?}", e))
     }

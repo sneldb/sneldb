@@ -9,6 +9,9 @@ use crate::engine::core::zone::zone_index::ZoneIndex;
 
 use super::column_handle::ColumnHandle;
 use super::global_zone_index_cache::{CacheOutcome, GlobalZoneIndexCache};
+use super::global_zone_surf_cache::GlobalZoneSurfCache;
+use super::zone_surf_cache_key::ZoneSurfCacheKey;
+use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
 
 #[derive(Debug)]
 pub struct QueryCaches {
@@ -24,6 +27,8 @@ pub struct QueryCaches {
     // Per-query memoization for decompressed blocks: (segment, uid, field, zone_id)
     decompressed_block_by_key:
         Mutex<HashMap<(String, String, String, u32), Arc<DecompressedBlock>>>,
+    // Per-query memoization for zone surf filters: (segment, uid, field)
+    zone_surf_by_key: Mutex<HashMap<(String, String, String), Arc<ZoneSurfFilter>>>,
 }
 
 impl QueryCaches {
@@ -43,6 +48,7 @@ impl QueryCaches {
             zone_index_by_key: Mutex::new(HashMap::new()),
             column_handle_by_key: Mutex::new(HashMap::new()),
             decompressed_block_by_key: Mutex::new(HashMap::new()),
+            zone_surf_by_key: Mutex::new(HashMap::new()),
         }
     }
 
@@ -184,6 +190,43 @@ impl QueryCaches {
             .unwrap_or_else(|p| p.into_inner());
         let entry = map.entry(key).or_insert_with(|| Arc::clone(&arc));
         Ok(Arc::clone(entry))
+    }
+
+    pub fn get_or_load_zone_surf(
+        &self,
+        segment_id: &str,
+        uid: &str,
+        field: &str,
+    ) -> Result<Arc<ZoneSurfFilter>, std::io::Error> {
+        let key = (segment_id.to_string(), uid.to_string(), field.to_string());
+
+        // Fast path: per-query memoization
+        if let Some(v) = self
+            .zone_surf_by_key
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(&key)
+            .cloned()
+        {
+            return Ok(v);
+        }
+
+        // Fallback to global cache
+        let cache_key = ZoneSurfCacheKey::new(segment_id, uid, field);
+        let segment_dir = self.segment_dir(segment_id);
+        let (arc, _outcome) = GlobalZoneSurfCache::instance().load_from_file(
+            cache_key,
+            &segment_dir.join(format!("{}_{}.zsrf", uid, field)),
+        )?;
+
+        // Memoize for subsequent lookups within this query
+        let mut map = self
+            .zone_surf_by_key
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        map.entry(key).or_insert_with(|| Arc::clone(&arc));
+
+        Ok(arc)
     }
 
     pub fn zone_index_summary_line(&self) -> String {
