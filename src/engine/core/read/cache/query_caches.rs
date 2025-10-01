@@ -208,16 +208,34 @@ impl QueryCaches {
             .get(&key)
             .cloned()
         {
+            if tracing::enabled!(tracing::Level::INFO) {
+                tracing::info!(target: "cache::zone_surf", segment_id = %segment_id, uid = %uid, field = %field, "ZoneSuRF per-query memoization HIT");
+            }
             return Ok(v);
         }
 
         // Fallback to global cache
-        let cache_key = ZoneSurfCacheKey::new(segment_id, uid, field);
+        // Use fully-qualified segment_dir as part of the cache key to avoid cross-shard collisions
         let segment_dir = self.segment_dir(segment_id);
-        let (arc, _outcome) = GlobalZoneSurfCache::instance().load_from_file(
+        let cache_key = ZoneSurfCacheKey::new(segment_dir.to_string_lossy(), uid, field);
+        let (arc, outcome) = GlobalZoneSurfCache::instance().load_from_file(
             cache_key,
             &segment_dir.join(format!("{}_{}.zsrf", uid, field)),
         )?;
+
+        if tracing::enabled!(tracing::Level::INFO) {
+            match outcome {
+                super::global_zone_surf_cache::CacheOutcome::Hit => {
+                    tracing::info!(target: "cache::zone_surf", segment_id = %segment_id, uid = %uid, field = %field, "ZoneSuRF global cache HIT");
+                }
+                super::global_zone_surf_cache::CacheOutcome::Miss => {
+                    tracing::info!(target: "cache::zone_surf", segment_id = %segment_id, uid = %uid, field = %field, "ZoneSuRF global cache MISS");
+                }
+                super::global_zone_surf_cache::CacheOutcome::Reload => {
+                    tracing::info!(target: "cache::zone_surf", segment_id = %segment_id, uid = %uid, field = %field, "ZoneSuRF global cache RELOAD");
+                }
+            }
+        }
 
         // Memoize for subsequent lookups within this query
         let mut map = self

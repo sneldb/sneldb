@@ -62,12 +62,13 @@ impl ColumnProvider for QueryCaches {
 impl ZoneSurfProvider for QueryCaches {
     fn load_zone_surf(
         &self,
-        segment_id: &str,
+        _segment_id: &str,
         uid: &str,
         field: &str,
         segment_dir: &Path,
     ) -> Result<(Arc<ZoneSurfFilter>, CacheOutcome), String> {
-        let key = ZoneSurfCacheKey::new(segment_id, uid, field);
+        // Build cache key with fully-qualified segment_dir to prevent cross-shard collisions
+        let key = ZoneSurfCacheKey::new(segment_dir.to_string_lossy(), uid, field);
         let path = segment_dir.join(format!("{}_{}.zsrf", uid, field));
 
         GlobalZoneSurfCache::instance()
@@ -82,12 +83,12 @@ pub struct CachedZoneSurfProvider;
 impl ZoneSurfProvider for CachedZoneSurfProvider {
     fn load_zone_surf(
         &self,
-        segment_id: &str,
+        _segment_id: &str,
         uid: &str,
         field: &str,
         segment_dir: &Path,
     ) -> Result<(Arc<ZoneSurfFilter>, CacheOutcome), String> {
-        let key = ZoneSurfCacheKey::new(segment_id, uid, field);
+        let key = ZoneSurfCacheKey::new(segment_dir.to_string_lossy(), uid, field);
         let path = segment_dir.join(format!("{}_{}.zsrf", uid, field));
 
         GlobalZoneSurfCache::instance()

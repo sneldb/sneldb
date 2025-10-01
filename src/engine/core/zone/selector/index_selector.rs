@@ -1,7 +1,8 @@
+use crate::engine::core::zone::selector::selector_kind::ZoneSelector;
 use crate::engine::core::zone::zone_artifacts::ZoneArtifacts;
 use crate::engine::core::{CandidateZone, QueryCaches, QueryPlan};
-use crate::engine::core::zone::selector::selector_kind::ZoneSelector;
 
+#[derive(Debug)]
 pub enum MissingIndexPolicy {
     AllZonesIfNoContext,
     AllZones,
@@ -23,7 +24,7 @@ impl<'a> ZoneSelector for IndexZoneSelector<'a> {
         match self.artifacts.load_zone_index(segment_id, self.uid) {
             Ok(index) => index.find_candidate_zones(self.event_type, self.context_id, segment_id),
             Err(err) => {
-                tracing::error!(target: "sneldb::query", %segment_id, uid = %self.uid, error = %err, "Failed to load ZoneIndex");
+                tracing::error!(target: "sneldb::query", %segment_id, uid = %self.uid, error = %err, policy = ?self.policy, context_id = ?self.context_id, "Failed to load ZoneIndex; applying missing-index policy");
                 match self.policy {
                     MissingIndexPolicy::AllZonesIfNoContext => match self.context_id {
                         Some(_) => vec![],
@@ -38,4 +39,3 @@ impl<'a> ZoneSelector for IndexZoneSelector<'a> {
         }
     }
 }
-

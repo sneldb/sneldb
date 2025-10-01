@@ -118,6 +118,9 @@ impl GlobalZoneSurfCache {
         // Try hit
         if let Ok(mut guard) = self.inner.lock() {
             if let Some(entry) = guard.get(&key) {
+                if tracing::enabled!(tracing::Level::INFO) {
+                    tracing::info!(target: "cache::zone_surf", segment_id = %key.segment_id, uid = %key.uid, field = %key.field, "ZoneSuRF cache HIT (per-process)");
+                }
                 self.hits.fetch_add(1, Ordering::Relaxed);
                 return Ok((Arc::clone(&entry.filter), CacheOutcome::Hit));
             }
@@ -135,6 +138,9 @@ impl GlobalZoneSurfCache {
         // Re-check under singleflight
         if let Ok(mut guard) = self.inner.lock() {
             if let Some(entry) = guard.get(&key) {
+                if tracing::enabled!(tracing::Level::INFO) {
+                    tracing::info!(target: "cache::zone_surf", segment_id = %key.segment_id, uid = %key.uid, field = %key.field, "ZoneSuRF cache HIT after singleflight check");
+                }
                 self.hits.fetch_add(1, Ordering::Relaxed);
                 let mut map = self.inflight.lock().unwrap();
                 map.remove(&key);
@@ -171,14 +177,23 @@ impl GlobalZoneSurfCache {
                 self.current_bytes
                     .fetch_add(estimated_size, Ordering::Relaxed);
                 self.misses.fetch_add(1, Ordering::Relaxed);
+                if tracing::enabled!(tracing::Level::INFO) {
+                    tracing::info!(target: "cache::zone_surf", segment_id = %key.segment_id, uid = %key.uid, field = %key.field, size_bytes = estimated_size, current_bytes = current_bytes + estimated_size, capacity_bytes = capacity_bytes, "ZoneSuRF cache MISS -> inserted entry");
+                }
                 CacheOutcome::Miss
             } else {
                 // No space available, but we still loaded it
                 self.misses.fetch_add(1, Ordering::Relaxed);
+                if tracing::enabled!(tracing::Level::WARN) {
+                    tracing::warn!(target: "cache::zone_surf", segment_id = %key.segment_id, uid = %key.uid, field = %key.field, size_bytes = estimated_size, current_bytes = current_bytes, capacity_bytes = capacity_bytes, "ZoneSuRF cache MISS but not inserted (over capacity)");
+                }
                 CacheOutcome::Miss
             }
         } else {
             self.misses.fetch_add(1, Ordering::Relaxed);
+            if tracing::enabled!(tracing::Level::WARN) {
+                tracing::warn!(target: "cache::zone_surf", segment_id = %key.segment_id, uid = %key.uid, field = %key.field, "ZoneSuRF cache MISS but cache lock unavailable");
+            }
             CacheOutcome::Miss
         };
 
@@ -198,10 +213,12 @@ impl GlobalZoneSurfCache {
         let segment_id = key.segment_id.clone();
         let uid = key.uid.clone();
         let field = key.field.clone();
-
         self.get_or_load(key, || {
             // Get file metadata for validation
             let (ino, mtime, size) = file_identity(path)?;
+            if tracing::enabled!(tracing::Level::INFO) {
+                tracing::info!(target: "cache::zone_surf", %segment_id, %uid, %field, path = %path.display(), ino = ino, mtime = mtime, size = size, "Loading ZoneSuRF from file");
+            }
 
             // Load the surf filter
             let (file, _header_offset) = open_and_header_offset(
