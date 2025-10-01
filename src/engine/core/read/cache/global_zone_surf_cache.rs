@@ -83,6 +83,30 @@ impl GlobalZoneSurfCache {
         }
     }
 
+    /// Resize the cache capacity in bytes
+    pub fn resize_bytes(&self, new_capacity_bytes: usize) {
+        self.capacity_bytes
+            .store(new_capacity_bytes, Ordering::Relaxed);
+        // Evict entries if we're over the new capacity
+        self.evict_until_within_cap();
+    }
+
+    fn evict_until_within_cap(&self) {
+        if let Ok(mut guard) = self.inner.lock() {
+            let cap = self.capacity_bytes.load(Ordering::Relaxed);
+            while self.current_bytes.load(Ordering::Relaxed) > cap {
+                if let Some((_k, v)) = guard.pop_lru() {
+                    let evicted_size = v.estimated_size();
+                    self.current_bytes
+                        .fetch_sub(evicted_size, Ordering::Relaxed);
+                    self.evictions.fetch_add(1, Ordering::Relaxed);
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+
     pub fn get_or_load<F>(
         &self,
         key: ZoneSurfCacheKey,

@@ -49,3 +49,46 @@ fn test_zone_surf_cache_stats() {
     let _ = stats.current_bytes;
     let _ = stats.current_items;
 }
+
+#[test]
+fn test_zone_surf_cache_resize() {
+    // Create a temporary directory
+    let dir = tempdir().unwrap();
+    let segment_dir = dir.path().join("segment-00000");
+    std::fs::create_dir_all(&segment_dir).unwrap();
+
+    // Create a test surf filter
+    let filter = ZoneSurfFilter { entries: vec![] };
+    let path = segment_dir.join("test_uid_test_field.zsrf");
+    filter.save(&path).unwrap();
+
+    let cache = GlobalZoneSurfCache::instance();
+    let key = ZoneSurfCacheKey::new("segment-00000", "test_uid", "test_field");
+
+    // Load the filter to populate the cache
+    let (_loaded_filter, _outcome) = cache.load_from_file(key, &path).unwrap();
+
+    // Check initial stats
+    let stats_before = cache.stats();
+    assert_eq!(stats_before.current_items, 1);
+    assert!(stats_before.current_bytes > 0);
+
+    // Resize to a smaller capacity (should trigger eviction)
+    cache.resize_bytes(1); // 1 byte - should evict everything
+
+    // Check stats after resize
+    let stats_after = cache.stats();
+    assert_eq!(stats_after.current_items, 0);
+    assert_eq!(stats_after.current_bytes, 0);
+    assert!(stats_after.evictions > stats_before.evictions);
+
+    // Resize back to a larger capacity
+    cache.resize_bytes(100 * 1024 * 1024); // 100MB
+
+    // Load again - should work fine
+    let key2 = ZoneSurfCacheKey::new("segment-00000", "test_uid", "test_field");
+    let (_loaded_filter2, _outcome2) = cache.load_from_file(key2, &path).unwrap();
+    let stats_final = cache.stats();
+    assert_eq!(stats_final.current_items, 1);
+    assert!(stats_final.current_bytes > 0);
+}
