@@ -62,17 +62,17 @@ impl ColumnProvider for QueryCaches {
 impl ZoneSurfProvider for QueryCaches {
     fn load_zone_surf(
         &self,
-        _segment_id: &str,
+        segment_id: &str,
         uid: &str,
         field: &str,
         segment_dir: &Path,
     ) -> Result<(Arc<ZoneSurfFilter>, CacheOutcome), String> {
-        // Build cache key with fully-qualified segment_dir to prevent cross-shard collisions
-        let key = ZoneSurfCacheKey::new(segment_dir.to_string_lossy(), uid, field);
+        // Build compact cache key (process-wide uniqueness)
+        let key = ZoneSurfCacheKey::from_context(self.shard_id_opt(), segment_id, uid, field);
         let path = segment_dir.join(format!("{}_{}.zsrf", uid, field));
 
         GlobalZoneSurfCache::instance()
-            .load_from_file(key, &path)
+            .load_from_file(key, segment_id, uid, field, &path)
             .map_err(|e| format!("Failed to load zone surf filter: {:?}", e))
     }
 }
@@ -83,16 +83,17 @@ pub struct CachedZoneSurfProvider;
 impl ZoneSurfProvider for CachedZoneSurfProvider {
     fn load_zone_surf(
         &self,
-        _segment_id: &str,
+        segment_id: &str,
         uid: &str,
         field: &str,
         segment_dir: &Path,
     ) -> Result<(Arc<ZoneSurfFilter>, CacheOutcome), String> {
-        let key = ZoneSurfCacheKey::new(segment_dir.to_string_lossy(), uid, field);
+        // No shard context here; set shard_id = 0
+        let key = ZoneSurfCacheKey::from_context(Some(0usize), segment_id, uid, field);
         let path = segment_dir.join(format!("{}_{}.zsrf", uid, field));
 
         GlobalZoneSurfCache::instance()
-            .load_from_file(key, &path)
+            .load_from_file(key, segment_id, uid, field, &path)
             .map_err(|e| format!("Failed to load zone surf filter: {:?}", e))
     }
 }

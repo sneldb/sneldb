@@ -43,7 +43,12 @@ pub async fn scan(
     let passives = passive_buffers.non_empty().await;
     let passive_refs: Vec<&Arc<Mutex<MemTable>>> = passives.iter().collect();
 
-    let caches = QueryCaches::new(segment_base_dir.to_path_buf());
+    let abs_dir = if segment_base_dir.is_absolute() {
+        segment_base_dir.to_path_buf()
+    } else {
+        std::fs::canonicalize(&segment_base_dir).unwrap_or(segment_base_dir.to_path_buf())
+    };
+    let caches = QueryCaches::new_abs(abs_dir);
 
     let mut execution = QueryExecution::new(&plan)
         .with_memtable(memtable)
