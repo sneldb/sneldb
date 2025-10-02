@@ -1,5 +1,6 @@
 use crate::engine::core::column::column_reader::ColumnReader;
 use crate::engine::core::column::compression::{CompressionCodec, Lz4Codec};
+use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
 use crate::engine::core::read::cache::QueryCaches;
 use crate::shared::storage_header::BinaryHeader;
 use crate::test_helpers::factories::column_factory::ColumnFactory;
@@ -330,4 +331,215 @@ fn column_reader_loads_values_using_per_query_memo() {
     )
     .expect("load2");
     assert_eq!(vals2, vals1);
+}
+
+// ===== Zone Surf Filter Cache Tests =====
+
+#[test]
+fn zone_surf_cache_reuses_arc() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base_dir = tmp.path().to_path_buf();
+    let segment_id = "segment-00000";
+    let uid = "uid_test";
+    let field = "field_test";
+    let seg_dir = base_dir.join(segment_id);
+    create_dir_all(&seg_dir).unwrap();
+
+    // Create a test surf filter
+    let filter = ZoneSurfFilter { entries: vec![] };
+    let path = seg_dir.join(format!("{}_{}.zsrf", uid, field));
+    filter.save(&path).expect("write surf filter");
+
+    let caches = QueryCaches::new(base_dir);
+
+    let f1 = caches
+        .get_or_load_zone_surf(segment_id, uid, field)
+        .unwrap();
+    let f2 = caches
+        .get_or_load_zone_surf(segment_id, uid, field)
+        .unwrap();
+    assert!(Arc::ptr_eq(&f1, &f2), "expected same Arc from cache");
+}
+
+#[test]
+fn zone_surf_cache_shared_global_cache_across_queries() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base_dir = tmp.path().to_path_buf();
+    let segment_id = "segment-shared";
+    let uid = "uid_test";
+    let field = "field_test";
+    let seg_dir = base_dir.join(segment_id);
+    create_dir_all(&seg_dir).unwrap();
+
+    // Create a test surf filter
+    let filter = ZoneSurfFilter { entries: vec![] };
+    let path = seg_dir.join(format!("{}_{}.zsrf", uid, field));
+    filter.save(&path).expect("write surf filter");
+
+    // First query: load once (miss)
+    let caches1 = QueryCaches::new(base_dir.clone());
+    let _ = caches1
+        .get_or_load_zone_surf(segment_id, uid, field)
+        .unwrap();
+
+    // Second query: first load should be a Hit due to global cache
+    let caches2 = QueryCaches::new(base_dir.clone());
+    let _ = caches2
+        .get_or_load_zone_surf(segment_id, uid, field)
+        .unwrap();
+
+    // Another hit for caches2
+    let _ = caches2
+        .get_or_load_zone_surf(segment_id, uid, field)
+        .unwrap();
+
+    // Both queries should have loaded the same filter from global cache
+    let f1 = caches1
+        .get_or_load_zone_surf(segment_id, uid, field)
+        .unwrap();
+    let f2 = caches2
+        .get_or_load_zone_surf(segment_id, uid, field)
+        .unwrap();
+    assert!(Arc::ptr_eq(&f1, &f2), "expected same Arc from global cache");
+}
+
+#[test]
+fn zone_surf_cache_multiple_segments_and_fields() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base_dir = tmp.path().to_path_buf();
+
+    let segments = ["segA", "segB"];
+    let fields = ["field1", "field2"];
+    let uid = "uid_test";
+
+    for seg in &segments {
+        let dir = base_dir.join(seg);
+        create_dir_all(&dir).unwrap();
+        for field in &fields {
+            let filter = ZoneSurfFilter { entries: vec![] };
+            let path = dir.join(format!("{}_{}.zsrf", uid, field));
+            filter.save(&path).expect("write surf filter");
+        }
+    }
+
+    let caches = QueryCaches::new(base_dir);
+
+    // Load all combinations
+    for seg in &segments {
+        for field in &fields {
+            let _ = caches.get_or_load_zone_surf(seg, uid, field).unwrap();
+        }
+    }
+
+    // Load again - should all be hits from per-query cache
+    for seg in &segments {
+        for field in &fields {
+            let _ = caches.get_or_load_zone_surf(seg, uid, field).unwrap();
+        }
+    }
+
+    // Verify all filters are loaded and accessible
+    for seg in &segments {
+        for field in &fields {
+            let filter = caches.get_or_load_zone_surf(seg, uid, field).unwrap();
+            assert_eq!(filter.entries.len(), 0);
+        }
+    }
+}
+
+#[test]
+fn zone_surf_cache_missing_file_error() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base_dir = tmp.path().to_path_buf();
+    let segment_id = "segment-missing";
+    let uid = "uid_test";
+    let field = "field_test";
+    let seg_dir = base_dir.join(segment_id);
+    create_dir_all(&seg_dir).unwrap();
+
+    let caches = QueryCaches::new(base_dir);
+    let res = caches.get_or_load_zone_surf(segment_id, uid, field);
+    assert!(res.is_err());
+}
+
+#[test]
+fn zone_surf_cache_per_query_memoization() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base_dir = tmp.path().to_path_buf();
+    let segment_id = "segment-memo";
+    let uid = "uid_test";
+    let field = "field_test";
+    let seg_dir = base_dir.join(segment_id);
+    create_dir_all(&seg_dir).unwrap();
+
+    // Create a test surf filter
+    let filter = ZoneSurfFilter { entries: vec![] };
+    let path = seg_dir.join(format!("{}_{}.zsrf", uid, field));
+    filter.save(&path).expect("write surf filter");
+
+    let caches = QueryCaches::new(base_dir);
+
+    // Multiple loads within the same query should return the same Arc
+    let f1 = caches
+        .get_or_load_zone_surf(segment_id, uid, field)
+        .unwrap();
+    let f2 = caches
+        .get_or_load_zone_surf(segment_id, uid, field)
+        .unwrap();
+    let f3 = caches
+        .get_or_load_zone_surf(segment_id, uid, field)
+        .unwrap();
+
+    assert!(
+        Arc::ptr_eq(&f1, &f2),
+        "expected same Arc from per-query memo"
+    );
+    assert!(
+        Arc::ptr_eq(&f2, &f3),
+        "expected same Arc from per-query memo"
+    );
+}
+
+#[test]
+fn zone_surf_cache_different_fields_same_uid() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base_dir = tmp.path().to_path_buf();
+    let segment_id = "segment-multi-field";
+    let uid = "uid_test";
+    let fields = ["field1", "field2", "field3"];
+    let seg_dir = base_dir.join(segment_id);
+    create_dir_all(&seg_dir).unwrap();
+
+    // Create surf filters for different fields
+    for field in &fields {
+        let filter = ZoneSurfFilter { entries: vec![] };
+        let path = seg_dir.join(format!("{}_{}.zsrf", uid, field));
+        filter.save(&path).expect("write surf filter");
+    }
+
+    let caches = QueryCaches::new(base_dir);
+
+    // Load all fields
+    let mut filters = Vec::new();
+    for field in &fields {
+        let filter = caches
+            .get_or_load_zone_surf(segment_id, uid, field)
+            .unwrap();
+        filters.push(filter);
+    }
+
+    // Verify all filters are different instances (different fields)
+    for i in 0..filters.len() {
+        for j in (i + 1)..filters.len() {
+            assert!(
+                !Arc::ptr_eq(&filters[i], &filters[j]),
+                "expected different Arc for different fields"
+            );
+        }
+    }
+
+    // Verify all filters are accessible and have correct structure
+    for filter in &filters {
+        assert_eq!(filter.entries.len(), 0);
+    }
 }
