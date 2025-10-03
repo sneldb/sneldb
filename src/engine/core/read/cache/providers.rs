@@ -1,13 +1,11 @@
-use std::path::Path;
-use std::sync::Arc;
-
-use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
-use crate::engine::core::zone::zone_index::ZoneIndex;
-
 use super::column_handle::ColumnHandle;
 use super::global_zone_surf_cache::{CacheOutcome, GlobalZoneSurfCache};
 use super::query_caches::QueryCaches;
 use super::zone_surf_cache_key::ZoneSurfCacheKey;
+use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
+use crate::engine::core::zone::zone_index::ZoneIndex;
+use std::path::Path;
+use std::sync::Arc;
 
 pub trait ZoneIndexProvider {
     fn get_or_load_zone_index(

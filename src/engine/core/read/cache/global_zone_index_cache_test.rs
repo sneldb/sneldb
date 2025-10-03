@@ -2,9 +2,8 @@ use crate::engine::core::read::cache::global_zone_index_cache::CacheOutcome;
 use crate::engine::core::read::cache::global_zone_index_cache::GlobalZoneIndexCache;
 use crate::engine::core::zone::zone_index::ZoneIndex;
 use crate::test_helpers::factories::zone_index_factory::ZoneIndexFactory;
-use std::sync::Arc;
-
 use once_cell::sync::Lazy;
+use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 
 static TEST_CACHE_GUARD: Lazy<StdMutex<()>> = Lazy::new(|| StdMutex::new(()));

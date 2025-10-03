@@ -1,5 +1,3 @@
-#![cfg(test)]
-
 use super::*;
 use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
 use std::sync::Arc;
