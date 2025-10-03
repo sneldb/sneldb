@@ -1,13 +1,14 @@
 use std::collections::{HashMap, HashSet};
 use tracing::info;
 
+use crate::engine::core::column::column_values::ColumnValues;
 use crate::shared::config::CONFIG;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CandidateZone {
     pub zone_id: u32,
     pub segment_id: String,
-    pub values: HashMap<String, Vec<String>>,
+    pub values: HashMap<String, ColumnValues>,
 }
 
 impl CandidateZone {
@@ -19,7 +20,7 @@ impl CandidateZone {
         }
     }
 
-    pub fn set_values(&mut self, values: HashMap<String, Vec<String>>) {
+    pub fn set_values(&mut self, values: HashMap<String, ColumnValues>) {
         self.values = values;
     }
 

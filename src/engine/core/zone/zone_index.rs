@@ -2,13 +2,12 @@ use crate::engine::core::CandidateZone;
 use crate::engine::errors::StoreError;
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 use memmap2::Mmap;
-use rustc_hash::FxHashSet as FastHashSet;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
-use tracing::{error, info};
+use tracing::{debug, error};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ZoneIndex {
@@ -166,41 +165,45 @@ impl ZoneIndex {
         context_id: Option<&str>,
         segment_id: &str,
     ) -> Vec<CandidateZone> {
-        // Pre-dedupe using a fast integer hash set
-        let mut unique_zone_ids: FastHashSet<u32> = FastHashSet::default();
+        // Collect zone ids into a vector, then sort+dedup to avoid HashSet churn
+        let mut zone_ids: Vec<u32> = Vec::new();
 
-        info!(target: "sneldb::index", event_type, ?context_id, segment_id, "Looking up candidate zones");
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(target: "sneldb::index", event_type, ?context_id, segment_id, "Looking up candidate zones");
+        }
 
         if let Some(context_map) = self.index.get(event_type) {
             match context_id {
                 Some(ctx_id) => {
                     if let Some(row_ids) = context_map.get(ctx_id) {
-                        unique_zone_ids.reserve(row_ids.len());
-                        for &zone_id in row_ids {
-                            unique_zone_ids.insert(zone_id);
-                        }
+                        zone_ids.reserve(row_ids.len());
+                        zone_ids.extend(row_ids.iter().copied());
                     }
                 }
                 None => {
-                    // Estimate capacity to reduce rehashing
+                    // Reserve once using a conservative estimate to reduce reallocations
                     let est: usize = context_map.values().map(|v| v.len()).sum();
-                    unique_zone_ids.reserve(est);
+                    zone_ids.reserve(est);
                     for (_, row_ids) in context_map {
-                        for &zone_id in row_ids {
-                            unique_zone_ids.insert(zone_id);
-                        }
+                        zone_ids.extend(row_ids.iter().copied());
                     }
                 }
             }
         }
 
+        // Sort and dedup in-place
+        zone_ids.sort_unstable();
+        zone_ids.dedup();
+
         // Construct CandidateZone instances only for unique zone ids
-        let mut out = Vec::with_capacity(unique_zone_ids.len());
-        for zone_id in unique_zone_ids {
+        let mut out = Vec::with_capacity(zone_ids.len());
+        for zone_id in zone_ids {
             out.push(CandidateZone::new(zone_id, segment_id.to_string()));
         }
 
-        info!(target: "sneldb::index", found = out.len(), "Candidate zones found");
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(target: "sneldb::index", found = out.len(), "Candidate zones found");
+        }
         out
     }
 

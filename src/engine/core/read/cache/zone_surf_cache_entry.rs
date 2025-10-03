@@ -43,9 +43,20 @@ impl ZoneSurfCacheEntry {
 
     /// Estimate the memory usage of this cache entry
     pub fn estimated_size(&self) -> usize {
-        // Rough estimation: surf filter size + metadata overhead
-        // This is a conservative estimate - actual size may vary
-        self.size as usize + 1024 // Add 1KB for metadata overhead
+        // Approximate in-memory usage by summing vector sizes of all tries
+        let mut total: usize = 0;
+        for e in &self.filter.entries {
+            let t = &e.trie;
+            total = total
+                .saturating_add(t.degrees.len() * std::mem::size_of::<u16>())
+                .saturating_add(t.child_offsets.len() * std::mem::size_of::<u32>())
+                .saturating_add(t.labels.len() * std::mem::size_of::<u8>())
+                .saturating_add(t.edge_to_child.len() * std::mem::size_of::<u32>())
+                .saturating_add(t.is_terminal_bits.len() * std::mem::size_of::<u8>());
+        }
+        // Add some overhead and avoid undercounting below file size
+        total = total.saturating_add(4096);
+        total.max(self.size as usize)
     }
 }
 

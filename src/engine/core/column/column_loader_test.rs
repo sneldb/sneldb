@@ -76,5 +76,6 @@ async fn loads_column_values_for_zone() {
     let devices = result.get("device").unwrap();
 
     assert_eq!(devices.len(), 2);
-    assert!(devices.contains(&"mobile".to_string()));
+    assert!(devices.get_str_at(0).unwrap() == "mobile");
+    assert!(devices.get_str_at(1).unwrap() == "web");
 }

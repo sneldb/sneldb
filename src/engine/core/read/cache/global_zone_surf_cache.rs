@@ -10,7 +10,7 @@ use once_cell::sync::Lazy;
 use super::zone_surf_cache_entry::ZoneSurfCacheEntry;
 use super::zone_surf_cache_key::ZoneSurfCacheKey;
 use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
-use crate::shared::storage_header::open_and_header_offset;
+// use crate::shared::storage_header::open_and_header_offset;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CacheOutcome {
@@ -207,7 +207,7 @@ impl GlobalZoneSurfCache {
         Ok((filter, outcome))
     }
 
-    /// Load a surf filter from file with validation
+    /// Load a surf filter from file with validation (supports compressed & legacy)
     pub fn load_from_file(
         &self,
         key: ZoneSurfCacheKey,
@@ -223,16 +223,9 @@ impl GlobalZoneSurfCache {
                 tracing::info!(target: "cache::zone_surf", %segment_id, %uid, %field, path = %path.display(), ino = ino, mtime = mtime, size = size, "Loading ZoneSuRF from file");
             }
 
-            // Load the surf filter
-            let (file, _header_offset) = open_and_header_offset(
-                path,
-                crate::shared::storage_header::FileKind::ZoneSurfFilter.magic(),
-            )?;
-            let mmap = unsafe { memmap2::MmapOptions::new().map(&file)? };
-            let filter: ZoneSurfFilter = bincode::deserialize(
-                &mmap[crate::shared::storage_header::BinaryHeader::TOTAL_LEN..],
-            )
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            // Load via format-aware loader
+            let filter = ZoneSurfFilter::load(path)
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
             Ok(ZoneSurfCacheEntry::new(
                 Arc::new(filter),
