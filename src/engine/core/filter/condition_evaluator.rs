@@ -148,7 +148,7 @@ impl ConditionEvaluator {
             for &row in &matching_rows {
                 let mut builder = EventBuilder::with_payload_capacity(dynamic_fields);
                 for (field, values) in &zone.values {
-                    if let Some(value) = values.get(row) {
+                    if let Some(value) = values.get_str_at(row) {
                         builder.add_field(field, value);
                     }
                 }

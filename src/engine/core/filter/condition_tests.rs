@@ -1,10 +1,33 @@
 use crate::command::types::CompareOp as CommandCompareOp;
 use crate::command::types::Expr;
 use crate::engine::core::Condition;
+use crate::engine::core::column::column_values::ColumnValues;
 use crate::engine::core::filter::condition::CompareOp;
 use crate::engine::core::filter::condition::PreparedAccessor;
+use crate::engine::core::read::cache::DecompressedBlock;
 use crate::engine::core::{LogicalCondition, LogicalOp, NumericCondition, StringCondition};
 use std::collections::HashMap;
+use std::sync::Arc;
+
+fn build_column_values_map(values: &HashMap<String, Vec<String>>) -> HashMap<String, ColumnValues> {
+    let mut out = HashMap::new();
+    for (field, vec_str) in values.iter() {
+        // Encode as [u16 len][bytes] per value
+        let mut bytes: Vec<u8> = Vec::new();
+        let mut ranges: Vec<(usize, usize)> = Vec::with_capacity(vec_str.len());
+        for s in vec_str {
+            let b = s.as_bytes();
+            let len = b.len() as u16;
+            let start = bytes.len();
+            bytes.extend_from_slice(&len.to_le_bytes());
+            bytes.extend_from_slice(b);
+            ranges.push((start + 2, b.len()));
+        }
+        let block = Arc::new(DecompressedBlock::from_bytes(bytes));
+        out.insert(field.clone(), ColumnValues::new(block, ranges));
+    }
+    out
+}
 
 #[test]
 fn numeric_condition_evaluates_correctly() {
@@ -98,7 +121,8 @@ fn numeric_condition_evaluate_mask_works() {
         vec!["18".to_string(), "25".to_string(), "30".to_string()],
     );
 
-    let accessor = PreparedAccessor::new(&values);
+    let cv_map = build_column_values_map(&values);
+    let accessor = PreparedAccessor::new(&cv_map);
     let cond = NumericCondition::new("age".into(), CompareOp::Gte, 20);
     let mask = cond.evaluate_mask(&accessor);
     assert_eq!(mask, vec![false, true, true]);
@@ -116,7 +140,8 @@ fn string_condition_evaluate_mask_works() {
         ],
     );
 
-    let accessor = PreparedAccessor::new(&values);
+    let cv_map = build_column_values_map(&values);
+    let accessor = PreparedAccessor::new(&cv_map);
     let cond = StringCondition::new("status".into(), CompareOp::Eq, "active".into());
     let mask = cond.evaluate_mask(&accessor);
     assert_eq!(mask, vec![true, false, true]);
@@ -138,7 +163,8 @@ fn logical_condition_evaluate_mask_works() {
         ],
     );
 
-    let accessor = PreparedAccessor::new(&values);
+    let cv_map = build_column_values_map(&values);
+    let accessor = PreparedAccessor::new(&cv_map);
     let c1 = Box::new(NumericCondition::new("age".into(), CompareOp::Gte, 20));
     let c2 = Box::new(StringCondition::new(
         "status".into(),

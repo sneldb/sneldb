@@ -19,7 +19,7 @@ impl ColumnReader {
         entry: &crate::engine::core::column::compression::ZoneBlockEntry,
         block: &Arc<DecompressedBlock>,
     ) -> Result<ColumnValues, QueryExecutionError> {
-        let decompressed: &[u8] = &block.bytes;
+        let decompressed: &[u8] = block.as_bytes();
         let mut ranges: Vec<(usize, usize)> = Vec::with_capacity(entry.num_rows as usize);
         for &off in &entry.in_block_offsets {
             let base = off as usize;

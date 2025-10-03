@@ -52,7 +52,7 @@ pub trait FieldAccessor {
     fn get_str_at(&self, field: &str, index: usize) -> Option<&str>;
     fn get_i64_at(&self, field: &str, index: usize) -> Option<i64>;
     fn event_count(&self) -> usize;
-    fn get_str_column(&self, field: &str) -> Option<&[String]>;
+    fn get_str_column(&self, field: &str) -> Option<Vec<String>>;
     fn get_i64_column_owned(&self, field: &str) -> Option<Vec<i64>>;
     fn get_i64_column(&self, field: &str) -> Option<&[i64]>;
 }
@@ -66,7 +66,9 @@ pub struct PreparedAccessor<'a> {
 }
 
 impl<'a> PreparedAccessor<'a> {
-    pub fn new(columns: &'a HashMap<String, crate::engine::core::column::column_values::ColumnValues>) -> Self {
+    pub fn new(
+        columns: &'a HashMap<String, crate::engine::core::column::column_values::ColumnValues>,
+    ) -> Self {
         let event_count = columns.values().next().map(|v| v.len()).unwrap_or(0);
         // Build numeric cache once per zone
         let mut numeric_columns: HashMap<String, Vec<i64>> = HashMap::new();
@@ -110,8 +112,10 @@ impl<'a> FieldAccessor for PreparedAccessor<'a> {
         self.event_count
     }
 
-    fn get_str_column(&self, field: &str) -> Option<&[String]> {
-        self.columns.get(field).map(|v| v.as_slice())
+    fn get_str_column(&self, field: &str) -> Option<Vec<String>> {
+        self.columns
+            .get(field)
+            .map(|col| col.iter().map(|s| s.to_string()).collect::<Vec<String>>())
     }
 
     fn get_i64_column_owned(&self, field: &str) -> Option<Vec<i64>> {
