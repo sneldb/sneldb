@@ -1,16 +1,14 @@
+use super::column_block_cache_key::ColumnBlockCacheKey;
+use super::column_block_cache_stats::ColumnBlockCacheStats;
+use super::decompressed_block::DecompressedBlock;
+use super::global_zone_index_cache::CacheOutcome;
+use lru::LruCache;
+use once_cell::sync::Lazy;
 use std::io;
 use std::num::NonZeroUsize;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-
-use lru::LruCache;
-use once_cell::sync::Lazy;
-
-use super::column_block_cache_key::ColumnBlockCacheKey;
-use super::column_block_cache_stats::ColumnBlockCacheStats;
-use super::decompressed_block::DecompressedBlock;
-use super::global_zone_index_cache::CacheOutcome;
 
 #[derive(Debug)]
 pub struct GlobalColumnBlockCache {

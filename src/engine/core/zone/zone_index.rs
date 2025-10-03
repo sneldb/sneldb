@@ -86,8 +86,6 @@ impl ZoneIndex {
             .push(id);
     }
 
-    // populate removed; index built directly during write
-
     pub fn write_to_path<P: AsRef<Path>>(&self, path: P) -> Result<(), StoreError> {
         let file = File::create(&path).map_err(|e| {
             error!(target: "sneldb::index", error = %e, path = %path.as_ref().display(), "Failed to create file");
