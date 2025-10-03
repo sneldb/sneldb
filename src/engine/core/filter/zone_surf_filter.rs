@@ -1,4 +1,7 @@
 use crate::engine::core::ZonePlan;
+use crate::engine::core::column::compression::compression_codec::{
+    ALGO_LZ4, CompressionCodec, FLAG_COMPRESSED, Lz4Codec,
+};
 use crate::engine::core::filter::surf_encoding::encode_value;
 use crate::engine::core::filter::surf_trie::SurfTrie;
 use crate::shared::storage_header::{BinaryHeader, FileKind};
@@ -29,13 +32,26 @@ impl ZoneSurfFilter {
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
-        let file = OpenOptions::new().create(true).write(true).open(path)?;
+        let file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(path)?;
         let mut writer = BufWriter::new(file);
+        // Serialize
         let data = bincode::serialize(self)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-        let header = BinaryHeader::new(FileKind::ZoneSurfFilter.magic(), 1, 0);
+        // Compress with LZ4
+        let codec = Lz4Codec;
+        let compressed = codec
+            .compress(&data)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        // Header with compressed flag
+        let header = BinaryHeader::new(FileKind::ZoneSurfFilter.magic(), 1, FLAG_COMPRESSED);
         header.write_to(&mut writer)?;
-        writer.write_all(&data)?;
+        // Algo id then payload
+        writer.write_all(&ALGO_LZ4.to_le_bytes())?;
+        writer.write_all(&compressed)?;
         writer.flush()?;
         Ok(())
     }
@@ -51,6 +67,32 @@ impl ZoneSurfFilter {
                 "invalid zonesurffilter magic",
             ));
         }
+        if (header.flags & FLAG_COMPRESSED) != 0 {
+            // read algo id
+            if mmap.len() < BinaryHeader::TOTAL_LEN + 2 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "truncated compressed zonesurffilter",
+                ));
+            }
+            let mut algo_bytes = [0u8; 2];
+            algo_bytes.copy_from_slice(&mmap[BinaryHeader::TOTAL_LEN..BinaryHeader::TOTAL_LEN + 2]);
+            let algo_id = u16::from_le_bytes(algo_bytes);
+            if algo_id != ALGO_LZ4 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("unsupported SuRF compression algo: {}", algo_id),
+                ));
+            }
+            let codec = Lz4Codec;
+            let decompressed = codec
+                .decompress(&mmap[BinaryHeader::TOTAL_LEN + 2..], 0)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            let filter: ZoneSurfFilter = bincode::deserialize(&decompressed)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            return Ok(filter);
+        }
+        // legacy
         let filter: ZoneSurfFilter = bincode::deserialize(&mmap[BinaryHeader::TOTAL_LEN..])
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
         Ok(filter)
@@ -274,18 +316,29 @@ impl<'a> SurfQuery<'a> {
             }
             let tb = target[depth];
 
-            // Find first child with label >= tb, and also note equal if present
+            // Binary search for first child with label >= tb
             let mut equal_idx: Option<usize> = None;
             let mut first_ge_idx: Option<usize> = None;
-            for i in s..e {
-                stats.edges_examined += 1;
-                let lbl = self.trie.labels[i];
-                if lbl == tb && equal_idx.is_none() {
-                    equal_idx = Some(i);
+            let slice = &self.trie.labels[s..e];
+            if !slice.is_empty() {
+                let mut lo = 0usize;
+                let mut hi = slice.len();
+                while lo < hi {
+                    let mid = (lo + hi) / 2;
+                    stats.edges_examined += 1;
+                    let v = slice[mid];
+                    if v < tb {
+                        lo = mid + 1;
+                    } else {
+                        hi = mid;
+                    }
                 }
-                if lbl >= tb {
-                    first_ge_idx = Some(i);
-                    break;
+                if lo < slice.len() {
+                    let idx = s + lo;
+                    first_ge_idx = Some(idx);
+                    if self.trie.labels[idx] == tb {
+                        equal_idx = Some(idx);
+                    }
                 }
             }
 
@@ -368,19 +421,30 @@ impl<'a> SurfQuery<'a> {
             }
             let tb = target[depth];
 
-            // Find last child with label <= tb, and also note equal if present
+            // Binary search for last child with label <= tb
             let mut equal_idx: Option<usize> = None;
             let mut last_le_idx: Option<usize> = None;
-            for i in s..e {
-                stats.edges_examined += 1;
-                let lbl = self.trie.labels[i];
-                if lbl == tb {
-                    equal_idx = Some(i);
+            let slice = &self.trie.labels[s..e];
+            if !slice.is_empty() {
+                // upper_bound: first index with label > tb
+                let mut lo = 0usize;
+                let mut hi = slice.len();
+                while lo < hi {
+                    let mid = (lo + hi) / 2;
+                    stats.edges_examined += 1;
+                    let v = slice[mid];
+                    if v <= tb {
+                        lo = mid + 1;
+                    } else {
+                        hi = mid;
+                    }
                 }
-                if lbl <= tb {
-                    last_le_idx = Some(i);
-                } else {
-                    break;
+                if lo > 0 {
+                    let idx = s + (lo - 1);
+                    last_le_idx = Some(idx);
+                    if self.trie.labels[idx] == tb {
+                        equal_idx = Some(idx);
+                    }
                 }
             }
 

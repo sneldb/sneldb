@@ -30,7 +30,7 @@ pub fn parse_segment_id_u64(segment_id: &str) -> u64 {
 
 /// Compact shard id from Option<usize> into u16 (0 when None).
 pub fn compact_shard_id(shard_id: Option<usize>) -> u16 {
-    shard_id.map(|s| (s as u16)).unwrap_or(0)
+    shard_id.map(|s| s as u16).unwrap_or(0)
 }
 
 /// Extract shard id from a base_dir (e.g., .../shard-3/segment-42) if present.

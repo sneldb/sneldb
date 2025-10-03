@@ -1,6 +1,9 @@
 use crate::engine::core::CandidateZone;
+use crate::engine::core::ColumnValues;
+use crate::engine::core::read::cache::DecompressedBlock;
 use crate::shared::config::CONFIG;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 #[test]
 fn creates_new_candidate_zone() {
@@ -14,10 +17,17 @@ fn creates_new_candidate_zone() {
 fn sets_zone_values_correctly() {
     let mut zone = CandidateZone::new(2, "segment-003".to_string());
     let mut values = HashMap::new();
-    values.insert("event_type".to_string(), vec!["user".to_string()]);
-    values.insert("region".to_string(), vec!["eu".to_string()]);
+    let empty_block = Arc::new(DecompressedBlock::from_bytes(Vec::new()));
+    values.insert(
+        "event_type".to_string(),
+        ColumnValues::new(Arc::clone(&empty_block), Vec::new()),
+    );
+    values.insert(
+        "region".to_string(),
+        ColumnValues::new(Arc::clone(&empty_block), Vec::new()),
+    );
     zone.set_values(values.clone());
-    assert_eq!(zone.values, values);
+    assert_eq!(zone.values.len(), 2);
 }
 
 #[test]
@@ -42,4 +52,30 @@ fn deduplicates_duplicate_zones() {
     assert_eq!(result.len(), 2);
     assert!(result.contains(&z1));
     assert!(result.contains(&z2));
+}
+
+#[test]
+fn zone_values_access_via_column_values() {
+    let mut zone = CandidateZone::new(3, "segment-vals".to_string());
+    // Build encoded bytes: [u16 len][bytes] per value
+    let mut bytes: Vec<u8> = Vec::new();
+    let mut ranges: Vec<(usize, usize)> = Vec::new();
+    for v in ["east", "west"].iter() {
+        let v_bytes = v.as_bytes();
+        let len = v_bytes.len() as u16;
+        let start = bytes.len();
+        bytes.extend_from_slice(&len.to_le_bytes());
+        bytes.extend_from_slice(v_bytes);
+        ranges.push((start + 2, v_bytes.len()));
+    }
+    let block = Arc::new(DecompressedBlock::from_bytes(bytes));
+    let mut values = HashMap::new();
+    values.insert("region".to_string(), ColumnValues::new(block, ranges));
+    zone.set_values(values);
+
+    // Access via stored ColumnValues
+    let region = zone.values.get("region").unwrap();
+    assert_eq!(region.len(), 2);
+    assert_eq!(region.get_str_at(0), Some("east"));
+    assert_eq!(region.get_str_at(1), Some("west"));
 }

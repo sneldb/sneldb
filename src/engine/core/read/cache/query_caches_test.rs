@@ -318,7 +318,10 @@ fn column_reader_loads_values_using_per_query_memo() {
         Some(&caches),
     )
     .expect("load1");
-    assert_eq!(vals1, vec!["hello".to_string(), "z".to_string()]);
+    let vals1_vec: Vec<String> = (0..vals1.len())
+        .map(|i| vals1.get_str_at(i).unwrap().to_string())
+        .collect();
+    assert_eq!(vals1_vec, vec!["hello".to_string(), "z".to_string()]);
 
     // Second load should reuse per-query memo/global cache transparently
     let vals2 = ColumnReader::load_for_zone_with_cache(
@@ -330,7 +333,10 @@ fn column_reader_loads_values_using_per_query_memo() {
         Some(&caches),
     )
     .expect("load2");
-    assert_eq!(vals2, vals1);
+    let vals2_vec: Vec<String> = (0..vals2.len())
+        .map(|i| vals2.get_str_at(i).unwrap().to_string())
+        .collect();
+    assert_eq!(vals2_vec, vals1_vec);
 }
 
 // ===== Zone Surf Filter Cache Tests =====

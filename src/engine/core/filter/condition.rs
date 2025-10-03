@@ -28,12 +28,12 @@ pub trait FieldAccessor {
 /// A concrete accessor over a zone's columnar values that lazily builds
 /// per-column numeric caches to avoid repeated string parsing.
 pub struct PreparedAccessor<'a> {
-    columns: &'a HashMap<String, Vec<String>>,
+    columns: &'a HashMap<String, crate::engine::core::column::column_values::ColumnValues>,
     event_count: usize,
 }
 
 impl<'a> PreparedAccessor<'a> {
-    pub fn new(columns: &'a HashMap<String, Vec<String>>) -> Self {
+    pub fn new(columns: &'a HashMap<String, crate::engine::core::column::column_values::ColumnValues>) -> Self {
         let event_count = columns.values().next().map(|v| v.len()).unwrap_or(0);
         Self {
             columns,
@@ -46,15 +46,13 @@ impl<'a> FieldAccessor for PreparedAccessor<'a> {
     fn get_str_at(&self, field: &str, index: usize) -> Option<&str> {
         self.columns
             .get(field)
-            .and_then(|col| col.get(index))
-            .map(|s| s.as_str())
+            .and_then(|col| col.get_str_at(index))
     }
 
     fn get_i64_at(&self, field: &str, index: usize) -> Option<i64> {
         self.columns
             .get(field)
-            .and_then(|col| col.get(index))
-            .and_then(|s| s.parse::<i64>().ok())
+            .and_then(|col| col.get_i64_at(index))
     }
 
     fn event_count(&self) -> usize {
