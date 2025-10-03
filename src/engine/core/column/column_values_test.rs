@@ -55,3 +55,71 @@ fn equality_ignores_block_identity_compares_ranges() {
     let cv2 = ColumnValues::new(block2, ranges1);
     assert_eq!(cv1, cv2);
 }
+
+#[test]
+fn get_i64_at_out_of_bounds_returns_none() {
+    let (block, ranges) = make_block_with_values(&["10"]);
+    let cv = ColumnValues::new(block, ranges);
+    assert_eq!(cv.get_i64_at(1), None);
+}
+
+#[test]
+fn get_str_at_invalid_utf8_returns_none() {
+    // Manually craft invalid UTF-8 bytes and point ranges to them directly
+    let bytes = vec![0xff, 0xfe];
+    let block = Arc::new(DecompressedBlock::from_bytes(bytes));
+    let cv = ColumnValues::new(Arc::clone(&block), vec![(0, 1), (1, 1)]);
+    assert_eq!(cv.get_str_at(0), None);
+    assert_eq!(cv.get_str_at(1), None);
+}
+
+#[test]
+fn get_i64_at_handles_extremes_and_formats() {
+    let (block, ranges) = make_block_with_values(&[
+        "9223372036854775807",  // i64::MAX
+        "-9223372036854775808", // i64::MIN
+        "9223372036854775808",  // overflow
+        "-9223372036854775809", // underflow
+        "+7",                   // plus sign
+        " 5",                   // leading space
+        "4.2",                  // decimal
+        "",                     // empty string
+        "000",                  // leading zeros
+        "0",                    // zero
+    ]);
+    let cv = ColumnValues::new(block, ranges);
+
+    assert_eq!(cv.get_i64_at(0), Some(9223372036854775807));
+    assert_eq!(cv.get_i64_at(1), Some(-9223372036854775808));
+    assert_eq!(cv.get_i64_at(2), None);
+    assert_eq!(cv.get_i64_at(3), None);
+    assert_eq!(cv.get_i64_at(4), Some(7));
+    assert_eq!(cv.get_i64_at(5), None);
+    assert_eq!(cv.get_i64_at(6), None);
+    assert_eq!(cv.get_i64_at(7), None);
+    assert_eq!(cv.get_i64_at(8), Some(0));
+    assert_eq!(cv.get_i64_at(9), Some(0));
+
+    // Cache should make repeated calls consistent
+    assert_eq!(cv.get_i64_at(0), Some(9223372036854775807));
+}
+
+#[test]
+fn get_str_at_handles_empty_and_unicode() {
+    let (block, ranges) = make_block_with_values(&["", "🦀", "naïve"]);
+    let cv = ColumnValues::new(block, ranges);
+    assert_eq!(cv.get_str_at(0), Some(""));
+    assert_eq!(cv.get_str_at(1), Some("🦀"));
+    assert_eq!(cv.get_str_at(2), Some("naïve"));
+}
+
+#[test]
+fn inequality_when_ranges_differ() {
+    let (block, ranges_a) = make_block_with_values(&["a", "b"]);
+    let (_block_b, mut ranges_b) = make_block_with_values(&["a", "b"]);
+    // mutate ranges_b to differ (swap order)
+    ranges_b.swap(0, 1);
+    let cv_a = ColumnValues::new(Arc::clone(&block), ranges_a);
+    let cv_b = ColumnValues::new(block, ranges_b);
+    assert_ne!(cv_a, cv_b);
+}

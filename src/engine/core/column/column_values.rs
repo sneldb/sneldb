@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use crate::engine::core::read::cache::DecompressedBlock;
 
@@ -7,11 +7,17 @@ use crate::engine::core::read::cache::DecompressedBlock;
 pub struct ColumnValues {
     pub block: Arc<DecompressedBlock>,
     pub ranges: Vec<(usize, usize)>, // (start, len)
+    // Lazily constructed cache of parsed i64 values; None for non-integers.
+    numeric_cache: Arc<OnceLock<Arc<Vec<Option<i64>>>>>,
 }
 
 impl ColumnValues {
     pub fn new(block: Arc<DecompressedBlock>, ranges: Vec<(usize, usize)>) -> Self {
-        Self { block, ranges }
+        Self {
+            block,
+            ranges,
+            numeric_cache: Arc::new(OnceLock::new()),
+        }
     }
 
     #[inline]
@@ -34,7 +40,15 @@ impl ColumnValues {
 
     #[inline]
     pub fn get_i64_at(&self, index: usize) -> Option<i64> {
-        self.get_str_at(index)?.parse::<i64>().ok()
+        let cache = self.numeric_cache.get_or_init(|| {
+            let mut parsed: Vec<Option<i64>> = Vec::with_capacity(self.ranges.len());
+            for i in 0..self.ranges.len() {
+                let v = self.get_str_at(i).and_then(|s| s.parse::<i64>().ok());
+                parsed.push(v);
+            }
+            Arc::new(parsed)
+        });
+        cache.get(index)?.clone()
     }
 }
 
