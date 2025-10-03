@@ -53,6 +53,11 @@ async fn projection_empty_list_behaves_like_all() {
         where_clause: None,
         limit: None,
         return_fields: Some(vec![]),
+        link_field: None,
+        aggs: None,
+        time_bucket: None,
+        group_by: None,
+        event_sequence: None,
     };
 
     let plan = QueryPlanFactory::new()
@@ -87,6 +92,11 @@ async fn projection_specific_fields_only_plus_core_and_filters() {
         }),
         limit: None,
         return_fields: Some(vec!["ip".into()]),
+        link_field: None,
+        aggs: None,
+        time_bucket: None,
+        group_by: None,
+        event_sequence: None,
     };
 
     let plan = QueryPlanFactory::new()
@@ -125,6 +135,11 @@ async fn projection_payload_keyword_is_ignored_and_not_included() {
         where_clause: None,
         limit: None,
         return_fields: Some(vec!["payload".into()]),
+        link_field: None,
+        aggs: None,
+        time_bucket: None,
+        group_by: None,
+        event_sequence: None,
     };
 
     let plan = QueryPlanFactory::new()
@@ -156,6 +171,11 @@ async fn projection_unknown_field_is_excluded() {
         where_clause: None,
         limit: None,
         return_fields: Some(vec!["bar".into()]),
+        link_field: None,
+        aggs: None,
+        time_bucket: None,
+        group_by: None,
+        event_sequence: None,
     };
 
     let plan = QueryPlanFactory::new()
@@ -193,6 +213,11 @@ async fn projection_excludes_unreferenced_payload_fields() {
         }),
         limit: None,
         return_fields: Some(vec!["name".into()]),
+        link_field: None,
+        aggs: None,
+        time_bucket: None,
+        group_by: None,
+        event_sequence: None,
     };
 
     let plan = QueryPlanFactory::new()

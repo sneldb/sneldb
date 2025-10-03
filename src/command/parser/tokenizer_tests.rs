@@ -251,6 +251,92 @@ mod tokenizer_tests {
     }
 
     #[test]
+    fn test_tokenize_dotted_identifier_in_where() {
+        let input = r#"QUERY orders WHERE order.status = "ok""#;
+        let tokens = tokenize(input);
+
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Word("QUERY".to_string()),
+                Token::Word("orders".to_string()),
+                Token::Word("WHERE".to_string()),
+                Token::Word("order".to_string()),
+                Token::Symbol('.'),
+                Token::Word("status".to_string()),
+                Token::Symbol('='),
+                Token::StringLiteral("ok".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_tokenize_dotted_identifier_in_return_and_by() {
+        let input = r#"QUERY orders RETURN [order.status] BY region.name"#;
+        let tokens = tokenize(input);
+
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Word("QUERY".to_string()),
+                Token::Word("orders".to_string()),
+                Token::Word("RETURN".to_string()),
+                Token::LeftSquareBracket,
+                Token::Word("order".to_string()),
+                Token::Symbol('.'),
+                Token::Word("status".to_string()),
+                Token::RightSquareBracket,
+                Token::Word("BY".to_string()),
+                Token::Word("region".to_string()),
+                Token::Symbol('.'),
+                Token::Word("name".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_tokenize_find_and_linked_by_with_dotted() {
+        let input = r#"FIND orders LINKED BY account.id"#;
+        let tokens = tokenize(input);
+
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Word("FIND".to_string()),
+                Token::Word("orders".to_string()),
+                Token::Word("LINKED".to_string()),
+                Token::Word("BY".to_string()),
+                Token::Word("account".to_string()),
+                Token::Symbol('.'),
+                Token::Word("id".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_tokenize_group_by_multiple_dotted_fields() {
+        let input = r#"QUERY orders COUNT BY a.b, c.d"#;
+        let tokens = tokenize(input);
+
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Word("QUERY".to_string()),
+                Token::Word("orders".to_string()),
+                Token::Word("COUNT".to_string()),
+                Token::Word("BY".to_string()),
+                Token::Word("a".to_string()),
+                Token::Symbol('.'),
+                Token::Word("b".to_string()),
+                Token::Symbol(','),
+                Token::Word("c".to_string()),
+                Token::Symbol('.'),
+                Token::Word("d".to_string()),
+            ]
+        );
+    }
+
+    #[test]
     fn test_tokenize_with_invalid_characters() {
         let input = r#"🧠"#;
         let tokens = tokenize(input);

@@ -21,6 +21,15 @@ impl EventBuilder {
         }
     }
 
+    pub fn with_payload_capacity(capacity: usize) -> Self {
+        Self {
+            event_type: String::new(),
+            context_id: String::new(),
+            timestamp: 0,
+            payload: HashMap::with_capacity(capacity),
+        }
+    }
+
     pub fn build(self) -> Event {
         debug!(target: "builder::event", "Building event with {} payload fields", self.payload.len());
         Event {

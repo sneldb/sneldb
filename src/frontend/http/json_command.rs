@@ -69,6 +69,11 @@ impl From<JsonCommand> for Command {
                 where_clause: where_clause.map(Into::into),
                 limit,
                 return_fields: None,
+                link_field: None,
+                aggs: None,
+                time_bucket: None,
+                group_by: None,
+                event_sequence: None,
             },
             JsonCommand::Replay {
                 event_type,
