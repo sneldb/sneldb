@@ -2,14 +2,14 @@ use super::ident_intern::{intern_field, intern_uid};
 use super::seg_id::{compact_shard_id, parse_segment_id_u64};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
-pub struct ColumnHandleKey {
+pub struct ZoneSurfCacheKey {
     pub shard_id: u16,
     pub segment_id: u64,
     pub uid_id: u32,
     pub field_id: u32,
 }
 
-impl ColumnHandleKey {
+impl ZoneSurfCacheKey {
     #[inline]
     pub fn from_context(
         shard_id_opt: Option<usize>,
