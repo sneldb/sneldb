@@ -36,7 +36,7 @@ impl<'a> ColumnLoader<'a> {
         &self,
         zone: &CandidateZone,
         columns: &[String],
-    ) -> HashMap<String, Vec<String>> {
+    ) -> HashMap<String, crate::engine::core::column::column_values::ColumnValues> {
         info!(
             target: "col_loader::load",
             zone_id = %zone.zone_id,
@@ -58,7 +58,7 @@ impl<'a> ColumnLoader<'a> {
     }
 
     /// Reads values for a column using the compressed zone index (.zfc)
-    fn read_column_for_zone(&self, zone: &CandidateZone, column: &str) -> Vec<String> {
+    fn read_column_for_zone(&self, zone: &CandidateZone, column: &str) -> crate::engine::core::column::column_values::ColumnValues {
         let segment_dir = self.segment_base_dir.join(&zone.segment_id);
         ColumnReader::load_for_zone_with_cache(
             &segment_dir,
@@ -68,6 +68,9 @@ impl<'a> ColumnLoader<'a> {
             zone.zone_id,
             self.caches,
         )
-        .unwrap_or_default()
+        .unwrap_or_else(|_| crate::engine::core::column::column_values::ColumnValues::new(
+            std::sync::Arc::new(crate::engine::core::read::cache::DecompressedBlock::from_bytes(Vec::new())),
+            Vec::new(),
+        ))
     }
 }

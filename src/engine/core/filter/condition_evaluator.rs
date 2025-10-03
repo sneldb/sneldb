@@ -132,7 +132,7 @@ impl ConditionEvaluator {
                 if passes {
                     let mut builder = EventBuilder::new();
                     for (field, values) in &zone.values {
-                        if let Some(value) = values.get(i) {
+                        if let Some(value) = values.get_str_at(i) {
                             builder.add_field(field, value);
                         }
                     }

@@ -1,6 +1,8 @@
-use crate::engine::core::CandidateZone;
+use crate::engine::core::read::cache::DecompressedBlock;
+use crate::engine::core::{CandidateZone, ColumnValues};
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 pub struct CandidateZoneFactory {
     params: HashMap<String, Value>,
@@ -44,7 +46,21 @@ impl CandidateZoneFactory {
         let mut zone = CandidateZone::new(zone_id as u32, segment_id.to_string());
 
         if let Some(values) = self.values {
-            zone.set_values(values);
+            // Convert Vec<String> values to zero-copy ColumnValues for tests
+            let mut conv: HashMap<String, ColumnValues> = HashMap::new();
+            for (k, vec_str) in values.into_iter() {
+                let mut bytes: Vec<u8> = Vec::new();
+                let mut ranges: Vec<(usize, usize)> = Vec::with_capacity(vec_str.len());
+                for s in vec_str {
+                    let start = bytes.len();
+                    bytes.extend_from_slice(s.as_bytes());
+                    let len = s.as_bytes().len();
+                    ranges.push((start, len));
+                }
+                let block = Arc::new(DecompressedBlock::from_bytes(bytes));
+                conv.insert(k, ColumnValues::new(block, ranges));
+            }
+            zone.set_values(conv);
         }
 
         zone

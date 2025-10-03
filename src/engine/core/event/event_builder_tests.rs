@@ -58,6 +58,87 @@ fn test_add_field_with_numbers() {
 }
 
 #[test]
+fn test_add_field_booleans_and_null() {
+    let mut builder = EventBuilder::new();
+    builder.add_field("b_true", "true");
+    builder.add_field("b_false", "false");
+    builder.add_field("n_null", "null");
+
+    assert_eq!(builder.payload.get("b_true"), Some(&Value::Bool(true)));
+    assert_eq!(builder.payload.get("b_false"), Some(&Value::Bool(false)));
+    assert_eq!(builder.payload.get("n_null"), Some(&Value::Null));
+}
+
+#[test]
+fn test_add_field_whitespace_and_strings() {
+    let mut builder = EventBuilder::new();
+    builder.add_field("ws_int", "  7  ");
+    builder.add_field("ws_bool", "  true ");
+    builder.add_field("raw_preserve", "  spaced  value  ");
+
+    assert_eq!(
+        builder.payload.get("ws_int"),
+        Some(&Value::Number(7.into()))
+    );
+    assert_eq!(builder.payload.get("ws_bool"), Some(&Value::Bool(true)));
+    // String fallback preserves original input (not trimmed)
+    assert_eq!(
+        builder.payload.get("raw_preserve"),
+        Some(&Value::String("  spaced  value  ".to_string()))
+    );
+}
+
+#[test]
+fn test_add_field_large_u64_and_negative_i64() {
+    let mut builder = EventBuilder::new();
+    let big: u64 = u64::MAX - 5;
+    builder.add_field("big", &big.to_string());
+    builder.add_field("neg", "-9223372036854775808"); // i64::MIN
+
+    assert_eq!(
+        builder.payload.get("big"),
+        Some(&Value::Number(Number::from(big)))
+    );
+    assert_eq!(
+        builder.payload.get("neg"),
+        Some(&Value::Number(Number::from(i64::MIN)))
+    );
+}
+
+#[test]
+fn test_add_field_nonfinite_float_falls_back_to_string() {
+    let mut builder = EventBuilder::new();
+    builder.add_field("nan", "NaN");
+    builder.add_field("inf", "inf");
+    builder.add_field("ninf", "-infinity");
+
+    assert_eq!(
+        builder.payload.get("nan"),
+        Some(&Value::String("NaN".into()))
+    );
+    assert_eq!(
+        builder.payload.get("inf"),
+        Some(&Value::String("inf".into()))
+    );
+    assert_eq!(
+        builder.payload.get("ninf"),
+        Some(&Value::String("-infinity".into()))
+    );
+}
+
+#[test]
+fn test_overrides() {
+    let mut builder = EventBuilder::new();
+    builder.add_field("event_type", "a");
+    builder.add_field("event_type", "b");
+    builder.add_field("x", "1");
+    builder.add_field("x", "2");
+
+    assert_eq!(builder.event_type, "b");
+    assert_eq!(builder.payload.get("x"), Some(&Value::Number(2.into())));
+}
+
+#[test]
 fn test_add_field_with_special_fields() {
     let mut builder = EventBuilder::new();
 

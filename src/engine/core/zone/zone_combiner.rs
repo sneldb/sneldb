@@ -1,6 +1,6 @@
 use crate::engine::core::{CandidateZone, LogicalOp};
 use std::collections::HashMap;
-use tracing::{info, warn};
+use tracing::{debug, warn};
 
 pub struct ZoneCombiner {
     zones: Vec<Vec<CandidateZone>>,
@@ -34,11 +34,15 @@ impl ZoneCombiner {
         let result = match self.op {
             LogicalOp::And => {
                 let mut base = maps[0].clone();
-                info!(target: "sneldb::zone_combiner", count = %base.len(), "Base map size before AND");
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    debug!(target: "sneldb::zone_combiner", count = %base.len(), "Base map size before AND");
+                }
                 for m in &maps[1..] {
                     base.retain(|k, _| m.contains_key(k));
                 }
-                info!(target: "sneldb::zone_combiner", count = %base.len(), "Base map size after AND");
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    debug!(target: "sneldb::zone_combiner", count = %base.len(), "Base map size after AND");
+                }
                 base
             }
             LogicalOp::Or => {
@@ -46,7 +50,9 @@ impl ZoneCombiner {
                 for m in maps {
                     all.extend(m);
                 }
-                info!(target: "sneldb::zone_combiner", count = %all.len(), "Combined map size for OR");
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    debug!(target: "sneldb::zone_combiner", count = %all.len(), "Combined map size for OR");
+                }
                 all
             }
             LogicalOp::Not => {

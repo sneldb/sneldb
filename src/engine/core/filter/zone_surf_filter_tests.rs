@@ -310,3 +310,126 @@ fn zone_surf_gt_many_bounds_monotonic() {
         assert_eq!(zones, vec![0u32], "> {} should hit zone", values[w]);
     }
 }
+
+#[test]
+fn zonesurf_compressed_header_and_algo_lz4() {
+    use crate::engine::core::column::compression::compression_codec::{ALGO_LZ4, FLAG_COMPRESSED};
+    use crate::shared::storage_header::{BinaryHeader, FileKind};
+    use std::fs::OpenOptions;
+    use std::io::Read;
+
+    // Save a minimal filter
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("u_hdr_field.zsrf");
+    let filter = ZoneSurfFilter { entries: vec![] };
+    filter.save(&path).unwrap();
+
+    // Read back header and algo id
+    let mut f = OpenOptions::new().read(true).open(&path).unwrap();
+    let hdr = BinaryHeader::read_from(&mut f).unwrap();
+    assert_eq!(hdr.magic, FileKind::ZoneSurfFilter.magic());
+    assert_ne!(
+        hdr.flags & FLAG_COMPRESSED,
+        0,
+        "compressed flag must be set"
+    );
+
+    // Next 2 bytes should be algo id
+    let mut algo_bytes = [0u8; 2];
+    f.read_exact(&mut algo_bytes).unwrap();
+    let algo = u16::from_le_bytes(algo_bytes);
+    assert_eq!(algo, ALGO_LZ4, "expected LZ4 algo id");
+}
+
+#[test]
+fn zonesurf_legacy_uncompressed_roundtrip_loads() {
+    use crate::shared::storage_header::{BinaryHeader, FileKind};
+    use std::fs::OpenOptions;
+    use std::io::Write;
+
+    // Build a trivial filter
+    let filter = ZoneSurfFilter { entries: vec![] };
+    let bytes = bincode::serialize(&filter).unwrap();
+
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("legacy.zsrf");
+    let mut f = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&path)
+        .unwrap();
+
+    // Write legacy header (no compression flag)
+    let header = BinaryHeader::new(FileKind::ZoneSurfFilter.magic(), 1, 0);
+    header.write_to(&mut f).unwrap();
+    f.write_all(&bytes).unwrap();
+    f.flush().unwrap();
+
+    // Load via format-aware loader
+    let loaded = ZoneSurfFilter::load(&path).unwrap();
+    assert_eq!(loaded.entries.len(), 0);
+}
+
+#[test]
+fn zonesurf_rejects_unsupported_algo() {
+    use crate::engine::core::column::compression::compression_codec::FLAG_COMPRESSED;
+    use crate::shared::storage_header::{BinaryHeader, FileKind};
+    use std::fs::OpenOptions;
+    use std::io::Write;
+
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("bad_algo.zsrf");
+    let mut f = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&path)
+        .unwrap();
+
+    // Write header with compressed flag set
+    let header = BinaryHeader::new(FileKind::ZoneSurfFilter.magic(), 1, FLAG_COMPRESSED);
+    header.write_to(&mut f).unwrap();
+    // Write wrong algo id
+    let bad_algo: u16 = 0x7FFF; // not ALGO_LZ4
+    f.write_all(&bad_algo.to_le_bytes()).unwrap();
+    // No payload needed; loader should fail on algo id check
+    f.flush().unwrap();
+
+    let err = ZoneSurfFilter::load(&path).unwrap_err();
+    let msg = format!("{}", err);
+    assert!(
+        msg.contains("unsupported SuRF compression algo"),
+        "msg was: {}",
+        msg
+    );
+}
+
+#[test]
+fn zonesurf_truncated_compressed_file_errors() {
+    use crate::engine::core::column::compression::compression_codec::FLAG_COMPRESSED;
+    use crate::shared::storage_header::{BinaryHeader, FileKind};
+    use std::fs::OpenOptions;
+
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("truncated.zsrf");
+    let mut f = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&path)
+        .unwrap();
+
+    // Write header with compressed flag but no algo bytes
+    let header = BinaryHeader::new(FileKind::ZoneSurfFilter.magic(), 1, FLAG_COMPRESSED);
+    header.write_to(&mut f).unwrap();
+    drop(f);
+
+    let err = ZoneSurfFilter::load(&path).unwrap_err();
+    let msg = format!("{}", err);
+    assert!(
+        msg.contains("truncated compressed zonesurffilter"),
+        "msg was: {}",
+        msg
+    );
+}

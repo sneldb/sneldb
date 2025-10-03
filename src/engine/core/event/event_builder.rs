@@ -1,6 +1,5 @@
 use crate::engine::core::Event;
-use serde_json::{Number, Value};
-use std::collections::HashMap;
+use serde_json::{Map, Number, Value};
 use tracing::{debug, warn};
 
 /// Builds Event objects from zone values
@@ -8,7 +7,7 @@ pub struct EventBuilder {
     pub event_type: String,
     pub context_id: String,
     pub timestamp: u64,
-    pub payload: HashMap<String, Value>,
+    pub payload: Map<String, Value>,
 }
 
 impl EventBuilder {
@@ -17,7 +16,7 @@ impl EventBuilder {
             event_type: String::new(),
             context_id: String::new(),
             timestamp: 0,
-            payload: HashMap::new(),
+            payload: Map::new(),
         }
     }
 
@@ -27,7 +26,7 @@ impl EventBuilder {
             event_type: self.event_type,
             context_id: self.context_id,
             timestamp: self.timestamp,
-            payload: Value::Object(self.payload.into_iter().collect()),
+            payload: Value::Object(self.payload),
         }
     }
 
@@ -57,24 +56,63 @@ impl EventBuilder {
     }
 
     fn add_payload_field(&mut self, field: &str, value: &str) {
-        // Try to parse as number first
-        if let Ok(num) = value.parse::<i64>() {
+        // Normalize whitespace
+        let trimmed = value.trim();
+
+        // Booleans and null (JSON-style keywords, lowercase)
+        match trimmed {
+            "true" => {
+                self.payload.insert(field.to_string(), Value::Bool(true));
+                debug!(target: "builder::event", %field, "Parsed as bool true");
+                return;
+            }
+            "false" => {
+                self.payload.insert(field.to_string(), Value::Bool(false));
+                debug!(target: "builder::event", %field, "Parsed as bool false");
+                return;
+            }
+            "null" => {
+                self.payload.insert(field.to_string(), Value::Null);
+                debug!(target: "builder::event", %field, "Parsed as null");
+                return;
+            }
+            _ => {}
+        }
+
+        // Try integers: prefer signed if a leading '-'; else try u64 first to capture large positives
+        if trimmed.starts_with('-') {
+            if let Ok(i) = trimmed.parse::<i64>() {
+                self.payload
+                    .insert(field.to_string(), Value::Number(i.into()));
+                debug!(target: "builder::event", %field, "Parsed as i64");
+                return;
+            }
+        } else if let Ok(u) = trimmed.parse::<u64>() {
             self.payload
-                .insert(field.to_string(), Value::Number(num.into()));
+                .insert(field.to_string(), Value::Number(Number::from(u)));
+            debug!(target: "builder::event", %field, "Parsed as u64");
+            return;
+        } else if let Ok(i) = trimmed.parse::<i64>() {
+            self.payload
+                .insert(field.to_string(), Value::Number(i.into()));
             debug!(target: "builder::event", %field, "Parsed as i64");
-        } else if let Ok(f) = value.parse::<f64>() {
+            return;
+        }
+
+        // Try float; reject NaN/Inf that JSON cannot represent
+        if let Ok(f) = trimmed.parse::<f64>() {
             if let Some(n) = Number::from_f64(f) {
                 self.payload.insert(field.to_string(), Value::Number(n));
                 debug!(target: "builder::event", %field, "Parsed as f64");
+                return;
             } else {
-                warn!(target: "builder::event", %field, %value, "f64 parsed but could not convert to JSON Number");
-                self.payload
-                    .insert(field.to_string(), Value::String(value.to_string()));
+                warn!(target: "builder::event", %field, value=%trimmed, "Non-finite float not representable in JSON; storing as String");
             }
-        } else {
-            self.payload
-                .insert(field.to_string(), Value::String(value.to_string()));
-            debug!(target: "builder::event", %field, "Stored as String");
         }
+
+        // Fallback: store as String (preserve original value, not trimmed)
+        self.payload
+            .insert(field.to_string(), Value::String(value.to_string()));
+        debug!(target: "builder::event", %field, "Stored as String");
     }
 }
