@@ -21,6 +21,11 @@ pub enum Command {
         where_clause: Option<Expr>,
         limit: Option<u32>,
         return_fields: Option<Vec<String>>,
+        link_field: Option<String>,
+        aggs: Option<Vec<AggSpec>>,
+        time_bucket: Option<TimeGranularity>,
+        group_by: Option<Vec<String>>,
+        event_sequence: Option<EventSequence>,
     },
     Replay {
         event_type: Option<String>,
@@ -49,6 +54,11 @@ impl Command {
                 where_clause: None,
                 limit: None,
                 return_fields: return_fields.clone(),
+                link_field: None,
+                aggs: None,
+                time_bucket: None,
+                group_by: None,
+                event_sequence: None,
             })
         } else {
             None
@@ -103,4 +113,39 @@ pub enum CompareOp {
     Gte,
     Lt,
     Lte,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AggSpec {
+    Count { unique_field: Option<String> },
+    Total { field: String },
+    Avg { field: String },
+    Min { field: String },
+    Max { field: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum TimeGranularity {
+    Hour,
+    Day,
+    Week,
+    Month,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum SequenceLink {
+    FollowedBy,
+    PrecededBy,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EventTarget {
+    pub event: String,
+    pub field: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EventSequence {
+    pub head: EventTarget,
+    pub links: Vec<(SequenceLink, EventTarget)>,
 }

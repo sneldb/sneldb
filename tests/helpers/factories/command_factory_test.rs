@@ -1,5 +1,4 @@
-use crate::command::types::Command;
-use crate::command::types::CompareOp;
+use crate::command::types::{AggSpec, Command, CompareOp, TimeGranularity};
 use crate::test_helpers::factories::{CommandFactory, ExprFactory};
 use serde_json::json;
 
@@ -99,5 +98,81 @@ fn test_command_replay_with_return_fields() {
         assert_eq!(f, vec!["event_type".to_string(), "timestamp".to_string()]);
     } else {
         panic!("Expected replay command with return_fields");
+    }
+}
+
+#[test]
+fn test_command_query_with_link_field() {
+    let cmd = CommandFactory::query().with_link_field("user_id").create();
+
+    if let Command::Query { link_field, .. } = cmd {
+        assert_eq!(link_field, Some("user_id".to_string()));
+    } else {
+        panic!("Expected query command with link_field");
+    }
+}
+
+#[test]
+fn test_command_query_with_aggs_helpers() {
+    let cmd = CommandFactory::query()
+        .add_count()
+        .add_count_unique("ctx")
+        .add_total("amount")
+        .add_avg("amount")
+        .add_min("amount")
+        .add_max("amount")
+        .create();
+
+    if let Command::Query { aggs: Some(a), .. } = cmd {
+        assert_eq!(a.len(), 6);
+        assert!(matches!(a[0], AggSpec::Count { unique_field: None }));
+        match &a[1] {
+            AggSpec::Count { unique_field } => assert_eq!(unique_field, &Some("ctx".to_string())),
+            _ => panic!("Expected Count UNIQUE"),
+        }
+        assert!(matches!(&a[2], AggSpec::Total { field } if field == "amount"));
+        assert!(matches!(&a[3], AggSpec::Avg { field } if field == "amount"));
+        assert!(matches!(&a[4], AggSpec::Min { field } if field == "amount"));
+        assert!(matches!(&a[5], AggSpec::Max { field } if field == "amount"));
+    } else {
+        panic!("Expected query command with aggs");
+    }
+}
+
+#[test]
+fn test_command_query_with_time_bucket_and_group_by() {
+    let cmd = CommandFactory::query()
+        .with_time_bucket(TimeGranularity::Day)
+        .with_group_by(vec!["country", "plan"])
+        .create();
+
+    if let Command::Query {
+        time_bucket: Some(tb),
+        group_by: Some(g),
+        ..
+    } = cmd
+    {
+        assert!(matches!(tb, TimeGranularity::Day));
+        assert_eq!(g, vec!["country".to_string(), "plan".to_string()]);
+    } else {
+        panic!("Expected query command with time_bucket and group_by");
+    }
+}
+
+#[test]
+fn test_command_query_with_aggs_vec() {
+    let aggs = vec![
+        AggSpec::Count { unique_field: None },
+        AggSpec::Avg {
+            field: "amount".to_string(),
+        },
+    ];
+
+    let cmd = CommandFactory::query().with_aggs(aggs.clone()).create();
+
+    if let Command::Query { aggs: Some(a), .. } = cmd {
+        assert_eq!(a, aggs);
+    } else {
+        panic!("Expected query command with aggs via with_aggs");
     }
 }
