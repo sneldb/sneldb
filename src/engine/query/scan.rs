@@ -40,11 +40,13 @@ pub async fn scan(
     };
 
     // Step 2: Build context and delegate to ExecutionEngine
-    let abs_dir = if segment_base_dir.is_absolute() {
-        segment_base_dir.to_path_buf()
-    } else {
-        std::fs::canonicalize(&segment_base_dir).unwrap_or(segment_base_dir.to_path_buf())
-    };
-    let ctx = ScanContext::new(registry, abs_dir, segment_ids, memtable, passive_buffers);
+
+    let ctx = ScanContext::new(
+        registry,
+        segment_base_dir.to_path_buf(),
+        segment_ids,
+        memtable,
+        passive_buffers,
+    );
     ExecutionEngine::execute(&plan, &ctx).await
 }
