@@ -1,4 +1,4 @@
-use crate::engine::core::filter::condition::PreparedAccessor;
+use crate::engine::core::filter::condition::{FieldAccessor, PreparedAccessor};
 use crate::engine::core::{
     CandidateZone, Condition, Event, EventBuilder, LogicalCondition, NumericCondition,
     StringCondition,
@@ -150,5 +150,12 @@ impl ConditionEvaluator {
         }
 
         results
+    }
+
+    /// Evaluates all conditions against a single row in a zone via accessor
+    pub fn evaluate_row_at(&self, accessor: &dyn FieldAccessor, index: usize) -> bool {
+        self.conditions
+            .iter()
+            .all(|condition| condition.evaluate_at(accessor, index))
     }
 }

@@ -1,3 +1,4 @@
+use crate::engine::core::read::result::QueryResult;
 use crate::engine::core::{FlushManager, MemTable, SegmentIdLoader};
 use crate::engine::query::scan::scan;
 use crate::engine::replay::scan::scan as replay_scan;
@@ -63,7 +64,7 @@ async fn on_store(
 /// Handles Query messages.
 async fn on_query(
     command: crate::command::types::Command,
-    tx: tokio::sync::mpsc::Sender<Vec<crate::engine::core::Event>>,
+    tx: tokio::sync::mpsc::Sender<QueryResult>,
     ctx: &ShardContext,
     registry: &Arc<tokio::sync::RwLock<SchemaRegistry>>,
 ) -> Result<(), String> {
@@ -77,7 +78,9 @@ async fn on_query(
     )
     .await
     .map_err(|e| e.to_string())?;
-    debug!(target: LOG_TARGET, shard_id = ctx.id, results_count = results.len(), "Query completed");
+    if tracing::enabled!(tracing::Level::DEBUG) {
+        debug!(target: LOG_TARGET, shard_id = ctx.id, "Query completed on shard");
+    }
     tx.send(results).await.map_err(|e| e.to_string())
 }
 

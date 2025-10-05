@@ -1,3 +1,4 @@
+use crate::engine::core::read::result::QueryResult;
 use crate::engine::query::scan::scan;
 use crate::engine::store::insert::insert_and_maybe_flush;
 use crate::test_helpers::factories::{
@@ -167,5 +168,8 @@ async fn test_insert_and_maybe_flush_e2e() {
     )
     .await
     .unwrap();
-    assert_eq!(result.len(), 3);
+    match result {
+        QueryResult::Selection(selection) => assert_eq!(selection.rows.len(), 3),
+        _ => panic!("Expected selection result, got {:?}", result),
+    }
 }

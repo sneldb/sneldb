@@ -26,12 +26,7 @@ async fn test_store_flush_query_lifecycle() {
     let wal_dir = tempdir().unwrap().into_path();
 
     // === ShardManager setup ===
-    let manager = ShardManager::new(
-        1,
-        tmp_dir.path().to_path_buf(),
-        wal_dir,
-    )
-    .await;
+    let manager = ShardManager::new(1, tmp_dir.path().to_path_buf(), wal_dir).await;
     let shard = manager.get_shard("ctx-42");
     let message_factory = ShardMessageFactory::new(Arc::clone(&registry));
 
@@ -78,13 +73,15 @@ async fn test_store_flush_query_lifecycle() {
         .await
         .expect("Failed to send query message");
 
-    let results = rx.recv().await.expect("No results received");
+    let result = rx.recv().await.expect("No results received");
 
     // === Validation ===
-    assert_eq!(results.len(), 1);
-    let result = &results[0];
-    assert_eq!(result.context_id, "ctx-42");
-    assert_eq!(result.event_type, "payment");
-    assert_eq!(result.payload["user_id"], "max");
-    assert_eq!(result.payload["amount"], 100);
+    let table = result.finalize_table();
+    assert_eq!(table.rows.len(), 1);
+    let row = &table.rows[0];
+    // Selection rows: [context_id, event_type, timestamp, payload]
+    assert_eq!(row[0], serde_json::json!("ctx-42"));
+    assert_eq!(row[1], serde_json::json!("payment"));
+    assert_eq!(row[3]["user_id"], serde_json::json!("max"));
+    assert_eq!(row[3]["amount"], serde_json::json!(100));
 }

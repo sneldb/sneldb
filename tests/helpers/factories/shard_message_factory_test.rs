@@ -1,4 +1,5 @@
 use crate::command::types::Command;
+use crate::engine::core::read::result::{QueryResult, SelectionResult};
 use crate::engine::shard::message::ShardMessage;
 use crate::test_helpers::factories::{EventFactory, SchemaRegistryFactory, ShardMessageFactory};
 use std::sync::Arc;
@@ -54,7 +55,14 @@ async fn test_shard_message_factory_variants() {
     match msg {
         ShardMessage::Query(c, sender, reg) => {
             assert_eq!(format!("{:?}", c), format!("{:?}", cmd));
-            sender.clone().send(vec![]).await.ok();
+            sender
+                .clone()
+                .send(QueryResult::Selection(SelectionResult {
+                    columns: vec![],
+                    rows: vec![],
+                }))
+                .await
+                .ok();
             assert!(Arc::ptr_eq(&reg, &registry));
         }
         _ => panic!("Expected Query variant"),

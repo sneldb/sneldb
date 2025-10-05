@@ -234,3 +234,99 @@ async fn evaluates_not_expression_correctly() {
     assert!(evaluator.evaluate_event(&pass_event));
     assert!(!evaluator.evaluate_event(&fail_event));
 }
+
+#[tokio::test]
+async fn build_from_plan_adds_special_fields_when_not_aggregated() {
+    let command = CommandFactory::query()
+        .with_event_type("evt")
+        .with_context_id("ctxA")
+        .with_since("100")
+        .create();
+
+    let registry_factory = SchemaRegistryFactory::new();
+    let registry = registry_factory.registry();
+    let plan = QueryPlanFactory::new()
+        .with_command(command)
+        .with_registry(registry)
+        .create()
+        .await;
+
+    // Use build_from_plan to implicitly add special fields
+    let evaluator = ConditionEvaluatorBuilder::build_from_plan(&plan);
+
+    // Matching special fields -> pass
+    let pass = EventFactory::new()
+        .with("event_type", "evt")
+        .with("context_id", "ctxA")
+        .with("timestamp", 150)
+        .with("payload", json!({}))
+        .create();
+    assert!(evaluator.evaluate_event(&pass));
+
+    // Wrong event_type -> fail
+    let wrong_evt = EventFactory::new()
+        .with("event_type", "other")
+        .with("context_id", "ctxA")
+        .with("timestamp", 150)
+        .with("payload", json!({}))
+        .create();
+    assert!(!evaluator.evaluate_event(&wrong_evt));
+
+    // Too-early timestamp -> fail
+    let early = EventFactory::new()
+        .with("event_type", "evt")
+        .with("context_id", "ctxA")
+        .with("timestamp", 99)
+        .with("payload", json!({}))
+        .create();
+    assert!(!evaluator.evaluate_event(&early));
+}
+
+#[tokio::test]
+async fn build_from_plan_skips_special_fields_for_aggregation() {
+    use crate::command::types::{CompareOp, Expr};
+
+    // Aggregation command: adds COUNT to ensure aggregate_plan is Some
+    let command = CommandFactory::query()
+        .with_event_type("evt")
+        .with_context_id("ctxB")
+        .with_since("1000")
+        .with_where_clause(Expr::Compare {
+            field: "amount".into(),
+            op: CompareOp::Gte,
+            value: json!(10),
+        })
+        .add_count()
+        .create();
+
+    let registry_factory = SchemaRegistryFactory::new();
+    let registry = registry_factory.registry();
+    let plan = QueryPlanFactory::new()
+        .with_command(command)
+        .with_registry(registry)
+        .create()
+        .await;
+
+    // In aggregation mode, special fields are skipped
+    let evaluator = ConditionEvaluatorBuilder::build_from_plan(&plan);
+
+    // Event violates special fields (event_type/context_id/timestamp), but satisfies where(amount>=10)
+    let should_pass = EventFactory::new()
+        .with("event_type", "other")
+        .with("context_id", "other")
+        .with("timestamp", 0)
+        .with("payload", json!({"amount": 20}))
+        .create();
+
+    assert!(evaluator.evaluate_event(&should_pass));
+
+    // Fails where clause -> should fail regardless of special fields
+    let should_fail = EventFactory::new()
+        .with("event_type", "other")
+        .with("context_id", "other")
+        .with("timestamp", 0)
+        .with("payload", json!({"amount": 5}))
+        .create();
+
+    assert!(!evaluator.evaluate_event(&should_fail));
+}

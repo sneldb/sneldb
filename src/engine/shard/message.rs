@@ -1,5 +1,6 @@
 use crate::command::types::Command;
 use crate::engine::core::Event;
+use crate::engine::core::read::result::QueryResult;
 use crate::engine::schema::registry::SchemaRegistry;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -14,6 +15,6 @@ pub enum ShardMessage {
         Arc<RwLock<SchemaRegistry>>,
         Arc<tokio::sync::Mutex<MemTable>>,
     ),
-    Query(Command, Sender<Vec<Event>>, Arc<RwLock<SchemaRegistry>>),
+    Query(Command, Sender<QueryResult>, Arc<RwLock<SchemaRegistry>>),
     Replay(Command, Sender<Vec<Event>>, Arc<RwLock<SchemaRegistry>>),
 }

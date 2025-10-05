@@ -1,6 +1,7 @@
 use crate::engine::core::{
     CandidateZone, ExecutionStep, QueryCaches, QueryPlan, ZoneCollector, ZoneValueLoader,
 };
+use std::collections::HashSet;
 use tracing::{debug, info, warn};
 
 pub struct ZoneHydrator<'a> {
@@ -26,6 +27,12 @@ impl<'a> ZoneHydrator<'a> {
             .collect_zones();
 
         debug!(target: "sneldb::query", "Collected {} candidate zones", candidate_zones.len());
+
+        // Deduplicate zones by (zone_id, segment_id) to avoid double-processing the same zone
+        // when missing-index fallbacks enumerate AllZones across multiple filter steps.
+        let mut seen: HashSet<(u32, String)> = HashSet::with_capacity(candidate_zones.len());
+        candidate_zones.retain(|z| seen.insert((z.zone_id, z.segment_id.clone())));
+        debug!(target: "sneldb::query", "Deduplicated to {} candidate zones", candidate_zones.len());
 
         match self.plan.event_type_uid().await {
             Some(uid) => {

@@ -118,6 +118,7 @@ pub enum CompareOp {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AggSpec {
     Count { unique_field: Option<String> },
+    CountField { field: String },
     Total { field: String },
     Avg { field: String },
     Min { field: String },

@@ -1,10 +1,10 @@
 use crate::command::types::Command;
+use crate::engine::core::read::result::QueryResult;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
 use crate::engine::shard::message::ShardMessage;
 use crate::shared::response::render::Renderer;
 use crate::shared::response::{Response, StatusCode};
-use serde_json::{Value, json};
 use std::sync::Arc;
 use tokio::io::AsyncWrite;
 use tokio::io::AsyncWriteExt;
@@ -65,37 +65,52 @@ pub async fn handle<W: AsyncWrite + Unpin>(
 
     drop(tx);
 
-    let mut all_results = vec![];
-    while let Some(received) = rx.recv().await {
-        all_results.extend(received);
+    // Collect and merge QueryResult, then finalize to ResultTable once
+    let mut acc_opt: Option<QueryResult> = None;
+    while let Some(msg) = rx.recv().await {
+        if let Some(cur) = &mut acc_opt {
+            let nxt = msg;
+            cur.merge(nxt);
+        } else {
+            acc_opt = Some(msg);
+        }
     }
 
-    if all_results.is_empty() {
+    let Some(result) = acc_opt else {
         info!(target: "sneldb::query", event_type, "Query returned no results");
         let resp = Response::ok_lines(vec!["No matching events found".to_string()]);
         return writer.write_all(&renderer.render(&resp)).await;
-    } else {
-        let count = all_results.len();
-        info!(
-            target: "sneldb::query",
-            event_type,
-            result_count = count,
-            "Query returned results"
-        );
+    };
 
-        let json_rows: Vec<Value> = all_results
-            .into_iter()
-            .map(|event| {
-                let mut obj = serde_json::Map::new();
-                obj.insert("context_id".to_string(), json!(event.context_id));
-                obj.insert("event_type".to_string(), json!(event.event_type));
-                obj.insert("timestamp".to_string(), json!(event.timestamp));
-                obj.insert("payload".to_string(), event.payload);
-                Value::Object(obj)
-            })
-            .collect();
-
-        let resp = Response::ok_json(json_rows, count);
-        writer.write_all(&renderer.render(&resp)).await
+    match result {
+        QueryResult::Selection(sel) => {
+            let table = sel.finalize();
+            if table.rows.is_empty() {
+                info!(target: "sneldb::query", event_type, "Query returned no results");
+                let resp = Response::ok_lines(vec!["No matching events found".to_string()]);
+                return writer.write_all(&renderer.render(&resp)).await;
+            }
+            let columns = table
+                .columns
+                .iter()
+                .map(|c| (c.name.clone(), c.logical_type.clone()))
+                .collect::<Vec<(String, String)>>();
+            let rows = table.rows;
+            let count = rows.len();
+            let resp = Response::ok_table(columns, rows, count);
+            writer.write_all(&renderer.render(&resp)).await
+        }
+        QueryResult::Aggregation(agg) => {
+            let table = agg.finalize();
+            let columns = table
+                .columns
+                .iter()
+                .map(|c| (c.name.clone(), c.logical_type.clone()))
+                .collect::<Vec<(String, String)>>();
+            let rows = table.rows;
+            let count = rows.len();
+            let resp = Response::ok_table(columns, rows, count);
+            writer.write_all(&renderer.render(&resp)).await
+        }
     }
 }

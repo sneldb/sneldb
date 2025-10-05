@@ -1,6 +1,7 @@
 use crate::command::types::Command;
 use crate::engine::core::Event;
 use crate::engine::core::MemTable;
+use crate::engine::core::read::result::QueryResult;
 use crate::engine::schema::registry::SchemaRegistry;
 use crate::engine::shard::message::ShardMessage;
 use crate::shared::config::CONFIG;
@@ -30,7 +31,7 @@ impl ShardMessageFactory {
         )
     }
 
-    pub fn query(&self, command: Command, tx: mpsc::Sender<Vec<Event>>) -> ShardMessage {
+    pub fn query(&self, command: Command, tx: mpsc::Sender<QueryResult>) -> ShardMessage {
         ShardMessage::Query(command, tx, Arc::clone(&self.registry))
     }
 

@@ -1,5 +1,6 @@
 use crate::command::types::{Command, Expr};
 use crate::engine::core::FilterPlan;
+use crate::engine::core::read::aggregate::plan::AggregatePlan;
 use crate::engine::schema::registry::SchemaRegistry;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -16,6 +17,7 @@ pub struct QueryPlan {
     pub registry: Arc<RwLock<SchemaRegistry>>,
     pub segment_base_dir: PathBuf,
     pub segment_ids: Arc<std::sync::RwLock<Vec<String>>>,
+    pub aggregate_plan: Option<AggregatePlan>,
 }
 
 impl QueryPlan {
@@ -36,6 +38,7 @@ impl QueryPlan {
                         "Built filter plans for query"
                     );
                 }
+                let aggregate_plan = AggregatePlan::from_command(&command);
                 Some(Self {
                     command,
                     metadata: HashMap::new(),
@@ -43,6 +46,7 @@ impl QueryPlan {
                     registry: Arc::clone(registry),
                     segment_base_dir: segment_base_dir.to_path_buf(),
                     segment_ids: Arc::clone(segment_ids),
+                    aggregate_plan,
                 })
             }
             _ => {
@@ -113,6 +117,7 @@ impl QueryPlan {
 
     pub async fn build(command: &Command, registry: Arc<RwLock<SchemaRegistry>>) -> Self {
         let filter_plans = FilterPlan::build_all(command, &registry).await;
+        let aggregate_plan = AggregatePlan::from_command(command);
         if tracing::enabled!(tracing::Level::INFO) {
             info!(
                 target: "sneldb::query_plan",
@@ -127,6 +132,7 @@ impl QueryPlan {
             metadata: HashMap::new(),
             segment_base_dir: PathBuf::new(),
             segment_ids: Arc::new(std::sync::RwLock::new(Vec::new())),
+            aggregate_plan,
         }
     }
 }

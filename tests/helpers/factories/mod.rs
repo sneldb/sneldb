@@ -1,21 +1,26 @@
+pub mod aggregate_result_factory;
 pub mod candidate_zone_factory;
 pub mod column_factory;
+pub mod column_spec_factory;
 pub mod command_factory;
 pub mod compare_op_factory;
 pub mod compressed_column_index_factory;
 pub mod condition_factory;
+pub mod decompressed_block_factory;
 pub mod enum_bitmap_index_factory;
 pub mod event_factory;
 pub mod execution_step_factory;
 pub mod expr_factory;
 pub mod field_xor_filter_factory;
 pub mod filter_plan_factory;
+pub mod group_key_factory;
 pub mod memtable_factory;
 pub mod mini_schema_factory;
 pub mod query_plan_factory;
 pub mod resolver_factory;
 pub mod schema_factory;
 pub mod schema_record_factory;
+pub mod selection_result_factory;
 pub mod shard_context_factory;
 pub mod shard_message_factory;
 pub mod snapshot_meta_factory;
@@ -30,24 +35,29 @@ pub mod zone_row_factory;
 pub mod zone_value_loader_factory;
 pub mod zone_xor_filter_index_factory;
 
+pub use aggregate_result_factory::AggregateResultFactory;
 pub use candidate_zone_factory::CandidateZoneFactory;
 pub use column_factory::ColumnFactory;
+pub use column_spec_factory::ColumnSpecFactory;
 pub use command_factory::CommandFactory;
 pub use compare_op_factory::CompareOpFactory;
 pub use compressed_column_index_factory::CompressedColumnIndexFactory;
 pub use condition_factory::ConditionFactory;
+pub use decompressed_block_factory::DecompressedBlockFactory;
 pub use enum_bitmap_index_factory::EnumBitmapIndexFactory;
 pub use event_factory::EventFactory;
 pub use execution_step_factory::ExecutionStepFactory;
 pub use expr_factory::ExprFactory;
 pub use field_xor_filter_factory::FieldXorFilterFactory;
 pub use filter_plan_factory::FilterPlanFactory;
+pub use group_key_factory::GroupKeyFactory;
 pub use memtable_factory::MemTableFactory;
 pub use mini_schema_factory::MiniSchemaFactory;
 pub use query_plan_factory::QueryPlanFactory;
 pub use resolver_factory::ResolverFactory;
 pub use schema_factory::SchemaRegistryFactory;
 pub use schema_record_factory::SchemaRecordFactory;
+pub use selection_result_factory::SelectionResultFactory;
 pub use shard_context_factory::ShardContextFactory;
 pub use shard_message_factory::ShardMessageFactory;
 pub use snapshot_meta_factory::SnapshotMetaFactory;
@@ -63,13 +73,19 @@ pub use zone_value_loader_factory::ZoneValueLoaderFactory;
 pub use zone_xor_filter_index_factory::ZoneXorFilterIndexFactory;
 
 #[cfg(test)]
+mod aggregate_result_factory_test;
+#[cfg(test)]
 mod candidate_zone_factory_test;
+#[cfg(test)]
+mod column_spec_factory_test;
 #[cfg(test)]
 mod command_factory_test;
 #[cfg(test)]
 mod compare_op_factory_test;
 #[cfg(test)]
 mod condition_factory_test;
+#[cfg(test)]
+mod decompressed_block_factory_test;
 #[cfg(test)]
 mod enum_bitmap_index_factory_test;
 #[cfg(test)]
@@ -83,6 +99,8 @@ mod field_xor_filter_factory_test;
 #[cfg(test)]
 mod filter_plan_factory_test;
 #[cfg(test)]
+mod group_key_factory_test;
+#[cfg(test)]
 mod memtable_factory_test;
 #[cfg(test)]
 mod mini_schema_factory_test;
@@ -92,6 +110,8 @@ mod query_plan_factory_test;
 mod resolver_factory_test;
 #[cfg(test)]
 mod schema_record_factory_test;
+#[cfg(test)]
+mod selection_result_factory_test;
 #[cfg(test)]
 mod shard_message_factory_test;
 #[cfg(test)]
