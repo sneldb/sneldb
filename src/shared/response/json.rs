@@ -9,6 +9,17 @@ impl Renderer for JsonRenderer {
         let results = match &response.body {
             ResponseBody::Lines(lines) => lines.iter().map(|s| json!(s)).collect::<Vec<Value>>(),
             ResponseBody::JsonArray(values) => values.clone(),
+            ResponseBody::Table { columns, rows } => {
+                let cols = columns
+                    .iter()
+                    .map(|(n, t)| json!({ "name": n, "type": t }))
+                    .collect::<Vec<Value>>();
+                let row_vals = rows
+                    .iter()
+                    .map(|r| Value::Array(r.clone()))
+                    .collect::<Vec<Value>>();
+                vec![json!({ "columns": cols, "rows": row_vals })]
+            }
         };
 
         let payload = json!({

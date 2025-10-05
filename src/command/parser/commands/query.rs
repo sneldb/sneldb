@@ -510,16 +510,42 @@ where
     loop {
         match iter.next() {
             Some(Word(w)) if w.eq_ignore_ascii_case("COUNT") => {
-                // COUNT [ UNIQUE field ]
-                let mut unique_field: Option<String> = None;
+                // COUNT [ UNIQUE field ] | COUNT <field>
+                // First check UNIQUE
                 if let Some(Word(u)) = iter.peek() {
                     if u.eq_ignore_ascii_case("UNIQUE") {
                         iter.next();
                         let f = expect_field(iter, "UNIQUE")?;
-                        unique_field = Some(f);
+                        result.push(AggSpec::Count {
+                            unique_field: Some(f),
+                        });
+
+                        // Optional comma will be handled by loop footer
+                        // Continue to next agg or break below
+                    } else {
+                        // If the next word starts a new clause, treat as COUNT ALL
+                        let clause = u.eq_ignore_ascii_case("PER")
+                            || u.eq_ignore_ascii_case("BY")
+                            || u.eq_ignore_ascii_case("LIMIT")
+                            || u.eq_ignore_ascii_case("WHERE")
+                            || u.eq_ignore_ascii_case("LINKED")
+                            || u.eq_ignore_ascii_case("RETURN")
+                            || u.eq_ignore_ascii_case("SINCE")
+                            || u.eq_ignore_ascii_case("FOR")
+                            || u.eq_ignore_ascii_case("FOLLOWED")
+                            || u.eq_ignore_ascii_case("PRECEDED");
+                        if clause {
+                            result.push(AggSpec::Count { unique_field: None });
+                        } else {
+                            // COUNT <field>
+                            let f = expect_field(iter, "COUNT")?;
+                            result.push(AggSpec::CountField { field: f });
+                        }
                     }
+                } else {
+                    // Bare COUNT
+                    result.push(AggSpec::Count { unique_field: None });
                 }
-                result.push(AggSpec::Count { unique_field });
             }
             Some(Word(w)) if w.eq_ignore_ascii_case("TOTAL") => {
                 let field = expect_field(iter, "TOTAL")?;

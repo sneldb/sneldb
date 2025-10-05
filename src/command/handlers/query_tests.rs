@@ -1,13 +1,16 @@
 use crate::command::handlers::query::handle;
+use crate::command::parser::commands::query::parse as parse_query;
+use crate::command::parser::tokenizer::tokenize;
 use crate::engine::shard::manager::ShardManager;
+use crate::logging::init_for_tests;
 use crate::shared::response::JsonRenderer;
 use crate::test_helpers::factories::{CommandFactory, SchemaRegistryFactory};
 use tempfile::tempdir;
 use tokio::io::{AsyncReadExt, duplex};
+use tokio::time::{Duration, sleep};
 
 #[tokio::test]
 async fn test_query_returns_no_results_when_nothing_matches() {
-    use crate::logging::init_for_tests;
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -41,20 +44,496 @@ async fn test_query_returns_no_results_when_nothing_matches() {
     let body = String::from_utf8_lossy(&buf[..n]);
 
     assert!(
-        body.contains("No matching events found"),
-        "Expected message about missing results, got: {}",
+        body.contains("No matching events found") || body.contains("\"rows\":[]"),
+        "Expected message or empty rows table, got: {}",
         body
     );
 }
 
 #[tokio::test]
-async fn test_query_returns_matching_event_as_json() {
-    use crate::command::handlers::query::handle;
-    use crate::logging::init_for_tests;
-    use crate::shared::response::JsonRenderer;
-    use crate::test_helpers::factories::{CommandFactory, SchemaRegistryFactory};
-    use tokio::io::{AsyncReadExt, duplex};
+async fn test_query_aggregation_count_unique_by_returns_values() {
+    init_for_tests();
 
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("login_evt", &[("user_id", "string"), ("country", "string")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // NL has 2 events with same user_id "A" (unique=1), DE has 1 with "B"
+    let stores = vec![
+        (
+            "login_evt",
+            "c1",
+            serde_json::json!({"user_id":"A","country":"NL"}),
+        ),
+        (
+            "login_evt",
+            "c2",
+            serde_json::json!({"user_id":"A","country":"NL"}),
+        ),
+        (
+            "login_evt",
+            "c3",
+            serde_json::json!({"user_id":"B","country":"DE"}),
+        ),
+    ];
+    for (evt, ctx, payload) in stores {
+        let store_cmd = crate::test_helpers::factories::CommandFactory::store()
+            .with_event_type(evt)
+            .with_context_id(ctx)
+            .with_payload(payload)
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+    sleep(Duration::from_millis(200)).await;
+
+    let cmd_str = "QUERY login_evt COUNT UNIQUE user_id BY country";
+    let tokens = tokenize(cmd_str);
+    let cmd = parse_query(&tokens).expect("parse COUNT UNIQUE query");
+
+    let (mut reader, mut writer) = duplex(2048);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 2048];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    assert!(body.contains("\"count_unique_user_id\""));
+    assert!(body.contains("NL") && body.contains("DE"));
+    assert!(!body.contains("\"rows\":[]"));
+}
+
+#[tokio::test]
+async fn test_query_aggregation_count_field_by_returns_values() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields(
+            "login_evt2",
+            &[("user_id", "string"), ("country", "string")],
+        )
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // NL has 2 with user_id present, DE has 1
+    let stores = vec![
+        (
+            "login_evt2",
+            "c1",
+            serde_json::json!({"user_id":"A","country":"NL"}),
+        ),
+        (
+            "login_evt2",
+            "c2",
+            serde_json::json!({"user_id":"A","country":"NL"}),
+        ),
+        (
+            "login_evt2",
+            "c3",
+            serde_json::json!({"user_id":"B","country":"DE"}),
+        ),
+    ];
+    for (evt, ctx, payload) in stores {
+        let store_cmd = crate::test_helpers::factories::CommandFactory::store()
+            .with_event_type(evt)
+            .with_context_id(ctx)
+            .with_payload(payload)
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+    sleep(Duration::from_millis(200)).await;
+
+    let cmd_str = "QUERY login_evt2 COUNT user_id BY country";
+    let tokens = tokenize(cmd_str);
+    let cmd = parse_query(&tokens).expect("parse COUNT <field> query");
+
+    let (mut reader, mut writer) = duplex(4096);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    assert!(body.contains("\"count_user_id\""));
+    assert!(body.contains("NL") && body.contains("DE"));
+    assert!(!body.contains("\"rows\":[]"));
+}
+
+#[tokio::test]
+async fn test_query_aggregation_per_month_by_country_returns_bucket_and_group() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("order_evt", &[("amount", "int"), ("country", "string")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // A few orders
+    for (ctx, amt, ctry) in [("o1", 10, "NL"), ("o2", 20, "NL"), ("o3", 15, "DE")].iter() {
+        let store_cmd = crate::test_helpers::factories::CommandFactory::store()
+            .with_event_type("order_evt")
+            .with_context_id(ctx)
+            .with_payload(serde_json::json!({ "amount": amt, "country": ctry }))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+    sleep(Duration::from_millis(200)).await;
+
+    let cmd_str = "QUERY order_evt AVG amount, TOTAL amount PER month BY country";
+    let tokens = tokenize(cmd_str);
+    let cmd = parse_query(&tokens).expect("parse agg per/by query");
+
+    let (mut reader, mut writer) = duplex(4096);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+    assert!(body.contains("\"bucket\""));
+    assert!(body.contains("\"country\""));
+    assert!(body.contains("\"avg_amount\"") && body.contains("\"total_amount\""));
+    assert!(!body.contains("\"rows\":[]"));
+}
+
+#[tokio::test]
+async fn test_query_aggregation_count_per_day_by_two_fields() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields(
+            "orders_evt",
+            &[("amount", "int"), ("country", "string"), ("plan", "string")],
+        )
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    let stores = vec![
+        (
+            "orders_evt",
+            "o1",
+            serde_json::json!({"amount": 10, "country": "NL", "plan": "pro"}),
+        ),
+        (
+            "orders_evt",
+            "o2",
+            serde_json::json!({"amount": 20, "country": "NL", "plan": "basic"}),
+        ),
+        (
+            "orders_evt",
+            "o3",
+            serde_json::json!({"amount": 15, "country": "DE", "plan": "pro"}),
+        ),
+    ];
+    for (evt, ctx, payload) in stores {
+        let store_cmd = crate::test_helpers::factories::CommandFactory::store()
+            .with_event_type(evt)
+            .with_context_id(ctx)
+            .with_payload(payload)
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+    sleep(Duration::from_millis(200)).await;
+
+    let cmd_str = "QUERY orders_evt COUNT PER day BY country, plan";
+    let tokens = tokenize(cmd_str);
+    let cmd = parse_query(&tokens).expect("parse COUNT PER day BY query");
+
+    let (mut reader, mut writer) = duplex(4096);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    assert!(body.contains("\"bucket\""));
+    assert!(body.contains("\"country\"") && body.contains("\"plan\""));
+    assert!(body.contains("\"count\""));
+}
+
+#[tokio::test]
+async fn test_query_aggregation_multiple_aggs_returns_all_metrics() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("multi_evt", &[("id", "int")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    for i in 1..=3 {
+        let store_cmd = crate::test_helpers::factories::CommandFactory::store()
+            .with_event_type("multi_evt")
+            .with_context_id(&format!("m{}", i))
+            .with_payload(serde_json::json!({ "id": i }))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+
+    sleep(Duration::from_millis(200)).await;
+
+    let cmd_str = "QUERY multi_evt COUNT, AVG id, TOTAL id";
+    let tokens = tokenize(cmd_str);
+    let cmd = parse_query(&tokens).expect("parse multi agg query");
+
+    let (mut reader, mut writer) = duplex(2048);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 2048];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+    assert!(body.contains("\"count\""));
+    assert!(body.contains("\"avg_id\""));
+    assert!(body.contains("\"total_id\""));
+    assert!(!body.contains("\"rows\":[]"));
+}
+
+#[tokio::test]
+async fn test_query_aggregation_count_returns_value() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("agg_evt", &[("id", "int")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store some events
+    for i in 1..=5 {
+        let store_cmd = crate::test_helpers::factories::CommandFactory::store()
+            .with_event_type("agg_evt")
+            .with_context_id(&format!("ctx{}", i))
+            .with_payload(serde_json::json!({ "id": i }))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+    sleep(Duration::from_millis(200)).await;
+
+    // Build COUNT command via parser
+    let cmd_str = "QUERY agg_evt COUNT";
+    let tokens = tokenize(cmd_str);
+    let cmd = parse_query(&tokens).expect("parse COUNT query");
+
+    let (mut reader, mut writer) = duplex(2048);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 2048];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    assert!(
+        body.contains("\"count\""),
+        "Expected count column, got: {}",
+        body
+    );
+    assert!(
+        !body.contains("\"rows\":[]"),
+        "Aggregation should return at least one row, got: {}",
+        body
+    );
+}
+
+#[tokio::test]
+async fn test_query_aggregation_avg_with_filter_returns_value() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("agg_evt2", &[("id", "int")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store 1..=10
+    for i in 1..=10 {
+        let store_cmd = crate::test_helpers::factories::CommandFactory::store()
+            .with_event_type("agg_evt2")
+            .with_context_id(&format!("u{}", i))
+            .with_payload(serde_json::json!({ "id": i }))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+
+    sleep(Duration::from_millis(200)).await;
+
+    // AVG with filter id < 6 → avg of 1..5 = 3.0
+    let cmd_str = "QUERY agg_evt2 WHERE id < 6 AVG id";
+    let tokens = tokenize(cmd_str);
+    let cmd = parse_query(&tokens).expect("parse AVG query");
+
+    let (mut reader, mut writer) = duplex(2048);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 2048];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    assert!(
+        body.contains("\"avg_id\""),
+        "Expected avg_id column, got: {}",
+        body
+    );
+    assert!(
+        !body.contains("\"rows\":[]"),
+        "Aggregation should return at least one row, got: {}",
+        body
+    );
+}
+
+#[tokio::test]
+async fn test_query_aggregation_empty_returns_table_not_message() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("agg_evt3", &[("id", "int")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // No stores → aggregation should return empty table (not the lines message)
+    let cmd_str = "QUERY agg_evt3 COUNT";
+    let tokens = tokenize(cmd_str);
+    let cmd = parse_query(&tokens).expect("parse COUNT query");
+
+    let (mut reader, mut writer) = duplex(1024);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 1024];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    assert!(body.contains("\"columns\""));
+    assert!(body.contains("\"count\""));
+    assert!(body.contains("\"rows\":[]"));
+    assert!(
+        !body.contains("No matching events found"),
+        "Aggregation empty should not render 'No matching events found'"
+    );
+}
+
+#[tokio::test]
+async fn test_query_returns_matching_event_as_json() {
     let base_dir = tempdir().unwrap().into_path();
     let wal_dir = tempdir().unwrap().into_path();
 
@@ -110,12 +589,6 @@ async fn test_query_returns_matching_event_as_json() {
 
 #[tokio::test]
 async fn test_query_returns_error_for_empty_event_type() {
-    use crate::command::handlers::query::handle;
-    use crate::logging::init_for_tests;
-    use crate::shared::response::JsonRenderer;
-    use crate::test_helpers::factories::{CommandFactory, SchemaRegistryFactory};
-    use tokio::io::{AsyncReadExt, duplex};
-
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();

@@ -3,6 +3,12 @@ use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
 use std::sync::Arc;
 use tempfile::tempdir;
 
+fn clear_cache_for_tests() {
+    let cache = GlobalZoneSurfCache::instance();
+    cache.resize_bytes(0);
+    cache.resize_bytes(100 * 1024 * 1024);
+}
+
 #[test]
 fn test_zone_surf_cache_basic_functionality() {
     // Create a temporary directory
@@ -58,6 +64,7 @@ fn test_zone_surf_cache_stats() {
 #[test]
 fn test_zone_surf_cache_resize() {
     // Create a temporary directory
+    clear_cache_for_tests();
     let dir = tempdir().unwrap();
     let segment_dir = dir.path().join("segment-00000");
     std::fs::create_dir_all(&segment_dir).unwrap();

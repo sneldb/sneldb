@@ -156,7 +156,13 @@ impl ConditionEvaluatorBuilder {
             builder.add_where_clause(where_clause);
         }
 
-        builder.add_special_fields(plan);
+        // In aggregation mode, projection may omit core fields like event_type/context_id/timestamp.
+        // Avoid injecting special-field conditions that would cause all rows to fail.
+        if plan.aggregate_plan.is_none() {
+            builder.add_special_fields(plan);
+        } else {
+            info!(target: "sneldb::evaluator", "Skipping special-field conditions for aggregation plan");
+        }
         builder.into_evaluator()
     }
 }

@@ -1,6 +1,6 @@
 use crate::shared::response::render::Renderer;
 use crate::shared::response::types::{Response, ResponseBody};
-use serde_json::to_string;
+use serde_json::{to_string, to_writer};
 
 pub struct UnixRenderer;
 
@@ -33,6 +33,48 @@ impl Renderer for UnixRenderer {
                         }
                     }
                 }
+            }
+
+            ResponseBody::Table { columns, rows } => {
+                // Stream a single JSON object: {"columns":[...],"rows":[...]}
+                output.extend_from_slice(b"{");
+                // columns
+                output.extend_from_slice(b"\"columns\":");
+                output.push(b'[');
+                for (i, (name, ty)) in columns.iter().enumerate() {
+                    if i > 0 {
+                        output.push(b',');
+                    }
+                    output.push(b'{');
+                    output.extend_from_slice(b"\"name\":");
+                    to_writer(&mut output, name).ok();
+                    output.push(b',');
+                    output.extend_from_slice(b"\"type\":");
+                    to_writer(&mut output, ty).ok();
+                    output.push(b'}');
+                }
+                output.push(b']');
+
+                output.push(b',');
+                // rows
+                output.extend_from_slice(b"\"rows\":");
+                output.push(b'[');
+                for (ri, row) in rows.iter().enumerate() {
+                    if ri > 0 {
+                        output.push(b',');
+                    }
+                    output.push(b'[');
+                    for (ci, cell) in row.iter().enumerate() {
+                        if ci > 0 {
+                            output.push(b',');
+                        }
+                        to_writer(&mut output, cell).ok();
+                    }
+                    output.push(b']');
+                }
+                output.push(b']');
+                output.push(b'}');
+                output.push(b'\n');
             }
         }
 

@@ -52,6 +52,10 @@ use serde_json::Value;
 pub enum ResponseBody {
     Lines(Vec<String>),
     JsonArray(Vec<Value>),
+    Table {
+        columns: Vec<(String, String)>,
+        rows: Vec<Vec<Value>>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -78,6 +82,15 @@ impl Response {
             count: count,
             message: "OK".to_string(),
             body: ResponseBody::JsonArray(rows),
+        }
+    }
+
+    pub fn ok_table(columns: Vec<(String, String)>, rows: Vec<Vec<Value>>, count: usize) -> Self {
+        Self {
+            status: StatusCode::Ok,
+            count,
+            message: "OK".to_string(),
+            body: ResponseBody::Table { columns, rows },
         }
     }
 

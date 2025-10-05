@@ -1,4 +1,5 @@
 use crate::command::handlers::store::handle;
+use crate::engine::core::read::result::QueryResult;
 use crate::engine::shard::manager::ShardManager;
 use crate::engine::shard::message::ShardMessage;
 use crate::shared::response::JsonRenderer;
@@ -63,7 +64,10 @@ async fn test_store_handle_valid_event_is_routed() {
         .expect("timeout waiting for result")
         .expect("no data");
 
-    assert_eq!(result[0].payload["id"], 123);
+    match result {
+        QueryResult::Selection(selection) => assert_eq!(selection.rows[0][3]["id"], 123),
+        _ => panic!("Expected selection result, got {:?}", result),
+    }
 }
 
 #[tokio::test]

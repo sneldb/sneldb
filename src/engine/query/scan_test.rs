@@ -1,6 +1,7 @@
 use crate::command::types::{CompareOp, Expr};
 use crate::engine::core::Flusher;
 use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
+use crate::engine::core::read::result::QueryResult;
 use crate::engine::query::scan::scan;
 use crate::test_helpers::factories::{
     CommandFactory, EventFactory, MemTableFactory, SchemaRegistryFactory,
@@ -62,10 +63,14 @@ async fn scan_query_returns_expected_events() {
     )
     .await
     .expect("scan failed");
-
-    assert_eq!(result.len(), 1);
-    assert_eq!(result[0].context_id, "ctx1");
-    assert_eq!(result[0].payload["key"], "value1");
+    let table = match result {
+        QueryResult::Selection(_) | QueryResult::Aggregation(_) => result.finalize_table(),
+    };
+    // columns: context_id, event_type, timestamp, payload
+    assert_eq!(table.rows.len(), 1);
+    let row = &table.rows[0];
+    assert_eq!(row[0], json!("ctx1"));
+    assert_eq!(row[3]["key"], json!("value1"));
 }
 
 #[tokio::test]
@@ -205,8 +210,14 @@ async fn scan_where_expr_logic() {
         )
         .await
         .unwrap();
-
-        let found_ids: Vec<String> = result.iter().map(|e| e.context_id.clone()).collect();
+        let table = match result {
+            QueryResult::Selection(_) | QueryResult::Aggregation(_) => result.finalize_table(),
+        };
+        let found_ids: Vec<String> = table
+            .rows
+            .iter()
+            .map(|r| r[0].as_str().unwrap().to_string())
+            .collect();
         assert_eq!(
             found_ids, expected_ids,
             "failed for expression: {:?}",
@@ -256,8 +267,11 @@ async fn scan_query_with_context_id_and_expr_logic() {
     )
     .await
     .unwrap();
-    assert_eq!(result.len(), 1);
-    assert_eq!(result[0].context_id, "ctx1");
+    let table = match result {
+        QueryResult::Selection(_) | QueryResult::Aggregation(_) => result.finalize_table(),
+    };
+    assert_eq!(table.rows.len(), 1);
+    assert_eq!(table.rows[0][0], json!("ctx1"));
 
     // 2. Filter by context_id + key = "b"
     let expr = Expr::Compare {
@@ -279,8 +293,11 @@ async fn scan_query_with_context_id_and_expr_logic() {
     )
     .await
     .unwrap();
-    assert_eq!(result.len(), 1);
-    assert_eq!(result[0].context_id, "ctx2");
+    let table = match result {
+        QueryResult::Selection(_) | QueryResult::Aggregation(_) => result.finalize_table(),
+    };
+    assert_eq!(table.rows.len(), 1);
+    assert_eq!(table.rows[0][0], json!("ctx2"));
 
     // 3. context_id = ctx3 and value > 5
     let expr = Expr::Compare {
@@ -302,8 +319,11 @@ async fn scan_query_with_context_id_and_expr_logic() {
     )
     .await
     .unwrap();
-    assert_eq!(result.len(), 1);
-    assert_eq!(result[0].context_id, "ctx3");
+    let table = match result {
+        QueryResult::Selection(_) | QueryResult::Aggregation(_) => result.finalize_table(),
+    };
+    assert_eq!(table.rows.len(), 1);
+    assert_eq!(table.rows[0][0], json!("ctx3"));
 
     // 4. context_id = ctx1 but value > 5 (should fail)
     let expr = Expr::Compare {
@@ -325,7 +345,10 @@ async fn scan_query_with_context_id_and_expr_logic() {
     )
     .await
     .unwrap();
-    assert_eq!(result.len(), 0);
+    let table = match result {
+        QueryResult::Selection(_) | QueryResult::Aggregation(_) => result.finalize_table(),
+    };
+    assert_eq!(table.rows.len(), 0);
 
     // 5. context_id = ctx2 and (value == 5 OR key == "a")
     let expr = Expr::Or(
@@ -354,6 +377,129 @@ async fn scan_query_with_context_id_and_expr_logic() {
     )
     .await
     .unwrap();
-    assert_eq!(result.len(), 1);
-    assert_eq!(result[0].context_id, "ctx2");
+    let table = match result {
+        QueryResult::Selection(_) | QueryResult::Aggregation(_) => result.finalize_table(),
+    };
+    assert_eq!(table.rows.len(), 1);
+    assert_eq!(table.rows[0][0], json!("ctx2"));
+}
+
+#[tokio::test]
+async fn scan_aggregate_count_by_country() {
+    let tmp_dir = tempdir().unwrap();
+    let dir = tmp_dir.path();
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let segment_ids = Arc::new(std::sync::RwLock::new(vec![]));
+    let registry_factory = SchemaRegistryFactory::new();
+    registry_factory
+        .define_with_fields("orders", &[("country", "string"), ("amount", "int")])
+        .await
+        .unwrap();
+    let registry = registry_factory.registry();
+
+    let events = vec![
+        EventFactory::new()
+            .with("context_id", "u1")
+            .with("event_type", "orders")
+            .with("payload", json!({"country":"US","amount": 10}))
+            .create(),
+        EventFactory::new()
+            .with("context_id", "u2")
+            .with("event_type", "orders")
+            .with("payload", json!({"country":"US","amount": 20}))
+            .create(),
+        EventFactory::new()
+            .with("context_id", "u3")
+            .with("event_type", "orders")
+            .with("payload", json!({"country":"DE","amount": 5}))
+            .create(),
+    ];
+    let memtable = MemTableFactory::new().with_events(events).create().unwrap();
+    let passive_buffers = Arc::new(PassiveBufferSet::new(8));
+
+    let cmd = CommandFactory::query()
+        .with_event_type("orders")
+        .add_count()
+        .with_group_by(vec!["country"])
+        .create();
+
+    let result = scan(
+        &cmd,
+        &registry,
+        dir,
+        &segment_ids,
+        &memtable,
+        &passive_buffers,
+    )
+    .await
+    .unwrap();
+    let table = result.finalize_table();
+    // Expect 2 rows (US, DE) and columns include country, count
+    assert!(table.columns.iter().any(|c| c.name == "country"));
+    assert!(table.columns.iter().any(|c| c.name == "count"));
+    assert_eq!(table.rows.len(), 2);
+}
+
+#[tokio::test]
+async fn scan_aggregate_count_unique_and_avg_by_country() {
+    let tmp_dir = tempdir().unwrap();
+    let dir = tmp_dir.path();
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let segment_ids = Arc::new(std::sync::RwLock::new(vec![]));
+    let registry_factory = SchemaRegistryFactory::new();
+    registry_factory
+        .define_with_fields("orders", &[("country", "string"), ("amount", "int")])
+        .await
+        .unwrap();
+    let registry = registry_factory.registry();
+
+    let events = vec![
+        EventFactory::new()
+            .with("context_id", "u1")
+            .with("event_type", "orders")
+            .with("payload", json!({"country":"US","amount": 10}))
+            .create(),
+        EventFactory::new()
+            .with("context_id", "u2")
+            .with("event_type", "orders")
+            .with("payload", json!({"country":"US","amount": 30}))
+            .create(),
+        EventFactory::new()
+            .with("context_id", "u1")
+            .with("event_type", "orders")
+            .with("payload", json!({"country":"DE","amount": 5}))
+            .create(),
+    ];
+    let memtable = MemTableFactory::new().with_events(events).create().unwrap();
+    let passive_buffers = Arc::new(PassiveBufferSet::new(8));
+
+    let cmd = CommandFactory::query()
+        .with_event_type("orders")
+        .add_count_unique("context_id")
+        .add_avg("amount")
+        .with_group_by(vec!["country"])
+        .create();
+
+    let result = scan(
+        &cmd,
+        &registry,
+        dir,
+        &segment_ids,
+        &memtable,
+        &passive_buffers,
+    )
+    .await
+    .unwrap();
+    let table = result.finalize_table();
+    // Expect two rows; verify columns exist
+    assert!(
+        table
+            .columns
+            .iter()
+            .any(|c| c.name.starts_with("count_unique_"))
+    );
+    assert!(table.columns.iter().any(|c| c.name.starts_with("avg_")));
+    assert_eq!(table.rows.len(), 2);
 }

@@ -284,9 +284,9 @@
       {
       "kind": "include_all",
       "value": [
-        "999",
-        "1000",
-        "1001"
+        "\"order_id\":999",
+        "\"order_id\":1000",
+        "\"order_id\":1001"
       ]
     },
     {
@@ -655,6 +655,200 @@
     ]
   }
   ,
+  {
+    "name": "agg_count_per_day_by_country_and_plan",
+    "input_commands": [
+      "DEFINE orders FIELDS { \"amount\": \"int\", \"country\": \"string\", \"plan\": \"string\" }",
+      "STORE orders FOR c1 PAYLOAD {\"amount\":10,\"country\":\"NL\",\"plan\":\"pro\"}",
+      "STORE orders FOR c2 PAYLOAD {\"amount\":20,\"country\":\"NL\",\"plan\":\"basic\"}",
+      "STORE orders FOR c3 PAYLOAD {\"amount\":15,\"country\":\"DE\",\"plan\":\"pro\"}",
+      "STORE orders FOR c4 PAYLOAD {\"amount\":18,\"country\":\"NL\",\"plan\":\"pro\"}",
+      "STORE orders FOR c5 PAYLOAD {\"amount\":11,\"country\":\"NL\",\"plan\":\"basic\"}",
+      "FLUSH",
+      "QUERY orders COUNT PER day BY country, plan"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"NL\",\"basic\",2" },
+      { "kind": "include", "value": "\"NL\",\"pro\",2" },
+      { "kind": "include", "value": "\"DE\",\"pro\",1" }
+    ]
+  }
+  ,
+  {
+    "name": "agg_count_unique_user_by_country_per_week",
+    "input_commands": [
+      "DEFINE login FIELDS { \"user_id\": \"string\", \"country\": \"string\" }",
+      "STORE login FOR u1 PAYLOAD {\"user_id\":\"A\",\"country\":\"NL\"}",
+      "STORE login FOR u2 PAYLOAD {\"user_id\":\"B\",\"country\":\"DE\"}",
+      "STORE login FOR u3 PAYLOAD {\"user_id\":\"A\",\"country\":\"NL\"}",
+      "FLUSH",
+      "QUERY login COUNT UNIQUE user_id PER week BY country"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"count_unique_user_id\"" },
+      { "kind": "include", "value": "\"NL\",1" },
+      { "kind": "include", "value": "\"DE\",1" }
+    ]
+  }
+  ,
+  {
+    "name": "agg_avg_min_max_with_filter_by_country",
+    "input_commands": [
+      "DEFINE orders FIELDS { \"amount\": \"int\", \"country\": \"string\", \"status\": \"string\" }",
+      "STORE orders FOR c1 PAYLOAD {\"amount\":10,\"country\":\"NL\",\"status\":\"ok\"}",
+      "STORE orders FOR c2 PAYLOAD {\"amount\":30,\"country\":\"NL\",\"status\":\"ok\"}",
+      "STORE orders FOR c3 PAYLOAD {\"amount\":25,\"country\":\"DE\",\"status\":\"pending\"}",
+      "FLUSH",
+      "QUERY orders WHERE status=\"ok\" AVG amount, MIN amount, MAX amount BY country"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"avg_amount\"" },
+      { "kind": "include", "value": "\"min_amount\"" },
+      { "kind": "include", "value": "\"max_amount\"" },
+      { "kind": "include", "value": "\"NL\"" },
+      { "kind": "include", "value": "20.0" },
+      { "kind": "include", "value": "10" },
+      { "kind": "include", "value": "30" }
+    ]
+  }
+  ,
+  {
+    "name": "agg_total_amount_group_by_two_fields_no_bucket",
+    "input_commands": [
+      "DEFINE orders FIELDS { \"amount\": \"int\", \"region\": \"string\", \"channel\": \"string\" }",
+      "STORE orders FOR r1 PAYLOAD {\"amount\":5,\"region\":\"EU\",\"channel\":\"web\"}",
+      "STORE orders FOR r2 PAYLOAD {\"amount\":7,\"region\":\"EU\",\"channel\":\"store\"}",
+      "STORE orders FOR r3 PAYLOAD {\"amount\":9,\"region\":\"US\",\"channel\":\"web\"}",
+      "FLUSH",
+      "QUERY orders TOTAL amount BY region, channel"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"EU\",\"web\",5" },
+      { "kind": "include", "value": "\"EU\",\"store\",7" },
+      { "kind": "include", "value": "\"US\",\"web\",9" }
+    ]
+  }
+  ,
+  {
+    "name": "agg_count_and_avg_per_hour_by_region",
+    "input_commands": [
+      "DEFINE metrics FIELDS { \"value\": \"int\", \"region\": \"string\" }",
+      "STORE metrics FOR m1 PAYLOAD {\"value\":1,\"region\":\"EU\"}",
+      "STORE metrics FOR m2 PAYLOAD {\"value\":3,\"region\":\"EU\"}",
+      "STORE metrics FOR m3 PAYLOAD {\"value\":2,\"region\":\"US\"}",
+      "FLUSH",
+      "QUERY metrics COUNT, AVG value PER hour BY region"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"EU\",2,2.0" },
+      { "kind": "include", "value": "\"US\",1,2.0" }
+    ]
+  }
+  ,
+  {
+    "name": "agg_count_and_count_unique_by_country",
+    "input_commands": [
+      "DEFINE login FIELDS { \"user_id\": \"string\", \"country\": \"string\" }",
+      "STORE login FOR a PAYLOAD {\"user_id\":\"X\",\"country\":\"NL\"}",
+      "STORE login FOR b PAYLOAD {\"user_id\":\"Y\",\"country\":\"NL\"}",
+      "STORE login FOR c PAYLOAD {\"user_id\":\"X\",\"country\":\"NL\"}",
+      "FLUSH",
+      "QUERY login COUNT, COUNT UNIQUE user_id BY country"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"count\"" },
+      { "kind": "include", "value": "\"count_unique_user_id\"" },
+      { "kind": "include", "value": "\"NL\",3,2" }
+    ]
+  },
+  {
+    "name": "agg_count_all_simple",
+    "input_commands": [
+      "DEFINE evt FIELDS { \"v\": \"int\" }",
+      "STORE evt FOR a PAYLOAD {\"v\":1}",
+      "STORE evt FOR b PAYLOAD {\"v\":2}",
+      "FLUSH",
+      "QUERY evt COUNT"
+    ],
+    "matcher": { "kind": "include", "value": "\"rows\":[[2]]" }
+  }
+  ,
+  {
+    "name": "agg_count_unique_by_country",
+    "input_commands": [
+      "DEFINE login FIELDS { \"user_id\": \"string\", \"country\": \"string\" }",
+      "STORE login FOR u1 PAYLOAD {\"user_id\":\"A\",\"country\":\"NL\"}",
+      "STORE login FOR u2 PAYLOAD {\"user_id\":\"B\",\"country\":\"DE\"}",
+      "STORE login FOR u3 PAYLOAD {\"user_id\":\"A\",\"country\":\"NL\"}",
+      "FLUSH",
+      "QUERY login COUNT UNIQUE user_id BY country"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"count_unique_user_id\"" },
+      { "kind": "include", "value": "\"NL\",1" },
+      { "kind": "include", "value": "\"DE\",1" }
+    ]
+  }
+  ,
+  {
+    "name": "agg_count_by_country",
+    "input_commands": [
+      "DEFINE login FIELDS { \"user_id\": \"string\", \"country\": \"string\" }",
+      "STORE login FOR u1 PAYLOAD {\"user_id\":\"A\",\"country\":\"NL\"}",
+      "STORE login FOR u2 PAYLOAD {\"user_id\":\"B\",\"country\":\"DE\"}",
+      "STORE login FOR u3 PAYLOAD {\"user_id\":\"A\",\"country\":\"NL\"}",
+      "FLUSH",
+      "QUERY login COUNT user_id BY country"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"count_user_id\"" },
+      { "kind": "include", "value": "\"NL\",2" },
+      { "kind": "include", "value": "\"DE\",1" }
+    ]
+  }
+  ,
+  {
+    "name": "agg_avg_total_min_max_per_month_by_country",
+    "input_commands": [
+      "DEFINE orders FIELDS { \"amount\": \"int\", \"country\": \"string\" }",
+      "STORE orders FOR c1 PAYLOAD {\"amount\":10,\"country\":\"NL\"}",
+      "STORE orders FOR c2 PAYLOAD {\"amount\":20,\"country\":\"NL\"}",
+      "STORE orders FOR c3 PAYLOAD {\"amount\":15,\"country\":\"DE\"}",
+      "FLUSH",
+      "QUERY orders AVG amount, TOTAL amount, MIN amount, MAX amount PER month BY country"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"DE\",15.0,15,15,15" },
+      { "kind": "include", "value": "\"NL\",15.0,30,10,20" }
+    ]
+  }
+  ,
+  {
+    "name": "agg_multiple_ops_no_group",
+    "input_commands": [
+      "DEFINE evt FIELDS { \"x\": \"int\", \"y\": \"int\" }",
+      "STORE evt FOR a PAYLOAD {\"x\":1,\"y\":2}",
+      "STORE evt FOR b PAYLOAD {\"x\":3,\"y\":4}",
+      "FLUSH",
+      "QUERY evt AVG x, MIN y, MAX y, TOTAL x"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"rows\":[[2.0,2,4,4]]" }
+    ]
+  }
+  ,
+  {
+    "name": "agg_count_only_with_filter",
+    "input_commands": [
+      "DEFINE evt FIELDS { \"kind\": \"string\" }",
+      "STORE evt FOR k1 PAYLOAD {\"kind\":\"a\"}",
+      "STORE evt FOR k2 PAYLOAD {\"kind\":\"b\"}",
+      "STORE evt FOR k3 PAYLOAD {\"kind\":\"a\"}",
+      "FLUSH",
+      "QUERY evt WHERE kind=\"a\" COUNT"
+    ],
+    "matcher": { "kind": "include", "value": "\"rows\":[[2]]" }
+  },
   {
     "name": "enum_store_wrong_case_rejected",
     "input_commands": [

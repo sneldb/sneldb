@@ -40,7 +40,6 @@ stdout_level = "warn"
 file_level = "error"
 
 [query]
-zone_index_cache_max_entries = 8000
-column_block_cache_max_bytes = 1073741824
-# Default capacity for process-wide ZoneSurf LRU cache (200MB)
-zone_surf_cache_max_bytes = 209715200
+zone_index_cache_max_entries = 60000
+column_block_cache_max_bytes = 2147483648
+zone_surf_cache_max_bytes = 419430400

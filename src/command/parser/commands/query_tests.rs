@@ -122,6 +122,30 @@ mod query_tests {
     }
 
     #[test]
+    fn test_parse_query_count_per_day_by_two_fields() {
+        let input = r#"QUERY orders COUNT PER day BY country, plan"#;
+        let tokens = tokenize(input);
+        let command = query::parse(&tokens).expect("Failed to parse COUNT PER day BY ...");
+        if let Command::Query {
+            aggs,
+            time_bucket,
+            group_by,
+            ..
+        } = command
+        {
+            let a = aggs.expect("aggs missing");
+            assert!(matches!(a[0], AggSpec::Count { unique_field: None }));
+            assert!(matches!(time_bucket, Some(TimeGranularity::Day)));
+            assert_eq!(
+                group_by,
+                Some(vec!["country".to_string(), "plan".to_string()])
+            );
+        } else {
+            panic!("Expected Query");
+        }
+    }
+
+    #[test]
     fn test_parse_event_sequence_followed_by() {
         let input = r#"QUERY order_created FOLLOWED BY payment_succeeded"#;
         let tokens = tokenize(input);
@@ -363,6 +387,29 @@ mod query_tests {
                 event_sequence: None,
             }
         );
+    }
+
+    #[test]
+    fn test_parse_query_count_field_by_country() {
+        let input = r#"QUERY orders COUNT user_id BY country"#;
+        let tokens = tokenize(input);
+
+        let command = query::parse(&tokens).expect("Failed to parse COUNT <field> BY");
+
+        if let Command::Query { aggs, group_by, .. } = command {
+            let a = aggs.expect("aggs missing");
+            if let Some(first) = a.get(0) {
+                match first {
+                    AggSpec::CountField { field } => assert_eq!(field, "user_id"),
+                    _ => panic!("Expected AggSpec::CountField"),
+                }
+            } else {
+                panic!("aggs empty");
+            }
+            assert_eq!(group_by, Some(vec!["country".to_string()]));
+        } else {
+            panic!("Expected Query");
+        }
     }
 
     #[test]
