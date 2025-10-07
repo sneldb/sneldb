@@ -19,6 +19,7 @@ mod replay_tests {
                 event_type: None,
                 context_id: "user-123".to_string(),
                 since: None,
+                time_field: None,
                 return_fields: None,
             }
         );
@@ -37,6 +38,7 @@ mod replay_tests {
                 event_type: Some("order_created".to_string()),
                 context_id: "user-123".to_string(),
                 since: None,
+                time_field: None,
                 return_fields: None,
             }
         );
@@ -55,6 +57,7 @@ mod replay_tests {
                 event_type: None,
                 context_id: "user-123".to_string(),
                 since: Some("2024-01-01T00:00:00Z".to_string()),
+                time_field: None,
                 return_fields: None,
             }
         );
@@ -74,6 +77,27 @@ mod replay_tests {
                 event_type: Some("order_created".to_string()),
                 context_id: "user-123".to_string(),
                 since: Some("2024-01-01T00:00:00Z".to_string()),
+                time_field: None,
+                return_fields: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_replay_with_using_time_field() {
+        let input =
+            r#"REPLAY order_created FOR user-9 SINCE "2025-01-01T00:00:00Z" USING created_at"#;
+        let tokens = tokenize(input);
+
+        let command = replay::parse(&tokens).expect("Failed to parse REPLAY with USING");
+
+        assert_eq!(
+            command,
+            Command::Replay {
+                event_type: Some("order_created".to_string()),
+                context_id: "user-9".to_string(),
+                since: Some("2025-01-01T00:00:00Z".to_string()),
+                time_field: Some("created_at".to_string()),
                 return_fields: None,
             }
         );
@@ -131,6 +155,7 @@ mod replay_tests {
                 event_type: Some("order_created".to_string()),
                 context_id: "user-123".to_string(),
                 since: None,
+                time_field: None,
                 return_fields: Some(vec![
                     "context_id".to_string(),
                     "event_type".to_string(),
@@ -154,6 +179,7 @@ mod replay_tests {
                 event_type: None,
                 context_id: "user-123".to_string(),
                 since: Some("2024-01-01T00:00:00Z".to_string()),
+                time_field: None,
                 return_fields: Some(vec!["plan".to_string(), "country".to_string()]),
             }
         );
@@ -172,6 +198,7 @@ mod replay_tests {
                 event_type: None,
                 context_id: "user-123".to_string(),
                 since: None,
+                time_field: None,
                 return_fields: Some(vec![]),
             }
         );
@@ -191,6 +218,7 @@ mod replay_tests {
                 event_type: Some("order_created".to_string()),
                 context_id: "user-123".to_string(),
                 since: None,
+                time_field: None,
                 return_fields: Some(vec![
                     "name".to_string(),
                     "country".to_string(),
@@ -214,6 +242,7 @@ mod replay_tests {
                 event_type: None,
                 context_id: "user-123".to_string(),
                 since: None,
+                time_field: None,
                 return_fields: Some(vec![
                     "name".to_string(),
                     "name".to_string(),

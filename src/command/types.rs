@@ -18,6 +18,7 @@ pub enum Command {
         event_type: String,
         context_id: Option<String>,
         since: Option<String>,
+        time_field: Option<String>,
         where_clause: Option<Expr>,
         limit: Option<u32>,
         return_fields: Option<Vec<String>>,
@@ -31,6 +32,7 @@ pub enum Command {
         event_type: Option<String>,
         context_id: String,
         since: Option<String>,
+        time_field: Option<String>,
         return_fields: Option<Vec<String>>,
     },
     Ping,
@@ -44,6 +46,7 @@ impl Command {
             event_type,
             context_id,
             since,
+            time_field,
             return_fields,
         } = self
         {
@@ -51,6 +54,7 @@ impl Command {
                 event_type: event_type.clone().unwrap_or_else(|| "*".to_string()),
                 context_id: Some(context_id.clone()),
                 since: since.clone(),
+                time_field: time_field.clone(),
                 where_clause: None,
                 limit: None,
                 return_fields: return_fields.clone(),

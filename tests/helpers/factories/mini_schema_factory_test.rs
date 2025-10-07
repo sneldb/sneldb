@@ -30,8 +30,7 @@ fn adds_numeric_and_alias_types() {
         .create();
 
     assert_eq!(schema.fields.get("counter"), Some(&FieldType::U64));
-    // alias "datetime" maps to U64 in from_primitive_str
-    assert_eq!(schema.fields.get("created_on"), Some(&FieldType::U64));
+    assert_eq!(schema.fields.get("created_on"), Some(&FieldType::Timestamp));
 }
 
 #[test]

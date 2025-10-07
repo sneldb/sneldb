@@ -75,6 +75,8 @@ pub struct AggregateSink {
     specs: Vec<AggregateOpSpec>,
     group_by: Option<Vec<String>>,
     time_bucket: Option<TimeGranularity>,
+    // Selected time field for bucketing; defaults to core "timestamp"
+    time_field: String,
     groups: HashMap<GroupKey, Vec<AggregatorImpl>>,
 }
 
@@ -84,6 +86,7 @@ impl AggregateSink {
             specs,
             group_by: None,
             time_bucket: None,
+            time_field: "timestamp".to_string(),
             groups: HashMap::new(),
         }
     }
@@ -93,6 +96,24 @@ impl AggregateSink {
             specs: plan.ops.clone(),
             group_by: plan.group_by.clone(),
             time_bucket: plan.time_bucket.clone(),
+            time_field: "timestamp".to_string(),
+            groups: HashMap::new(),
+        }
+    }
+
+    /// Construct from full QueryPlan to honor selected time field for bucketing.
+    pub fn from_query_plan(plan: &QueryPlan, agg: &AggregatePlan) -> Self {
+        let time_field = match &plan.command {
+            crate::command::types::Command::Query { time_field, .. } => time_field
+                .clone()
+                .unwrap_or_else(|| "timestamp".to_string()),
+            _ => "timestamp".to_string(),
+        };
+        Self {
+            specs: agg.ops.clone(),
+            group_by: agg.group_by.clone(),
+            time_bucket: agg.time_bucket.clone(),
+            time_field,
             groups: HashMap::new(),
         }
     }
@@ -210,6 +231,7 @@ impl ResultSink for AggregateSink {
         let key = compute_group_key(
             self.time_bucket.as_ref(),
             self.group_by.as_ref(),
+            &self.time_field,
             columns,
             row_idx,
         );
@@ -226,8 +248,12 @@ impl ResultSink for AggregateSink {
     }
 
     fn on_event(&mut self, event: &Event) {
-        let key =
-            compute_group_key_from_event(self.time_bucket.as_ref(), self.group_by.as_ref(), event);
+        let key = compute_group_key_from_event(
+            self.time_bucket.as_ref(),
+            self.group_by.as_ref(),
+            &self.time_field,
+            event,
+        );
         let entry = self.groups.entry(key).or_insert_with(|| {
             self.specs
                 .iter()
@@ -252,12 +278,13 @@ fn bucket_of(ts: u64, gran: &TimeGranularity) -> u64 {
 fn compute_group_key(
     bucket: Option<&TimeGranularity>,
     group_by: Option<&Vec<String>>,
+    time_field: &str,
     columns: &HashMap<String, ColumnValues>,
     row_idx: usize,
 ) -> GroupKey {
     let mut bucket_val: Option<u64> = None;
     if let Some(gr) = bucket {
-        if let Some(ts_col) = columns.get("timestamp") {
+        if let Some(ts_col) = columns.get(time_field) {
             if let Some(ts) = ts_col.get_i64_at(row_idx) {
                 bucket_val = Some(bucket_of(ts as u64, gr));
             }
@@ -283,11 +310,23 @@ fn compute_group_key(
 fn compute_group_key_from_event(
     bucket: Option<&TimeGranularity>,
     group_by: Option<&Vec<String>>,
+    time_field: &str,
     event: &Event,
 ) -> GroupKey {
     let mut bucket_val: Option<u64> = None;
     if let Some(gr) = bucket {
-        bucket_val = Some(bucket_of(event.timestamp, gr));
+        let ts = if time_field == "timestamp" {
+            event.timestamp
+        } else {
+            event
+                .payload
+                .as_object()
+                .and_then(|m| m.get(time_field))
+                .and_then(|v| v.as_i64())
+                .map(|v| v as u64)
+                .unwrap_or(0)
+        };
+        bucket_val = Some(bucket_of(ts, gr));
     }
     let mut groups: Vec<String> = Vec::new();
     if let Some(gb) = group_by {

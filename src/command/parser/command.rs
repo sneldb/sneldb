@@ -24,15 +24,24 @@ pub fn parse_command(input: &str) -> Result<Command, ParseError> {
             commands::store::parse(&tokens)
         }
         Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("QUERY") => {
-            commands::query::parse(&tokens)
+            // Route QUERY through the PEG parser (same as FIND)
+            match commands::query_peg::parse_query_peg(input) {
+                Ok(cmd) => Ok(cmd),
+                Err(e) => Err(ParseError::UnexpectedToken(format!(
+                    "PEG parse error: {}",
+                    e
+                ))),
+            }
         }
         Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("FIND") => {
-            // Alias: FIND behaves the same as QUERY
-            let mut aliased = tokens.clone();
-            if let Some(Token::Word(w)) = aliased.first_mut() {
-                *w = "QUERY".to_string();
+            // Route FIND/QUERY-compatible PEG parser on the raw input
+            match commands::query_peg::parse_query_peg(input) {
+                Ok(cmd) => Ok(cmd),
+                Err(e) => Err(ParseError::UnexpectedToken(format!(
+                    "PEG parse error: {}",
+                    e
+                ))),
             }
-            commands::query::parse(&aliased)
         }
         Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("REPLAY") => {
             commands::replay::parse(&tokens)

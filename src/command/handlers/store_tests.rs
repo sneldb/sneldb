@@ -71,6 +71,338 @@ async fn test_store_handle_valid_event_is_routed() {
 }
 
 #[tokio::test]
+async fn test_store_normalizes_datetime_rfc3339_to_epoch_seconds() {
+    use crate::logging::init_for_tests;
+    use chrono::{TimeZone, Utc};
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields(
+            "evt_time_norm",
+            &[("id", "int"), ("created_at", "datetime")],
+        )
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    let ts_str = "2025-09-07T12:34:56Z";
+    let expected = Utc
+        .with_ymd_and_hms(2025, 9, 7, 12, 34, 56)
+        .single()
+        .unwrap()
+        .timestamp();
+
+    let cmd = CommandFactory::store()
+        .with_event_type("evt_time_norm")
+        .with_context_id("ctx-time-norm-1")
+        .with_payload(serde_json::json!({ "id": 1, "created_at": ts_str }))
+        .create();
+
+    let (mut _reader, mut writer) = duplex(1024);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .expect("handler should not fail");
+
+    let shard = shard_manager.get_shard("ctx-time-norm-1");
+    let (tx, mut rx) = mpsc::channel(1);
+    shard
+        .tx
+        .send(ShardMessage::Query(
+            CommandFactory::query()
+                .with_event_type("evt_time_norm")
+                .with_context_id("ctx-time-norm-1")
+                .create(),
+            tx,
+            registry.clone(),
+        ))
+        .await
+        .unwrap();
+
+    let result = timeout(Duration::from_secs(1), rx.recv())
+        .await
+        .expect("timeout waiting for result")
+        .expect("no data");
+
+    match result {
+        QueryResult::Selection(selection) => {
+            let payload = &selection.rows[0][3];
+            assert_eq!(payload["created_at"], serde_json::json!(expected));
+        }
+        _ => panic!("Expected selection result, got {:?}", result),
+    }
+}
+
+#[tokio::test]
+async fn test_store_normalizes_datetime_integer_units() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("evt_units", &[("id", "int"), ("created_at", "datetime")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // seconds
+    let cmd1 = CommandFactory::store()
+        .with_event_type("evt_units")
+        .with_context_id("ctx-units-1")
+        .with_payload(serde_json::json!({ "id": 1, "created_at": 1_600_000_000 }))
+        .create();
+    let (mut _r1, mut w1) = duplex(1024);
+    handle(&cmd1, &shard_manager, &registry, &mut w1, &JsonRenderer)
+        .await
+        .unwrap();
+
+    // milliseconds
+    let cmd2 = CommandFactory::store()
+        .with_event_type("evt_units")
+        .with_context_id("ctx-units-2")
+        .with_payload(serde_json::json!({ "id": 2, "created_at": 1_600_000_000_000u64 }))
+        .create();
+    let (mut _r2, mut w2) = duplex(1024);
+    handle(&cmd2, &shard_manager, &registry, &mut w2, &JsonRenderer)
+        .await
+        .unwrap();
+
+    // microseconds
+    let cmd3 = CommandFactory::store()
+        .with_event_type("evt_units")
+        .with_context_id("ctx-units-3")
+        .with_payload(serde_json::json!({ "id": 3, "created_at": 1_600_000_000_000_000u64 }))
+        .create();
+    let (mut _r3, mut w3) = duplex(1024);
+    handle(&cmd3, &shard_manager, &registry, &mut w3, &JsonRenderer)
+        .await
+        .unwrap();
+
+    // nanoseconds
+    let cmd4 = CommandFactory::store()
+        .with_event_type("evt_units")
+        .with_context_id("ctx-units-4")
+        .with_payload(serde_json::json!({ "id": 4, "created_at": 1_600_000_000_000_000_000u64 }))
+        .create();
+    let (mut _r4, mut w4) = duplex(1024);
+    handle(&cmd4, &shard_manager, &registry, &mut w4, &JsonRenderer)
+        .await
+        .unwrap();
+
+    // float seconds (floor)
+    let cmd5 = CommandFactory::store()
+        .with_event_type("evt_units")
+        .with_context_id("ctx-units-5")
+        .with_payload(serde_json::json!({ "id": 5, "created_at": 1_600_000_000.9 }))
+        .create();
+    let (mut _r5, mut w5) = duplex(1024);
+    handle(&cmd5, &shard_manager, &registry, &mut w5, &JsonRenderer)
+        .await
+        .unwrap();
+
+    // Query and verify normalization results
+    for (ctx, expected) in [
+        ("ctx-units-1", 1_600_000_000),
+        ("ctx-units-2", 1_600_000_000),
+        ("ctx-units-3", 1_600_000_000),
+        ("ctx-units-4", 1_600_000_000),
+        ("ctx-units-5", 1_600_000_000),
+    ] {
+        let shard = shard_manager.get_shard(ctx);
+        let (tx, mut rx) = mpsc::channel(1);
+        shard
+            .tx
+            .send(ShardMessage::Query(
+                CommandFactory::query()
+                    .with_event_type("evt_units")
+                    .with_context_id(ctx)
+                    .create(),
+                tx,
+                registry.clone(),
+            ))
+            .await
+            .unwrap();
+
+        let result = timeout(Duration::from_secs(1), rx.recv())
+            .await
+            .expect("timeout waiting for result")
+            .expect("no data");
+
+        match result {
+            QueryResult::Selection(selection) => {
+                let payload = &selection.rows[0][3];
+                assert_eq!(payload["created_at"], serde_json::json!(expected));
+            }
+            _ => panic!("Expected selection result, got {:?}", result),
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_store_normalizes_date_string_to_midnight() {
+    use crate::logging::init_for_tests;
+    use chrono::{TimeZone, Utc};
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("evt_date_norm", &[("id", "int"), ("birthdate", "date")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    let d_str = "2025-09-07";
+    let expected = Utc
+        .with_ymd_and_hms(2025, 9, 7, 0, 0, 0)
+        .single()
+        .unwrap()
+        .timestamp();
+
+    let cmd = CommandFactory::store()
+        .with_event_type("evt_date_norm")
+        .with_context_id("ctx-date-norm-1")
+        .with_payload(serde_json::json!({ "id": 2, "birthdate": d_str }))
+        .create();
+
+    let (mut _reader, mut writer) = duplex(1024);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .expect("handler should not fail");
+
+    let shard = shard_manager.get_shard("ctx-date-norm-1");
+    let (tx, mut rx) = mpsc::channel(1);
+    shard
+        .tx
+        .send(ShardMessage::Query(
+            CommandFactory::query()
+                .with_event_type("evt_date_norm")
+                .with_context_id("ctx-date-norm-1")
+                .create(),
+            tx,
+            registry.clone(),
+        ))
+        .await
+        .unwrap();
+
+    let result = timeout(Duration::from_secs(1), rx.recv())
+        .await
+        .expect("timeout waiting for result")
+        .expect("no data");
+
+    match result {
+        QueryResult::Selection(selection) => {
+            let payload = &selection.rows[0][3];
+            assert_eq!(payload["birthdate"], serde_json::json!(expected));
+        }
+        _ => panic!("Expected selection result, got {:?}", result),
+    }
+}
+
+#[tokio::test]
+async fn test_store_optional_datetime_null_passes() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields(
+            "evt_optional_time",
+            &[("id", "int"), ("delivered_at", "datetime | null")],
+        )
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    let cmd = CommandFactory::store()
+        .with_event_type("evt_optional_time")
+        .with_context_id("ctx-optional-1")
+        .with_payload(serde_json::json!({ "id": 3, "delivered_at": null }))
+        .create();
+
+    let (mut _reader, mut writer) = duplex(1024);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .expect("handler should not fail");
+
+    let shard = shard_manager.get_shard("ctx-optional-1");
+    let (tx, mut rx) = mpsc::channel(1);
+    shard
+        .tx
+        .send(ShardMessage::Query(
+            CommandFactory::query()
+                .with_event_type("evt_optional_time")
+                .with_context_id("ctx-optional-1")
+                .create(),
+            tx,
+            registry.clone(),
+        ))
+        .await
+        .unwrap();
+
+    let result = timeout(Duration::from_secs(1), rx.recv())
+        .await
+        .expect("timeout waiting for result")
+        .expect("no data");
+
+    match result {
+        QueryResult::Selection(selection) => {
+            let payload = &selection.rows[0][3];
+            assert!(payload.get("delivered_at").unwrap().is_null());
+        }
+        _ => panic!("Expected selection result, got {:?}", result),
+    }
+}
+
+#[tokio::test]
+async fn test_store_rejects_invalid_time_string() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("evt_bad_time", &[("id", "int"), ("created_at", "datetime")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    let cmd = CommandFactory::store()
+        .with_event_type("evt_bad_time")
+        .with_context_id("ctx-bad-1")
+        .with_payload(serde_json::json!({ "id": 4, "created_at": "not-a-time" }))
+        .create();
+
+    let (mut reader, mut writer) = duplex(1024);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut response = vec![0u8; 1024];
+    let n = reader.read(&mut response).await.unwrap();
+    let msg = String::from_utf8_lossy(&response[..n]);
+    assert!(msg.contains("Invalid time string"));
+}
+
+#[tokio::test]
 async fn test_store_handle_rejects_empty_event_type() {
     use crate::logging::init_for_tests;
     init_for_tests();
@@ -267,4 +599,125 @@ async fn test_store_handle_accepts_missing_optional_field() {
 
     assert!(msg.contains("OK"));
     assert!(msg.contains("Event accepted for storage"));
+}
+
+#[tokio::test]
+async fn test_store_handle_accepts_datetime_string_field() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    // Define schema with a logical datetime field
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("evt_time", &[("id", "int"), ("created_at", "datetime")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // RFC3339 datetime string
+    let ts_str = "2025-09-07T12:34:56Z";
+    let cmd = CommandFactory::store()
+        .with_event_type("evt_time")
+        .with_context_id("ctx-time-1")
+        .with_payload(serde_json::json!({ "id": 1, "created_at": ts_str }))
+        .create();
+
+    let (mut _reader, mut writer) = duplex(1024);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .expect("handler should not fail");
+
+    // Query back and ensure the row exists and carries the field
+    let shard = shard_manager.get_shard("ctx-time-1");
+    let (tx, mut rx) = mpsc::channel(1);
+    shard
+        .tx
+        .send(ShardMessage::Query(
+            CommandFactory::query()
+                .with_event_type("evt_time")
+                .with_context_id("ctx-time-1")
+                .create(),
+            tx,
+            registry.clone(),
+        ))
+        .await
+        .unwrap();
+
+    let result = timeout(Duration::from_secs(1), rx.recv())
+        .await
+        .expect("timeout waiting for result")
+        .expect("no data");
+
+    match result {
+        QueryResult::Selection(selection) => {
+            assert_eq!(selection.rows.len(), 1);
+            let payload = &selection.rows[0][3];
+            assert!(payload.get("created_at").is_some());
+        }
+        _ => panic!("Expected selection result, got {:?}", result),
+    }
+}
+
+#[tokio::test]
+async fn test_store_handle_accepts_date_string_field() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    // Define schema with a logical date field
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("evt_date", &[("id", "int"), ("birthdate", "date")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Date-only string
+    let d_str = "2025-09-07";
+    let cmd = CommandFactory::store()
+        .with_event_type("evt_date")
+        .with_context_id("ctx-date-1")
+        .with_payload(serde_json::json!({ "id": 2, "birthdate": d_str }))
+        .create();
+
+    let (mut _reader, mut writer) = duplex(1024);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .expect("handler should not fail");
+
+    let shard = shard_manager.get_shard("ctx-date-1");
+    let (tx, mut rx) = mpsc::channel(1);
+    shard
+        .tx
+        .send(ShardMessage::Query(
+            CommandFactory::query()
+                .with_event_type("evt_date")
+                .with_context_id("ctx-date-1")
+                .create(),
+            tx,
+            registry.clone(),
+        ))
+        .await
+        .unwrap();
+
+    let result = timeout(Duration::from_secs(1), rx.recv())
+        .await
+        .expect("timeout waiting for result")
+        .expect("no data");
+
+    match result {
+        QueryResult::Selection(selection) => {
+            assert_eq!(selection.rows.len(), 1);
+            let payload = &selection.rows[0][3];
+            assert!(payload.get("birthdate").is_some());
+        }
+        _ => panic!("Expected selection result, got {:?}", result),
+    }
 }

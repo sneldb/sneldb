@@ -43,6 +43,7 @@ impl CommandFactory {
                 time_bucket: None,
                 group_by: None,
                 event_sequence: None,
+                time_field: None,
             },
         }
     }
@@ -54,6 +55,7 @@ impl CommandFactory {
                 context_id: "ctx1".into(),
                 since: Some("2023-01-01T00:00:00Z".into()),
                 return_fields: None,
+                time_field: None,
             },
         }
     }
@@ -221,6 +223,13 @@ impl CommandFactory {
         let values: Vec<String> = fields.into_iter().map(|s| s.to_string()).collect();
         if let Command::Query { group_by, .. } = &mut self.inner {
             *group_by = Some(values);
+        }
+        self
+    }
+
+    pub fn with_time_field(mut self, field: &str) -> Self {
+        if let Command::Query { time_field, .. } = &mut self.inner {
+            *time_field = Some(field.to_string());
         }
         self
     }

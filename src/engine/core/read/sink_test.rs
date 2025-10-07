@@ -202,6 +202,87 @@ async fn aggregate_sink_row_group_by_and_month_bucket() {
 }
 
 #[tokio::test]
+async fn aggregate_sink_row_month_bucket_using_created_at() {
+    // Prepare registry and plan with selected time_field = created_at
+    let registry_factory = SchemaRegistryFactory::new();
+    registry_factory
+        .define_with_fields(
+            "order2",
+            &[
+                ("created_at", "datetime"),
+                ("country", "string"),
+                ("amount", "int"),
+            ],
+        )
+        .await
+        .unwrap();
+    let registry = registry_factory.registry();
+
+    let cmd = CommandFactory::query()
+        .with_event_type("order2")
+        .with_time_field("created_at")
+        .create();
+
+    let plan = QueryPlanFactory::new()
+        .with_command(cmd)
+        .with_registry(registry.clone())
+        .create()
+        .await;
+
+    let specs = vec![
+        AggregateOpSpec::CountAll,
+        AggregateOpSpec::Total {
+            field: "amount".into(),
+        },
+    ];
+    let plan_spec = AggregatePlan {
+        ops: specs.clone(),
+        group_by: Some(vec!["country".into()]),
+        time_bucket: Some(TimeGranularity::Month),
+    };
+    let mut sink =
+        crate::engine::core::read::sink::AggregateSink::from_query_plan(&plan, &plan_spec);
+
+    // Same month bucket computed from created_at
+    let ts1 = 3_000_000u64; // month bucket: 2_592_000
+    let ts2 = 3_000_100u64; // same bucket
+    let ts3 = 3_200_000u64; // may be same or next depending; keep same bucket boundary
+    let columns = make_columns(&[
+        (
+            "created_at",
+            vec![&ts1.to_string(), &ts2.to_string(), &ts3.to_string()],
+        ),
+        ("country", vec!["US", "US", "DE"]),
+        ("amount", vec!["10", "5", "3"]),
+    ]);
+
+    sink.on_row(0, &columns);
+    sink.on_row(1, &columns);
+    sink.on_row(2, &columns);
+
+    let events = sink.into_events(&plan);
+    assert_eq!(events.len(), 2);
+    let mut seen_us = false;
+    let mut seen_de = false;
+    for e in events {
+        let p = e.payload.as_object().unwrap();
+        let country = p["country"].as_str().unwrap();
+        if country == "US" {
+            seen_us = true;
+            assert_eq!(p["bucket"], json!(month_bucket(ts1)));
+            assert_eq!(p["count"], json!(2));
+            assert_eq!(p["total_amount"], json!(15));
+        } else if country == "DE" {
+            seen_de = true;
+            assert_eq!(p["bucket"], json!(month_bucket(ts1)));
+            assert_eq!(p["count"], json!(1));
+            assert_eq!(p["total_amount"], json!(3));
+        }
+    }
+    assert!(seen_us && seen_de);
+}
+
+#[tokio::test]
 async fn aggregate_sink_row_missing_groupby_field_emits_empty_string() {
     let specs = vec![AggregateOpSpec::CountAll];
     let plan_spec = AggregatePlan {
@@ -311,6 +392,82 @@ async fn aggregate_sink_event_group_by_and_day_bucket() {
     assert_eq!(by_key.get(&("US".into(), 86_400)).cloned(), Some((2, 15)));
     assert_eq!(by_key.get(&("US".into(), 172_800)).cloned(), Some((1, 2)));
     assert_eq!(by_key.get(&("DE".into(), 86_400)).cloned(), Some((1, 3)));
+}
+
+#[tokio::test]
+async fn aggregate_sink_event_bucket_using_created_at() {
+    // Registry with created_at
+    let registry_factory = SchemaRegistryFactory::new();
+    registry_factory
+        .define_with_fields(
+            "evt_time_bucket",
+            &[
+                ("created_at", "datetime"),
+                ("country", "string"),
+                ("amount", "int"),
+            ],
+        )
+        .await
+        .unwrap();
+    let registry = registry_factory.registry();
+
+    let cmd = CommandFactory::query()
+        .with_event_type("evt_time_bucket")
+        .with_time_field("created_at")
+        .create();
+
+    let plan = QueryPlanFactory::new()
+        .with_command(cmd)
+        .with_registry(registry)
+        .create()
+        .await;
+
+    let specs = vec![AggregateOpSpec::CountAll];
+    let agg = AggregatePlan {
+        ops: specs.clone(),
+        group_by: Some(vec!["country".into()]),
+        time_bucket: Some(TimeGranularity::Day),
+    };
+    let mut sink = crate::engine::core::read::sink::AggregateSink::from_query_plan(&plan, &agg);
+
+    // Day bucket 86400s computed from created_at in payload
+    let e1 = EventFactory::new()
+        .with("timestamp", json!(1))
+        .with(
+            "payload",
+            json!({"country":"US", "amount": 10, "created_at": 86_401}),
+        )
+        .create();
+    let e2 = EventFactory::new()
+        .with("timestamp", json!(1))
+        .with(
+            "payload",
+            json!({"country":"US", "amount": 5, "created_at": 86_450}),
+        )
+        .create();
+    let e3 = EventFactory::new()
+        .with("timestamp", json!(1))
+        .with(
+            "payload",
+            json!({"country":"US", "amount": 2, "created_at": 172_800}),
+        )
+        .create();
+    sink.on_event(&e1);
+    sink.on_event(&e2);
+    sink.on_event(&e3);
+
+    let mut events = sink.into_events(&plan);
+    // Expect two buckets for US: day1 and day2
+    events.sort_by(|a, b| {
+        a.payload["bucket"]
+            .as_u64()
+            .cmp(&b.payload["bucket"].as_u64())
+    });
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0].payload["bucket"], json!(86_400));
+    assert_eq!(events[0].payload["count"], json!(2));
+    assert_eq!(events[1].payload["bucket"], json!(172_800));
+    assert_eq!(events[1].payload["count"], json!(1));
 }
 
 // AggregateSink - partial snapshot -------------------------------------
