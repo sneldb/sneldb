@@ -1,7 +1,7 @@
 use crate::command::types::CompareOp;
+use crate::engine::core::zone::selector::pruner::{PruneArgs, ZonePruner};
 use crate::engine::core::zone::zone_artifacts::ZoneArtifacts;
 use crate::engine::core::{CandidateZone, FieldXorFilter, RangeQueryHandler};
-use crate::engine::core::zone::selector::pruner::{PruneArgs, ZonePruner};
 use tracing::{info, warn};
 
 pub struct RangePruner<'a> {
@@ -46,7 +46,6 @@ impl<'a> RangePruner<'a> {
             RangeQueryHandler::new(FieldXorFilter::new(&Vec::new()), segment_id.to_string())
                 .handle_range_query(value, op)
         {
-            warn!("zones: {:?}", zones);
             return Some(zones);
         }
 
@@ -56,8 +55,9 @@ impl<'a> RangePruner<'a> {
 
 impl<'a> ZonePruner for RangePruner<'a> {
     fn apply(&self, args: &PruneArgs) -> Option<Vec<CandidateZone>> {
-        let (Some(op), Some(value)) = (args.op, args.value) else { return None; };
+        let (Some(op), Some(value)) = (args.op, args.value) else {
+            return None;
+        };
         self.attempt(args.segment_id, args.uid, args.column, value, op)
     }
 }
-
