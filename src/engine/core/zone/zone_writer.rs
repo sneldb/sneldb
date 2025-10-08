@@ -72,7 +72,7 @@ impl<'a> ZoneWriter<'a> {
         if let Err(e) = build_all_zxf(zone_plans, self.segment_dir) {
             debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping .zxf due to error");
         }
-        
+
         // Build Zone-level SuRF filters (best-effort)
         debug!(
             target: "sneldb::flush",

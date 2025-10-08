@@ -36,7 +36,7 @@ impl<'a> SegmentAggregateRunner<'a> {
 
         let evaluator = ConditionEvaluatorBuilder::build_from_plan(self.plan);
 
-        let mut total_matched: usize = 0;
+        let mut _total_matched: usize = 0;
         for zone in &zones {
             // Build a column reference map owned by this function
             let mut columns: HashMap<
@@ -50,6 +50,39 @@ impl<'a> SegmentAggregateRunner<'a> {
                 continue;
             }
 
+            // Prewarm numeric caches for numeric aggregates and time bucketing
+            if let Some(agg) = &self.plan.aggregate_plan {
+                // Warm time bucket field if present
+                if agg.time_bucket.is_some() {
+                    let time_field = match &self.plan.command {
+                        crate::command::types::Command::Query { time_field, .. } => time_field
+                            .clone()
+                            .unwrap_or_else(|| "timestamp".to_string()),
+                        _ => "timestamp".to_string(),
+                    };
+                    if let Some(col) = columns.get(&time_field) {
+                        col.warm_numeric_cache();
+                    }
+                }
+
+                // Warm numeric fields used by Total/Avg (and numeric Min/Max if they exist)
+                for op in &agg.ops {
+                    match op {
+                        crate::engine::core::read::aggregate::plan::AggregateOpSpec::Total {
+                            field,
+                        }
+                        | crate::engine::core::read::aggregate::plan::AggregateOpSpec::Avg {
+                            field,
+                        } => {
+                            if let Some(col) = columns.get(field) {
+                                col.warm_numeric_cache();
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
             let accessor = PreparedAccessor::new(&columns);
             let n = accessor.event_count();
             let mut matched_in_zone = 0usize;
@@ -59,7 +92,7 @@ impl<'a> SegmentAggregateRunner<'a> {
                     matched_in_zone += 1;
                 }
             }
-            total_matched += matched_in_zone;
+            _total_matched += matched_in_zone;
         }
     }
 }

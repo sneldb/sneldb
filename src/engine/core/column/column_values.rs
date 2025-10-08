@@ -9,6 +9,8 @@ pub struct ColumnValues {
     pub ranges: Vec<(usize, usize)>, // (start, len)
     // Lazily constructed cache of parsed i64 values; None for non-integers.
     numeric_cache: Arc<OnceLock<Arc<Vec<Option<i64>>>>>,
+    // Cached result indicating whether all entries are valid UTF-8
+    utf8_validated: Arc<OnceLock<bool>>,
 }
 
 impl ColumnValues {
@@ -17,6 +19,7 @@ impl ColumnValues {
             block,
             ranges,
             numeric_cache: Arc::new(OnceLock::new()),
+            utf8_validated: Arc::new(OnceLock::new()),
         }
     }
 
@@ -34,8 +37,29 @@ impl ColumnValues {
     pub fn get_str_at(&self, index: usize) -> Option<&str> {
         let (start, len) = *self.ranges.get(index)?;
         let bytes = &self.block.bytes[start..start + len];
-        // Values are UTF-8 encoded when written; validate at read time
+        // Values are UTF-8 encoded when written; if invalid, return None.
         std::str::from_utf8(bytes).ok()
+    }
+
+    /// Validates the entire column contains valid UTF-8; caches the result.
+    pub fn validate_utf8(&self) -> bool {
+        *self.utf8_validated.get_or_init(|| {
+            for (start, len) in &self.ranges {
+                let bytes = &self.block.bytes[*start..*start + *len];
+                if std::str::from_utf8(bytes).is_err() {
+                    return false;
+                }
+            }
+            true
+        })
+    }
+
+    /// Unsafe fast-path: assumes the column has been validated via `validate_utf8`.
+    #[inline]
+    pub fn get_str_at_unchecked(&self, index: usize) -> Option<&str> {
+        let (start, len) = *self.ranges.get(index)?;
+        let bytes = &self.block.bytes[start..start + len];
+        Some(unsafe { std::str::from_utf8_unchecked(bytes) })
     }
 
     #[inline]
@@ -49,6 +73,19 @@ impl ColumnValues {
             Arc::new(parsed)
         });
         cache.get(index)?.clone()
+    }
+
+    /// Pre-builds the numeric cache for this column if any numeric access is expected.
+    /// This avoids first-touch contention and amortizes parsing cost outside the hot loop.
+    pub fn warm_numeric_cache(&self) {
+        let _ = self.numeric_cache.get_or_init(|| {
+            let mut parsed: Vec<Option<i64>> = Vec::with_capacity(self.ranges.len());
+            for i in 0..self.ranges.len() {
+                let v = self.get_str_at(i).and_then(|s| s.parse::<i64>().ok());
+                parsed.push(v);
+            }
+            Arc::new(parsed)
+        });
     }
 }
 

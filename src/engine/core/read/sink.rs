@@ -7,8 +7,9 @@ use crate::engine::core::read::aggregate::partial::{
 };
 use crate::engine::core::read::aggregate::plan::{AggregateOpSpec, AggregatePlan};
 use crate::engine::core::{Event, QueryPlan};
+use ahash::RandomState as AHashRandomState;
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
+use std::hash::{BuildHasher, Hash, Hasher};
 
 /// A sink that consumes matching rows or events produced by the execution path
 pub trait ResultSink {
@@ -52,22 +53,23 @@ impl ResultSink for EventSink {
 /// Aggregation sink that maintains aggregator state and can output a synthetic event
 #[derive(Clone, Debug, Eq)]
 struct GroupKey {
+    // Precomputed 64-bit hash to speed up HashMap lookups and reduce per-insert hashing cost
+    prehash: u64,
     bucket: Option<u64>,
     groups: Vec<String>,
 }
 
 impl PartialEq for GroupKey {
     fn eq(&self, other: &Self) -> bool {
+        // prehash is a cache; equality must be defined by the actual key fields
         self.bucket == other.bucket && self.groups == other.groups
     }
 }
 
 impl Hash for GroupKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.bucket.hash(state);
-        for g in &self.groups {
-            g.hash(state);
-        }
+        // Use the precomputed hash to avoid re-hashing the full key
+        self.prehash.hash(state);
     }
 }
 
@@ -77,7 +79,7 @@ pub struct AggregateSink {
     time_bucket: Option<TimeGranularity>,
     // Selected time field for bucketing; defaults to core "timestamp"
     time_field: String,
-    groups: HashMap<GroupKey, Vec<AggregatorImpl>>,
+    groups: std::collections::HashMap<GroupKey, Vec<AggregatorImpl>, AHashRandomState>,
 }
 
 impl AggregateSink {
@@ -87,7 +89,7 @@ impl AggregateSink {
             group_by: None,
             time_bucket: None,
             time_field: "timestamp".to_string(),
-            groups: HashMap::new(),
+            groups: std::collections::HashMap::with_hasher(AHashRandomState::new()),
         }
     }
 
@@ -97,7 +99,7 @@ impl AggregateSink {
             group_by: plan.group_by.clone(),
             time_bucket: plan.time_bucket.clone(),
             time_field: "timestamp".to_string(),
-            groups: HashMap::new(),
+            groups: std::collections::HashMap::with_hasher(AHashRandomState::new()),
         }
     }
 
@@ -114,7 +116,7 @@ impl AggregateSink {
             group_by: agg.group_by.clone(),
             time_bucket: agg.time_bucket.clone(),
             time_field,
-            groups: HashMap::new(),
+            groups: std::collections::HashMap::with_hasher(AHashRandomState::new()),
         }
     }
 
@@ -122,8 +124,10 @@ impl AggregateSink {
     pub fn into_events(self, plan: &QueryPlan) -> Vec<Event> {
         // If no grouping/bucketing, synthesize a single default key from map or empty
         let groups = if self.groups.is_empty() {
-            let mut m: HashMap<GroupKey, Vec<AggregatorImpl>> = HashMap::new();
+            let mut m: std::collections::HashMap<GroupKey, Vec<AggregatorImpl>, AHashRandomState> =
+                std::collections::HashMap::with_hasher(AHashRandomState::new());
             let key = GroupKey {
+                prehash: 0,
                 bucket: None,
                 groups: Vec::new(),
             };
@@ -290,7 +294,11 @@ fn compute_group_key(
             }
         }
     }
-    let mut groups: Vec<String> = Vec::new();
+    let mut groups: Vec<String> = if let Some(gb) = group_by {
+        Vec::with_capacity(gb.len())
+    } else {
+        Vec::new()
+    };
     if let Some(gb) = group_by {
         for name in gb.iter() {
             if let Some(col) = columns.get(name) {
@@ -301,7 +309,15 @@ fn compute_group_key(
             }
         }
     }
+    // Precompute a stable 64-bit hash for the group key
+    let mut hasher = AHashRandomState::with_seeds(0, 0, 0, 0).build_hasher();
+    bucket_val.hash(&mut hasher);
+    for g in &groups {
+        g.hash(&mut hasher);
+    }
+    let prehash = hasher.finish();
     GroupKey {
+        prehash,
         bucket: bucket_val,
         groups,
     }
@@ -334,7 +350,14 @@ fn compute_group_key_from_event(
             groups.push(event.get_field_value(name));
         }
     }
+    let mut hasher = AHashRandomState::with_seeds(0, 0, 0, 0).build_hasher();
+    bucket_val.hash(&mut hasher);
+    for g in &groups {
+        g.hash(&mut hasher);
+    }
+    let prehash = hasher.finish();
     GroupKey {
+        prehash,
         bucket: bucket_val,
         groups,
     }
