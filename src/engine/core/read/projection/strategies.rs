@@ -1,7 +1,7 @@
-use super::context::ProjectionContext;
 use super::columns::ProjectionColumns;
-use crate::engine::core::read::aggregate::plan::{AggregateOpSpec, AggregatePlan};
+use super::context::ProjectionContext;
 use crate::engine::core::QueryPlan;
+use crate::engine::core::read::aggregate::plan::{AggregateOpSpec, AggregatePlan};
 use std::collections::HashSet;
 
 #[async_trait::async_trait]
@@ -75,9 +75,15 @@ impl<'a> ProjectionStrategy for AggregationProjection<'a> {
             }
         }
 
-        // time bucket
+        // time bucket requires the selected time field (defaults to core "timestamp")
         if self.agg.time_bucket.is_some() {
-            set.add("timestamp");
+            let tf = match &self.plan.command {
+                crate::command::types::Command::Query { time_field, .. } => {
+                    time_field.as_deref().unwrap_or("timestamp")
+                }
+                _ => "timestamp",
+            };
+            set.add(tf);
         }
 
         // agg inputs
@@ -111,5 +117,3 @@ impl<'a> ProjectionStrategy for AggregationProjection<'a> {
         final_set
     }
 }
-
-

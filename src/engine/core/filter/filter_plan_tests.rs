@@ -48,6 +48,44 @@ async fn builds_filters_with_context_and_timestamp_and_where_clause() {
 }
 
 #[tokio::test]
+async fn builds_filters_with_custom_time_field_using_clause() {
+    let registry = SchemaRegistryFactory::new();
+    registry
+        .define_with_fields(
+            "evt",
+            &[
+                ("context_id", "string"),
+                ("created_at", "datetime"),
+                ("x", "string"),
+            ],
+        )
+        .await
+        .unwrap();
+
+    let cmd = CommandFactory::query()
+        .with_event_type("evt")
+        .with_context_id("c1")
+        .with_since("2025-01-01T00:00:00Z")
+        .with_time_field("created_at")
+        .create();
+
+    let plans = FilterPlan::build_all(&cmd, &registry.registry()).await;
+
+    let mut map: std::collections::HashMap<&str, &FilterPlan> = std::collections::HashMap::new();
+    for p in &plans {
+        map.insert(&p.column, p);
+    }
+
+    // context_id and event_type should be present
+    assert!(map.contains_key("context_id"));
+    assert!(map.contains_key("event_type"));
+    // time filter should target created_at (selected time field), not core timestamp
+    assert!(map.contains_key("created_at"));
+    assert!(!map.contains_key("timestamp"));
+    assert_eq!(map["created_at"].operation, Some(CompareOp::Gte));
+}
+
+#[tokio::test]
 async fn preserves_multiple_where_filters_for_same_column_in_or() {
     let registry = SchemaRegistryFactory::new();
     registry
@@ -99,5 +137,297 @@ async fn preserves_multiple_where_filters_for_same_column_in_or() {
         plan_filters
             .iter()
             .all(|p| p.operation == Some(CompareOp::Eq))
+    );
+}
+
+#[tokio::test]
+async fn when_since_missing_time_field_gets_fallback_plan() {
+    let registry = SchemaRegistryFactory::new();
+    registry
+        .define_with_fields(
+            "evt2",
+            &[
+                ("context_id", "string"),
+                ("created_at", "datetime"),
+                ("y", "string"),
+            ],
+        )
+        .await
+        .unwrap();
+
+    // No SINCE, no WHERE => created_at should appear only as a fallback filter (operation None)
+    let cmd = CommandFactory::query()
+        .with_event_type("evt2")
+        .with_context_id("c2")
+        .create();
+
+    let plans = FilterPlan::build_all(&cmd, &registry.registry()).await;
+
+    let created = plans.iter().find(|p| p.column == "created_at").unwrap();
+    assert_eq!(created.operation, None);
+    assert_eq!(created.priority, 3);
+}
+
+#[tokio::test]
+async fn using_time_field_with_where_on_same_column_keeps_both_filters() {
+    let registry = SchemaRegistryFactory::new();
+    registry
+        .define_with_fields(
+            "evt3",
+            &[
+                ("context_id", "string"),
+                ("created_at", "datetime"),
+                ("a", "string"),
+            ],
+        )
+        .await
+        .unwrap();
+
+    let cmd = CommandFactory::query()
+        .with_event_type("evt3")
+        .with_context_id("c3")
+        .with_since("123456")
+        .with_time_field("created_at")
+        .with_where_clause(Expr::Compare {
+            field: "created_at".into(),
+            op: CompareOp::Gt,
+            value: json!(200000),
+        })
+        .create();
+
+    let plans = FilterPlan::build_all(&cmd, &registry.registry()).await;
+
+    let created_filters: Vec<_> = plans.iter().filter(|p| p.column == "created_at").collect();
+    // Expect two filters on created_at: one from SINCE (Gte), one from WHERE (Gt)
+    assert_eq!(created_filters.len(), 2);
+    assert!(
+        created_filters
+            .iter()
+            .any(|p| p.operation == Some(CompareOp::Gte))
+    );
+    assert!(
+        created_filters
+            .iter()
+            .any(|p| p.operation == Some(CompareOp::Gt))
+    );
+}
+
+#[tokio::test]
+async fn using_timestamp_explicit_targets_core_timestamp() {
+    let registry = SchemaRegistryFactory::new();
+    registry
+        .define_with_fields(
+            "evt4",
+            &[
+                ("context_id", "string"),
+                ("created_at", "datetime"),
+                ("a", "string"),
+            ],
+        )
+        .await
+        .unwrap();
+
+    let cmd = CommandFactory::query()
+        .with_event_type("evt4")
+        .with_context_id("c4")
+        .with_since("123")
+        .with_time_field("timestamp")
+        .create();
+
+    let plans = FilterPlan::build_all(&cmd, &registry.registry()).await;
+    let map: std::collections::HashMap<_, _> =
+        plans.iter().map(|p| (p.column.as_str(), p)).collect();
+    assert!(map.contains_key("timestamp"));
+    assert_eq!(map["timestamp"].operation, Some(CompareOp::Gte));
+    // Should not carry SINCE condition on created_at
+    if let Some(created) = map.get("created_at") {
+        assert_eq!(created.operation, None);
+        assert_eq!(created.priority, 3);
+    }
+}
+
+#[tokio::test]
+async fn default_without_time_field_uses_timestamp() {
+    let registry = SchemaRegistryFactory::new();
+    registry
+        .define_with_fields("evt5", &[("context_id", "string"), ("x", "string")])
+        .await
+        .unwrap();
+
+    let cmd = CommandFactory::query()
+        .with_event_type("evt5")
+        .with_context_id("c5")
+        .with_since("9999")
+        .create();
+
+    let plans = FilterPlan::build_all(&cmd, &registry.registry()).await;
+    let map: std::collections::HashMap<_, _> =
+        plans.iter().map(|p| (p.column.as_str(), p)).collect();
+    assert!(map.contains_key("timestamp"));
+    assert_eq!(map["timestamp"].operation, Some(CompareOp::Gte));
+}
+
+#[tokio::test]
+async fn custom_time_field_without_since_keeps_time_filter_over_fallback() {
+    let registry = SchemaRegistryFactory::new();
+    registry
+        .define_with_fields(
+            "evt_custom_time",
+            &[
+                ("context_id", "string"),
+                ("created_at", "datetime"),
+                ("b", "string"),
+            ],
+        )
+        .await
+        .unwrap();
+
+    // No since, but explicit time_field = created_at
+    let cmd = CommandFactory::query()
+        .with_event_type("evt_custom_time")
+        .with_time_field("created_at")
+        .create();
+
+    let plans = FilterPlan::build_all(&cmd, &registry.registry()).await;
+
+    // There should be a single created_at filter from time_field (Gte, value None), not a fallback
+    let created_filters: Vec<_> = plans.iter().filter(|p| p.column == "created_at").collect();
+    assert_eq!(created_filters.len(), 1);
+    assert_eq!(created_filters[0].operation, Some(CompareOp::Gte));
+    assert!(created_filters[0].value.is_none());
+    assert_eq!(created_filters[0].priority, 1);
+
+    // Field 'b' should still receive a fallback
+    assert!(
+        plans
+            .iter()
+            .any(|p| p.column == "b" && p.operation.is_none())
+    );
+}
+
+#[tokio::test]
+async fn no_fallback_for_fields_present_in_where_clause() {
+    let registry = SchemaRegistryFactory::new();
+    registry
+        .define_with_fields(
+            "evt_where",
+            &[
+                ("context_id", "string"),
+                ("timestamp", "u64"),
+                ("a", "string"),
+                ("b", "string"),
+            ],
+        )
+        .await
+        .unwrap();
+
+    let cmd = CommandFactory::query()
+        .with_event_type("evt_where")
+        .with_where_clause(Expr::Compare {
+            field: "a".into(),
+            op: CompareOp::Eq,
+            value: json!(1),
+        })
+        .create();
+
+    let plans = FilterPlan::build_all(&cmd, &registry.registry()).await;
+
+    // No fallback for 'a' since it's referenced in WHERE
+    assert!(
+        !plans
+            .iter()
+            .any(|p| p.column == "a" && p.operation.is_none())
+    );
+    // But 'b' should have a fallback
+    assert!(
+        plans
+            .iter()
+            .any(|p| p.column == "b" && p.operation.is_none())
+    );
+}
+
+#[tokio::test]
+async fn preserves_multiple_where_filters_for_same_column_in_and() {
+    let registry = SchemaRegistryFactory::new();
+    registry
+        .define_with_fields(
+            "subscription2",
+            &[
+                ("plan", "string"),
+                ("context_id", "string"),
+                ("timestamp", "u64"),
+            ],
+        )
+        .await
+        .unwrap();
+
+    let cmd = CommandFactory::query()
+        .with_event_type("subscription2")
+        .with_where_clause(Expr::And(
+            Box::new(Expr::Compare {
+                field: "plan".into(),
+                op: CompareOp::Eq,
+                value: json!("pro"),
+            }),
+            Box::new(Expr::Compare {
+                field: "plan".into(),
+                op: CompareOp::Eq,
+                value: json!("premium"),
+            }),
+        ))
+        .create();
+
+    let plans = FilterPlan::build_all(&cmd, &registry.registry()).await;
+
+    let plan_filters: Vec<_> = plans.iter().filter(|p| p.column == "plan").collect();
+    assert_eq!(plan_filters.len(), 2);
+    let values: std::collections::HashSet<_> = plan_filters
+        .iter()
+        .map(|p| p.value.as_ref().unwrap().as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(
+        values,
+        HashSet::from(["pro".to_string(), "premium".to_string()])
+    );
+}
+
+#[tokio::test]
+async fn using_timestamp_with_where_on_timestamp_keeps_both_filters() {
+    let registry = SchemaRegistryFactory::new();
+    registry
+        .define_with_fields(
+            "evt_ts",
+            &[
+                ("context_id", "string"),
+                ("timestamp", "u64"),
+                ("a", "string"),
+            ],
+        )
+        .await
+        .unwrap();
+
+    let cmd = CommandFactory::query()
+        .with_event_type("evt_ts")
+        .with_since("1000")
+        .with_where_clause(Expr::Compare {
+            field: "timestamp".into(),
+            op: CompareOp::Lt,
+            value: json!(2000),
+        })
+        .create();
+
+    let plans = FilterPlan::build_all(&cmd, &registry.registry()).await;
+
+    let ts_filters: Vec<_> = plans.iter().filter(|p| p.column == "timestamp").collect();
+    assert_eq!(ts_filters.len(), 2);
+    assert!(
+        ts_filters
+            .iter()
+            .any(|p| p.operation == Some(CompareOp::Gte))
+    );
+    assert!(
+        ts_filters
+            .iter()
+            .any(|p| p.operation == Some(CompareOp::Lt))
     );
 }

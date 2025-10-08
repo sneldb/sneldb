@@ -20,6 +20,7 @@ pub enum JsonCommand {
         event_type: String,
         context_id: Option<String>,
         since: Option<String>,
+        time_field: Option<String>,
         #[serde(default)]
         #[serde(alias = "where")]
         where_clause: Option<JsonExpr>,
@@ -29,6 +30,7 @@ pub enum JsonCommand {
         event_type: Option<String>,
         context_id: String,
         since: Option<String>,
+        time_field: Option<String>,
     },
     Ping,
     Flush,
@@ -60,12 +62,14 @@ impl From<JsonCommand> for Command {
                 event_type,
                 context_id,
                 since,
+                time_field,
                 where_clause,
                 limit,
             } => Command::Query {
                 event_type,
                 context_id,
                 since,
+                time_field,
                 where_clause: where_clause.map(Into::into),
                 limit,
                 return_fields: None,
@@ -79,10 +83,12 @@ impl From<JsonCommand> for Command {
                 event_type,
                 context_id,
                 since,
+                time_field,
             } => Command::Replay {
                 event_type,
                 context_id,
                 since,
+                time_field,
                 return_fields: None,
             },
             JsonCommand::Ping => Command::Ping,

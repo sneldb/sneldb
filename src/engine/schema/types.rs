@@ -35,6 +35,10 @@ pub enum FieldType {
     I64,
     F64,
     Bool,
+    /// Logical datetime (epoch seconds, normalized)
+    Timestamp,
+    /// Logical date (midnight UTC in epoch seconds)
+    Date,
     Optional(Box<FieldType>),
     Enum(EnumType),
 }
@@ -48,8 +52,9 @@ impl FieldType {
             "i64" | "int64" | "int" | "integer" => Some(FieldType::I64),
             "f64" | "float" | "double" | "number" => Some(FieldType::F64),
             "bool" | "boolean" => Some(FieldType::Bool),
-            // common aliases in the codebase for timestamps
-            "datetime" | "timestamp" => Some(FieldType::U64),
+            // logical time fields
+            "datetime" | "timestamp" => Some(FieldType::Timestamp),
+            "date" => Some(FieldType::Date),
             _ => None,
         }
     }

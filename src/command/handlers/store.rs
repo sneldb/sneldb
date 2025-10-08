@@ -1,12 +1,14 @@
 use crate::command::types::Command;
 use crate::engine::core::Event;
 use crate::engine::schema::FieldType;
+use crate::engine::schema::PayloadTimeNormalizer;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::schema::registry::MiniSchema;
 use crate::engine::shard::manager::ShardManager;
 use crate::engine::shard::message::ShardMessage;
 use crate::shared::response::render::Renderer;
 use crate::shared::response::{Response, StatusCode};
+// time parsing utilities are used via schema normalizer
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -90,6 +92,20 @@ pub async fn handle<W: AsyncWrite + Unpin>(
         return write_error(writer, renderer, StatusCode::BadRequest, &e).await;
     }
 
+    // Normalize logical time fields to epoch seconds in the payload
+    let mut normalized_payload = payload.clone();
+    let time_normalizer = PayloadTimeNormalizer::new(mini_schema);
+    if let Err(e) = time_normalizer.normalize(&mut normalized_payload) {
+        warn!(
+            target: "sneldb::store",
+            event_type,
+            context_id,
+            error = %e,
+            "Time normalization failed"
+        );
+        return write_error(writer, renderer, StatusCode::BadRequest, &e).await;
+    }
+
     let event = Event {
         timestamp: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -97,7 +113,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
             .as_secs(),
         event_type: event_type.clone(),
         context_id: context_id.clone(),
-        payload: payload.clone(),
+        payload: normalized_payload,
     };
 
     let shard = shard_manager.get_shard(context_id);
@@ -165,6 +181,9 @@ fn type_allows_value(ft: &FieldType, v: &serde_json::Value) -> bool {
         FieldType::I64 => v.as_i64().is_some(),
         FieldType::F64 => v.as_f64().is_some(),
         FieldType::Bool => v.is_boolean(),
+        // For logical time fields, accept both strings and numbers at validation time;
+        // normalization to seconds will happen later in the ingest path.
+        FieldType::Timestamp | FieldType::Date => v.is_string() || v.is_number(),
         FieldType::Optional(inner) => v.is_null() || type_allows_value(inner, v),
         FieldType::Enum(enum_ty) => v
             .as_str()
@@ -211,6 +230,8 @@ fn validate_payload(payload: &serde_json::Value, schema: &MiniSchema) -> Result<
 
     Ok(())
 }
+
+// time normalization moved to PayloadTimeNormalizer in schema module
 
 /// Writes an error response to the writer.
 async fn write_error<W: AsyncWrite + Unpin>(

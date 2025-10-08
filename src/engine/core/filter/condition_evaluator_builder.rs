@@ -1,5 +1,6 @@
 use crate::command::types::{Command, CompareOp, Expr};
 use crate::engine::core::{ConditionEvaluator, LogicalCondition, LogicalOp, QueryPlan};
+use crate::shared::time::{TimeKind, TimeParser};
 use tracing::info;
 
 /// Builds a ConditionEvaluator by combining where clause conditions and special field conditions
@@ -30,11 +31,7 @@ impl ConditionEvaluatorBuilder {
                         num_value,
                     );
                 } else if let Some(str_value) = value.as_str() {
-                    info!(
-                        target: "sneldb::evaluator",
-                        "Adding string condition: {} {:?} '{}'",
-                        field, op, str_value
-                    );
+                    info!(target: "sneldb::evaluator", "Adding string condition: {} {:?} '{}'", field, op, str_value);
                     self.evaluator.add_string_condition(
                         field.clone(),
                         op.clone().into(),
@@ -121,23 +118,31 @@ impl ConditionEvaluatorBuilder {
             );
         }
 
-        if let Command::Query { since, .. } = &plan.command {
+        if let Command::Query {
+            since, time_field, ..
+        } = &plan.command
+        {
             if let Some(since) = since {
-                if let Ok(parsed) = since.parse::<i64>() {
-                    info!(
-                        target: "sneldb::evaluator",
-                        "Adding timestamp condition: timestamp >= {}", parsed
-                    );
+                let tf = time_field.as_deref().unwrap_or("timestamp");
+                // Try parse with ISO-8601 support; fallback to integer heuristics
+                if let Some(parsed) =
+                    TimeParser::parse_str_to_epoch_seconds(since, TimeKind::DateTime)
+                {
+                    info!(target: "sneldb::evaluator", "Adding time condition: {} >= {}", tf, parsed);
                     self.evaluator.add_numeric_condition(
-                        "timestamp".to_string(),
+                        tf.to_string(),
+                        CompareOp::Gte.into(),
+                        parsed,
+                    );
+                } else if let Ok(parsed) = since.parse::<i64>() {
+                    info!(target: "sneldb::evaluator", "Adding time condition (numeric): {} >= {}", tf, parsed);
+                    self.evaluator.add_numeric_condition(
+                        tf.to_string(),
                         CompareOp::Gte.into(),
                         parsed,
                     );
                 } else {
-                    info!(
-                        target: "sneldb::evaluator",
-                        "Failed to parse 'since' as i64: '{}'", since
-                    );
+                    info!(target: "sneldb::evaluator", "Ignoring unparsable 'since': '{}'", since);
                 }
             }
         }

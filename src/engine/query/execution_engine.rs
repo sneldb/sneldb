@@ -108,7 +108,7 @@ impl ExecutionEngine {
         plan: &QueryPlan,
         ctx: &ScanContext<'a>,
     ) -> Result<QueryResult, QueryExecutionError> {
-        let mut sink = AggregateSink::from_plan(plan.aggregate_plan.as_ref().unwrap());
+        let mut sink = AggregateSink::from_query_plan(plan, plan.aggregate_plan.as_ref().unwrap());
         // Memtable path
         let mem_events = MemTableQuery::new(ctx.memtable, plan).query();
         for e in &mem_events {

@@ -286,10 +286,14 @@ mod dispatcher_tests {
         let input = r#"QUERY orders WHERE"#;
         let result = parse_command(input);
 
-        assert!(
-            matches!(result, Err(ParseError::MissingArgument(_))),
-            "Expected MissingArgument error for incomplete WHERE clause"
-        );
+        let err = result.expect_err("Expected error for incomplete WHERE clause");
+        match err {
+            ParseError::UnexpectedToken(msg) => {
+                assert!(msg.contains("PEG parse error:"), "{}", msg);
+                assert!(msg.contains("expected one of"), "{}", msg);
+            }
+            other => panic!("Expected UnexpectedToken, got {:?}", other),
+        }
     }
 
     #[test]

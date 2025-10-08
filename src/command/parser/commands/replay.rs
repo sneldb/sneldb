@@ -159,6 +159,28 @@ pub fn parse(tokens: &[Token]) -> Result<Command, ParseError> {
         }
     }
 
+    // Optional: USING <time_field>
+    let mut time_field: Option<String> = None;
+    if let Some(Word(word)) = iter.peek() {
+        if word.eq_ignore_ascii_case("USING") {
+            iter.next();
+            match iter.next() {
+                Some(Word(f)) => time_field = Some(f.clone()),
+                Some(other) => {
+                    return Err(ParseError::UnexpectedToken(format!(
+                        "Expected field after USING, found {:?}",
+                        other
+                    )));
+                }
+                None => {
+                    return Err(ParseError::MissingArgument(
+                        "Expected field after USING".to_string(),
+                    ));
+                }
+            }
+        }
+    }
+
     // Check there are no extra tokens
     if iter.peek().is_some() {
         return Err(ParseError::UnexpectedToken(format!(
@@ -171,6 +193,7 @@ pub fn parse(tokens: &[Token]) -> Result<Command, ParseError> {
         event_type,
         context_id,
         since,
+        time_field,
         return_fields,
     })
 }

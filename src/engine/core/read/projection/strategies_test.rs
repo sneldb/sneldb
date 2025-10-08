@@ -1,5 +1,5 @@
 use super::strategies::{AggregationProjection, ProjectionStrategy, SelectionProjection};
-use crate::command::types::{AggSpec, CompareOp, Expr, TimeGranularity};
+use crate::command::types::{CompareOp, Expr, TimeGranularity};
 use crate::engine::core::read::query_plan::QueryPlan;
 use crate::test_helpers::factories::{CommandFactory, QueryPlanFactory, SchemaRegistryFactory};
 use std::collections::HashSet;
@@ -52,23 +52,15 @@ async fn selection_specific_fields_and_filters() {
         .await
         .unwrap();
 
-    let cmd = crate::command::types::Command::Query {
-        event_type: "login".into(),
-        context_id: None,
-        since: None,
-        where_clause: Some(Expr::Compare {
+    let cmd = CommandFactory::query()
+        .with_event_type("login")
+        .with_where_clause(Expr::Compare {
             field: "device".into(),
             op: CompareOp::Eq,
             value: serde_json::json!("ios"),
-        }),
-        limit: None,
-        return_fields: Some(vec!["ip".into()]),
-        link_field: None,
-        aggs: None,
-        time_bucket: None,
-        group_by: None,
-        event_sequence: None,
-    };
+        })
+        .with_return_fields(vec!["ip"])
+        .create();
 
     let plan: QueryPlan = QueryPlanFactory::new()
         .with_command(cmd)
@@ -101,19 +93,10 @@ async fn selection_empty_return_fields_means_all_payload() {
         .await
         .unwrap();
 
-    let cmd = crate::command::types::Command::Query {
-        event_type: "subscription".into(),
-        context_id: None,
-        since: None,
-        where_clause: None,
-        limit: None,
-        return_fields: Some(vec![]),
-        link_field: None,
-        aggs: None,
-        time_bucket: None,
-        group_by: None,
-        event_sequence: None,
-    };
+    let cmd = CommandFactory::query()
+        .with_event_type("subscription")
+        .with_return_fields(vec![])
+        .create();
 
     let plan: QueryPlan = QueryPlanFactory::new()
         .with_command(cmd)
@@ -137,19 +120,10 @@ async fn selection_unknown_fields_ignored() {
         .await
         .unwrap();
 
-    let cmd = crate::command::types::Command::Query {
-        event_type: "foo".into(),
-        context_id: None,
-        since: None,
-        where_clause: None,
-        limit: None,
-        return_fields: Some(vec!["bar".into()]),
-        link_field: None,
-        aggs: None,
-        time_bucket: None,
-        group_by: None,
-        event_sequence: None,
-    };
+    let cmd = CommandFactory::query()
+        .with_event_type("foo")
+        .with_return_fields(vec!["bar"])
+        .create();
 
     let plan: QueryPlan = QueryPlanFactory::new()
         .with_command(cmd)
@@ -172,19 +146,10 @@ async fn aggregation_count_only_minimal_timestamp() {
         .await
         .unwrap();
 
-    let cmd = crate::command::types::Command::Query {
-        event_type: "evt".into(),
-        context_id: None,
-        since: None,
-        where_clause: None,
-        limit: None,
-        return_fields: None,
-        link_field: None,
-        aggs: Some(vec![AggSpec::Count { unique_field: None }]),
-        time_bucket: None,
-        group_by: None,
-        event_sequence: None,
-    };
+    let cmd = CommandFactory::query()
+        .with_event_type("evt")
+        .add_count()
+        .create();
 
     let plan: QueryPlan = QueryPlanFactory::new()
         .with_command(cmd)
@@ -210,23 +175,15 @@ async fn aggregation_count_only_with_payload_filter_includes_filter_column() {
         .await
         .unwrap();
 
-    let cmd = crate::command::types::Command::Query {
-        event_type: "evt".into(),
-        context_id: None,
-        since: None,
-        where_clause: Some(Expr::Compare {
+    let cmd = CommandFactory::query()
+        .with_event_type("evt")
+        .with_where_clause(Expr::Compare {
             field: "kind".into(),
             op: CompareOp::Eq,
             value: serde_json::json!("a"),
-        }),
-        limit: None,
-        return_fields: None,
-        link_field: None,
-        aggs: Some(vec![AggSpec::Count { unique_field: None }]),
-        time_bucket: None,
-        group_by: None,
-        event_sequence: None,
-    };
+        })
+        .add_count()
+        .create();
 
     let plan: QueryPlan = QueryPlanFactory::new()
         .with_command(cmd)
@@ -250,19 +207,12 @@ async fn aggregation_time_bucket_and_group_by_included() {
         .await
         .unwrap();
 
-    let cmd = crate::command::types::Command::Query {
-        event_type: "evt".into(),
-        context_id: None,
-        since: None,
-        where_clause: None,
-        limit: None,
-        return_fields: None,
-        link_field: None,
-        aggs: Some(vec![AggSpec::Count { unique_field: None }]),
-        time_bucket: Some(TimeGranularity::Month),
-        group_by: Some(vec!["country".into()]),
-        event_sequence: None,
-    };
+    let cmd = CommandFactory::query()
+        .with_event_type("evt")
+        .add_count()
+        .with_time_bucket(TimeGranularity::Month)
+        .with_group_by(vec!["country"])
+        .create();
 
     let plan: QueryPlan = QueryPlanFactory::new()
         .with_command(cmd)
@@ -279,6 +229,39 @@ async fn aggregation_time_bucket_and_group_by_included() {
 }
 
 #[tokio::test]
+async fn aggregation_time_bucket_uses_selected_time_field() {
+    let schema = SchemaRegistryFactory::new();
+    let registry = schema.registry();
+    schema
+        .define_with_fields(
+            "evt_time",
+            &[("created_at", "datetime"), ("country", "string")],
+        )
+        .await
+        .unwrap();
+
+    let cmd = CommandFactory::query()
+        .with_event_type("evt_time")
+        .add_count()
+        .with_time_bucket(TimeGranularity::Month)
+        .with_time_field("created_at")
+        .create();
+
+    let plan: QueryPlan = QueryPlanFactory::new()
+        .with_command(cmd)
+        .with_registry(Arc::clone(&registry))
+        .with_segment_base_dir(tempdir().unwrap().path())
+        .create()
+        .await;
+
+    let agg = plan.aggregate_plan.as_ref().unwrap();
+    let s = AggregationProjection { plan: &plan, agg };
+    let out = to_set(s.compute().await.into_vec());
+    // Should include created_at (selected time field) for bucketing, not necessarily core timestamp
+    assert!(out.contains("created_at"));
+}
+
+#[tokio::test]
 async fn aggregation_multiple_ops_include_all_arg_fields() {
     let schema = SchemaRegistryFactory::new();
     let registry = schema.registry();
@@ -287,23 +270,12 @@ async fn aggregation_multiple_ops_include_all_arg_fields() {
         .await
         .unwrap();
 
-    let cmd = crate::command::types::Command::Query {
-        event_type: "evt".into(),
-        context_id: None,
-        since: None,
-        where_clause: None,
-        limit: None,
-        return_fields: None,
-        link_field: None,
-        aggs: Some(vec![
-            AggSpec::Avg { field: "x".into() },
-            AggSpec::Min { field: "y".into() },
-            AggSpec::Max { field: "z".into() },
-        ]),
-        time_bucket: None,
-        group_by: None,
-        event_sequence: None,
-    };
+    let cmd = CommandFactory::query()
+        .with_event_type("evt")
+        .add_avg("x")
+        .add_min("y")
+        .add_max("z")
+        .create();
 
     let plan: QueryPlan = QueryPlanFactory::new()
         .with_command(cmd)
@@ -329,23 +301,15 @@ async fn aggregation_filter_on_core_is_ignored_but_fallback_timestamp_applies() 
         .await
         .unwrap();
 
-    let cmd = crate::command::types::Command::Query {
-        event_type: "evt".into(),
-        context_id: None,
-        since: None,
-        where_clause: Some(Expr::Compare {
+    let cmd = CommandFactory::query()
+        .with_event_type("evt")
+        .with_where_clause(Expr::Compare {
             field: "timestamp".into(),
             op: CompareOp::Gt,
             value: serde_json::json!(0),
-        }),
-        limit: None,
-        return_fields: None,
-        link_field: None,
-        aggs: Some(vec![AggSpec::Count { unique_field: None }]),
-        time_bucket: None,
-        group_by: None,
-        event_sequence: None,
-    };
+        })
+        .add_count()
+        .create();
 
     let plan: QueryPlan = QueryPlanFactory::new()
         .with_command(cmd)

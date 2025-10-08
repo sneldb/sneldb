@@ -7,9 +7,9 @@ DEFINE <event_type> FIELDS { "key": "type", … }
 
 STORE  <event_type> FOR <context_id> PAYLOAD <json_object>
 
-QUERY  <event_type> [FOR <context_id>] [SINCE ] [WHERE ] [LIMIT ]
+QUERY  <event_type> [FOR <context_id>] [SINCE <ts>] [USING <time_field>] [WHERE <expr>] [LIMIT <n>]
 
-REPLAY [<event_type>] FOR <context_id> [SINCE ]
+REPLAY [<event_type>] FOR <context_id> [SINCE <ts>] [USING <time_field>]
 
 FLUSH
 ```
@@ -22,7 +22,8 @@ FLUSH
 - **WHERE operators**: `=`, `!=`, `>`, `>=`, `<`, `<=`, `AND`, `OR`, `NOT`.
 - **Precedence**: `NOT` > `AND` > `OR`. Use parentheses sparingly by structuring conditions; (parentheses not required in current grammar).
 - **LIMIT**: positive integer; caps returned rows.
-- **SINCE**: ISO-8601 timestamp string (e.g., `2025-08-01T00:00:00Z`). When present, only events at/after this instant are considered.
+- **SINCE**: ISO-8601 timestamp string (e.g., `2025-08-01T00:00:00Z`) or numeric epoch (s/ms/µs/ns). Parsed and normalized to epoch seconds.
+- **USING**: Selects the time field used by SINCE and bucketing; defaults to core `timestamp`. Common choices: a schema field like `created_at` declared as `"datetime"`.
 
 ### Mini-grammar (informal)
 
@@ -39,20 +40,20 @@ value     := string | number | boolean
 DEFINE order_created AS 1 FIELDS {
   id: "uuid",
   amount: "float",
-  currency: "string"
+  currency: "string",
+  created_at: "datetime"
 }
 
 STORE order_created FOR ctx_123 PAYLOAD {
   "id": "a1-b2",
   "amount": 42.5,
   "currency": "EUR",
-  "tags": ["new","vip"],
-  "flag": true
+  "created_at": "2025-09-07T12:00:00Z"
 }
 
-QUERY order_created FOR "ctx_123" SINCE "2025-08-01T00:00:00Z"
+QUERY order_created FOR "ctx_123" SINCE "2025-08-01T00:00:00Z" USING created_at
 WHERE amount >= 40 AND currency = "EUR"
 LIMIT 100
 
-REPLAY order_created FOR ctx_123 SINCE "2025-08-01T00:00:00Z"
+REPLAY order_created FOR ctx_123 SINCE "2025-08-01T00:00:00Z" USING created_at
 ```

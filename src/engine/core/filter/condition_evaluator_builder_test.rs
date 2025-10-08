@@ -64,6 +64,59 @@ async fn builds_evaluator_from_command_factory_and_filters_correctly() {
 }
 
 #[tokio::test]
+async fn adds_time_condition_on_selected_time_field_with_iso8601_since() {
+    // Define a schema with a logical datetime field "created_at"
+    let registry_factory = SchemaRegistryFactory::new();
+    registry_factory
+        .define_with_fields("evt_time", &[("id", "int"), ("created_at", "datetime")])
+        .await
+        .unwrap();
+    let registry = registry_factory.registry();
+
+    // Build a query that uses SINCE with ISO-8601 and selects created_at as time field
+    let command = CommandFactory::query()
+        .with_event_type("evt_time")
+        .with_context_id("ctx1")
+        .with_since("2025-01-01T00:00:00Z")
+        .with_time_field("created_at")
+        .create();
+
+    let plan = QueryPlanFactory::new()
+        .with_command(command)
+        .with_registry(registry.clone())
+        .create()
+        .await;
+
+    let evaluator = ConditionEvaluatorBuilder::build_from_plan(&plan);
+
+    // Compute epoch seconds for boundaries
+    let since_epoch = chrono::DateTime::parse_from_rfc3339("2025-01-01T00:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc)
+        .timestamp();
+    let before = since_epoch - 1;
+    let after = since_epoch + 1;
+
+    // Event older than since on created_at should fail
+    let old = EventFactory::new()
+        .with("event_type", "evt_time")
+        .with("context_id", "ctx1")
+        .with("timestamp", 1) // core timestamp irrelevant when USING created_at
+        .with("payload", json!({ "id": 1, "created_at": before }))
+        .create();
+    assert!(!evaluator.evaluate_event(&old));
+
+    // Event newer than since on created_at should pass
+    let new = EventFactory::new()
+        .with("event_type", "evt_time")
+        .with("context_id", "ctx1")
+        .with("timestamp", 1)
+        .with("payload", json!({ "id": 2, "created_at": after }))
+        .create();
+    assert!(evaluator.evaluate_event(&new));
+}
+
+#[tokio::test]
 async fn evaluates_and_expression_correctly() {
     // amount >= 100 AND status == "confirmed"
     let expr = Expr::And(

@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use rand::Rng;
 use rand::distributions::{Alphanumeric, DistString};
 use serde_json::{Value, json};
 use snel_db::shared::config::CONFIG;
@@ -40,6 +41,32 @@ async fn main() -> Result<()> {
         .and_then(|s| s.parse().ok());
     let wait_dur: Option<Duration> = wait_secs.map(Duration::from_secs);
 
+    // Time range for generated datetime field `created_at`
+    // Defaults to last 30 days; can be overridden via env:
+    // - SNEL_STRESS_CREATED_AT_DAYS or SNEL_STRESS_TS_DAYS: number of days in the past (default 30)
+    // - SNEL_STRESS_CREATED_AT_START or SNEL_STRESS_TS_START: epoch seconds start (optional)
+    // - SNEL_STRESS_CREATED_AT_END or SNEL_STRESS_TS_END: epoch seconds end (optional)
+    let ts_days: i64 = std::env::var("SNEL_STRESS_CREATED_AT_DAYS")
+        .ok()
+        .or_else(|| std::env::var("SNEL_STRESS_TS_DAYS").ok())
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(30);
+    let now_secs_i64: i64 = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let default_start = now_secs_i64 - ts_days * 86_400;
+    let ts_start: i64 = std::env::var("SNEL_STRESS_CREATED_AT_START")
+        .ok()
+        .or_else(|| std::env::var("SNEL_STRESS_TS_START").ok())
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(default_start);
+    let ts_end: i64 = std::env::var("SNEL_STRESS_CREATED_AT_END")
+        .ok()
+        .or_else(|| std::env::var("SNEL_STRESS_TS_END").ok())
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(now_secs_i64);
+
     let addr = &CONFIG.server.tcp_addr;
     println!("Connecting to {}...", addr);
 
@@ -50,9 +77,9 @@ async fn main() -> Result<()> {
     control.set_nodelay(true)?;
     let mut control_reader = BufReader::new(control);
 
-    // Define schema (add enum field `plan` with 20 variants)
+    // Define schema (add enum field `plan` with 20 variants and datetime `created_at`)
     let schema_cmd = format!(
-        "DEFINE {} FIELDS {{ id: \"u64\", v: \"string\", flag: \"bool\", plan: [\"type01\", \"type02\", \"type03\", \"type04\", \"type05\", \"type06\", \"type07\", \"type08\", \"type09\", \"type10\", \"type11\", \"type12\", \"type13\", \"type14\", \"type15\", \"type16\", \"type17\", \"type18\", \"type19\", \"type20\"] }}\n",
+        "DEFINE {} FIELDS {{ id: \"u64\", v: \"string\", flag: \"bool\", created_at: \"datetime\", plan: [\"type01\", \"type02\", \"type03\", \"type04\", \"type05\", \"type06\", \"type07\", \"type08\", \"type09\", \"type10\", \"type11\", \"type12\", \"type13\", \"type14\", \"type15\", \"type16\", \"type17\", \"type18\", \"type19\", \"type20\"] }}\n",
         event_type
     );
     send_and_drain(&mut control_reader, &schema_cmd, wait_dur).await?;
@@ -159,7 +186,7 @@ async fn main() -> Result<()> {
     // Produce jobs
     for i in 0..total_events {
         let ctx_id = &contexts[i % context_pool];
-        let evt = random_event_payload(i as u64);
+        let evt = random_event_payload(i as u64, ts_start, ts_end);
         let cmd = format!("STORE {} FOR {} PAYLOAD {}\n", event_type, ctx_id, evt);
         let txi = &tx_vec[i % tx_vec.len()];
         let _ = txi.send(cmd).await; // backpressure via channel
@@ -193,8 +220,12 @@ async fn main() -> Result<()> {
         t0.elapsed().as_secs_f64() * 1000.0
     );
 
-    // Run QUERY (scoped to same context) to sample latency
-    let query_cmd = format!("QUERY {} WHERE id < 100\n", event_type);
+    // Run QUERY (scoped) to sample latency over time using `created_at`
+    let since_secs = now_secs_i64 - 86_400; // last 24h
+    let query_cmd = format!(
+        "QUERY {} SINCE {} USING created_at WHERE id < 100\n",
+        event_type, since_secs
+    );
     let t1 = Instant::now();
     send_and_collect_json_with_timeout(&mut control_reader, &query_cmd, 10, wait_dur).await?;
     println!(
@@ -205,13 +236,18 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn random_event_payload(seq: u64) -> String {
+fn random_event_payload(seq: u64, ts_start: i64, ts_end: i64) -> String {
     let v = Alphanumeric.sample_string(&mut rand::thread_rng(), 12);
     let plan = format!("type{:02}", (seq % 20) + 1);
+    let mut rng = rand::thread_rng();
+    let low = ts_start.min(ts_end);
+    let high = ts_start.max(ts_end);
+    let ts = rng.gen_range(low..=high);
     let obj = json!({
         "id": seq,
         "v": v,
         "flag": (seq % 2 == 0),
+        "created_at": ts,
         "plan": plan
     });
     obj.to_string()

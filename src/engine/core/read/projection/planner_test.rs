@@ -1,4 +1,4 @@
-use crate::command::types::{AggSpec, Command, CompareOp, Expr, TimeGranularity};
+use crate::command::types::{CompareOp, Expr, TimeGranularity};
 use crate::engine::core::read::projection::ProjectionPlanner;
 use crate::test_helpers::factories::{CommandFactory, QueryPlanFactory, SchemaRegistryFactory};
 use std::sync::Arc;
@@ -48,19 +48,10 @@ async fn projection_aggregate_minimal_for_count_only() {
         .await
         .unwrap();
 
-    let cmd = Command::Query {
-        event_type: "evt".into(),
-        context_id: None,
-        since: None,
-        where_clause: None,
-        limit: None,
-        return_fields: None,
-        link_field: None,
-        aggs: Some(vec![AggSpec::Count { unique_field: None }]),
-        time_bucket: None,
-        group_by: None,
-        event_sequence: None,
-    };
+    let cmd = CommandFactory::query()
+        .with_event_type("evt")
+        .add_count()
+        .create();
 
     let plan = QueryPlanFactory::new()
         .with_command(cmd)
@@ -93,36 +84,20 @@ async fn projection_aggregate_includes_bucket_groupby_filters_and_args() {
         .await
         .unwrap();
 
-    let cmd = Command::Query {
-        event_type: "order".into(),
-        context_id: None,
-        since: None,
-        where_clause: Some(Expr::Compare {
+    let cmd = CommandFactory::query()
+        .with_event_type("order")
+        .with_where_clause(Expr::Compare {
             field: "status".into(),
             op: CompareOp::Eq,
             value: serde_json::json!("ok"),
-        }),
-        limit: None,
-        return_fields: None,
-        link_field: None,
-        aggs: Some(vec![
-            AggSpec::Avg {
-                field: "amount".into(),
-            },
-            AggSpec::Min {
-                field: "amount".into(),
-            },
-            AggSpec::Max {
-                field: "amount".into(),
-            },
-            AggSpec::Total {
-                field: "amount".into(),
-            },
-        ]),
-        time_bucket: Some(TimeGranularity::Month),
-        group_by: Some(vec!["country".into()]),
-        event_sequence: None,
-    };
+        })
+        .add_avg("amount")
+        .add_min("amount")
+        .add_max("amount")
+        .add_total("amount")
+        .with_time_bucket(TimeGranularity::Month)
+        .with_group_by(vec!["country"])
+        .create();
 
     let plan = QueryPlanFactory::new()
         .with_command(cmd)
@@ -151,21 +126,10 @@ async fn projection_aggregate_count_unique_includes_unique_field() {
         .await
         .unwrap();
 
-    let cmd = Command::Query {
-        event_type: "login".into(),
-        context_id: None,
-        since: None,
-        where_clause: None,
-        limit: None,
-        return_fields: None,
-        link_field: None,
-        aggs: Some(vec![AggSpec::Count {
-            unique_field: Some("user_id".into()),
-        }]),
-        time_bucket: None,
-        group_by: None,
-        event_sequence: None,
-    };
+    let cmd = CommandFactory::query()
+        .with_event_type("login")
+        .add_count_unique("user_id")
+        .create();
 
     let plan = QueryPlanFactory::new()
         .with_command(cmd)
@@ -190,19 +154,10 @@ async fn projection_empty_list_behaves_like_all() {
         .await
         .unwrap();
 
-    let cmd = Command::Query {
-        event_type: "subscription".into(),
-        context_id: None,
-        since: None,
-        where_clause: None,
-        limit: None,
-        return_fields: Some(vec![]),
-        link_field: None,
-        aggs: None,
-        time_bucket: None,
-        group_by: None,
-        event_sequence: None,
-    };
+    let cmd = CommandFactory::query()
+        .with_event_type("subscription")
+        .with_return_fields(vec![])
+        .create();
 
     let plan = QueryPlanFactory::new()
         .with_command(cmd)
@@ -225,23 +180,15 @@ async fn projection_specific_fields_only_plus_core_and_filters() {
         .await
         .unwrap();
 
-    let cmd = Command::Query {
-        event_type: "login".into(),
-        context_id: None,
-        since: None,
-        where_clause: Some(Expr::Compare {
+    let cmd = CommandFactory::query()
+        .with_event_type("login")
+        .with_where_clause(Expr::Compare {
             field: "device".into(),
             op: CompareOp::Eq,
             value: serde_json::json!("ios"),
-        }),
-        limit: None,
-        return_fields: Some(vec!["ip".into()]),
-        link_field: None,
-        aggs: None,
-        time_bucket: None,
-        group_by: None,
-        event_sequence: None,
-    };
+        })
+        .with_return_fields(vec!["ip"])
+        .create();
 
     let plan = QueryPlanFactory::new()
         .with_command(cmd)
@@ -272,19 +219,10 @@ async fn projection_payload_keyword_is_ignored_and_not_included() {
         .await
         .unwrap();
 
-    let cmd = Command::Query {
-        event_type: "payment".into(),
-        context_id: None,
-        since: None,
-        where_clause: None,
-        limit: None,
-        return_fields: Some(vec!["payload".into()]),
-        link_field: None,
-        aggs: None,
-        time_bucket: None,
-        group_by: None,
-        event_sequence: None,
-    };
+    let cmd = CommandFactory::query()
+        .with_event_type("payment")
+        .with_return_fields(vec!["payload"])
+        .create();
 
     let plan = QueryPlanFactory::new()
         .with_command(cmd)
@@ -308,19 +246,10 @@ async fn projection_unknown_field_is_excluded() {
         .await
         .unwrap();
 
-    let cmd = Command::Query {
-        event_type: "foo".into(),
-        context_id: None,
-        since: None,
-        where_clause: None,
-        limit: None,
-        return_fields: Some(vec!["bar".into()]),
-        link_field: None,
-        aggs: None,
-        time_bucket: None,
-        group_by: None,
-        event_sequence: None,
-    };
+    let cmd = CommandFactory::query()
+        .with_event_type("foo")
+        .with_return_fields(vec!["bar"])
+        .create();
 
     let plan = QueryPlanFactory::new()
         .with_command(cmd)
@@ -346,23 +275,15 @@ async fn projection_excludes_unreferenced_payload_fields() {
         .unwrap();
 
     // RETURN only name, filter on price; color should not be included
-    let cmd = Command::Query {
-        event_type: "product".into(),
-        context_id: None,
-        since: None,
-        where_clause: Some(Expr::Compare {
+    let cmd = CommandFactory::query()
+        .with_event_type("product")
+        .with_where_clause(Expr::Compare {
             field: "price".into(),
             op: CompareOp::Gt,
             value: serde_json::json!(10),
-        }),
-        limit: None,
-        return_fields: Some(vec!["name".into()]),
-        link_field: None,
-        aggs: None,
-        time_bucket: None,
-        group_by: None,
-        event_sequence: None,
-    };
+        })
+        .with_return_fields(vec!["name"])
+        .create();
 
     let plan = QueryPlanFactory::new()
         .with_command(cmd)
@@ -393,23 +314,15 @@ async fn projection_aggregate_count_only_with_payload_filter_includes_filter_col
         .await
         .unwrap();
 
-    let cmd = Command::Query {
-        event_type: "evt".into(),
-        context_id: None,
-        since: None,
-        where_clause: Some(Expr::Compare {
+    let cmd = CommandFactory::query()
+        .with_event_type("evt")
+        .with_where_clause(Expr::Compare {
             field: "kind".into(),
             op: CompareOp::Eq,
             value: serde_json::json!("a"),
-        }),
-        limit: None,
-        return_fields: None,
-        link_field: None,
-        aggs: Some(vec![AggSpec::Count { unique_field: None }]),
-        time_bucket: None,
-        group_by: None,
-        event_sequence: None,
-    };
+        })
+        .add_count()
+        .create();
 
     let plan = QueryPlanFactory::new()
         .with_command(cmd)
@@ -433,19 +346,12 @@ async fn projection_aggregate_count_only_with_time_bucket_and_group_by() {
         .await
         .unwrap();
 
-    let cmd = Command::Query {
-        event_type: "evt".into(),
-        context_id: None,
-        since: None,
-        where_clause: None,
-        limit: None,
-        return_fields: None,
-        link_field: None,
-        aggs: Some(vec![AggSpec::Count { unique_field: None }]),
-        time_bucket: Some(TimeGranularity::Month),
-        group_by: Some(vec!["country".into()]),
-        event_sequence: None,
-    };
+    let cmd = CommandFactory::query()
+        .with_event_type("evt")
+        .add_count()
+        .with_time_bucket(TimeGranularity::Month)
+        .with_group_by(vec!["country"])
+        .create();
 
     let plan = QueryPlanFactory::new()
         .with_command(cmd)
@@ -468,19 +374,11 @@ async fn projection_aggregate_ignores_return_fields_when_aggs_present() {
         .await
         .unwrap();
 
-    let cmd = Command::Query {
-        event_type: "evt".into(),
-        context_id: None,
-        since: None,
-        where_clause: None,
-        limit: None,
-        return_fields: Some(vec!["a".into()]),
-        link_field: None,
-        aggs: Some(vec![AggSpec::Total { field: "b".into() }]),
-        time_bucket: None,
-        group_by: None,
-        event_sequence: None,
-    };
+    let cmd = CommandFactory::query()
+        .with_event_type("evt")
+        .with_return_fields(vec!["a"])
+        .add_total("b")
+        .create();
 
     let plan = QueryPlanFactory::new()
         .with_command(cmd)
@@ -504,23 +402,12 @@ async fn projection_aggregate_multiple_ops_include_all_arg_fields() {
         .await
         .unwrap();
 
-    let cmd = Command::Query {
-        event_type: "evt".into(),
-        context_id: None,
-        since: None,
-        where_clause: None,
-        limit: None,
-        return_fields: None,
-        link_field: None,
-        aggs: Some(vec![
-            AggSpec::Avg { field: "x".into() },
-            AggSpec::Min { field: "y".into() },
-            AggSpec::Max { field: "z".into() },
-        ]),
-        time_bucket: None,
-        group_by: None,
-        event_sequence: None,
-    };
+    let cmd = CommandFactory::query()
+        .with_event_type("evt")
+        .add_avg("x")
+        .add_min("y")
+        .add_max("z")
+        .create();
 
     let plan = QueryPlanFactory::new()
         .with_command(cmd)

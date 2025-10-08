@@ -213,7 +213,7 @@
       "define order_created FIELDS { \"order_id\": \"int\", \"status\": \"string\" }",
       "Store order_created FoR customer-1 PAYLOAD {\"order_id\":123,\"status\":\"confirmed\"}",
       "STORe order_created For customer-2 PAYLOAD {\"order_id\":124,\"status\":\"pending\"}",
-      "qUERY order_created wherE status=\"confirmed\""
+      "query order_created WHERE status=\"confirmed\""
     ],
     "matcher": {
       "kind": "include_all",
@@ -652,6 +652,287 @@
           "user-14"
         ]
       }
+    ]
+  }
+  ,
+  {
+    "name": "replay_since_using_created_at_iso8601",
+    "input_commands": [
+      "DEFINE evt_rp1 FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE evt_rp1 FOR rctx PAYLOAD {\"id\":1,\"created_at\":\"2025-01-01T00:00:00Z\"}",
+      "STORE evt_rp1 FOR rctx PAYLOAD {\"id\":2,\"created_at\":\"2025-01-01T00:00:01Z\"}",
+      "FLUSH",
+      "REPLAY evt_rp1 FOR rctx SINCE \"2025-01-01T00:00:01Z\" USING created_at"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"id\":2" },
+      { "kind": "include_none", "value": ["\"id\":1"] }
+    ]
+  }
+  ,
+  {
+    "name": "replay_since_using_created_at_ms",
+    "input_commands": [
+      "DEFINE evt_rp2 FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE evt_rp2 FOR rctx2 PAYLOAD {\"id\":1,\"created_at\":\"2025-01-01T00:00:00Z\"}",
+      "STORE evt_rp2 FOR rctx2 PAYLOAD {\"id\":2,\"created_at\":\"2025-01-01T00:00:01Z\"}",
+      "FLUSH",
+      "REPLAY evt_rp2 FOR rctx2 SINCE \"1735689600000\" USING created_at"
+    ],
+    "matcher": { "kind": "include_all", "value": ["\"id\":1","\"id\":2"] }
+  }
+  ,
+  {
+    "name": "replay_since_using_date_field_midnight",
+    "input_commands": [
+      "DEFINE evt_rp3 FIELDS { \"id\": \"int\", \"on\": \"date\" }",
+      "STORE evt_rp3 FOR rctx3 PAYLOAD {\"id\":1,\"on\":\"2025-01-01\"}",
+      "STORE evt_rp3 FOR rctx3 PAYLOAD {\"id\":2,\"on\":\"2025-01-02\"}",
+      "FLUSH",
+      "REPLAY evt_rp3 FOR rctx3 SINCE \"2025-01-02T00:00:00Z\" USING on"
+    ],
+    "matcher": { "kind": "include", "value": "\"id\":2" }
+  }
+  ,
+  {
+    "name": "replay_since_unparsable_ignored",
+    "input_commands": [
+      "DEFINE evt_rp4 FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE evt_rp4 FOR rctx4 PAYLOAD {\"id\":1,\"created_at\":\"2025-01-01T00:00:00Z\"}",
+      "STORE evt_rp4 FOR rctx4 PAYLOAD {\"id\":2,\"created_at\":\"2025-01-01T00:00:01Z\"}",
+      "FLUSH",
+      "REPLAY evt_rp4 FOR rctx4 SINCE \"bogus\" USING created_at"
+    ],
+    "matcher": { "kind": "include_all", "value": ["\"id\":1","\"id\":2"] }
+  },
+  {
+    "name": "bucket_month_using_created_at_boundary",
+    "input_commands": [
+      "DEFINE orders_time FIELDS { \"id\": \"int\", \"created_at\": \"datetime\", \"amount\": \"int\" }",
+      "STORE orders_time FOR b1 PAYLOAD {\"id\":1,\"created_at\":1736639999,\"amount\":10}",
+      "STORE orders_time FOR b2 PAYLOAD {\"id\":2,\"created_at\":1736640000,\"amount\":20}",
+      "FLUSH",
+      "QUERY orders_time TOTAL amount PER month USING created_at"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"bucket\"" },
+      { "kind": "include_all", "value": ["1734048000","1736640000"] },
+      { "kind": "include_all", "value": ["10","20"] }
+    ]
+  }
+  ,
+  {
+    "name": "bucket_week_using_created_at_negative_offset_cross_week",
+    "input_commands": [
+      "DEFINE sessions FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE sessions FOR s1 PAYLOAD {\"id\":1,\"created_at\":1735171199}",
+      "STORE sessions FOR s2 PAYLOAD {\"id\":2,\"created_at\":1735171200}",
+      "FLUSH",
+      "QUERY sessions COUNT PER week USING created_at"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["[1734566400,1]","[1735171200,1]"] }
+    ]
+  }
+  ,
+  {
+    "name": "bucket_day_using_date_field_midnight_normalization",
+    "input_commands": [
+      "DEFINE birthdays FIELDS { \"id\": \"int\", \"birthdate\": \"date\" }",
+      "STORE birthdays FOR bd1 PAYLOAD {\"id\":1,\"birthdate\":\"2025-09-06\"}",
+      "STORE birthdays FOR bd2 PAYLOAD {\"id\":2,\"birthdate\":\"2025-09-06\"}",
+      "STORE birthdays FOR bd3 PAYLOAD {\"id\":3,\"birthdate\":\"2025-09-07\"}",
+      "FLUSH",
+      "QUERY birthdays COUNT PER day USING birthdate"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"count\"" },
+      { "kind": "include", "value": "2" },
+      { "kind": "include", "value": "1" }
+    ]
+  }
+  ,
+  {
+    "name": "bucket_hour_using_created_at_ms_payload",
+    "input_commands": [
+      "DEFINE clicks FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE clicks FOR c1 PAYLOAD {\"id\":1,\"created_at\":1735689600000}",
+      "STORE clicks FOR c2 PAYLOAD {\"id\":2,\"created_at\":1735693199000}",
+      "STORE clicks FOR c3 PAYLOAD {\"id\":3,\"created_at\":1735693200000}",
+      "FLUSH",
+      "QUERY clicks COUNT PER hour USING created_at"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"count\"" },
+      { "kind": "include", "value": "2" },
+      { "kind": "include", "value": "1" }
+    ]
+  },
+  {
+    "name": "since_using_created_at_equal_boundary_included",
+    "input_commands": [
+      "DEFINE evt_eq FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE evt_eq FOR ctxEq PAYLOAD {\"id\":1,\"created_at\":\"2024-12-31T23:59:59Z\"}",
+      "STORE evt_eq FOR ctxEq PAYLOAD {\"id\":2,\"created_at\":\"2025-01-01T00:00:00Z\"}",
+      "FLUSH",
+      "QUERY evt_eq FOR ctxEq SINCE \"2025-01-01T00:00:00Z\" USING created_at"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"id\":2" },
+      { "kind": "include_none", "value": ["\"id\":1"] }
+    ]
+  }
+  ,
+  {
+    "name": "since_using_created_at_ms_input",
+    "input_commands": [
+      "DEFINE evt_ms FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE evt_ms FOR ctxMs PAYLOAD {\"id\":1,\"created_at\":\"2025-01-01T00:00:00Z\"}",
+      "STORE evt_ms FOR ctxMs PAYLOAD {\"id\":2,\"created_at\":\"2025-01-01T00:00:01Z\"}",
+      "FLUSH",
+      "QUERY evt_ms FOR ctxMs SINCE \"1735689600000\" USING created_at"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["\"id\":1","\"id\":2"] }
+    ]
+  }
+  ,
+  {
+    "name": "since_using_created_at_ns_input_excludes_first",
+    "input_commands": [
+      "DEFINE evt_ns FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE evt_ns FOR ctxNs PAYLOAD {\"id\":1,\"created_at\":\"2025-01-01T00:00:00Z\"}",
+      "STORE evt_ns FOR ctxNs PAYLOAD {\"id\":2,\"created_at\":\"2025-01-01T00:00:01Z\"}",
+      "FLUSH",
+      "QUERY evt_ns FOR ctxNs SINCE \"1735689601000000000\" USING created_at"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"id\":2" },
+      { "kind": "include_none", "value": ["\"id\":1"] }
+    ]
+  }
+  ,
+  {
+    "name": "since_using_created_at_minus_offset_boundary",
+    "input_commands": [
+      "DEFINE evt_neg_off FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE evt_neg_off FOR ctxNo PAYLOAD {\"id\":1,\"created_at\":\"2024-12-31T18:59:59-05:00\"}",
+      "STORE evt_neg_off FOR ctxNo PAYLOAD {\"id\":2,\"created_at\":\"2024-12-31T19:00:00-05:00\"}",
+      "FLUSH",
+      "QUERY evt_neg_off FOR ctxNo SINCE \"2025-01-01T00:00:00Z\" USING created_at"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"id\":2" },
+      { "kind": "include_none", "value": ["\"id\":1"] }
+    ]
+  }
+  ,
+  {
+    "name": "store_created_at_ms_number_normalized",
+    "input_commands": [
+      "DEFINE evt_store_ms FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE evt_store_ms FOR ctxSm PAYLOAD {\"id\":1,\"created_at\":1735689600000}",
+      "STORE evt_store_ms FOR ctxSm PAYLOAD {\"id\":2,\"created_at\":1735689601000}",
+      "FLUSH",
+      "QUERY evt_store_ms FOR ctxSm SINCE \"2025-01-01T00:00:00Z\" USING created_at"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["\"id\":1","\"id\":2"] }
+    ]
+  },
+  {
+    "name": "since_using_created_at_with_offset",
+    "input_commands": [
+      "DEFINE evt_off FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE evt_off FOR ctxO PAYLOAD {\"id\":1,\"created_at\":\"2025-01-01T01:59:59+02:00\"}",
+      "STORE evt_off FOR ctxO PAYLOAD {\"id\":2,\"created_at\":\"2025-01-01T02:00:01+02:00\"}",
+      "FLUSH",
+      "QUERY evt_off FOR ctxO SINCE \"2025-01-01T00:00:00Z\" USING created_at"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"id\":2" },
+      { "kind": "include_none", "value": ["\"id\":1"] }
+    ]
+  }
+  ,
+  {
+    "name": "since_using_date_field",
+    "input_commands": [
+      "DEFINE people FIELDS { \"id\": \"int\", \"birthdate\": \"date\" }",
+      "STORE people FOR pctx PAYLOAD {\"id\":1,\"birthdate\":\"2025-09-06\"}",
+      "STORE people FOR pctx PAYLOAD {\"id\":2,\"birthdate\":\"2025-09-07\"}",
+      "FLUSH",
+      "QUERY people FOR pctx SINCE \"2025-09-07T00:00:00Z\" USING birthdate"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"id\":2" },
+      { "kind": "include_none", "value": ["\"id\":1"] }
+    ]
+  }
+  ,
+  {
+    "name": "store_invalid_time_string_rejected",
+    "input_commands": [
+      "DEFINE evt_bad_time FIELDS { \"created_at\": \"datetime\" }",
+      "STORE evt_bad_time FOR ctxBad PAYLOAD {\"created_at\":\"not-a-time\"}"
+    ],
+    "matcher": { "kind": "include", "value": "Invalid time string" }
+  }
+  ,
+  {
+    "name": "since_unparsable_ignored_includes_all",
+    "input_commands": [
+      "DEFINE evt_bogus FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE evt_bogus FOR ctxBog PAYLOAD {\"id\":1,\"created_at\":\"2025-01-01T00:00:01Z\"}",
+      "STORE evt_bogus FOR ctxBog PAYLOAD {\"id\":2,\"created_at\":\"2025-01-02T00:00:00Z\"}",
+      "FLUSH",
+      "QUERY evt_bogus FOR ctxBog SINCE \"bogus\" USING created_at"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["\"id\":1","\"id\":2"] }
+    ]
+  }
+  ,
+  {
+    "name": "since_using_optional_datetime_skips_nulls",
+    "input_commands": [
+      "DEFINE evt_opt_time FIELDS { \"id\": \"int\", \"created_at\": \"datetime | null\" }",
+      "STORE evt_opt_time FOR ctxOpt PAYLOAD {\"id\":1,\"created_at\":null}",
+      "STORE evt_opt_time FOR ctxOpt PAYLOAD {\"id\":2,\"created_at\":\"2025-01-02T00:00:00Z\"}",
+      "FLUSH",
+      "QUERY evt_opt_time FOR ctxOpt SINCE \"2025-01-01T00:00:00Z\" USING created_at"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"id\":2" },
+      { "kind": "include_none", "value": ["\"id\":1"] }
+    ]
+  },
+  {
+    "name": "since_using_created_at_iso8601_selection",
+    "input_commands": [
+      "DEFINE evt_time_sel1 FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE evt_time_sel1 FOR ctxA PAYLOAD {\"id\":1,\"created_at\":\"2024-12-31T23:59:59Z\"}",
+      "STORE evt_time_sel1 FOR ctxA PAYLOAD {\"id\":2,\"created_at\":\"2025-01-01T00:00:01Z\"}",
+      "FLUSH",
+      "QUERY evt_time_sel1 FOR ctxA SINCE \"2025-01-01T00:00:00Z\" USING created_at"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"id\":2" },
+      { "kind": "include_none", "value": ["\"id\":1"] }
+    ]
+  }
+  ,
+  {
+    "name": "since_using_created_at_numeric_units_selection",
+    "input_commands": [
+      "DEFINE evt_time_sel2 FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE evt_time_sel2 FOR ctxB PAYLOAD {\"id\":1,\"created_at\":1600000000000}",
+      "STORE evt_time_sel2 FOR ctxB PAYLOAD {\"id\":2,\"created_at\":1600000100000}",
+      "FLUSH",
+      "QUERY evt_time_sel2 FOR ctxB SINCE \"1600000000\" USING created_at"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["\"id\":1","\"id\":2"] }
     ]
   }
   ,
