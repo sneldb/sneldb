@@ -1,7 +1,8 @@
+use crate::command::parser::error::ParseError;
 use crate::command::types::{
     AggSpec, Command, CompareOp, EventSequence, EventTarget, Expr, SequenceLink, TimeGranularity,
 };
-use serde_json::Value;
+use serde_json::{Number, Value};
 
 peg::parser! {
     grammar sneldb_query() for str {
@@ -138,15 +139,13 @@ peg::parser! {
         // ==========
 
         rule time_clause() -> Clause
-            = ci("PER") _ unit:$("hour" / "day" / "week" / "month")
+            = ci("PER") _ tg:(
+                  ci("HOUR")  { TimeGranularity::Hour }
+                / ci("DAY")   { TimeGranularity::Day }
+                / ci("WEEK")  { TimeGranularity::Week }
+                / ci("MONTH") { TimeGranularity::Month }
+              )
               _ using:(ci("USING") _ f:field() { f })? {
-                let tg = match unit {
-                    "hour" => TimeGranularity::Hour,
-                    "day" => TimeGranularity::Day,
-                    "week" => TimeGranularity::Week,
-                    "month" => TimeGranularity::Month,
-                    _ => unreachable!(),
-                };
                 Clause::Time(tg, using)
             }
 
@@ -216,8 +215,20 @@ peg::parser! {
 
         rule value() -> Value
             = s:string_literal() { Value::String(s.to_string()) }
-            / i:integer() { Value::Number(i.parse::<i64>().unwrap().into()) }
+            / n:number() { n }
             / id:ident() { Value::String(id.to_string()) }
+
+        // Accept integers and decimals; choose int when no dot for stable equality in tests
+        rule number() -> Value
+            = n:$( ("-")? ['0'..='9']+ ( "." ['0'..='9']+ )? ) {
+                if n.contains('.') {
+                    let f: f64 = n.parse::<f64>().unwrap();
+                    Value::Number(Number::from_f64(f).unwrap())
+                } else {
+                    let i: i64 = n.parse::<i64>().unwrap();
+                    Value::Number(i.into())
+                }
+            }
 
         rule field() -> String
             = i:ident() "." j:ident() { format!("{}.{}", i, j) }
@@ -247,44 +258,71 @@ fn eq_ci(a: &str, b: &str) -> bool {
 }
 
 // =========
-// BUILDERS
+// STATE/BUILDERS
 // =========
 
-fn build_command(head: EventSequence, clauses: Vec<Clause>) -> Command {
-    let mut context_id = None;
-    let mut since = None;
-    let mut return_fields = None;
-    let mut link_field = None;
-    let mut where_clause = None;
-    let mut using_field = None;
-    let mut aggs = None;
-    let mut time_bucket = None;
-    let mut group_by = None;
-    let mut limit = None;
+#[derive(Default)]
+struct QueryParts {
+    context_id: Option<String>,
+    since: Option<String>,
+    return_fields: Option<Vec<String>>,
+    link_field: Option<String>,
+    where_clause: Option<Expr>,
+    using_field: Option<String>,
+    aggs: Option<Vec<AggSpec>>,
+    time_bucket: Option<TimeGranularity>,
+    group_by: Option<Vec<String>>,
+    limit: Option<u32>,
+}
 
-    for c in clauses {
-        match c {
-            Clause::For(v) => context_id = Some(v),
-            Clause::Since(v) => since = Some(v),
-            Clause::Return(v) => return_fields = Some(v),
-            Clause::Link(v) => link_field = Some(v),
-            Clause::Where(e) => where_clause = Some(e),
-            Clause::Using(f) => using_field = Some(f),
-            Clause::Aggs(a) => aggs = Some(a),
+impl QueryParts {
+    fn apply_clause(&mut self, clause: Clause) {
+        match clause {
+            Clause::For(v) => self.context_id = Some(v),
+            Clause::Since(v) => self.since = Some(v),
+            Clause::Return(v) => self.return_fields = Some(v),
+            Clause::Link(v) => self.link_field = Some(v),
+            Clause::Where(e) => self.where_clause = Some(e),
+            Clause::Using(f) => self.using_field = Some(f),
+            Clause::Aggs(a) => self.aggs = Some(a),
             Clause::Time(tg, uf) => {
-                time_bucket = Some(tg);
+                self.time_bucket = Some(tg);
                 if let Some(fu) = uf {
-                    using_field = Some(fu);
+                    self.using_field = Some(fu);
                 }
             }
             Clause::Group(g, uf) => {
-                group_by = Some(g);
+                self.group_by = Some(g);
                 if let Some(fu) = uf {
-                    using_field = Some(fu);
+                    self.using_field = Some(fu);
                 }
             }
-            Clause::Limit(n) => limit = Some(n),
+            Clause::Limit(n) => self.limit = Some(n),
         }
+    }
+
+    fn into_command(self, event_type: String, event_sequence: Option<EventSequence>) -> Command {
+        Command::Query {
+            event_type,
+            context_id: self.context_id,
+            since: self.since,
+            time_field: self.using_field,
+            where_clause: self.where_clause,
+            limit: self.limit,
+            return_fields: self.return_fields,
+            link_field: self.link_field,
+            aggs: self.aggs,
+            time_bucket: self.time_bucket,
+            group_by: self.group_by,
+            event_sequence,
+        }
+    }
+}
+
+fn build_command(head: EventSequence, clauses: Vec<Clause>) -> Command {
+    let mut parts = QueryParts::default();
+    for c in clauses {
+        parts.apply_clause(c);
     }
 
     let event_type = head.head.event.clone();
@@ -294,20 +332,7 @@ fn build_command(head: EventSequence, clauses: Vec<Clause>) -> Command {
         Some(head)
     };
 
-    Command::Query {
-        event_type,
-        context_id,
-        since,
-        time_field: using_field,
-        where_clause,
-        limit,
-        return_fields,
-        link_field,
-        aggs,
-        time_bucket,
-        group_by,
-        event_sequence,
-    }
+    parts.into_command(event_type, event_sequence)
 }
 
 #[derive(Debug)]
@@ -324,6 +349,11 @@ enum Clause {
     Limit(u32),
 }
 
-pub fn parse_query_peg(input: &str) -> Result<Command, peg::error::ParseError<peg::str::LineCol>> {
-    sneldb_query::query(input)
+pub fn parse(input: &str) -> Result<Command, ParseError> {
+    sneldb_query::query(input).map_err(map_peg_error)
+}
+
+fn map_peg_error(e: peg::error::ParseError<peg::str::LineCol>) -> ParseError {
+    // Preserve old dispatcher_tests expectations (prefix and details)
+    ParseError::UnexpectedToken(format!("PEG parse error: {}", e))
 }
