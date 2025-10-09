@@ -1,4 +1,4 @@
-use crate::command::parser::commands::query_peg::parse_query_peg;
+use crate::command::parser::commands::query::parse as parse_query_peg;
 use crate::command::types::{
     AggSpec, Command, CompareOp, EventSequence, EventTarget, Expr, SequenceLink, TimeGranularity,
 };

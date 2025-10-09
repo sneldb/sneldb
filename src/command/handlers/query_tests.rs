@@ -1,5 +1,5 @@
 use crate::command::handlers::query::handle;
-use crate::command::parser::commands::query_peg::parse_query_peg;
+use crate::command::parser::commands::query::parse;
 use crate::engine::shard::manager::ShardManager;
 use crate::logging::init_for_tests;
 use crate::shared::response::JsonRenderer;
@@ -102,7 +102,7 @@ async fn test_query_aggregation_count_unique_by_returns_values() {
     sleep(Duration::from_millis(200)).await;
 
     let cmd_str = "QUERY login_evt COUNT UNIQUE user_id BY country";
-    let cmd = parse_query_peg(cmd_str).expect("parse COUNT UNIQUE query");
+    let cmd = parse(cmd_str).expect("parse COUNT UNIQUE query");
 
     let (mut reader, mut writer) = duplex(2048);
     handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
@@ -174,7 +174,7 @@ async fn test_query_aggregation_count_field_by_returns_values() {
     sleep(Duration::from_millis(200)).await;
 
     let cmd_str = "QUERY login_evt2 COUNT user_id BY country";
-    let cmd = parse_query_peg(cmd_str).expect("parse COUNT <field> query");
+    let cmd = parse(cmd_str).expect("parse COUNT <field> query");
 
     let (mut reader, mut writer) = duplex(4096);
     handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
@@ -226,7 +226,7 @@ async fn test_query_aggregation_per_month_by_country_returns_bucket_and_group() 
     sleep(Duration::from_millis(200)).await;
 
     let cmd_str = "QUERY order_evt AVG amount, TOTAL amount PER month BY country";
-    let cmd = parse_query_peg(cmd_str).expect("parse agg per/by query");
+    let cmd = parse(cmd_str).expect("parse agg per/by query");
 
     let (mut reader, mut writer) = duplex(4096);
     handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
@@ -297,7 +297,7 @@ async fn test_query_aggregation_count_per_day_by_two_fields() {
     sleep(Duration::from_millis(200)).await;
 
     let cmd_str = "QUERY orders_evt COUNT PER day BY country, plan";
-    let cmd = parse_query_peg(cmd_str).expect("parse COUNT PER day BY query");
+    let cmd = parse(cmd_str).expect("parse COUNT PER day BY query");
 
     let (mut reader, mut writer) = duplex(4096);
     handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
@@ -349,7 +349,7 @@ async fn test_query_aggregation_multiple_aggs_returns_all_metrics() {
     sleep(Duration::from_millis(200)).await;
 
     let cmd_str = "QUERY multi_evt COUNT, AVG id, TOTAL id";
-    let cmd = parse_query_peg(cmd_str).expect("parse multi agg query");
+    let cmd = parse(cmd_str).expect("parse multi agg query");
 
     let (mut reader, mut writer) = duplex(2048);
     handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
@@ -402,7 +402,7 @@ async fn test_query_aggregation_count_returns_value() {
 
     // Build COUNT command via parser
     let cmd_str = "QUERY agg_evt COUNT";
-    let cmd = parse_query_peg(cmd_str).expect("parse COUNT query");
+    let cmd = parse(cmd_str).expect("parse COUNT query");
 
     let (mut reader, mut writer) = duplex(2048);
     handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
@@ -463,7 +463,7 @@ async fn test_query_aggregation_avg_with_filter_returns_value() {
 
     // AVG with filter id < 6 → avg of 1..5 = 3.0
     let cmd_str = "QUERY agg_evt2 WHERE id < 6 AVG id";
-    let cmd = parse_query_peg(cmd_str).expect("parse AVG query");
+    let cmd = parse(cmd_str).expect("parse AVG query");
 
     let (mut reader, mut writer) = duplex(2048);
     handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
@@ -503,7 +503,7 @@ async fn test_query_aggregation_empty_returns_table_not_message() {
 
     // No stores → aggregation should return empty table (not the lines message)
     let cmd_str = "QUERY agg_evt3 COUNT";
-    let cmd = parse_query_peg(cmd_str).expect("parse COUNT query");
+    let cmd = parse(cmd_str).expect("parse COUNT query");
 
     let (mut reader, mut writer) = duplex(1024);
     handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
