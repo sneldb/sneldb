@@ -1,12 +1,13 @@
 use crate::engine::core::{
     ConditionEvaluatorBuilder, Event, ExecutionStep, QueryCaches, QueryPlan, ZoneHydrator,
 };
-use tracing::{debug, info};
+use tracing::info;
 
 pub struct SegmentQueryRunner<'a> {
     plan: &'a QueryPlan,
     steps: Vec<ExecutionStep<'a>>,
     caches: Option<&'a QueryCaches>,
+    limit: Option<usize>,
 }
 
 impl<'a> SegmentQueryRunner<'a> {
@@ -15,6 +16,7 @@ impl<'a> SegmentQueryRunner<'a> {
             plan,
             steps,
             caches: None,
+            limit: None,
         }
     }
 
@@ -27,7 +29,7 @@ impl<'a> SegmentQueryRunner<'a> {
             .await;
 
         let evaluator = ConditionEvaluatorBuilder::build_from_plan(self.plan);
-        let events = evaluator.evaluate_zones(candidate_zones);
+        let events = evaluator.evaluate_zones_with_limit(candidate_zones, self.limit);
 
         info!(
             target: "sneldb::query::segment",
@@ -39,6 +41,11 @@ impl<'a> SegmentQueryRunner<'a> {
 
     pub fn with_caches(mut self, caches: Option<&'a QueryCaches>) -> Self {
         self.caches = caches;
+        self
+    }
+
+    pub fn with_limit(mut self, limit: Option<usize>) -> Self {
+        self.limit = limit;
         self
     }
 }

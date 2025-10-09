@@ -105,9 +105,23 @@ impl<'a> QueryExecution<'a> {
         );
         events.extend(memtable_events);
 
+        // Check LIMIT after memtable path; early return if satisfied
+        if let Some(limit) = self.plan.limit() {
+            if events.len() >= limit {
+                events.truncate(limit);
+                return Ok(events);
+            }
+        }
+
         // Step 2: Disk segments
+        let remaining_limit = self
+            .plan
+            .limit()
+            .map(|lim| lim.saturating_sub(events.len()));
+
         let segment_events = SegmentQueryRunner::new(self.plan, self.steps.clone())
             .with_caches(self.caches)
+            .with_limit(remaining_limit)
             .run()
             .await;
         debug!(
@@ -116,6 +130,13 @@ impl<'a> QueryExecution<'a> {
             "Retrieved events from disk segments"
         );
         events.extend(segment_events);
+
+        // Enforce final LIMIT if present (defensive; runner should already cap)
+        if let Some(limit) = self.plan.limit() {
+            if events.len() > limit {
+                events.truncate(limit);
+            }
+        }
 
         info!(
             target: "sneldb::query_exec",

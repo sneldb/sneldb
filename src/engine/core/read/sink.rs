@@ -80,6 +80,8 @@ pub struct AggregateSink {
     // Selected time field for bucketing; defaults to core "timestamp"
     time_field: String,
     groups: std::collections::HashMap<GroupKey, Vec<AggregatorImpl>, AHashRandomState>,
+    // Optional cap on the number of distinct groups produced
+    group_limit: Option<usize>,
 }
 
 impl AggregateSink {
@@ -90,6 +92,7 @@ impl AggregateSink {
             time_bucket: None,
             time_field: "timestamp".to_string(),
             groups: std::collections::HashMap::with_hasher(AHashRandomState::new()),
+            group_limit: None,
         }
     }
 
@@ -100,6 +103,7 @@ impl AggregateSink {
             time_bucket: plan.time_bucket.clone(),
             time_field: "timestamp".to_string(),
             groups: std::collections::HashMap::with_hasher(AHashRandomState::new()),
+            group_limit: None,
         }
     }
 
@@ -117,7 +121,15 @@ impl AggregateSink {
             time_bucket: agg.time_bucket.clone(),
             time_field,
             groups: std::collections::HashMap::with_hasher(AHashRandomState::new()),
+            group_limit: None,
         }
+    }
+
+    /// Limit the number of distinct groups produced by this sink. If set, new groups
+    /// beyond the limit will be ignored (existing groups continue to be updated).
+    pub fn with_group_limit(mut self, limit: Option<usize>) -> Self {
+        self.group_limit = limit;
+        self
     }
 
     /// Finalizes into a single synthetic Event with metrics in payload
@@ -240,6 +252,15 @@ impl ResultSink for AggregateSink {
             row_idx,
         );
 
+        // Enforce group limit: if key not present and limit reached, skip creating new group
+        if !self.groups.contains_key(&key) {
+            if let Some(max) = self.group_limit {
+                if self.groups.len() >= max {
+                    return;
+                }
+            }
+        }
+
         let entry = self.groups.entry(key).or_insert_with(|| {
             self.specs
                 .iter()
@@ -258,6 +279,13 @@ impl ResultSink for AggregateSink {
             &self.time_field,
             event,
         );
+        if !self.groups.contains_key(&key) {
+            if let Some(max) = self.group_limit {
+                if self.groups.len() >= max {
+                    return;
+                }
+            }
+        }
         let entry = self.groups.entry(key).or_insert_with(|| {
             self.specs
                 .iter()
