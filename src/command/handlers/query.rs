@@ -23,6 +23,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
         context_id,
         since,
         where_clause,
+        offset,
         limit,
         ..
     } = cmd
@@ -44,6 +45,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
         context_id = context_id.as_deref().unwrap_or("<none>"),
         since = ?since,
         limit = ?limit,
+        offset = ?offset,
         has_filter = where_clause.is_some(),
         "Dispatching Query command to all shards"
     );
@@ -85,14 +87,25 @@ pub async fn handle<W: AsyncWrite + Unpin>(
     match result {
         QueryResult::Selection(sel) => {
             let mut table = sel.finalize();
-            // Apply global LIMIT across merged shard results. Sort by context_id for stability.
-            if let Some(lim) = limit {
-                // Sort rows by first column (context_id) if present
-                if !table.rows.is_empty() && !table.rows[0].is_empty() {
-                    table
-                        .rows
-                        .sort_by(|a, b| a[0].to_string().cmp(&b[0].to_string()));
+            // Apply global OFFSET then LIMIT across merged shard results.
+            // Only sort when pagination is requested (offset or limit) to avoid O(n log n) on large full scans.
+            let need_sort = offset.is_some() || limit.is_some();
+            if need_sort && !table.rows.is_empty() && !table.rows[0].is_empty() {
+                table
+                    .rows
+                    .sort_unstable_by(|a, b| a[0].to_string().cmp(&b[0].to_string()));
+            }
+            if let Some(off) = offset {
+                let off = *off as usize;
+                if off > 0 {
+                    if off >= table.rows.len() {
+                        table.rows.clear();
+                    } else {
+                        table.rows.drain(0..off);
+                    }
                 }
+            }
+            if let Some(lim) = limit {
                 let lim = *lim as usize;
                 if table.rows.len() > lim {
                     table.rows.truncate(lim);

@@ -653,6 +653,67 @@
         ]
       }
     ]
+  },
+  {
+    "name": "query_offset_only_two",
+    "config": { "engine": { "flush_threshold": 100 } },
+    "input_commands": [
+      "DEFINE offset_only FIELDS { \"status\": \"string\" }",
+      "STORE offset_only FOR u1 PAYLOAD {\"status\":\"ok\"}",
+      "STORE offset_only FOR u2 PAYLOAD {\"status\":\"ok\"}",
+      "STORE offset_only FOR u3 PAYLOAD {\"status\":\"ok\"}",
+      "QUERY offset_only WHERE status=\"ok\" OFFSET 2"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["u3"] },
+      { "kind": "include_none", "value": ["u1","u2"] }
+    ]
+  },
+  {
+    "name": "query_offset_and_limit_window",
+    "config": { "engine": { "flush_threshold": 100 } },
+    "input_commands": [
+      "DEFINE offset_limit FIELDS { \"id\": \"int\" }",
+      "STORE offset_limit FOR c1 PAYLOAD {\"id\":1}",
+      "STORE offset_limit FOR c2 PAYLOAD {\"id\":2}",
+      "STORE offset_limit FOR c3 PAYLOAD {\"id\":3}",
+      "STORE offset_limit FOR c4 PAYLOAD {\"id\":4}",
+      "STORE offset_limit FOR c5 PAYLOAD {\"id\":5}",
+      "QUERY offset_limit OFFSET 2 LIMIT 2"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["c3","c4"] },
+      { "kind": "include_none", "value": ["c1","c2","c5"] }
+    ]
+  },
+  {
+    "name": "query_offset_exceeds_total",
+    "config": { "engine": { "flush_threshold": 100 } },
+    "input_commands": [
+      "DEFINE offset_gt_total FIELDS { \"x\": \"int\" }",
+      "STORE offset_gt_total FOR a PAYLOAD {\"x\":1}",
+      "STORE offset_gt_total FOR b PAYLOAD {\"x\":2}",
+      "QUERY offset_gt_total OFFSET 5"
+    ],
+    "matcher": { "kind": "include", "value": "No matching events found" }
+  },
+  {
+    "name": "query_offset_combines_memtable_and_segment",
+    "input_commands": [
+      "DEFINE offset_mix FIELDS { \"id\": \"int\" }",
+      "STORE offset_mix FOR c1 PAYLOAD {\"id\":1}",
+      "STORE offset_mix FOR c2 PAYLOAD {\"id\":2}",
+      "STORE offset_mix FOR c3 PAYLOAD {\"id\":3}",
+      "FLUSH",
+      "STORE offset_mix FOR c4 PAYLOAD {\"id\":4}",
+      "STORE offset_mix FOR c5 PAYLOAD {\"id\":5}",
+      "STORE offset_mix FOR c6 PAYLOAD {\"id\":6}",
+      "QUERY offset_mix OFFSET 4 LIMIT 2"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["c5","c6"] },
+      { "kind": "include_none", "value": ["c1","c2","c3","c4"] }
+    ]
   }
   ,
   {

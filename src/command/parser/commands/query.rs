@@ -63,10 +63,11 @@ peg::parser! {
             / agg_clause()
             / time_clause()
             / group_clause()
+            / offset_clause()
             / limit_clause()
 
         rule clause_start()
-            = ci("PER") / ci("BY") / ci("USING") / ci("SINCE") / ci("LIMIT")
+            = ci("PER") / ci("BY") / ci("USING") / ci("SINCE") / ci("LIMIT") / ci("OFFSET")
             / ci("RETURN") / ci("LINKED") / ci("WHERE") / ci("FOR")
             / ci("FOLLOWED") / ci("PRECEDED")
 
@@ -157,6 +158,11 @@ peg::parser! {
                 v.push(first);
                 for fld in rest { v.push(fld); }
                 Clause::Group(v, using)
+            }
+
+        rule offset_clause() -> Clause
+            = ci("OFFSET") _ n:integer() {
+                Clause::Offset(n.parse::<u32>().unwrap())
             }
 
         rule limit_clause() -> Clause
@@ -272,6 +278,7 @@ struct QueryParts {
     aggs: Option<Vec<AggSpec>>,
     time_bucket: Option<TimeGranularity>,
     group_by: Option<Vec<String>>,
+    offset: Option<u32>,
     limit: Option<u32>,
 }
 
@@ -297,6 +304,7 @@ impl QueryParts {
                     self.using_field = Some(fu);
                 }
             }
+            Clause::Offset(n) => self.offset = Some(n),
             Clause::Limit(n) => self.limit = Some(n),
         }
     }
@@ -308,6 +316,7 @@ impl QueryParts {
             since: self.since,
             time_field: self.using_field,
             where_clause: self.where_clause,
+            offset: self.offset,
             limit: self.limit,
             return_fields: self.return_fields,
             link_field: self.link_field,
@@ -346,6 +355,7 @@ enum Clause {
     Aggs(Vec<AggSpec>),
     Time(TimeGranularity, Option<String>),
     Group(Vec<String>, Option<String>),
+    Offset(u32),
     Limit(u32),
 }
 

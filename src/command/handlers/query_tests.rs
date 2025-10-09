@@ -664,6 +664,181 @@ async fn test_query_selection_limit_truncates_and_sorts() {
 }
 
 #[tokio::test]
+async fn test_query_selection_no_pagination_returns_all_rows() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("nosort_sel_evt", [("id", "int")].as_ref())
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store three events with shuffled context_ids; without pagination we should not sort
+    for (ctx, id) in [("c3", 3), ("c1", 1), ("c2", 2)] {
+        let store_cmd = crate::test_helpers::factories::CommandFactory::store()
+            .with_event_type("nosort_sel_evt")
+            .with_context_id(ctx)
+            .with_payload(serde_json::json!({ "id": id }))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+
+    // Allow time for store to be processed
+    sleep(Duration::from_millis(1000)).await;
+
+    // No LIMIT/OFFSET: just ensure all rows are returned (order may vary)
+    let cmd = parse("QUERY nosort_sel_evt").expect("parse selection query");
+    let (mut reader, mut writer) = duplex(4096);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+    let json_start = body.find('{').unwrap_or(0);
+    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
+    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    assert_eq!(rows.len(), 3);
+    let got: std::collections::HashSet<String> = rows
+        .iter()
+        .map(|r| r[0].as_str().unwrap().to_string())
+        .collect();
+    let expected: std::collections::HashSet<String> = ["c1", "c2", "c3"]
+        .into_iter()
+        .map(|s| s.to_string())
+        .collect();
+    assert_eq!(got, expected);
+}
+
+#[tokio::test]
+async fn test_query_selection_offset_and_limit() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("offset_evt", [("id", "int")].as_ref())
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store events with known context_id order after handler sorting: c1..c5
+    for (ctx, id) in [("c1", 1), ("c2", 2), ("c3", 3), ("c4", 4), ("c5", 5)] {
+        let store_cmd = crate::test_helpers::factories::CommandFactory::store()
+            .with_event_type("offset_evt")
+            .with_context_id(ctx)
+            .with_payload(serde_json::json!({ "id": id }))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+
+    // Allow time for store to be processed
+    sleep(Duration::from_millis(1000)).await;
+
+    // OFFSET 2 LIMIT 2 should return c3 and c4 (order may vary across shards)
+    let cmd =
+        parse("QUERY offset_evt OFFSET 2 LIMIT 2").expect("parse OFFSET LIMIT selection query");
+    let (mut reader, mut writer) = duplex(4096);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+    let json_start = body.find('{').unwrap_or(0);
+    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
+    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    assert_eq!(rows.len(), 2);
+    let got: std::collections::HashSet<String> = rows
+        .iter()
+        .map(|r| r[0].as_str().unwrap().to_string())
+        .collect();
+    let expected: std::collections::HashSet<String> =
+        ["c3", "c4"].into_iter().map(|s| s.to_string()).collect();
+    assert_eq!(got, expected);
+}
+
+#[tokio::test]
+async fn test_query_selection_offset_only_drops_rows() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("offset_only_evt", &[("id", "int")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    for (ctx, id) in [("c1", 1), ("c2", 2), ("c3", 3)] {
+        let store_cmd = crate::test_helpers::factories::CommandFactory::store()
+            .with_event_type("offset_only_evt")
+            .with_context_id(ctx)
+            .with_payload(serde_json::json!({ "id": id }))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+
+    sleep(Duration::from_millis(300)).await;
+
+    // OFFSET 2 should return only c3
+    let cmd = parse("QUERY offset_only_evt OFFSET 2").expect("parse OFFSET selection query");
+    let (mut reader, mut writer) = duplex(4096);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+    let json_start = body.find('{').unwrap_or(0);
+    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
+    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0][0], JsonValue::String("c3".into()));
+}
+
+#[tokio::test]
 async fn test_query_aggregation_limit_truncates_and_sorts_groups() {
     init_for_tests();
 

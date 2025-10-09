@@ -105,19 +105,34 @@ impl<'a> QueryExecution<'a> {
         );
         events.extend(memtable_events);
 
-        // Check LIMIT after memtable path; early return if satisfied
-        if let Some(limit) = self.plan.limit() {
-            if events.len() >= limit {
-                events.truncate(limit);
-                return Ok(events);
+        // Early return only when no OFFSET is used; in that case LIMIT alone is safe to cap.
+        if self.plan.offset().is_none() {
+            if let Some(limit) = self.plan.limit() {
+                if events.len() >= limit {
+                    events.truncate(limit);
+                    return Ok(events);
+                }
             }
         }
 
         // Step 2: Disk segments
-        let remaining_limit = self
-            .plan
-            .limit()
-            .map(|lim| lim.saturating_sub(events.len()));
+        // Cap segment fetch:
+        // - With OFFSET: use window (offset+limit) remaining so we don't over-fetch
+        // - Without OFFSET: use remaining LIMIT
+        let remaining_limit = match (self.plan.offset(), self.plan.limit()) {
+            (Some(_), Some(lim)) => {
+                // For OFFSET queries, fetch up to full window from segments as well,
+                // to avoid missing earlier rows after global sort.
+                let window = lim.saturating_add(self.plan.offset().unwrap_or(0));
+                Some(window)
+            }
+            (Some(_), None) => {
+                // No LIMIT but OFFSET present — fetch all (no cap)
+                None
+            }
+            (None, Some(lim)) => Some(lim.saturating_sub(events.len())),
+            (None, None) => None,
+        };
 
         let segment_events = SegmentQueryRunner::new(self.plan, self.steps.clone())
             .with_caches(self.caches)
@@ -131,10 +146,12 @@ impl<'a> QueryExecution<'a> {
         );
         events.extend(segment_events);
 
-        // Enforce final LIMIT if present (defensive; runner should already cap)
-        if let Some(limit) = self.plan.limit() {
-            if events.len() > limit {
-                events.truncate(limit);
+        // Final cap only when no OFFSET: with OFFSET, let the handler sort and slice.
+        if self.plan.offset().is_none() {
+            if let Some(limit) = self.plan.limit() {
+                if events.len() > limit {
+                    events.truncate(limit);
+                }
             }
         }
 

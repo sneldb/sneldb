@@ -28,6 +28,7 @@ mod query_peg_tests {
                 since: None,
                 time_field: None,
                 where_clause: None,
+                offset: None,
                 limit: None,
                 return_fields: None,
                 link_field: None,
@@ -55,6 +56,7 @@ mod query_peg_tests {
                 since: None,
                 time_field: None,
                 where_clause: None,
+                offset: None,
                 limit: None,
                 return_fields: None,
                 link_field: None,
@@ -79,6 +81,7 @@ mod query_peg_tests {
                 since: Some("2025-01-01T00:00:00Z".to_string()),
                 time_field: None,
                 where_clause: None,
+                offset: None,
                 limit: None,
                 return_fields: None,
                 link_field: None,
@@ -106,6 +109,7 @@ mod query_peg_tests {
                 since: None,
                 time_field: None,
                 where_clause: None,
+                offset: None,
                 limit: None,
                 return_fields: None,
                 link_field: None,
@@ -142,6 +146,7 @@ mod query_peg_tests {
                 since: None,
                 time_field: None,
                 where_clause: None,
+                offset: None,
                 limit: None,
                 return_fields: None,
                 link_field: None,
@@ -181,6 +186,7 @@ mod query_peg_tests {
                 since: None,
                 time_field: None,
                 where_clause: None,
+                offset: None,
                 limit: None,
                 return_fields: None,
                 link_field: Some("user_id".to_string()),
@@ -212,6 +218,7 @@ mod query_peg_tests {
                     op: CompareOp::Eq,
                     value: Value::String("done".to_string()),
                 }),
+                offset: None,
                 limit: None,
                 return_fields: None,
                 link_field: None,
@@ -247,6 +254,7 @@ mod query_peg_tests {
                         value: Value::String("NL".to_string()),
                     })
                 )),
+                offset: None,
                 limit: None,
                 return_fields: None,
                 link_field: None,
@@ -274,6 +282,7 @@ mod query_peg_tests {
                 since: None,
                 time_field: None,
                 where_clause: None,
+                offset: None,
                 limit: None,
                 return_fields: Some(vec![
                     "id".to_string(),
@@ -305,6 +314,7 @@ mod query_peg_tests {
                 since: None,
                 time_field: None,
                 where_clause: None,
+                offset: None,
                 limit: None,
                 return_fields: None,
                 link_field: None,
@@ -331,6 +341,7 @@ mod query_peg_tests {
                 since: None,
                 time_field: None,
                 where_clause: None,
+                offset: None,
                 limit: None,
                 return_fields: None,
                 link_field: None,
@@ -360,6 +371,7 @@ mod query_peg_tests {
                 since: None,
                 time_field: Some("created_at".to_string()),
                 where_clause: None,
+                offset: None,
                 limit: None,
                 return_fields: None,
                 link_field: None,
@@ -387,6 +399,7 @@ mod query_peg_tests {
                 since: None,
                 time_field: None,
                 where_clause: None,
+                offset: None,
                 limit: None,
                 return_fields: None,
                 link_field: None,
@@ -414,6 +427,7 @@ mod query_peg_tests {
                 since: None,
                 time_field: None,
                 where_clause: None,
+                offset: None,
                 limit: Some(100),
                 return_fields: None,
                 link_field: None,
@@ -445,6 +459,7 @@ mod query_peg_tests {
                     op: CompareOp::Eq,
                     value: Value::String("paid".to_string()),
                 }),
+                offset: None,
                 limit: Some(50),
                 return_fields: None,
                 link_field: Some("user_id".to_string()),
@@ -551,6 +566,7 @@ mod query_peg_tests {
                 since: None,
                 time_field: None,
                 where_clause: None,
+                offset: None,
                 limit: None,
                 return_fields: Some(vec!["id".to_string(), "total".to_string()]),
                 link_field: None,
@@ -584,6 +600,7 @@ mod query_peg_tests {
                 since: None,
                 time_field: None,
                 where_clause: None,
+                offset: None,
                 limit: None,
                 return_fields: None,
                 link_field: None,
@@ -608,6 +625,7 @@ mod query_peg_tests {
                 since: None,
                 time_field: None,
                 where_clause: None,
+                offset: None,
                 limit: None,
                 return_fields: None,
                 link_field: None,
@@ -653,6 +671,7 @@ mod query_peg_tests {
                 since: None,
                 time_field: None,
                 where_clause: None,
+                offset: None,
                 limit: None,
                 return_fields: Some(vec!["id".to_string(), "total".to_string()]),
                 link_field: None,
@@ -681,6 +700,7 @@ mod query_peg_tests {
                     op: CompareOp::Eq,
                     value: Value::String("done".to_string()),
                 }),
+                offset: None,
                 limit: None,
                 return_fields: None,
                 link_field: None,
@@ -716,6 +736,7 @@ mod query_peg_tests {
                         value: Value::Bool(true),
                     })
                 )),
+                offset: None,
                 limit: None,
                 return_fields: None,
                 link_field: None,
@@ -740,6 +761,7 @@ mod query_peg_tests {
                 since: None,
                 time_field: None,
                 where_clause: None,
+                offset: None,
                 limit: None,
                 return_fields: None,
                 link_field: None,
@@ -766,6 +788,7 @@ mod query_peg_tests {
                 since: None,
                 time_field: None,
                 where_clause: None,
+                offset: None,
                 limit: None,
                 return_fields: None,
                 link_field: None,
@@ -798,6 +821,7 @@ mod query_peg_tests {
                 since: None,
                 time_field: Some("created_at".to_string()),
                 where_clause: None,
+                offset: None,
                 limit: None,
                 return_fields: None,
                 link_field: None,
@@ -822,11 +846,88 @@ mod query_peg_tests {
                 since: None,
                 time_field: None,
                 where_clause: None,
+                offset: None,
                 limit: None,
                 return_fields: None,
                 link_field: None,
                 aggs: Some(vec![AggSpec::Count { unique_field: None }]),
                 time_bucket: Some(TimeGranularity::Month),
+                group_by: None,
+                event_sequence: None,
+            }
+        );
+    }
+
+    // ─────────────────────────────
+    // 14. OFFSET Clause
+    // ─────────────────────────────
+    #[test]
+    fn test_parse_query_offset_clause() {
+        let input = r#"QUERY orders OFFSET 10"#;
+        let command = parse(input);
+
+        assert_eq!(
+            command,
+            Command::Query {
+                event_type: "orders".to_string(),
+                context_id: None,
+                since: None,
+                time_field: None,
+                where_clause: None,
+                offset: Some(10),
+                limit: None,
+                return_fields: None,
+                link_field: None,
+                aggs: None,
+                time_bucket: None,
+                group_by: None,
+                event_sequence: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_query_offset_then_limit() {
+        let input = r#"QUERY e OFFSET 5 LIMIT 3"#;
+        let command = parse(input);
+        assert_eq!(
+            command,
+            Command::Query {
+                event_type: "e".to_string(),
+                context_id: None,
+                since: None,
+                time_field: None,
+                where_clause: None,
+                offset: Some(5),
+                limit: Some(3),
+                return_fields: None,
+                link_field: None,
+                aggs: None,
+                time_bucket: None,
+                group_by: None,
+                event_sequence: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_query_limit_then_offset() {
+        let input = r#"QUERY e LIMIT 3 OFFSET 5"#;
+        let command = parse(input);
+        assert_eq!(
+            command,
+            Command::Query {
+                event_type: "e".to_string(),
+                context_id: None,
+                since: None,
+                time_field: None,
+                where_clause: None,
+                offset: Some(5),
+                limit: Some(3),
+                return_fields: None,
+                link_field: None,
+                aggs: None,
+                time_bucket: None,
                 group_by: None,
                 event_sequence: None,
             }

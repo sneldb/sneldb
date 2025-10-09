@@ -24,6 +24,7 @@ pub enum JsonCommand {
         #[serde(default)]
         #[serde(alias = "where")]
         where_clause: Option<JsonExpr>,
+        offset: Option<u32>,
         limit: Option<u32>,
     },
     Replay {
@@ -64,6 +65,7 @@ impl From<JsonCommand> for Command {
                 since,
                 time_field,
                 where_clause,
+                offset,
                 limit,
             } => Command::Query {
                 event_type,
@@ -71,6 +73,7 @@ impl From<JsonCommand> for Command {
                 since,
                 time_field,
                 where_clause: where_clause.map(Into::into),
+                offset,
                 limit,
                 return_fields: None,
                 link_field: None,

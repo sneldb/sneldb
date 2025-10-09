@@ -36,6 +36,7 @@ impl CommandFactory {
                 context_id: None,
                 since: None,
                 where_clause: None,
+                offset: None,
                 limit: Some(10),
                 return_fields: None,
                 link_field: None,
@@ -109,6 +110,13 @@ impl CommandFactory {
     pub fn with_limit(mut self, limit: u32) -> Self {
         if let Command::Query { limit: l, .. } = &mut self.inner {
             *l = Some(limit);
+        }
+        self
+    }
+
+    pub fn with_offset(mut self, offset: u32) -> Self {
+        if let Command::Query { offset: o, .. } = &mut self.inner {
+            *o = Some(offset);
         }
         self
     }

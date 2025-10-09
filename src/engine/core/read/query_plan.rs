@@ -86,6 +86,22 @@ impl QueryPlan {
         }
     }
 
+    pub fn offset(&self) -> Option<usize> {
+        if let Command::Query { offset, .. } = &self.command {
+            offset.map(|v| v as usize)
+        } else {
+            None
+        }
+    }
+
+    pub fn window_needed(&self) -> Option<usize> {
+        match (self.limit(), self.offset()) {
+            (Some(l), Some(o)) => Some(l.saturating_add(o)),
+            (Some(l), None) => Some(l),
+            _ => None,
+        }
+    }
+
     pub fn context_id_plan(&self) -> Option<&FilterPlan> {
         self.filter_plans.iter().find(|plan| plan.is_context_id())
     }

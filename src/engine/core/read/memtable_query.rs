@@ -16,7 +16,15 @@ impl<'a> MemTableQuery<'a> {
         let evaluator = ConditionEvaluatorBuilder::build_from_plan(self.plan);
         let event_type = self.plan.event_type();
         let context_id = self.plan.context_id();
+        // Compute scan window: we need to scan up to offset+limit matches if both present,
+        // otherwise just limit, otherwise no cap.
         let limit = self.plan.limit();
+        let offset = self.plan.offset();
+        let scan_limit = match (limit, offset) {
+            (Some(l), Some(o)) => Some(l.saturating_add(o)),
+            (Some(l), None) => Some(l),
+            _ => None,
+        };
 
         debug!(
             target: "sneldb::query_memtable",
@@ -29,7 +37,7 @@ impl<'a> MemTableQuery<'a> {
         let mut events = Vec::new();
 
         for event in self.memtable.iter() {
-            if let Some(lim) = limit {
+            if let Some(lim) = scan_limit {
                 if events.len() >= lim {
                     break;
                 }
