@@ -3,34 +3,136 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SnelDB Playground</title>
+  <title>SnelDB Dashboard</title>
   <link rel="stylesheet" href="/static/styles.css" />
   <link rel="stylesheet" href="/static/highlight.css" />
   <link rel="icon" href="data:," />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <div id="app">
     <header>
-      <h1>SnelDB Playground</h1>
-      <div class="status" id="status">Ready</div>
+      <div class="header-content">
+        <div class="logo-section">
+          <h1>SnelDB Dashboard</h1>
+          <p class="tagline">Query. Visualize. Analyze.</p>
+        </div>
+        <div class="header-actions">
+          <button id="themeToggle" class="theme-toggle" aria-label="Toggle theme">
+            <svg class="sun-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M10 2V4M10 16V18M18 10H16M4 10H2M15.657 4.343L14.243 5.757M5.757 14.243L4.343 15.657M15.657 15.657L14.243 14.243M5.757 5.757L4.343 4.343" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <svg class="moon-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <path d="M17 10.5C16.6 14.4 13.4 17.5 9.5 18C5.1 18.5 1.5 14.9 2 10.5C2.4 6.6 5.6 3.5 9.5 3C10.4 2.9 11.2 3 12 3.3C11.2 4.3 10.7 5.6 10.7 7C10.7 10.3 13.3 13 16.6 13C17.4 13 18.1 12.8 18.8 12.5C18.2 13.8 17.3 14.9 16.2 15.7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <div class="status" id="status">
+            <span class="status-indicator"></span>
+            <span class="status-text">Ready</span>
+          </div>
+        </div>
+      </div>
     </header>
     <main>
-      <section class="input">
+      <section class="input-section">
+        <div class="section-header">
+          <h2>Query Editor</h2>
+        </div>
         <div class="editor">
           <pre aria-hidden="true"><code id="hl" class="language-sneldb"></code></pre>
-          <textarea id="command">DEFINE subscription FIELDS { "id": "int", "plan": "string" }
-STORE subscription FOR ctx1 PAYLOAD {"id": 1, "plan": "free"}
-STORE subscription FOR ctx2 PAYLOAD {"id": 2, "plan": "pro"}
-QUERY subscription WHERE id=1</textarea>
+          <textarea id="command" placeholder="Enter your SnelDB query here...">QUERY stress_evt WHERE id < 1000 COUNT PER week USING created_at BY plan LIMIT 10</textarea>
         </div>
         <div class="actions">
-          <button id="run">Run (Ctrl+Enter)</button>
-          <button id="clear">Clear</button>
-          <label class="fmt-toggle"><input id="fmt" type="checkbox" /> JSON output</label>
+          <button id="run" class="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M3 2L13 8L3 14V2Z" fill="currentColor"/>
+            </svg>
+            Run Query
+          </button>
+          <button id="clear" class="btn btn-secondary">Clear</button>
         </div>
       </section>
-      <section class="output">
-        <pre><code id="output" class="language-json"></code></pre>
+      <section class="output-section">
+        <div class="section-header">
+          <h2>Results</h2>
+          <div class="view-controls" id="viewControls" style="display: none;">
+            <button class="view-btn active" data-view="chart" id="chartViewBtn">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="2" y="8" width="3" height="6" fill="currentColor"/>
+                <rect x="6" y="4" width="3" height="10" fill="currentColor"/>
+                <rect x="10" y="6" width="3" height="8" fill="currentColor"/>
+              </svg>
+              Chart
+            </button>
+            <button class="view-btn" data-view="table" id="tableViewBtn">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="2" y="2" width="12" height="12" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                <line x1="2" y1="6" x2="14" y2="6" stroke="currentColor" stroke-width="1.5"/>
+                <line x1="8" y1="2" x2="8" y2="14" stroke="currentColor" stroke-width="1.5"/>
+              </svg>
+              Table
+            </button>
+            <button class="view-btn" data-view="json" id="jsonViewBtn">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M4 2C2.89543 2 2 2.89543 2 4V6C2 7.10457 2.89543 8 4 8C2.89543 8 2 8.89543 2 10V12C2 13.1046 2.89543 14 4 14" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                <path d="M12 2C13.1046 2 14 2.89543 14 4V6C14 7.10457 13.1046 8 12 8C13.1046 8 14 8.89543 14 10V12C14 13.1046 13.1046 14 12 14" stroke="currentColor" stroke-width="1.5" fill="none"/>
+              </svg>
+              JSON
+            </button>
+          </div>
+        </div>
+        <div class="output-container">
+          <div id="chartView" class="view-content active">
+            <div class="chart-controls" id="chartControls" style="display: none;">
+              <div class="control-group">
+                <label class="chart-type-label">Chart Type:</label>
+                <div class="chart-type-buttons">
+                  <button class="chart-type-btn active" data-type="bar">Bar</button>
+                  <button class="chart-type-btn" data-type="line">Line</button>
+                  <button class="chart-type-btn" data-type="pie">Pie</button>
+                  <button class="chart-type-btn" data-type="doughnut">Doughnut</button>
+                </div>
+              </div>
+              <div class="control-group">
+                <label class="chart-type-label" for="colorSchemeSelect">Colors:</label>
+                <select id="colorSchemeSelect" class="color-scheme-select">
+                  <option value="multicolor">Multicolor</option>
+                  <option value="blues">Blues</option>
+                  <option value="greens">Greens</option>
+                  <option value="purples">Purples</option>
+                  <option value="warm">Warm</option>
+                  <option value="earth">Earth</option>
+                  <option value="ocean">Ocean</option>
+                  <option value="sunset">Sunset</option>
+                  <option value="forest">Forest</option>
+                  <option value="monochrome">Monochrome</option>
+                  <option value="pastel">Pastel</option>
+                  <option value="vibrant">Vibrant</option>
+                </select>
+              </div>
+            </div>
+            <div class="chart-wrapper">
+              <canvas id="chart"></canvas>
+            </div>
+            <div class="empty-state" id="emptyState">
+              <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+                <rect x="8" y="32" width="12" height="24" fill="currentColor" opacity="0.2"/>
+                <rect x="26" y="16" width="12" height="40" fill="currentColor" opacity="0.2"/>
+                <rect x="44" y="24" width="12" height="32" fill="currentColor" opacity="0.2"/>
+              </svg>
+              <p>Run a query to visualize results</p>
+            </div>
+          </div>
+          <div id="tableView" class="view-content">
+            <div class="table-wrapper">
+              <table id="dataTable"></table>
+            </div>
+          </div>
+          <div id="jsonView" class="view-content">
+            <pre><code id="output" class="language-json"></code></pre>
+          </div>
+        </div>
       </section>
     </main>
   </div>
@@ -51,7 +153,6 @@ QUERY subscription WHERE id=1</textarea>
   </script>
   <script>window.SNELDB_AUTH_TOKEN = 'mysecrettoken';</script>
 </body>
-<!-- Minimal single-file SPA served from static assets. -->
 </html>
 
 
