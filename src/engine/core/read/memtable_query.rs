@@ -16,6 +16,7 @@ impl<'a> MemTableQuery<'a> {
         let evaluator = ConditionEvaluatorBuilder::build_from_plan(self.plan);
         let event_type = self.plan.event_type();
         let context_id = self.plan.context_id();
+        let limit = self.plan.limit();
 
         debug!(
             target: "sneldb::query_memtable",
@@ -28,6 +29,11 @@ impl<'a> MemTableQuery<'a> {
         let mut events = Vec::new();
 
         for event in self.memtable.iter() {
+            if let Some(lim) = limit {
+                if events.len() >= lim {
+                    break;
+                }
+            }
             if evaluator.evaluate_event(event) {
                 events.push(event.clone());
             }

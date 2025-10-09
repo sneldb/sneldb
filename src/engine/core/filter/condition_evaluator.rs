@@ -101,6 +101,14 @@ impl ConditionEvaluator {
     }
 
     pub fn evaluate_zones(&self, zones: Vec<CandidateZone>) -> Vec<Event> {
+        self.evaluate_zones_with_limit(zones, None)
+    }
+
+    pub fn evaluate_zones_with_limit(
+        &self,
+        zones: Vec<CandidateZone>,
+        limit: Option<usize>,
+    ) -> Vec<Event> {
         if tracing::enabled!(tracing::Level::INFO) {
             info!(
                 target: "sneldb::evaluator",
@@ -110,7 +118,13 @@ impl ConditionEvaluator {
         }
 
         let mut results: Vec<Event> = Vec::new();
-        for zone in zones.into_iter() {
+        'zones: for zone in zones.into_iter() {
+            if let Some(lim) = limit {
+                if results.len() >= lim {
+                    break 'zones;
+                }
+            }
+
             if tracing::enabled!(tracing::Level::INFO) {
                 let event_count = zone.values.values().next().map(|v| v.len()).unwrap_or(0);
                 info!(
@@ -125,6 +139,11 @@ impl ConditionEvaluator {
             let event_count = zone.values.values().next().map(|v| v.len()).unwrap_or(0);
             let accessor = PreparedAccessor::new(&zone.values);
             for i in 0..event_count {
+                if let Some(lim) = limit {
+                    if results.len() >= lim {
+                        break;
+                    }
+                }
                 let passes = self
                     .conditions
                     .iter()

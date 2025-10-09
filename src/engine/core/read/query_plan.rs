@@ -78,6 +78,14 @@ impl QueryPlan {
         }
     }
 
+    pub fn limit(&self) -> Option<usize> {
+        if let Command::Query { limit, .. } = &self.command {
+            limit.map(|v| v as usize)
+        } else {
+            None
+        }
+    }
+
     pub fn context_id_plan(&self) -> Option<&FilterPlan> {
         self.filter_plans.iter().find(|plan| plan.is_context_id())
     }

@@ -4,6 +4,7 @@ use crate::engine::shard::manager::ShardManager;
 use crate::logging::init_for_tests;
 use crate::shared::response::JsonRenderer;
 use crate::test_helpers::factories::{CommandFactory, SchemaRegistryFactory};
+use serde_json::Value as JsonValue;
 use tempfile::tempdir;
 use tokio::io::{AsyncReadExt, duplex};
 use tokio::time::{Duration, sleep};
@@ -603,4 +604,119 @@ async fn test_query_returns_error_for_empty_event_type() {
     let body = String::from_utf8_lossy(&buf[..n]);
 
     assert!(body.contains("event_type cannot be empty"));
+}
+
+#[tokio::test]
+async fn test_query_selection_limit_truncates_and_sorts() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("limit_sel_evt", &[("id", "int")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store three events with shuffled context_ids
+    for (ctx, id) in [("c3", 3), ("c1", 1), ("c2", 2)] {
+        let store_cmd = crate::test_helpers::factories::CommandFactory::store()
+            .with_event_type("limit_sel_evt")
+            .with_context_id(ctx)
+            .with_payload(serde_json::json!({ "id": id }))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+
+    // Allow time for store to be processed
+    sleep(Duration::from_millis(400)).await;
+
+    // LIMIT 2 should return two rows sorted by context_id: c1, c2
+    let cmd = parse("QUERY limit_sel_evt LIMIT 2").expect("parse LIMIT selection query");
+    let (mut reader, mut writer) = duplex(4096);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Extract JSON payload
+    let json_start = body.find('{').unwrap_or(0);
+    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
+    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0][0], JsonValue::String("c1".into()));
+    assert_eq!(rows[1][0], JsonValue::String("c2".into()));
+}
+
+#[tokio::test]
+async fn test_query_aggregation_limit_truncates_and_sorts_groups() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("limit_agg_evt", &[("country", "string")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Three different groups
+    for (ctx, country) in [("a", "US"), ("b", "DE"), ("c", "FR")] {
+        let store_cmd = crate::test_helpers::factories::CommandFactory::store()
+            .with_event_type("limit_agg_evt")
+            .with_context_id(ctx)
+            .with_payload(serde_json::json!({ "country": country }))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+    sleep(Duration::from_millis(400)).await;
+
+    let cmd = parse("QUERY limit_agg_evt COUNT BY country LIMIT 2").expect("parse agg LIMIT query");
+    let (mut reader, mut writer) = duplex(4096);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+    let json_start = body.find('{').unwrap_or(0);
+    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
+    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    assert_eq!(rows.len(), 2);
+    // Non-deterministic ordering/path (memtable vs segment), but LIMIT=2 must cap results.
+    // Assert we got any two distinct countries from the three inserted.
+    let c0 = rows[0][0].as_str().unwrap().to_string();
+    let c1 = rows[1][0].as_str().unwrap().to_string();
+    let set: std::collections::HashSet<String> = [c0, c1].into_iter().collect();
+    assert_eq!(set.len(), 2);
+    let allowed: std::collections::HashSet<&str> = ["US", "DE", "FR"].into_iter().collect();
+    assert!(set.iter().all(|c| allowed.contains(c.as_str())));
 }

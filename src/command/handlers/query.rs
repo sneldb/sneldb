@@ -84,7 +84,20 @@ pub async fn handle<W: AsyncWrite + Unpin>(
 
     match result {
         QueryResult::Selection(sel) => {
-            let table = sel.finalize();
+            let mut table = sel.finalize();
+            // Apply global LIMIT across merged shard results. Sort by context_id for stability.
+            if let Some(lim) = limit {
+                // Sort rows by first column (context_id) if present
+                if !table.rows.is_empty() && !table.rows[0].is_empty() {
+                    table
+                        .rows
+                        .sort_by(|a, b| a[0].to_string().cmp(&b[0].to_string()));
+                }
+                let lim = *lim as usize;
+                if table.rows.len() > lim {
+                    table.rows.truncate(lim);
+                }
+            }
             if table.rows.is_empty() {
                 info!(target: "sneldb::query", event_type, "Query returned no results");
                 let resp = Response::ok_lines(vec!["No matching events found".to_string()]);
@@ -101,7 +114,26 @@ pub async fn handle<W: AsyncWrite + Unpin>(
             writer.write_all(&renderer.render(&resp)).await
         }
         QueryResult::Aggregation(agg) => {
-            let table = agg.finalize();
+            let mut table = agg.finalize();
+            // Apply LIMIT to aggregation rows as well; order by bucket/group columns for stability
+            if let Some(lim) = limit {
+                if !table.rows.is_empty() && !table.rows[0].is_empty() {
+                    table.rows.sort_by(|a, b| {
+                        let av = a.get(0);
+                        let bv = b.get(0);
+                        match (av, bv) {
+                            (Some(va), Some(vb)) => va.to_string().cmp(&vb.to_string()),
+                            (Some(_), None) => std::cmp::Ordering::Less,
+                            (None, Some(_)) => std::cmp::Ordering::Greater,
+                            (None, None) => std::cmp::Ordering::Equal,
+                        }
+                    });
+                }
+                let lim = *lim as usize;
+                if table.rows.len() > lim {
+                    table.rows.truncate(lim);
+                }
+            }
             let columns = table
                 .columns
                 .iter()

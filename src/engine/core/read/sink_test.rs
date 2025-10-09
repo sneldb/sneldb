@@ -668,3 +668,49 @@ async fn aggregate_sink_event_count_unique_empty_and_missing_collapsed() {
     let p = events[0].payload.as_object().unwrap();
     assert_eq!(p["count_unique_user"], json!(1));
 }
+
+#[tokio::test]
+async fn aggregate_sink_row_respects_group_limit() {
+    let specs = vec![AggregateOpSpec::CountAll];
+    let mut sink = AggregateSink::from_plan(&AggregatePlan {
+        ops: specs.clone(),
+        group_by: Some(vec!["country".into()]),
+        time_bucket: None,
+    })
+    .with_group_limit(Some(2));
+
+    let columns = make_columns(&[("country", vec!["US", "DE", "FR"])]);
+    sink.on_row(0, &columns); // US
+    sink.on_row(1, &columns); // DE
+    sink.on_row(2, &columns); // FR -> should be ignored due to limit 2
+
+    let plan = make_plan("evt_limit_row", None).await;
+    let events = sink.into_events(&plan);
+    assert_eq!(events.len(), 2);
+}
+
+#[tokio::test]
+async fn aggregate_sink_event_respects_group_limit() {
+    let specs = vec![AggregateOpSpec::CountAll];
+    let mut sink = AggregateSink::from_plan(&AggregatePlan {
+        ops: specs.clone(),
+        group_by: Some(vec!["country".into()]),
+        time_bucket: None,
+    })
+    .with_group_limit(Some(1));
+
+    let e1 = EventFactory::new()
+        .with("payload", json!({"country":"US"}))
+        .create();
+    let e2 = EventFactory::new()
+        .with("payload", json!({"country":"DE"}))
+        .create();
+    sink.on_event(&e1);
+    sink.on_event(&e2); // should be dropped as new group beyond limit
+
+    let plan = make_plan("evt_limit_event", None).await;
+    let events = sink.into_events(&plan);
+    assert_eq!(events.len(), 1);
+    let p = events[0].payload.as_object().unwrap();
+    assert!(p["country"].as_str().unwrap() == "US" || p["country"].as_str().unwrap() == "DE");
+}
