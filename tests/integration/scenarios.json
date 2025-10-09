@@ -656,6 +656,92 @@
   }
   ,
   {
+    "name": "query_limit_zero_no_results",
+    "input_commands": [
+      "DEFINE limit_zero FIELDS { \"status\": \"string\" }",
+      "STORE limit_zero FOR a PAYLOAD {\"status\":\"ok\"}",
+      "STORE limit_zero FOR b PAYLOAD {\"status\":\"ok\"}",
+      "QUERY limit_zero WHERE status=\"ok\" LIMIT 0"
+    ],
+    "matcher": { "kind": "include", "value": "No matching events found" }
+  }
+  ,
+  {
+    "name": "query_limit_memtable_only_two",
+    "config": { "engine": { "flush_threshold": 100 } },
+    "input_commands": [
+      "DEFINE limit_mem_only FIELDS { \"status\": \"string\" }",
+      "STORE limit_mem_only FOR u1 PAYLOAD {\"status\":\"ok\"}",
+      "STORE limit_mem_only FOR u2 PAYLOAD {\"status\":\"ok\"}",
+      "STORE limit_mem_only FOR u3 PAYLOAD {\"status\":\"ok\"}",
+      "QUERY limit_mem_only WHERE status=\"ok\" LIMIT 2"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["u1","u2"] },
+      { "kind": "include_none", "value": ["u3"] }
+    ]
+  }
+  ,
+  {
+    "name": "query_limit_memtable_only_two_same_shard",
+    "config": { "engine": { "flush_threshold": 100 } },
+    "input_commands": [
+      "DEFINE limit_mem_only FIELDS { \"status\": \"int\" }",
+      "STORE limit_mem_only FOR u1 PAYLOAD {\"status\":400}",
+      "STORE limit_mem_only FOR u1 PAYLOAD {\"status\":500}",
+      "STORE limit_mem_only FOR u1 PAYLOAD {\"status\":200}",
+      "QUERY limit_mem_only LIMIT 2"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["\"status\":400","\"status\":500"] },
+      { "kind": "include_none", "value": ["\"status\":200"] }
+    ]
+  }
+  ,
+  {
+    "name": "query_limit_combines_memtable_and_segment",
+    "input_commands": [
+      "DEFINE limit_mix FIELDS { \"status\": \"string\" }",
+      "STORE limit_mix FOR seg-ctx PAYLOAD {\"status\":\"ok\"}",
+      "FLUSH",
+      "STORE limit_mix FOR mem-ctx PAYLOAD {\"status\":\"ok\"}",
+      "QUERY limit_mix WHERE status=\"ok\" LIMIT 2"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["seg-ctx","mem-ctx"] }
+    ]
+  }
+  ,
+  {
+    "name": "query_limit_equal_to_total",
+    "config": { "engine": { "flush_threshold": 100 } },
+    "input_commands": [
+      "DEFINE limit_eq_total FIELDS { \"status\": \"string\" }",
+      "STORE limit_eq_total FOR c1 PAYLOAD {\"status\":\"ok\"}",
+      "STORE limit_eq_total FOR c2 PAYLOAD {\"status\":\"ok\"}",
+      "STORE limit_eq_total FOR c3 PAYLOAD {\"status\":\"ok\"}",
+      "QUERY limit_eq_total WHERE status=\"ok\" LIMIT 3"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["c1","c2","c3"] }
+    ]
+  }
+  ,
+  {
+    "name": "query_limit_greater_than_total",
+    "config": { "engine": { "flush_threshold": 100 } },
+    "input_commands": [
+      "DEFINE limit_gt_total FIELDS { \"status\": \"string\" }",
+      "STORE limit_gt_total FOR d1 PAYLOAD {\"status\":\"ok\"}",
+      "STORE limit_gt_total FOR d2 PAYLOAD {\"status\":\"ok\"}",
+      "QUERY limit_gt_total WHERE status=\"ok\" LIMIT 10"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["d1","d2"] }
+    ]
+  }
+  ,
+  {
     "name": "replay_since_using_created_at_iso8601",
     "input_commands": [
       "DEFINE evt_rp1 FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
