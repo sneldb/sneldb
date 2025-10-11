@@ -67,6 +67,50 @@ impl Event {
         }
     }
 
+    /// Returns the value of the specified field as a zero-padded sortable String.
+    /// Numeric values are zero-padded so lexicographic comparison works correctly.
+    /// This is used by RLTE index for proper ordering of numeric fields.
+    pub fn get_field_value_sortable(&self, field: &str) -> String {
+        match field {
+            "context_id" => self.context_id.clone(),
+            "event_type" => self.event_type.clone(),
+            // Pad timestamp to 20 digits for u64 (max: 18446744073709551615 = 20 digits)
+            "timestamp" => format!("{:020}", self.timestamp),
+            other => {
+                if let Some(obj) = self.payload.as_object() {
+                    if let Some(v) = obj.get(other) {
+                        if let Some(s) = v.as_str() {
+                            // Keep strings as-is
+                            s.to_string()
+                        } else if let Some(n) = v.as_i64() {
+                            // Pad signed integers with bias to make them sortable
+                            // Use wrapping_sub to avoid i128 overhead
+                            // Maps i64::MIN -> 0, 0 -> 9223372036854775808, i64::MAX -> u64::MAX
+                            let biased = n.wrapping_sub(i64::MIN) as u64;
+                            format!("{:020}", biased)
+                        } else if let Some(n) = v.as_u64() {
+                            // Pad unsigned integers to 20 digits
+                            format!("{:020}", n)
+                        } else if let Some(f) = v.as_f64() {
+                            // For floats, convert to sortable format (limited precision)
+                            // Use scientific notation with fixed width
+                            format!("{:+025.10e}", f)
+                        } else if let Some(b) = v.as_bool() {
+                            // Booleans: "false" < "true" lexicographically (correct)
+                            b.to_string()
+                        } else {
+                            v.to_string()
+                        }
+                    } else {
+                        "".to_string()
+                    }
+                } else {
+                    "".to_string()
+                }
+            }
+        }
+    }
+
     /// Collects all field names in this event: fixed + dynamic (from payload).
     pub fn collect_all_fields(&self) -> HashSet<String> {
         let mut fields: HashSet<String> = HashSet::new();

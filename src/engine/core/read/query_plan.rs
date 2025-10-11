@@ -86,6 +86,22 @@ impl QueryPlan {
         }
     }
 
+    pub fn offset(&self) -> Option<usize> {
+        if let Command::Query { offset, .. } = &self.command {
+            offset.map(|v| v as usize)
+        } else {
+            None
+        }
+    }
+
+    pub fn order_by(&self) -> Option<&crate::command::types::OrderSpec> {
+        if let Command::Query { order_by, .. } = &self.command {
+            order_by.as_ref()
+        } else {
+            None
+        }
+    }
+
     pub fn context_id_plan(&self) -> Option<&FilterPlan> {
         self.filter_plans.iter().find(|plan| plan.is_context_id())
     }

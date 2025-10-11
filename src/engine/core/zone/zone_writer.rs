@@ -2,6 +2,7 @@ use crate::engine::core::ColumnWriter;
 use crate::engine::core::FieldXorFilter;
 use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
 use crate::engine::core::zone::enum_bitmap_index::EnumBitmapBuilder;
+use crate::engine::core::zone::rlte_index::RlteIndex;
 use crate::engine::core::zone::zone_xor_index::build_all_zxf;
 use crate::engine::core::{ZoneIndex, ZoneMeta, ZonePlan};
 use crate::engine::errors::StoreError;
@@ -81,6 +82,23 @@ impl<'a> ZoneWriter<'a> {
         );
         if let Err(e) = ZoneSurfFilter::build_all(zone_plans, self.segment_dir) {
             debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping Zone SuRF due to error");
+        }
+
+        // Build RLTE index (best-effort)
+        debug!(
+            target: "sneldb::flush",
+            uid = self.uid,
+            "Building RLTE index"
+        );
+        match std::panic::catch_unwind(|| RlteIndex::build_from_zones(zone_plans)) {
+            Ok(rlte) => {
+                if let Err(e) = rlte.save(self.uid, self.segment_dir) {
+                    debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping RLTE due to IO error");
+                }
+            }
+            Err(_) => {
+                debug!(target: "sneldb::flush", uid = self.uid, "Skipping RLTE due to build panic");
+            }
         }
 
         // Build Enum Bitmap Indexes for enum fields (best-effort)

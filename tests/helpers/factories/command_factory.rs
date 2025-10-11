@@ -1,4 +1,6 @@
-use crate::command::types::{AggSpec, Command, Expr, FieldSpec, MiniSchema, TimeGranularity};
+use crate::command::types::{
+    AggSpec, Command, Expr, FieldSpec, MiniSchema, OrderSpec, TimeGranularity,
+};
 use serde_json::{Value, json};
 
 pub struct CommandFactory {
@@ -37,6 +39,9 @@ impl CommandFactory {
                 since: None,
                 where_clause: None,
                 limit: Some(10),
+                offset: None,
+                order_by: None,
+                picked_zones: None,
                 return_fields: None,
                 link_field: None,
                 aggs: None,
@@ -109,6 +114,13 @@ impl CommandFactory {
     pub fn with_limit(mut self, limit: u32) -> Self {
         if let Command::Query { limit: l, .. } = &mut self.inner {
             *l = Some(limit);
+        }
+        self
+    }
+
+    pub fn with_offset(mut self, offset: u32) -> Self {
+        if let Command::Query { offset: o, .. } = &mut self.inner {
+            *o = Some(offset);
         }
         self
     }
@@ -230,6 +242,16 @@ impl CommandFactory {
     pub fn with_time_field(mut self, field: &str) -> Self {
         if let Command::Query { time_field, .. } = &mut self.inner {
             *time_field = Some(field.to_string());
+        }
+        self
+    }
+
+    pub fn with_order_by(mut self, field: &str, desc: bool) -> Self {
+        if let Command::Query { order_by, .. } = &mut self.inner {
+            *order_by = Some(OrderSpec {
+                field: field.to_string(),
+                desc,
+            });
         }
         self
     }

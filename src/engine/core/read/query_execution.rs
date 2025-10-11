@@ -1,5 +1,6 @@
 use crate::engine::core::{
-    Event, ExecutionStep, MemTable, MemTableQueryRunner, QueryCaches, QueryPlan, SegmentQueryRunner,
+    Event, ExecutionStep, MemTable, MemTableQueryRunner, QueryCaches, QueryContext, QueryPlan,
+    SegmentQueryRunner,
 };
 use crate::engine::errors::QueryExecutionError;
 use std::collections::HashMap;
@@ -93,9 +94,19 @@ impl<'a> QueryExecution<'a> {
 
         let mut events = Vec::new();
 
-        // Step 1: Memtable
+        // Extract query context to check for ORDER BY
+        let ctx = QueryContext::from_command(&self.plan.command);
+
+        // Step 1: Memtable (with limit, or None if ORDER BY present)
+        let memtable_limit = if ctx.should_defer_limit() {
+            None // ORDER BY present - need all events for k-way merge
+        } else {
+            self.plan.limit()
+        };
+
         let memtable_events =
             MemTableQueryRunner::new(self.memtable, &self.passive_memtables, self.plan)
+                .with_limit(memtable_limit)
                 .run()
                 .await;
         debug!(
@@ -105,19 +116,25 @@ impl<'a> QueryExecution<'a> {
         );
         events.extend(memtable_events);
 
-        // Check LIMIT after memtable path; early return if satisfied
-        if let Some(limit) = self.plan.limit() {
-            if events.len() >= limit {
-                events.truncate(limit);
-                return Ok(events);
+        // Only early return if LIMIT satisfied AND no ORDER BY/OFFSET
+        // (ORDER BY requires k-way merge at handler level, OFFSET needs all data)
+        if !ctx.should_defer_limit() && self.plan.offset().is_none() {
+            if let Some(limit) = self.plan.limit() {
+                if events.len() >= limit {
+                    events.truncate(limit);
+                    return Ok(events);
+                }
             }
         }
 
         // Step 2: Disk segments
-        let remaining_limit = self
-            .plan
-            .limit()
-            .map(|lim| lim.saturating_sub(events.len()));
+        let remaining_limit = if ctx.should_defer_limit() {
+            None // ORDER BY present - need all events
+        } else {
+            self.plan
+                .limit()
+                .map(|lim| lim.saturating_sub(events.len()))
+        };
 
         let segment_events = SegmentQueryRunner::new(self.plan, self.steps.clone())
             .with_caches(self.caches)
@@ -131,10 +148,12 @@ impl<'a> QueryExecution<'a> {
         );
         events.extend(segment_events);
 
-        // Enforce final LIMIT if present (defensive; runner should already cap)
-        if let Some(limit) = self.plan.limit() {
-            if events.len() > limit {
-                events.truncate(limit);
+        // Enforce final LIMIT if present (only when no ORDER BY - handler does it for ORDER BY)
+        if !ctx.should_defer_limit() {
+            if let Some(limit) = self.plan.limit() {
+                if events.len() > limit {
+                    events.truncate(limit);
+                }
             }
         }
 

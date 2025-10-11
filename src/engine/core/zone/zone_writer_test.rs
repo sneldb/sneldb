@@ -1,3 +1,4 @@
+use crate::engine::core::zone::rlte_index::RlteIndex;
 use crate::engine::core::zone::zone_xor_index::ZoneXorFilterIndex;
 use crate::engine::core::{FieldXorFilter, ZoneIndex, ZoneMeta, ZonePlanner, ZoneWriter};
 use crate::test_helpers::factories::{EventFactory, SchemaRegistryFactory};
@@ -89,5 +90,34 @@ async fn test_zone_writer_creates_all_outputs_correctly() {
             "Zone {} should maybe contain payload key=value",
             zone_id
         );
+    }
+
+    // Validate RLTE file exists and is readable
+    let rlte_path = segment_dir.join(format!("{}.rlte", uid));
+    assert!(
+        rlte_path.exists(),
+        "Expected RLTE file to be written: {:?}",
+        rlte_path
+    );
+    let rlte = RlteIndex::load(&uid, segment_dir).expect("Failed to load RLTE index");
+    // RLTE should exclude context_id (sorted by LSM), and include payload 'key'
+    assert!(
+        !rlte.ladders.contains_key("context_id"),
+        "RLTE must exclude context_id ladder"
+    );
+    assert!(
+        rlte.ladders.contains_key("key"),
+        "RLTE must include payload 'key' ladder"
+    );
+    // Each recorded zone should have a non-empty ladder for 'key'
+    if let Some(per_zone) = rlte.ladders.get("key") {
+        assert!(!per_zone.is_empty(), "RLTE key should have zone entries");
+        for (zone_id, ladder) in per_zone {
+            assert!(
+                !ladder.is_empty(),
+                "RLTE ladder for zone {} should not be empty",
+                zone_id
+            );
+        }
     }
 }

@@ -1,12 +1,15 @@
 pub mod candidate_zone;
 pub mod enum_bitmap_index;
 pub mod enum_zone_pruner;
+pub mod rlte_index;
+pub mod segment_zone_id;
 pub mod selector;
 pub mod zone_artifacts;
 pub mod zone_collector;
 pub mod zone_combiner;
 pub mod zone_cursor;
 pub mod zone_cursor_loader;
+pub mod zone_filter;
 pub mod zone_finder;
 pub mod zone_hydrator;
 pub mod zone_index;
@@ -28,6 +31,10 @@ mod enum_bitmap_index_test;
 #[cfg(test)]
 mod enum_zone_pruner_test;
 #[cfg(test)]
+mod rlte_index_tests;
+#[cfg(test)]
+mod segment_zone_id_test;
+#[cfg(test)]
 mod zone_collector_tests;
 #[cfg(test)]
 mod zone_combiner_tests;
@@ -35,6 +42,8 @@ mod zone_combiner_tests;
 mod zone_cursor_loader_test;
 #[cfg(test)]
 mod zone_cursor_test;
+#[cfg(test)]
+mod zone_filter_test;
 #[cfg(test)]
 mod zone_finder_test;
 #[cfg(test)]

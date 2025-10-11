@@ -171,7 +171,7 @@ async fn finds_event_type_zones_with_mock_index() {
         .create();
 
     let finder = ZoneFinder::new(&filter_plan, &query_plan, &binding, &shard_dir);
-    let found    = finder.find();
+    let found = finder.find();
 
     assert_eq!(found.len(), 2);
     assert_eq!(found[0].zone_id, 0);

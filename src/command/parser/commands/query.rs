@@ -64,9 +64,11 @@ peg::parser! {
             / time_clause()
             / group_clause()
             / limit_clause()
+            / offset_clause()
+            / order_clause()
 
         rule clause_start()
-            = ci("PER") / ci("BY") / ci("USING") / ci("SINCE") / ci("LIMIT")
+            = ci("PER") / ci("BY") / ci("USING") / ci("SINCE") / ci("LIMIT") / ci("OFFSET") / (ci("ORDER") _ ci("BY"))
             / ci("RETURN") / ci("LINKED") / ci("WHERE") / ci("FOR")
             / ci("FOLLOWED") / ci("PRECEDED")
 
@@ -162,6 +164,17 @@ peg::parser! {
         rule limit_clause() -> Clause
             = ci("LIMIT") _ n:integer() {
                 Clause::Limit(n.parse::<u32>().unwrap())
+            }
+
+        rule offset_clause() -> Clause
+            = ci("OFFSET") _ n:integer() {
+                Clause::Offset(n.parse::<u32>().unwrap())
+            }
+
+        rule order_clause() -> Clause
+            = ci("ORDER") _ ci("BY") _ f:field() _ d:$(ci("ASC") / ci("DESC"))? {
+                let desc = match d { Some(dir) => eq_ci(dir, "DESC"), None => false };
+                Clause::Order(f, desc)
             }
 
         // ==========
@@ -273,6 +286,8 @@ struct QueryParts {
     time_bucket: Option<TimeGranularity>,
     group_by: Option<Vec<String>>,
     limit: Option<u32>,
+    offset: Option<u32>,
+    order_by: Option<crate::command::types::OrderSpec>,
 }
 
 impl QueryParts {
@@ -298,6 +313,10 @@ impl QueryParts {
                 }
             }
             Clause::Limit(n) => self.limit = Some(n),
+            Clause::Offset(n) => self.offset = Some(n),
+            Clause::Order(f, desc) => {
+                self.order_by = Some(crate::command::types::OrderSpec { field: f, desc })
+            }
         }
     }
 
@@ -309,6 +328,9 @@ impl QueryParts {
             time_field: self.using_field,
             where_clause: self.where_clause,
             limit: self.limit,
+            offset: self.offset,
+            order_by: self.order_by,
+            picked_zones: None,
             return_fields: self.return_fields,
             link_field: self.link_field,
             aggs: self.aggs,
@@ -347,6 +369,8 @@ enum Clause {
     Time(TimeGranularity, Option<String>),
     Group(Vec<String>, Option<String>),
     Limit(u32),
+    Offset(u32),
+    Order(String, bool),
 }
 
 pub fn parse(input: &str) -> Result<Command, ParseError> {

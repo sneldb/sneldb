@@ -125,6 +125,7 @@ pub enum FileKind {
     EventSnapshot,
     EventSnapshotMeta,
     ZoneSurfFilter,
+    ZoneRlte,
 }
 
 impl FileKind {
@@ -143,6 +144,7 @@ impl FileKind {
             FileKind::EventSnapshot => *b"EVDBSNP\0",
             FileKind::EventSnapshotMeta => *b"EVDBSMT\0",
             FileKind::ZoneSurfFilter => *b"EVDBZSF\0",
+            FileKind::ZoneRlte => *b"EVDBZRT\0",
         }
     }
 }
