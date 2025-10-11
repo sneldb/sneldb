@@ -1,9 +1,12 @@
 pub mod aggregate;
 pub mod cache;
+pub mod event_sorter;
 pub mod execution_step;
+pub mod field_comparator;
 pub mod memtable_query;
 pub mod memtable_query_runner;
 pub mod projection;
+pub mod query_context;
 pub mod query_execution;
 pub mod query_plan;
 pub mod range_query_handler;
@@ -13,12 +16,17 @@ pub mod segment_query_runner;
 pub mod sink;
 
 #[cfg(test)]
+mod event_sorter_test;
+#[cfg(test)]
 mod execution_step_test;
+#[cfg(test)]
+mod field_comparator_test;
 #[cfg(test)]
 mod memtable_query_runner_test;
 #[cfg(test)]
 mod memtable_query_test;
-
+#[cfg(test)]
+mod query_context_test;
 #[cfg(test)]
 mod query_execution_test;
 #[cfg(test)]

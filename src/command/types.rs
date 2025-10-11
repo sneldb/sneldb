@@ -21,6 +21,9 @@ pub enum Command {
         time_field: Option<String>,
         where_clause: Option<Expr>,
         limit: Option<u32>,
+        offset: Option<u32>,
+        order_by: Option<OrderSpec>,
+        picked_zones: Option<PickedZones>,
         return_fields: Option<Vec<String>>,
         link_field: Option<String>,
         aggs: Option<Vec<AggSpec>>,
@@ -57,6 +60,9 @@ impl Command {
                 time_field: time_field.clone(),
                 where_clause: None,
                 limit: None,
+                offset: None,
+                order_by: None,
+                picked_zones: None,
                 return_fields: return_fields.clone(),
                 link_field: None,
                 aggs: None,
@@ -127,6 +133,22 @@ pub enum AggSpec {
     Avg { field: String },
     Min { field: String },
     Max { field: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct OrderSpec {
+    pub field: String,
+    pub desc: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PickedZones {
+    pub uid: String,
+    pub field: String,
+    pub asc: bool,
+    pub cutoff: String,
+    pub k: usize,
+    pub zones: Vec<(String, u32)>, // (segment_id, zone_id)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

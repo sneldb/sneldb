@@ -1530,4 +1530,177 @@
     ],
     "matcher": { "kind": "include", "value": "No matching events found" }
   }
+  ,
+  {
+    "name": "query_order_by_asc_with_limit",
+    "input_commands": [
+      "DEFINE score FIELDS { \"val\": \"int\" }",
+      "STORE score FOR u1 PAYLOAD {\"val\":50}",
+      "STORE score FOR u2 PAYLOAD {\"val\":30}",
+      "STORE score FOR u3 PAYLOAD {\"val\":70}",
+      "STORE score FOR u4 PAYLOAD {\"val\":10}",
+      "STORE score FOR u5 PAYLOAD {\"val\":90}",
+      "FLUSH",
+      "QUERY score ORDER BY val ASC LIMIT 3"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["\"val\":10", "\"val\":30", "\"val\":50"] },
+      { "kind": "include_none", "value": ["\"val\":70", "\"val\":90"] }
+    ]
+  }
+  ,
+  {
+    "name": "query_order_by_desc_with_limit",
+    "input_commands": [
+      "DEFINE score FIELDS { \"val\": \"int\" }",
+      "STORE score FOR u1 PAYLOAD {\"val\":50}",
+      "STORE score FOR u2 PAYLOAD {\"val\":30}",
+      "STORE score FOR u3 PAYLOAD {\"val\":70}",
+      "STORE score FOR u4 PAYLOAD {\"val\":10}",
+      "STORE score FOR u5 PAYLOAD {\"val\":90}",
+      "FLUSH",
+      "QUERY score ORDER BY val DESC LIMIT 2"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["\"val\":90", "\"val\":70"] },
+      { "kind": "include_none", "value": ["\"val\":50", "\"val\":30", "\"val\":10"] }
+    ]
+  }
+  ,
+  {
+    "name": "query_order_by_with_offset_and_limit",
+    "input_commands": [
+      "DEFINE price FIELDS { \"val\": \"int\" }",
+      "STORE price FOR p1 PAYLOAD {\"val\":100}",
+      "STORE price FOR p2 PAYLOAD {\"val\":200}",
+      "STORE price FOR p3 PAYLOAD {\"val\":300}",
+      "STORE price FOR p4 PAYLOAD {\"val\":400}",
+      "STORE price FOR p5 PAYLOAD {\"val\":500}",
+      "FLUSH",
+      "QUERY price ORDER BY val ASC OFFSET 1 LIMIT 3"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["\"val\":200", "\"val\":300", "\"val\":400"] },
+      { "kind": "include_none", "value": ["\"val\":100", "\"val\":500"] }
+    ]
+  }
+  ,
+  {
+    "name": "query_order_by_desc_with_offset",
+    "input_commands": [
+      "DEFINE rating FIELDS { \"val\": \"int\" }",
+      "STORE rating FOR r1 PAYLOAD {\"val\":5}",
+      "STORE rating FOR r2 PAYLOAD {\"val\":10}",
+      "STORE rating FOR r3 PAYLOAD {\"val\":15}",
+      "STORE rating FOR r4 PAYLOAD {\"val\":20}",
+      "STORE rating FOR r5 PAYLOAD {\"val\":25}",
+      "FLUSH",
+      "QUERY rating ORDER BY val DESC OFFSET 2 LIMIT 2"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["\"val\":15", "\"val\":10"] },
+      { "kind": "include_none", "value": ["\"val\":25", "\"val\":20", "\"val\":5"] }
+    ]
+  }
+  ,
+  {
+    "name": "query_offset_without_limit_rejected",
+    "input_commands": [
+      "DEFINE evt FIELDS { \"val\": \"int\" }",
+      "STORE evt FOR e1 PAYLOAD {\"val\":1}",
+      "STORE evt FOR e2 PAYLOAD {\"val\":2}",
+      "FLUSH",
+      "QUERY evt ORDER BY val ASC OFFSET 1"
+    ],
+    "matcher": { "kind": "include", "value": "OFFSET requires LIMIT" }
+  }
+  ,
+  {
+    "name": "query_order_by_string_field_asc",
+    "input_commands": [
+      "DEFINE user FIELDS { \"name\": \"string\" }",
+      "STORE user FOR u1 PAYLOAD {\"name\":\"charlie\"}",
+      "STORE user FOR u2 PAYLOAD {\"name\":\"alice\"}",
+      "STORE user FOR u3 PAYLOAD {\"name\":\"bob\"}",
+      "FLUSH",
+      "QUERY user ORDER BY name ASC LIMIT 2"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["alice", "bob"] },
+      { "kind": "include_none", "value": ["charlie"] }
+    ]
+  }
+  ,
+  {
+    "name": "query_order_by_with_filter",
+    "input_commands": [
+      "DEFINE item FIELDS { \"category\": \"string\", \"price\": \"int\" }",
+      "STORE item FOR i1 PAYLOAD {\"category\":\"A\",\"price\":100}",
+      "STORE item FOR i2 PAYLOAD {\"category\":\"A\",\"price\":200}",
+      "STORE item FOR i3 PAYLOAD {\"category\":\"B\",\"price\":150}",
+      "STORE item FOR i4 PAYLOAD {\"category\":\"A\",\"price\":50}",
+      "FLUSH",
+      "SLEEP 400",
+      "QUERY item WHERE category=\"A\" ORDER BY price ASC LIMIT 2"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["\"price\":50", "\"price\":100"] },
+      { "kind": "include_none", "value": ["\"price\":200", "\"price\":150"] }
+    ]
+  }
+  ,
+  {
+    "name": "query_order_by_offset_boundary",
+    "input_commands": [
+      "DEFINE num FIELDS { \"val\": \"int\" }",
+      "STORE num FOR n1 PAYLOAD {\"val\":1}",
+      "STORE num FOR n2 PAYLOAD {\"val\":2}",
+      "STORE num FOR n3 PAYLOAD {\"val\":3}",
+      "FLUSH",
+      "QUERY num ORDER BY val ASC OFFSET 2 LIMIT 5"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"val\":3" },
+      { "kind": "include_none", "value": ["\"val\":1", "\"val\":2"] }
+    ]
+  }
+  ,
+  {
+    "name": "query_order_by_memtable_and_segment",
+    "input_commands": [
+      "DEFINE mixed FIELDS { \"val\": \"int\" }",
+      "STORE mixed FOR m1 PAYLOAD {\"val\":10}",
+      "STORE mixed FOR m2 PAYLOAD {\"val\":20}",
+      "FLUSH",
+      "STORE mixed FOR m3 PAYLOAD {\"val\":5}",
+      "STORE mixed FOR m4 PAYLOAD {\"val\":15}",
+      "QUERY mixed ORDER BY val ASC LIMIT 3"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["\"val\":5", "\"val\":10", "\"val\":15"] },
+      { "kind": "include_none", "value": ["\"val\":20"] }
+    ]
+  }
+  ,
+
+  {
+    "name": "query_order_by_large_offset",
+    "config": { "engine": { "flush_threshold": 3 } },
+    "input_commands": [
+      "DEFINE large FIELDS { \"val\": \"int\" }",
+      "STORE large FOR l1 PAYLOAD {\"val\":1}",
+      "STORE large FOR l2 PAYLOAD {\"val\":2}",
+      "STORE large FOR l3 PAYLOAD {\"val\":3}",
+      "STORE large FOR l4 PAYLOAD {\"val\":4}",
+      "STORE large FOR l5 PAYLOAD {\"val\":5}",
+      "STORE large FOR l6 PAYLOAD {\"val\":6}",
+      "FLUSH",
+      "SLEEP 500",
+      "QUERY large ORDER BY val ASC OFFSET 4 LIMIT 2"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["\"val\":5", "\"val\":6"] },
+      { "kind": "include_none", "value": ["\"val\":1", "\"val\":2", "\"val\":3", "\"val\":4"] }
+    ]
+  }
 ]

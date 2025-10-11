@@ -47,7 +47,7 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: cargo test
-        run: SNELDB_CONFIG='config/test.toml' cargo test --verbose
+        run: SNELDB_CONFIG='config/test.toml' cargo test -- --test-threads=1
 
   e2e-tests:
     name: E2E tests

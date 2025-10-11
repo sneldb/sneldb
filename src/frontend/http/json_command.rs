@@ -25,6 +25,8 @@ pub enum JsonCommand {
         #[serde(alias = "where")]
         where_clause: Option<JsonExpr>,
         limit: Option<u32>,
+        offset: Option<u32>,
+        order_by: Option<crate::command::types::OrderSpec>,
     },
     Replay {
         event_type: Option<String>,
@@ -65,6 +67,8 @@ impl From<JsonCommand> for Command {
                 time_field,
                 where_clause,
                 limit,
+                offset,
+                order_by,
             } => Command::Query {
                 event_type,
                 context_id,
@@ -72,6 +76,9 @@ impl From<JsonCommand> for Command {
                 time_field,
                 where_clause: where_clause.map(Into::into),
                 limit,
+                offset,
+                order_by,
+                picked_zones: None,
                 return_fields: None,
                 link_field: None,
                 aggs: None,

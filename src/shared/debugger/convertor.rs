@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 use std::env;
 use std::fs::File;
-use std::io::BufReader;
-use std::io::Read;
+use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 
 use crate::engine::core::ZoneIndex;
@@ -24,7 +23,7 @@ pub fn main() {
     if args.len() < 3 {
         eprintln!("Usage:");
         eprintln!("  convertor zone <path/to/zones.bin>");
-        eprintln!("  convertor col <path/to/segment_dir> <field>");
+        eprintln!("  convertor col <path/to/segment_dir> <uid> <field>");
         eprintln!("  convertor offset <path/to/segment_dir> <uid> <field>");
         eprintln!("  convertor schemas <path/to/schema_dir>");
         eprintln!("  convertor shards <path/to/cols_dir>");
@@ -91,21 +90,31 @@ pub fn main() {
                 std::process::exit(1);
             }
 
+            use crate::engine::core::column::compression::compressed_column_index::CompressedColumnIndex;
+            use crate::engine::core::column::compression::compression_codec::{
+                CompressionCodec, Lz4Codec,
+            };
+
             let segment_path = Path::new(&args[2]);
             let uid = &args[3];
             let field = &args[4];
-            let zones_path = segment_path.join(format!("{}.zones", uid));
 
-            let mut zone_metas = match ZoneMeta::load(&zones_path) {
-                Ok(z) => z,
+            // Load the compression index (.zfc)
+            let zfc_path = segment_path.join(format!("{}_{}.zfc", uid, field));
+            let index = match CompressedColumnIndex::load_from_path(&zfc_path) {
+                Ok(i) => i,
                 Err(e) => {
-                    eprintln!("Failed to load zones: {}", e);
+                    eprintln!(
+                        "Failed to load .zfc index from {}: {}",
+                        zfc_path.display(),
+                        e
+                    );
                     std::process::exit(1);
                 }
             };
 
-            let mut combined: HashMap<u32, Vec<String>> = HashMap::new();
-            let col_path = segment_path.join(format!("{uid}_{field}.col"));
+            // Open the column file
+            let col_path = segment_path.join(format!("{}_{}.col", uid, field));
             let file = match File::open(&col_path) {
                 Ok(f) => f,
                 Err(e) => {
@@ -114,6 +123,8 @@ pub fn main() {
                 }
             };
             let mut reader = BufReader::new(file);
+
+            // Validate header
             match BinaryHeader::read_from(&mut reader) {
                 Ok(h) => {
                     if h.magic != FileKind::SegmentColumn.magic() {
@@ -126,20 +137,79 @@ pub fn main() {
                     std::process::exit(1);
                 }
             }
-            let zone_metas = ZoneMeta::sort_by(&mut zone_metas, "zone_id");
-            for zone_meta in zone_metas.iter() {
-                // Read values for each row in the zone
-                for _ in zone_meta.start_row..=zone_meta.end_row {
-                    let mut len_buf = [0u8; 2];
-                    reader.read_exact(&mut len_buf).unwrap();
-                    let value_len = u16::from_le_bytes(len_buf) as usize;
 
-                    let mut value_bytes = vec![0u8; value_len];
-                    reader.read_exact(&mut value_bytes).unwrap();
-                    let value = String::from_utf8(value_bytes).unwrap();
+            let codec = Lz4Codec;
+            let mut combined: HashMap<u32, Vec<String>> = HashMap::new();
 
-                    combined.entry(zone_meta.zone_id).or_default().push(value);
+            // Process each zone in sorted order
+            let mut zone_ids: Vec<_> = index.entries.keys().copied().collect();
+            zone_ids.sort();
+
+            for zone_id in zone_ids {
+                let entry = index.entries.get(&zone_id).unwrap();
+
+                // Seek to the compressed block
+                if let Err(e) = reader.seek(SeekFrom::Start(entry.block_start)) {
+                    eprintln!("Failed to seek to zone {}: {}", zone_id, e);
+                    std::process::exit(1);
                 }
+
+                // Read the compressed block
+                let mut compressed_bytes = vec![0u8; entry.comp_len as usize];
+                if let Err(e) = reader.read_exact(&mut compressed_bytes) {
+                    eprintln!("Failed to read compressed data for zone {}: {}", zone_id, e);
+                    std::process::exit(1);
+                }
+
+                // Decompress
+                let uncompressed =
+                    match codec.decompress(&compressed_bytes, entry.uncomp_len as usize) {
+                        Ok(data) => data,
+                        Err(e) => {
+                            eprintln!("Failed to decompress zone {}: {}", zone_id, e);
+                            std::process::exit(1);
+                        }
+                    };
+
+                // Parse uncompressed data: [u16 len][bytes] repeated
+                let mut cursor = 0;
+                let mut values = Vec::new();
+                while cursor < uncompressed.len() {
+                    if cursor + 2 > uncompressed.len() {
+                        break;
+                    }
+                    let len = u16::from_le_bytes([uncompressed[cursor], uncompressed[cursor + 1]])
+                        as usize;
+                    cursor += 2;
+
+                    if cursor + len > uncompressed.len() {
+                        eprintln!(
+                            "Invalid length {} at cursor {} for zone {}",
+                            len,
+                            cursor - 2,
+                            zone_id
+                        );
+                        break;
+                    }
+
+                    let value_bytes = &uncompressed[cursor..cursor + len];
+                    cursor += len;
+
+                    match String::from_utf8(value_bytes.to_vec()) {
+                        Ok(value) => values.push(value),
+                        Err(e) => {
+                            eprintln!(
+                                "UTF-8 error in zone {} at position {}: {}",
+                                zone_id,
+                                cursor - len,
+                                e
+                            );
+                            values.push(format!("<invalid UTF-8: {} bytes>", len));
+                        }
+                    }
+                }
+
+                combined.insert(zone_id, values);
             }
 
             #[derive(Serialize)]

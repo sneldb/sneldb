@@ -65,6 +65,21 @@ impl GlobalZoneIndexCache {
         }
     }
 
+    /// Clears all cached entries. Useful for testing to avoid cross-test contamination.
+    #[cfg(test)]
+    pub fn clear_for_test(&self) {
+        if let Ok(mut guard) = self.inner.lock() {
+            guard.clear();
+        }
+        if let Ok(mut guard) = self.inflight.lock() {
+            guard.clear();
+        }
+        self.hits.store(0, Ordering::Relaxed);
+        self.misses.store(0, Ordering::Relaxed);
+        self.reloads.store(0, Ordering::Relaxed);
+        self.evictions.store(0, Ordering::Relaxed);
+    }
+
     pub fn stats(&self) -> ZoneIndexCacheStats {
         ZoneIndexCacheStats {
             hits: self.hits.load(Ordering::Relaxed),

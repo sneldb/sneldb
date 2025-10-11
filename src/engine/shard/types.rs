@@ -16,6 +16,7 @@ use tracing::{error, info};
 pub struct Shard {
     pub id: usize,
     pub tx: Sender<ShardMessage>,
+    pub base_dir: PathBuf,
 }
 
 impl Shard {
@@ -67,6 +68,6 @@ impl Shard {
 
         info!(target: "shard::types", shard_id = id, "Shard spawned successfully");
 
-        (Shard { id, tx }, flush_rx)
+        (Shard { id, tx, base_dir }, flush_rx)
     }
 }
