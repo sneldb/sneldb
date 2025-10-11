@@ -5,19 +5,24 @@ use crate::engine::errors::StoreError;
 use crate::engine::schema::registry::SchemaRegistry;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::{RwLock as TokioRwLock, mpsc::Receiver};
+use tokio::sync::{Mutex, RwLock as TokioRwLock, mpsc::Receiver};
 use tracing::{debug, error, info};
 
 /// Worker that processes MemTables and writes them to disk
 pub struct FlushWorker {
     shard_id: usize,
     base_dir: PathBuf,
+    flush_coordination_lock: Arc<Mutex<()>>,
 }
 
 impl FlushWorker {
     /// Creates a new FlushWorker instance
-    pub fn new(shard_id: usize, base_dir: PathBuf) -> Self {
-        Self { shard_id, base_dir }
+    pub fn new(shard_id: usize, base_dir: PathBuf, flush_coordination_lock: Arc<Mutex<()>>) -> Self {
+        Self {
+            shard_id,
+            base_dir,
+            flush_coordination_lock,
+        }
     }
 
     /// Runs the worker loop that processes MemTables
@@ -41,7 +46,13 @@ impl FlushWorker {
                 "Starting flush"
             );
 
-            let flusher = Flusher::new(memtable, segment_id, &segment_dir, Arc::clone(&registry));
+            let flusher = Flusher::new(
+                memtable,
+                segment_id,
+                &segment_dir,
+                Arc::clone(&registry),
+                Arc::clone(&self.flush_coordination_lock),
+            );
             if let Err(e) = flusher.flush().await {
                 error!(
                     target: "sneldb::flush",

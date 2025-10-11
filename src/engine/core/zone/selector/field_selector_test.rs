@@ -46,7 +46,7 @@ async fn xor_eq_uses_zxf_to_narrow_zones() {
             .with_events(vec![e1])
             .create()
             .unwrap();
-        crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone())
+        crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
             .flush()
             .await
             .unwrap();
@@ -62,7 +62,7 @@ async fn xor_eq_uses_zxf_to_narrow_zones() {
             .with_events(vec![e2])
             .create()
             .unwrap();
-        crate::engine::core::Flusher::new(mem, 2, &seg2, registry.clone())
+        crate::engine::core::Flusher::new(mem, 2, &seg2, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
             .flush()
             .await
             .unwrap();
@@ -133,7 +133,7 @@ async fn range_pruner_uses_zonesurf_for_gt_and_lte() {
         .with_events(vec![e1, e2])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem1, 1, &seg1, registry.clone())
+    crate::engine::core::Flusher::new(mem1, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -154,7 +154,7 @@ async fn range_pruner_uses_zonesurf_for_gt_and_lte() {
         .with_events(vec![e3, e4])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem2, 2, &seg2, registry.clone())
+    crate::engine::core::Flusher::new(mem2, 2, &seg2, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -256,7 +256,7 @@ async fn enum_pruner_respects_eq_and_neq() {
         .with_events(vec![a, b])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem1, 1, &seg1, registry.clone())
+    crate::engine::core::Flusher::new(mem1, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -272,7 +272,7 @@ async fn enum_pruner_respects_eq_and_neq() {
         .with_events(vec![c])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem2, 2, &seg2, registry.clone())
+    crate::engine::core::Flusher::new(mem2, 2, &seg2, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -351,7 +351,7 @@ async fn returns_all_zones_when_value_missing() {
         .with_events(vec![e])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone())
+    crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -411,7 +411,7 @@ async fn returns_empty_when_uid_missing() {
         .with_events(vec![e])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone())
+    crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -467,7 +467,7 @@ async fn xor_pruner_skips_on_neq_operation() {
         .with_events(vec![e])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone())
+    crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -527,7 +527,7 @@ async fn xor_pruner_falls_back_to_full_field_filter_when_zxf_missing() {
         .with_events(vec![e])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone())
+    crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -600,7 +600,7 @@ async fn zonesurf_ge_gt_le_lte_cover_boundaries_and_cross_segment() {
         .with_events(vec![a, b])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem1, 1, &seg1, registry.clone())
+    crate::engine::core::Flusher::new(mem1, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -621,7 +621,7 @@ async fn zonesurf_ge_gt_le_lte_cover_boundaries_and_cross_segment() {
         .with_events(vec![c, d])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem2, 2, &seg2, registry.clone())
+    crate::engine::core::Flusher::new(mem2, 2, &seg2, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();

@@ -38,7 +38,7 @@ impl CommandFactory {
                 context_id: None,
                 since: None,
                 where_clause: None,
-                limit: Some(10),
+                limit: None,
                 offset: None,
                 order_by: None,
                 picked_zones: None,

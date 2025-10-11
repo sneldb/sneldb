@@ -130,7 +130,7 @@ async fn segment_aggregate_runner_count_unique_mixed_missing_and_empty() {
         .with_events(vec![e1, e2, e3, e4, e5])
         .create()
         .unwrap();
-    Flusher::new(mem, 50, &seg_dir, Arc::clone(&registry))
+    Flusher::new(mem, 50, &seg_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -203,7 +203,7 @@ async fn segment_aggregate_runner_min_max_numeric_preference() {
         .with_events(vec![e1, e2, e3])
         .create()
         .unwrap();
-    Flusher::new(mem, 60, &seg_dir, Arc::clone(&registry))
+    Flusher::new(mem, 60, &seg_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -277,7 +277,7 @@ async fn segment_aggregate_runner_count_field_missing_is_zero() {
         .with_events(vec![e1, e2])
         .create()
         .unwrap();
-    Flusher::new(mem, 70, &seg_dir, Arc::clone(&registry))
+    Flusher::new(mem, 70, &seg_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -346,7 +346,7 @@ async fn segment_aggregate_runner_since_ignored_in_aggregation() {
         .with_events(vec![e1, e2])
         .create()
         .unwrap();
-    Flusher::new(mem, 80, &seg_dir, Arc::clone(&registry))
+    Flusher::new(mem, 80, &seg_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -415,7 +415,7 @@ async fn segment_aggregate_runner_count_across_segments() {
         )
         .create()
         .unwrap();
-    Flusher::new(mem1, 1, &seg1_dir, Arc::clone(&registry))
+    Flusher::new(mem1, 1, &seg1_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -430,7 +430,7 @@ async fn segment_aggregate_runner_count_across_segments() {
         )
         .create()
         .unwrap();
-    Flusher::new(mem2, 2, &seg2_dir, Arc::clone(&registry))
+    Flusher::new(mem2, 2, &seg2_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -512,7 +512,7 @@ async fn segment_aggregate_runner_respects_where_predicate() {
         .with_events(events)
         .create()
         .unwrap();
-    Flusher::new(mem, 10, &seg_dir, Arc::clone(&registry))
+    Flusher::new(mem, 10, &seg_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -594,7 +594,7 @@ async fn segment_aggregate_runner_group_by_and_bucket_total() {
         .with_events(vec![e1, e2, e3])
         .create()
         .unwrap();
-    Flusher::new(mem, 20, &seg_dir, Arc::clone(&registry))
+    Flusher::new(mem, 20, &seg_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -679,7 +679,7 @@ async fn segment_aggregate_runner_missing_groupby_field_emits_empty_string() {
         .with_events(vec![e])
         .create()
         .unwrap();
-    Flusher::new(mem, 30, &seg_dir, Arc::clone(&registry))
+    Flusher::new(mem, 30, &seg_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();

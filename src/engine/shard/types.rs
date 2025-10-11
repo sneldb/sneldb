@@ -34,6 +34,7 @@ impl Shard {
             Arc<RwLock<SchemaRegistry>>,
             Arc<tokio::sync::Mutex<MemTable>>,
         )>,
+        Arc<tokio::sync::Mutex<()>>,
     ) {
         // Channels: one for shard messages, one for flush notifications
         let (flush_tx, flush_rx) = channel(8096);
@@ -47,6 +48,9 @@ impl Shard {
 
         // Create shard context (includes WAL + MemTable)
         let ctx = ShardContext::new(id, flush_tx.clone(), base_dir.clone(), wal_dir.clone());
+
+        // Clone the flush coordination lock before moving ctx
+        let flush_lock = ctx.flush_coordination_lock.clone();
 
         info!(
             target: "shard::types",
@@ -68,6 +72,6 @@ impl Shard {
 
         info!(target: "shard::types", shard_id = id, "Shard spawned successfully");
 
-        (Shard { id, tx, base_dir }, flush_rx)
+        (Shard { id, tx, base_dir }, flush_rx, flush_lock)
     }
 }

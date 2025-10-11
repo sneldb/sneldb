@@ -63,7 +63,8 @@ impl ShardContextFactory {
         );
 
         let segment_ids = Arc::new(RwLock::new(vec![]));
-        let flush_manager = FlushManager::new(self.id, base_dir.clone(), Arc::clone(&segment_ids));
+        let flush_coordination_lock = Arc::new(tokio::sync::Mutex::new(()));
+        let flush_manager = FlushManager::new(self.id, base_dir.clone(), Arc::clone(&segment_ids), Arc::clone(&flush_coordination_lock));
 
         let ctx = ShardContext {
             id: self.id,
@@ -77,6 +78,7 @@ impl ShardContextFactory {
             flush_count: 0,
             wal: Some(wal),
             flush_manager,
+            flush_coordination_lock,
             passive_buffers: Arc::new(PassiveBufferSet::new(8)),
         };
 

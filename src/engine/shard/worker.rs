@@ -117,11 +117,9 @@ async fn on_flush(
     let passive = ctx.passive_buffers.add_from(&ctx.memtable).await;
     let flushed_mem = std::mem::replace(&mut ctx.memtable, MemTable::new(capacity));
 
-    // Create flush manager and enqueue
-    let flush_manager =
-        FlushManager::new(ctx.id, ctx.base_dir.clone(), Arc::clone(&ctx.segment_ids));
+    // Use the existing flush manager from context
     info!(target: LOG_TARGET, shard_id = ctx.id, "Queueing memtable for flush");
-    flush_manager
+    ctx.flush_manager
         .queue_for_flush(
             flushed_mem,
             Arc::clone(registry),

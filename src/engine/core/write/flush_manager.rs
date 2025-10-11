@@ -4,7 +4,7 @@ use crate::engine::errors::StoreError;
 use crate::engine::schema::registry::SchemaRegistry;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
-use tokio::sync::{RwLock as TokioRwLock, mpsc::Sender};
+use tokio::sync::{Mutex, RwLock as TokioRwLock, mpsc::Sender};
 use tracing::{debug, error, info};
 
 /// Manages the flushing of MemTables to disk segments
@@ -15,18 +15,23 @@ pub struct FlushManager {
         u64,
         MemTable,
         Arc<TokioRwLock<SchemaRegistry>>,
-        Arc<tokio::sync::Mutex<MemTable>>,
+        Arc<Mutex<MemTable>>,
     )>,
     segment_ids: Arc<RwLock<Vec<String>>>,
 }
 
 impl FlushManager {
     /// Creates a new FlushManager instance
-    pub fn new(shard_id: usize, base_dir: PathBuf, segment_ids: Arc<RwLock<Vec<String>>>) -> Self {
+    pub fn new(
+        shard_id: usize,
+        base_dir: PathBuf,
+        segment_ids: Arc<RwLock<Vec<String>>>,
+        flush_coordination_lock: Arc<Mutex<()>>,
+    ) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel(4096);
 
         // Spawn the flush worker task
-        let worker = FlushWorker::new(shard_id, base_dir.clone());
+        let worker = FlushWorker::new(shard_id, base_dir.clone(), flush_coordination_lock);
 
         tokio::spawn(async move {
             if let Err(e) = worker.run(rx).await {
@@ -48,7 +53,7 @@ impl FlushManager {
         full_memtable: MemTable,
         schema_registry: Arc<TokioRwLock<SchemaRegistry>>,
         segment_id: u64,
-        passive_memtable: Arc<tokio::sync::Mutex<MemTable>>,
+        passive_memtable: Arc<Mutex<MemTable>>,
     ) -> Result<(), StoreError> {
         debug!(
             target: "sneldb::flush",

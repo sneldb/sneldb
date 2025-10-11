@@ -34,6 +34,9 @@ pub struct ShardContext {
     pub flush_count: usize,
     pub wal: Option<Arc<WalHandle>>,
     pub flush_manager: FlushManager,
+
+    // Flush coordination - prevents concurrent segment index updates
+    pub flush_coordination_lock: Arc<Mutex<()>>,
 }
 
 impl ShardContext {
@@ -63,7 +66,13 @@ impl ShardContext {
         let segment_id = SegmentIdLoader::next_id(&segment_ids);
 
         // Step 3: Initialize core components
-        let flush_manager = FlushManager::new(id, base_dir.clone(), Arc::clone(&segment_ids));
+        let flush_coordination_lock = Arc::new(Mutex::new(()));
+        let flush_manager = FlushManager::new(
+            id,
+            base_dir.clone(),
+            Arc::clone(&segment_ids),
+            Arc::clone(&flush_coordination_lock),
+        );
 
         let mut ctx = Self {
             id,
@@ -80,6 +89,7 @@ impl ShardContext {
             flush_count: 0,
             wal: Some(wal),
             flush_manager,
+            flush_coordination_lock,
         };
 
         // Step 4: Recover MemTable from WAL

@@ -19,6 +19,7 @@ async fn test_segment_index_builder_adds_segment_entry() {
         segment_id,
         segment_dir: &segment_dir,
         event_type_uids: uids.clone(),
+        flush_coordination_lock: std::sync::Arc::new(tokio::sync::Mutex::new(())),
     };
 
     builder
