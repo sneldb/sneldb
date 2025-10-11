@@ -118,7 +118,8 @@ impl<'a> QueryExecution<'a> {
 
         // Only early return if LIMIT satisfied AND no ORDER BY/OFFSET
         // (ORDER BY requires k-way merge at handler level, OFFSET needs all data)
-        if !ctx.should_defer_limit() && self.plan.offset().is_none() {
+        let has_pagination = ctx.should_defer_limit() || self.plan.offset().is_some();
+        if !has_pagination {
             if let Some(limit) = self.plan.limit() {
                 if events.len() >= limit {
                     events.truncate(limit);
@@ -128,8 +129,8 @@ impl<'a> QueryExecution<'a> {
         }
 
         // Step 2: Disk segments
-        let remaining_limit = if ctx.should_defer_limit() {
-            None // ORDER BY present - need all events
+        let remaining_limit = if has_pagination {
+            None // ORDER BY or OFFSET present - need all events for proper pagination
         } else {
             self.plan
                 .limit()
@@ -148,8 +149,8 @@ impl<'a> QueryExecution<'a> {
         );
         events.extend(segment_events);
 
-        // Enforce final LIMIT if present (only when no ORDER BY - handler does it for ORDER BY)
-        if !ctx.should_defer_limit() {
+        // Enforce final LIMIT if present (only when no ORDER BY/OFFSET - handler does pagination)
+        if !has_pagination {
             if let Some(limit) = self.plan.limit() {
                 if events.len() > limit {
                     events.truncate(limit);

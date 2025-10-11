@@ -1,5 +1,6 @@
 use crate::engine::core::{Flusher, SegmentIndex, ZoneMeta};
 use crate::test_helpers::factories::{EventFactory, MemTableFactory, SchemaRegistryFactory};
+use std::sync::Arc;
 use tempfile::tempdir;
 
 #[tokio::test]
@@ -37,7 +38,7 @@ async fn test_flusher_flushes_memtable_to_segment_dir() {
         .create()
         .expect("Failed to create memtable");
 
-    let flusher = Flusher::new(memtable, segment_id, &segment_dir, registry.clone());
+    let flusher = Flusher::new(memtable, segment_id, &segment_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())));
     flusher.flush().await.expect("Flush failed");
 
     let zones_path = segment_dir.join(format!("{}.zones", uid));

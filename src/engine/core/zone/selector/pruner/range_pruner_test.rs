@@ -51,7 +51,7 @@ async fn surf_ge_and_le_inclusive_boundaries_id_field() {
         .with_events(vec![a, b])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem1, 1, &seg1, registry.clone())
+    crate::engine::core::Flusher::new(mem1, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -72,7 +72,7 @@ async fn surf_ge_and_le_inclusive_boundaries_id_field() {
         .with_events(vec![c, d])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem2, 2, &seg2, registry.clone())
+    crate::engine::core::Flusher::new(mem2, 2, &seg2, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -155,7 +155,7 @@ async fn surf_gt_and_lt_exclusive_boundaries_id_field() {
         .with_events(vec![a])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem1, 1, &seg1, registry.clone())
+    crate::engine::core::Flusher::new(mem1, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -171,7 +171,7 @@ async fn surf_gt_and_lt_exclusive_boundaries_id_field() {
         .with_events(vec![b])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem2, 2, &seg2, registry.clone())
+    crate::engine::core::Flusher::new(mem2, 2, &seg2, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -257,7 +257,7 @@ async fn falls_back_to_range_handler_on_non_id_field() {
         .with_events(vec![a])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone())
+    crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();

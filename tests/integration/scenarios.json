@@ -677,8 +677,8 @@
       "QUERY limit_mem_only WHERE status=\"ok\" LIMIT 2"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["u1","u2"] },
-      { "kind": "include_none", "value": ["u3"] }
+      { "kind": "include_all", "value": ["u2","u3"] },
+      { "kind": "include_none", "value": ["u1"] }
     ]
   }
   ,

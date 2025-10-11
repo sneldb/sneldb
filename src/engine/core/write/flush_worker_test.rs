@@ -36,7 +36,8 @@ async fn test_flush_worker_processes_memtable() {
     let segment_id = 3;
 
     // Spawn FlushWorker
-    let worker = FlushWorker::new(0, base_path.clone());
+    let flush_lock = std::sync::Arc::new(tokio::sync::Mutex::new(()));
+    let worker = FlushWorker::new(0, base_path.clone(), flush_lock);
     tokio::spawn(async move {
         worker.run(rx).await.expect("Worker run failed");
     });

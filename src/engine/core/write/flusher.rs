@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, instrument, trace};
 
 pub struct Flusher {
@@ -13,6 +13,7 @@ pub struct Flusher {
     segment_id: u64,
     segment_dir: PathBuf,
     registry: Arc<RwLock<SchemaRegistry>>,
+    flush_coordination_lock: Arc<Mutex<()>>,
 }
 
 impl Flusher {
@@ -21,12 +22,14 @@ impl Flusher {
         segment_id: u64,
         segment_dir: &Path,
         registry: Arc<RwLock<SchemaRegistry>>,
+        flush_coordination_lock: Arc<Mutex<()>>,
     ) -> Self {
         Self {
             memtable,
             segment_id,
             segment_dir: segment_dir.to_path_buf(),
             registry,
+            flush_coordination_lock,
         }
     }
 
@@ -92,6 +95,7 @@ impl Flusher {
             segment_id,
             segment_dir: &segment_dir,
             event_type_uids: uids,
+            flush_coordination_lock: Arc::clone(&self.flush_coordination_lock),
         }
         .add_segment_entry(None)
         .await?;

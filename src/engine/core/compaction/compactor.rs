@@ -80,10 +80,13 @@ impl Compactor {
         info!(target: "compactor::run", zones_written = zone_plans.len(), "Wrote compacted zones");
 
         // Step 5: Update segment index
+        // Note: Compaction uses its own lock since it's a separate process
+        let compaction_lock = Arc::new(tokio::sync::Mutex::new(()));
         SegmentIndexBuilder {
             segment_id: self.output_segment_id,
             segment_dir: &self.output_dir,
             event_type_uids: vec![self.uid.clone()],
+            flush_coordination_lock: compaction_lock,
         }
         .add_segment_entry(Some(&self.output_dir))
         .await

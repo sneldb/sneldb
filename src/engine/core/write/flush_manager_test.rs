@@ -34,7 +34,13 @@ async fn test_flush_manager_queues_and_flushes_memtable() {
     let segment_ids = Arc::new(RwLock::new(vec![]));
 
     // Create FlushManager
-    let manager = FlushManager::new(shard_id, base_dir.clone(), Arc::clone(&segment_ids));
+    let flush_lock = Arc::new(tokio::sync::Mutex::new(()));
+    let manager = FlushManager::new(
+        shard_id,
+        base_dir.clone(),
+        Arc::clone(&segment_ids),
+        flush_lock,
+    );
 
     // Act: queue for flush
     manager

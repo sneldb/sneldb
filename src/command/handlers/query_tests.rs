@@ -1368,7 +1368,7 @@ async fn test_orchestrator_multi_shard_query() {
     // Create 3 shards
     let shard_manager = ShardManager::new(3, base_dir, wal_dir).await;
 
-    // Store events across multiple shards
+    // Store 30 events (multiple of flush_threshold=3) across multiple shards
     for i in 1..=30 {
         let store_cmd = CommandFactory::store()
             .with_event_type("multi_shard_evt")
@@ -1387,8 +1387,6 @@ async fn test_orchestrator_multi_shard_query() {
         .expect("store should succeed");
     }
 
-    sleep(Duration::from_millis(500)).await;
-
     // Query should aggregate results from all shards
     let cmd = CommandFactory::query()
         .with_event_type("multi_shard_evt")
@@ -1404,11 +1402,11 @@ async fn test_orchestrator_multi_shard_query() {
     let json_start = body.find('{').unwrap_or(0);
     let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON");
     let rows = json["results"][0]["rows"].as_array().expect("rows array");
-
-    // Should find most/all events across 3 shards (timing-dependent on flush)
+    println!("rows: {:?}", rows);
+    // Should find most events across 3 shards (some timing variation expected)
     assert!(
-        rows.len() >= 28,
-        "Should find at least 28 of 30 events, found {}",
+        rows.len() == 30,
+        "Should find exactly 30 events across shards, found {}",
         rows.len()
     );
 }
@@ -2153,9 +2151,17 @@ async fn test_offset_only_without_order_by() {
     let mut buf = vec![0; 4096];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Debug: print actual response
+    if !body.contains("\"rows\"") {
+        eprintln!("Unexpected response: {}", body);
+    }
+
     let json_start = body.find('{').unwrap_or(0);
     let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let rows = json["results"][0]["rows"].as_array().unwrap_or_else(|| {
+        panic!("Expected rows array, got: {}", json);
+    });
 
     // Should get at most 2 rows (LIMIT 2)
     assert!(rows.len() <= 2, "OFFSET+LIMIT without ORDER BY should work");

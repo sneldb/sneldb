@@ -244,6 +244,35 @@ impl<'a> QueryOrchestrator<'a> {
             }
         }
 
-        acc_opt.ok_or_else(|| "No results from shards".to_string())
+        let mut result = acc_opt.ok_or_else(|| "No results from shards".to_string())?;
+
+        // Apply LIMIT and OFFSET if present (even without ORDER BY)
+        if let Command::Query { limit, offset, .. } = self.cmd {
+            match &mut result {
+                QueryResult::Selection(sel) => {
+                    // Apply offset first
+                    if let Some(offset_val) = offset {
+                        let offset_usize = *offset_val as usize;
+                        if sel.rows.len() > offset_usize {
+                            sel.rows.drain(0..offset_usize);
+                        } else {
+                            sel.rows.clear();
+                        }
+                    }
+                    // Then apply limit
+                    if let Some(limit_val) = limit {
+                        let limit_usize = *limit_val as usize;
+                        if sel.rows.len() > limit_usize {
+                            sel.rows.truncate(limit_usize);
+                        }
+                    }
+                }
+                QueryResult::Aggregation(_) => {
+                    // Aggregations handle LIMIT differently (already applied during grouping)
+                }
+            }
+        }
+
+        Ok(result)
     }
 }

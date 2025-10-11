@@ -53,7 +53,7 @@ async fn enum_pruner_handles_unknown_variant_and_empty_index() {
         .with_events(vec![ev])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone())
+    crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -149,7 +149,7 @@ async fn enum_pruner_multiple_variants_same_zone_dedupes() {
         .with_events(vec![a, b])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone())
+    crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();

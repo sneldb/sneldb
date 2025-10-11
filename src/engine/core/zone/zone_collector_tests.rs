@@ -73,12 +73,12 @@ async fn zone_collector_combines_zones_across_segments() {
         .create()
         .unwrap();
 
-    Flusher::new(memtable1, segment1_id, &segment1_dir, registry.clone())
+    Flusher::new(memtable1, segment1_id, &segment1_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
 
-    Flusher::new(memtable2, segment2_id, &segment2_dir, registry.clone())
+    Flusher::new(memtable2, segment2_id, &segment2_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -194,11 +194,11 @@ async fn zone_collector_reorders_context_first_and_yields_same_result() {
         .create()
         .unwrap();
 
-    Flusher::new(memtable1, segment1_id, &segment1_dir, registry.clone())
+    Flusher::new(memtable1, segment1_id, &segment1_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
-    Flusher::new(memtable2, segment2_id, &segment2_dir, registry.clone())
+    Flusher::new(memtable2, segment2_id, &segment2_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -287,11 +287,11 @@ async fn zone_collector_or_combines_union_without_pruning() {
         .with_events(events2)
         .create()
         .unwrap();
-    Flusher::new(m1, 1, &segment1_dir, registry.clone())
+    Flusher::new(m1, 1, &segment1_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
-    Flusher::new(m2, 2, &segment2_dir, registry.clone())
+    Flusher::new(m2, 2, &segment2_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();

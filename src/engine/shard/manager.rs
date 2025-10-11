@@ -4,6 +4,7 @@ use crate::engine::shard::Shard;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
+use std::sync::Arc;
 use tracing::{error, info};
 
 #[derive(Debug)]
@@ -23,11 +24,12 @@ impl ShardManager {
             let shard_base_dir = base_dir.join(format!("shard-{id}"));
             let shard_wal_dir = wal_dir.join(format!("shard-{id}"));
 
-            // Spawn shard and get its flush channel
-            let (shard, flush_rx) = Shard::spawn(id, shard_base_dir.clone(), shard_wal_dir).await;
+            // Spawn shard and get its flush channel and coordination lock
+            let (shard, flush_rx, flush_lock) =
+                Shard::spawn(id, shard_base_dir.clone(), shard_wal_dir).await;
 
-            // Spawn flush worker
-            let flush_worker = FlushWorker::new(id, shard_base_dir.clone());
+            // Spawn flush worker with the shard's coordination lock
+            let flush_worker = FlushWorker::new(id, shard_base_dir.clone(), flush_lock);
             tokio::spawn(async move {
                 if let Err(e) = flush_worker.run(flush_rx).await {
                     error!(target: "shard::manager", shard_id = id, "Flush worker crashed: {e}");

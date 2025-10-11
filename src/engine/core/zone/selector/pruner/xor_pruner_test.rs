@@ -48,7 +48,7 @@ async fn xor_uses_zxf_primary_and_xf_fallback_and_skips_on_miss() {
         .with_events(vec![a, b])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem1, 1, &seg1, registry.clone())
+    crate::engine::core::Flusher::new(mem1, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
@@ -64,7 +64,7 @@ async fn xor_uses_zxf_primary_and_xf_fallback_and_skips_on_miss() {
         .with_events(vec![c])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem2, 2, &seg2, registry.clone())
+    crate::engine::core::Flusher::new(mem2, 2, &seg2, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
         .flush()
         .await
         .unwrap();
