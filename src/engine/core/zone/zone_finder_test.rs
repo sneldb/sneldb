@@ -1,5 +1,4 @@
 use crate::command::types::CompareOp;
-use std::sync::Arc;
 use crate::engine::core::{Flusher, ZoneFinder};
 use crate::engine::schema::{EnumType, FieldType};
 use crate::test_helpers::factories::{
@@ -7,6 +6,7 @@ use crate::test_helpers::factories::{
     SchemaRegistryFactory,
 };
 use serde_json::json;
+use std::sync::Arc;
 use tempfile::tempdir;
 
 #[tokio::test]
@@ -78,7 +78,13 @@ async fn finds_event_type_zones_with_mock_index() {
         .create()
         .expect("Failed to create memtable");
 
-    let flusher = Flusher::new(memtable, segment1_id, &segment1_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())));
+    let flusher = Flusher::new(
+        memtable,
+        segment1_id,
+        &segment1_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
     flusher.flush().await.expect("Flush failed");
 
     let memtable = MemTableFactory::new()
@@ -87,7 +93,13 @@ async fn finds_event_type_zones_with_mock_index() {
         .create()
         .expect("Failed to create memtable");
 
-    let flusher = Flusher::new(memtable, segment2_id, &segment2_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())));
+    let flusher = Flusher::new(
+        memtable,
+        segment2_id,
+        &segment2_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
     flusher.flush().await.expect("Flush failed");
 
     // when event_type is user_created
@@ -294,7 +306,13 @@ async fn ebm_eq_prunes_zones() {
         .with_events(vec![e1, e2])
         .create()
         .expect("Failed to create memtable");
-    let flusher = Flusher::new(memtable, segment1_id, &segment1_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())));
+    let flusher = Flusher::new(
+        memtable,
+        segment1_id,
+        &segment1_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
     flusher.flush().await.expect("Flush failed");
 
     // segment-002: [premium, enterprise]
@@ -313,7 +331,13 @@ async fn ebm_eq_prunes_zones() {
         .with_events(vec![e3, e4])
         .create()
         .expect("Failed to create memtable");
-    let flusher = Flusher::new(memtable, segment2_id, &segment2_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())));
+    let flusher = Flusher::new(
+        memtable,
+        segment2_id,
+        &segment2_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
     flusher.flush().await.expect("Flush failed");
 
     // Query: plan == "pro" -> only segment-001 zone 0
@@ -403,7 +427,13 @@ async fn ebm_neq_prunes_zones() {
         .with_events(vec![e1, e2])
         .create()
         .expect("Failed to create memtable");
-    let flusher = Flusher::new(memtable, segment1_id, &segment1_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())));
+    let flusher = Flusher::new(
+        memtable,
+        segment1_id,
+        &segment1_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
     flusher.flush().await.expect("Flush failed");
 
     // segment-002: [premium, enterprise]
@@ -422,7 +452,13 @@ async fn ebm_neq_prunes_zones() {
         .with_events(vec![e3, e4])
         .create()
         .expect("Failed to create memtable");
-    let flusher = Flusher::new(memtable, segment2_id, &segment2_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())));
+    let flusher = Flusher::new(
+        memtable,
+        segment2_id,
+        &segment2_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
     flusher.flush().await.expect("Flush failed");
 
     // Query: plan != "pro" -> both segment zones included
@@ -496,7 +532,13 @@ async fn zone_surf_prunes_segments_for_gt() {
         .with_events(vec![e1, e2])
         .create()
         .expect("Failed to create memtable");
-    let flusher = Flusher::new(memtable, segment1_id, &segment1_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())));
+    let flusher = Flusher::new(
+        memtable,
+        segment1_id,
+        &segment1_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
     flusher.flush().await.expect("Flush failed");
 
     // segment-002: ids > 10
@@ -515,7 +557,13 @@ async fn zone_surf_prunes_segments_for_gt() {
         .with_events(vec![e3, e4])
         .create()
         .expect("Failed to create memtable");
-    let flusher = Flusher::new(memtable, segment2_id, &segment2_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())));
+    let flusher = Flusher::new(
+        memtable,
+        segment2_id,
+        &segment2_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
     flusher.flush().await.expect("Flush failed");
 
     let filter_plan = FilterPlanFactory::new()
@@ -587,7 +635,13 @@ async fn zone_surf_prunes_segments_for_lt() {
         .with_events(vec![a1, a2])
         .create()
         .expect("Failed to create memtable");
-    let flusher = Flusher::new(memtable, segment1_id, &segment1_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())));
+    let flusher = Flusher::new(
+        memtable,
+        segment1_id,
+        &segment1_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
     flusher.flush().await.expect("Flush failed");
 
     // segment-002: ids > 10
@@ -606,7 +660,13 @@ async fn zone_surf_prunes_segments_for_lt() {
         .with_events(vec![b1, b2])
         .create()
         .expect("Failed to create memtable");
-    let flusher = Flusher::new(memtable, segment2_id, &segment2_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())));
+    let flusher = Flusher::new(
+        memtable,
+        segment2_id,
+        &segment2_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
     flusher.flush().await.expect("Flush failed");
 
     let filter_plan = FilterPlanFactory::new()
@@ -673,10 +733,16 @@ async fn zone_surf_gte_includes_boundary() {
         .with_events(vec![a])
         .create()
         .unwrap();
-    Flusher::new(memtable, segment1_id, &segment1_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    Flusher::new(
+        memtable,
+        segment1_id,
+        &segment1_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // segment-002: value 11
     let b = EventFactory::new()
@@ -689,10 +755,16 @@ async fn zone_surf_gte_includes_boundary() {
         .with_events(vec![b])
         .create()
         .unwrap();
-    Flusher::new(memtable, segment2_id, &segment2_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    Flusher::new(
+        memtable,
+        segment2_id,
+        &segment2_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     let filter_plan = FilterPlanFactory::new()
         .with_column("id")
@@ -759,10 +831,16 @@ async fn zone_surf_lte_includes_boundary() {
         .with_events(vec![a])
         .create()
         .unwrap();
-    Flusher::new(memtable, segment1_id, &segment1_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    Flusher::new(
+        memtable,
+        segment1_id,
+        &segment1_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // segment-002: boundary value 20
     let b = EventFactory::new()
@@ -775,10 +853,16 @@ async fn zone_surf_lte_includes_boundary() {
         .with_events(vec![b])
         .create()
         .unwrap();
-    Flusher::new(memtable, segment2_id, &segment2_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    Flusher::new(
+        memtable,
+        segment2_id,
+        &segment2_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     let filter_plan = FilterPlanFactory::new()
         .with_column("id")
@@ -854,10 +938,16 @@ async fn zone_surf_between_three_segments_and() {
         .with_events(vec![e1, e2])
         .create()
         .unwrap();
-    Flusher::new(mem, s1_id, &s1_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    Flusher::new(
+        mem,
+        s1_id,
+        &s1_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // segment-002: [25, 31]
     let e3 = EventFactory::new()
@@ -875,10 +965,16 @@ async fn zone_surf_between_three_segments_and() {
         .with_events(vec![e3, e4])
         .create()
         .unwrap();
-    Flusher::new(mem, s2_id, &s2_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    Flusher::new(
+        mem,
+        s2_id,
+        &s2_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // segment-003: [15, 29]
     let e5 = EventFactory::new()
@@ -896,10 +992,16 @@ async fn zone_surf_between_three_segments_and() {
         .with_events(vec![e5, e6])
         .create()
         .unwrap();
-    Flusher::new(mem, s3_id, &s3_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    Flusher::new(
+        mem,
+        s3_id,
+        &s3_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // Build query plan
     let command = CommandFactory::query().with_event_type(event_type).create();

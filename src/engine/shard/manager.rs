@@ -1,6 +1,7 @@
 use crate::engine::compactor::background::start_background_compactor;
 use crate::engine::core::FlushWorker;
 use crate::engine::shard::Shard;
+use crate::shared::path::absolutize;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
@@ -16,6 +17,8 @@ impl ShardManager {
     /// Create and initialize all shards with WAL, flush workers, and background compactors.
     pub async fn new(num_shards: usize, base_dir: PathBuf, wal_dir: PathBuf) -> Self {
         info!(target: "shard::manager", "Initializing ShardManager with {num_shards} shards");
+        let base_dir = absolutize(base_dir);
+        let wal_dir = absolutize(wal_dir);
         let mut shards = Vec::with_capacity(num_shards);
 
         for id in 0..num_shards {

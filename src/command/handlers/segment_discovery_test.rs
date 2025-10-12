@@ -239,4 +239,3 @@ async fn preserves_shard_base_dir() {
     assert_eq!(shard_data.shard_id, 42);
     assert_eq!(shard_data.base_dir, base_path);
 }
-

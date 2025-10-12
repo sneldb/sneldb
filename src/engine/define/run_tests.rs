@@ -1,6 +1,6 @@
 use super::run::define_schema;
-use crate::engine::schema::registry::{MiniSchema, SchemaRegistry};
 use crate::engine::schema::FieldType;
+use crate::engine::schema::registry::{MiniSchema, SchemaRegistry};
 use std::collections::HashMap;
 use tempfile;
 

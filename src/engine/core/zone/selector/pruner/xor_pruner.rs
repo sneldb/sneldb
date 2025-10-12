@@ -1,7 +1,7 @@
 use crate::command::types::CompareOp;
-use crate::engine::core::zone::zone_artifacts::ZoneArtifacts;
 use crate::engine::core::CandidateZone;
 use crate::engine::core::zone::selector::pruner::{PruneArgs, ZonePruner};
+use crate::engine::core::zone::zone_artifacts::ZoneArtifacts;
 use tracing::debug;
 
 pub struct XorPruner<'a> {
@@ -73,8 +73,9 @@ impl<'a> XorPruner<'a> {
 
 impl<'a> ZonePruner for XorPruner<'a> {
     fn apply(&self, args: &PruneArgs) -> Option<Vec<CandidateZone>> {
-        let (Some(op), Some(value)) = (args.op, args.value) else { return None; };
+        let (Some(op), Some(value)) = (args.op, args.value) else {
+            return None;
+        };
         self.attempt(args.segment_id, args.uid, args.column, value, op)
     }
 }
-

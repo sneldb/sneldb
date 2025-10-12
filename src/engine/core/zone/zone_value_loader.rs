@@ -42,7 +42,7 @@ impl<'a> ZoneValueLoader<'a> {
             debug!(
                 target: "sneldb::query",
                 uid = self.uid,
-                segment_id = zone.segment_id,
+                segment_id = %zone.segment_id,
                 zone_id = zone.zone_id,
                 "Loading column values for zone"
             );

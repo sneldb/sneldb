@@ -14,6 +14,7 @@ use super::global_zone_index_cache::{CacheOutcome, GlobalZoneIndexCache};
 use super::global_zone_surf_cache::GlobalZoneSurfCache;
 use super::zone_surf_cache_key::ZoneSurfCacheKey;
 use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
+use crate::shared::path::absolutize;
 
 #[derive(Debug)]
 pub struct QueryCaches {
@@ -35,23 +36,8 @@ pub struct QueryCaches {
 
 impl QueryCaches {
     pub fn new(base_dir: PathBuf) -> Self {
-        let abs_base_dir = if base_dir.is_absolute() {
-            base_dir
-        } else {
-            std::fs::canonicalize(&base_dir).unwrap_or(base_dir)
-        };
-        let shard_id = parse_shard_id(&abs_base_dir);
-        Self {
-            base_dir: abs_base_dir,
-            shard_id,
-            zone_index_hits: AtomicU64::new(0),
-            zone_index_misses: AtomicU64::new(0),
-            zone_index_reloads: AtomicU64::new(0),
-            zone_index_by_key: Mutex::new(HashMap::new()),
-            column_handle_by_key: Mutex::new(HashMap::new()),
-            decompressed_block_by_key: Mutex::new(HashMap::new()),
-            zone_surf_by_key: Mutex::new(HashMap::new()),
-        }
+        let abs_base_dir = absolutize(&base_dir);
+        Self::new_abs(abs_base_dir)
     }
 
     /// Construct with an already-absolute base_dir without canonicalize overhead.

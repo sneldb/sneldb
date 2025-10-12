@@ -281,7 +281,7 @@ async fn runner_pruned_empty_first_step_still_executes_following_steps() {
     ];
 
     // Order: context first, then id
-    let order = vec![(0usize, None), (1usize, None)];
+    let order: Vec<(usize, Option<Vec<String>>)> = vec![(0usize, None), (1usize, None)];
 
     let runner = ZoneStepRunner::new(&plan);
     let (zones, pruned) = runner.run(&mut steps, &order);

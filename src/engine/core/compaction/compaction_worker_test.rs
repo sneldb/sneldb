@@ -1,7 +1,7 @@
 use crate::engine::core::{CompactionWorker, Flusher, SegmentIndex};
-use std::sync::Arc;
 use crate::test_helpers::factories::*;
 use serde_json::json;
+use std::sync::Arc;
 use tempfile::tempdir;
 
 #[tokio::test]
@@ -43,7 +43,13 @@ async fn compacts_l0_segments_into_l1() {
             .create()
             .unwrap();
 
-        let flusher = Flusher::new(memtable, segment_id, &segment_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())));
+        let flusher = Flusher::new(
+            memtable,
+            segment_id,
+            &segment_dir,
+            registry.clone(),
+            Arc::new(tokio::sync::Mutex::new(())),
+        );
         flusher.flush().await.unwrap();
     }
 

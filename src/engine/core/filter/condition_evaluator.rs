@@ -4,6 +4,7 @@ use crate::engine::core::{
     CandidateZone, Condition, Event, EventBuilder, LogicalCondition, NumericCondition,
     StringCondition,
 };
+use std::collections::HashSet;
 use std::thread;
 use tracing::info;
 
@@ -11,12 +12,14 @@ use tracing::info;
 #[derive(Debug)]
 pub struct ConditionEvaluator {
     conditions: Vec<Box<dyn Condition>>,
+    numeric_fields: HashSet<String>,
 }
 
 impl ConditionEvaluator {
     pub fn new() -> Self {
         Self {
             conditions: Vec::new(),
+            numeric_fields: HashSet::new(),
         }
     }
 
@@ -33,6 +36,7 @@ impl ConditionEvaluator {
                 field, operation, value
             );
         }
+        self.numeric_fields.insert(field.clone());
         self.conditions
             .push(Box::new(NumericCondition::new(field, operation, value)));
     }
@@ -62,11 +66,19 @@ impl ConditionEvaluator {
                 condition
             );
         }
+        if condition.is_numeric() {
+            condition.collect_numeric_fields(&mut self.numeric_fields);
+        }
         self.conditions.push(Box::new(condition));
     }
 
     pub fn into_conditions(self) -> Vec<Box<dyn Condition>> {
         self.conditions
+    }
+
+    #[inline]
+    pub fn has_numeric_conditions(&self) -> bool {
+        !self.numeric_fields.is_empty()
     }
 
     /// Evaluates all conditions against a single event using direct field access
@@ -120,6 +132,9 @@ impl ConditionEvaluator {
 
             let event_count = zone.values.values().next().map(|v| v.len()).unwrap_or(0);
             let accessor = PreparedAccessor::new(&zone.values);
+            if self.has_numeric_conditions() {
+                accessor.warm_numeric_cache(&self.numeric_fields);
+            }
             for i in 0..event_count {
                 if let Some(lim) = limit {
                     if results.len() >= lim {

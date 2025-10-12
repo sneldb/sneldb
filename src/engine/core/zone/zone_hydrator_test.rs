@@ -44,7 +44,13 @@ async fn hydrates_candidate_zones_with_values() {
         .create()
         .unwrap();
 
-    let flusher = Flusher::new(memtable, 1, &segment_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())));
+    let flusher = Flusher::new(
+        memtable,
+        1,
+        &segment_dir,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
     flusher.flush().await.expect("flush failed");
 
     // Create query command and plan

@@ -374,4 +374,3 @@ fn multiple_shards_get_different_zones() {
         assert_eq!(pz.uid, "uid-1");
     }
 }
-

@@ -342,4 +342,3 @@ fn merges_with_varying_shard_sizes() {
         assert_eq!(result[i][2], (i as u64 + 1) * 1000);
     }
 }
-

@@ -17,7 +17,11 @@ pub struct FlushWorker {
 
 impl FlushWorker {
     /// Creates a new FlushWorker instance
-    pub fn new(shard_id: usize, base_dir: PathBuf, flush_coordination_lock: Arc<Mutex<()>>) -> Self {
+    pub fn new(
+        shard_id: usize,
+        base_dir: PathBuf,
+        flush_coordination_lock: Arc<Mutex<()>>,
+    ) -> Self {
         Self {
             shard_id,
             base_dir,

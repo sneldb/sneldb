@@ -173,9 +173,9 @@ fn apply_handles_mixed_prefix_formats() {
 
     // Zones also with mixed formats
     let mut zones = vec![
-        CandidateZone::new(0, "with-prefix".to_string()),     // should match first tuple
+        CandidateZone::new(0, "with-prefix".to_string()), // should match first tuple
         CandidateZone::new(1, "segment-without-prefix".to_string()), // should match second tuple
-        CandidateZone::new(2, "something-else".to_string()),  // should NOT match
+        CandidateZone::new(2, "something-else".to_string()), // should NOT match
     ];
 
     filter.apply(&mut zones);
@@ -285,4 +285,3 @@ fn large_filter_performance() {
     // First 1000 should match, second 1000 should not
     assert_eq!(zones.len(), 1000);
 }
-

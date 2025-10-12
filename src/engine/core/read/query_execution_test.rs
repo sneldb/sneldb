@@ -204,7 +204,13 @@ async fn executes_query_with_only_segment_match() {
         .create()
         .unwrap();
 
-    let flusher = Flusher::new(memtable, 7, &segment_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())));
+    let flusher = Flusher::new(
+        memtable,
+        7,
+        &segment_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
     flusher.flush().await.expect("Flush failed");
 
     // Query for events with status = "ok"
@@ -343,7 +349,13 @@ async fn executes_query_limit_short_circuits_before_segments_when_memtable_satis
         .unwrap();
 
     // Flush segment
-    let flusher = Flusher::new(seg_memtable, 2, &segment_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())));
+    let flusher = Flusher::new(
+        seg_memtable,
+        2,
+        &segment_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
     flusher.flush().await.expect("Flush failed");
 
     // Build query (limit=2)
@@ -409,7 +421,13 @@ async fn executes_query_limit_combines_memtable_and_segments() {
         seg_builder = seg_builder.with_event(e);
     }
     let seg_memtable = seg_builder.create().unwrap();
-    let flusher = Flusher::new(seg_memtable, 5, &segment_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())));
+    let flusher = Flusher::new(
+        seg_memtable,
+        5,
+        &segment_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
     flusher.flush().await.expect("Flush failed");
 
     // Memtable with 1 matching
@@ -521,7 +539,13 @@ async fn executes_query_limit_one_memtable_and_segments_mixed_order() {
         .with_events(vec![s1, s2])
         .create()
         .unwrap();
-    let flusher = Flusher::new(seg_memtable, 2, &segment_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())));
+    let flusher = Flusher::new(
+        seg_memtable,
+        2,
+        &segment_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
     flusher.flush().await.expect("Flush failed");
 
     // Memtable with 1 match
@@ -587,7 +611,13 @@ async fn executes_query_limit_exact_boundary_between_memtable_and_segment() {
         ])
         .create()
         .unwrap();
-    let flusher = Flusher::new(seg_memtable, 2, &segment_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())));
+    let flusher = Flusher::new(
+        seg_memtable,
+        2,
+        &segment_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
     flusher.flush().await.expect("Flush failed");
 
     // Memtable with 3 matches
@@ -654,7 +684,13 @@ async fn executes_query_limit_larger_than_total_results() {
         .with_event(seg_event)
         .create()
         .unwrap();
-    let flusher = Flusher::new(seg_memtable, 1, &segment_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())));
+    let flusher = Flusher::new(
+        seg_memtable,
+        1,
+        &segment_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
     flusher.flush().await.expect("Flush failed");
 
     // Memtable with 2 matches

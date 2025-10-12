@@ -7,7 +7,7 @@ use std::io;
 use std::num::NonZeroUsize;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CacheOutcome {
@@ -26,7 +26,7 @@ pub struct ZoneIndexCacheStats {
 
 #[derive(Debug)]
 pub struct GlobalZoneIndexCache {
-    inner: Mutex<LruCache<ZoneIndexCacheKey, Arc<RwLock<ZoneIndexEntry>>>>,
+    inner: Mutex<LruCache<ZoneIndexCacheKey, Arc<ZoneIndexEntry>>>,
     inflight: Mutex<std::collections::HashMap<ZoneIndexCacheKey, Arc<Mutex<()>>>>,
     hits: AtomicU64,
     misses: AtomicU64,
@@ -105,8 +105,7 @@ impl GlobalZoneIndexCache {
         // Try hit: trust cache; skip fs validation
         if let Ok(mut guard) = self.inner.lock() {
             if let Some(entry_arc) = guard.get(&key) {
-                let entry = entry_arc.read().unwrap();
-                let zi = entry.zone_index.clone();
+                let zi = Arc::clone(&entry_arc.zone_index);
                 self.hits.fetch_add(1, Ordering::Relaxed);
                 return Ok((zi, CacheOutcome::Hit));
             }
@@ -124,8 +123,7 @@ impl GlobalZoneIndexCache {
         // Re-check under singleflight guard
         if let Ok(mut guard) = self.inner.lock() {
             if let Some(entry_arc) = guard.get(&key) {
-                let entry = entry_arc.read().unwrap();
-                let zi = entry.zone_index.clone();
+                let zi = Arc::clone(&entry_arc.zone_index);
                 self.hits.fetch_add(1, Ordering::Relaxed);
                 let mut map = self.inflight.lock().unwrap();
                 map.remove(&key);
@@ -166,7 +164,7 @@ impl GlobalZoneIndexCache {
             mtime,
             size,
         );
-        let entry_arc = Arc::new(RwLock::new(entry));
+        let entry_arc = Arc::new(entry);
 
         // Insert/replace and determine outcome
         let outcome = if let Ok(mut guard) = self.inner.lock() {
