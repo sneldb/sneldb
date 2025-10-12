@@ -77,7 +77,3 @@ path = "src/bin/stress_tcp.rs"
 [[bin]]
 name = "wal_archive_manager"
 path = "src/bin/wal_archive_manager.rs"
-
-[[bin]]
-name = "wal_archive_benchmark"
-path = "src/bin/wal_archive_benchmark.rs"

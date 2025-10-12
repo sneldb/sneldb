@@ -1,6 +1,5 @@
 use crate::engine::core::wal::wal_archive::WalArchive;
 use crate::shared::config::CONFIG;
-use rayon::prelude::*;
 use std::path::{Path, PathBuf};
 use tracing::{error, info, warn};
 
@@ -96,7 +95,6 @@ impl WalArchiver {
     }
 
     /// Archive multiple WAL log files with IDs < keep_from_log_id
-    /// Uses parallel compression for better performance with multiple files.
     pub fn archive_logs_up_to(
         &self,
         keep_from_log_id: u64,
@@ -108,19 +106,25 @@ impl WalArchiver {
             "Starting batch archive"
         );
 
-        // Collect log IDs that need archiving
-        let log_ids: Vec<u64> = match std::fs::read_dir(&self.wal_dir) {
-            Ok(entries) => entries
-                .flatten()
-                .filter_map(|entry| {
+        let mut results = Vec::new();
+
+        match std::fs::read_dir(&self.wal_dir) {
+            Ok(entries) => {
+                for entry in entries.flatten() {
                     let file_name = entry.file_name().to_string_lossy().to_string();
-                    file_name
+
+                    if let Some(num) = file_name
                         .strip_prefix("wal-")
                         .and_then(|s| s.strip_suffix(".log"))
-                        .and_then(|num| num.parse::<u64>().ok())
-                        .filter(|&id| id < keep_from_log_id)
-                })
-                .collect(),
+                    {
+                        if let Ok(id) = num.parse::<u64>() {
+                            if id < keep_from_log_id {
+                                results.push(self.archive_log(id));
+                            }
+                        }
+                    }
+                }
+            }
             Err(e) => {
                 error!(
                     target: "wal_archiver::archive_logs_up_to",
@@ -128,33 +132,8 @@ impl WalArchiver {
                     error = %e,
                     "Failed to read WAL directory"
                 );
-                return vec![];
             }
-        };
-
-        if log_ids.is_empty() {
-            info!(
-                target: "wal_archiver::archive_logs_up_to",
-                shard_id = self.shard_id,
-                "No WAL files to archive"
-            );
-            return vec![];
         }
-
-        // Archive in parallel using rayon for better CPU utilization
-        // Compression is CPU-bound, so parallelism helps significantly
-        let results: Vec<Result<PathBuf, std::io::Error>> = log_ids
-            .par_iter()
-            .map(|&id| {
-                info!(
-                    target: "wal_archiver::parallel_archive",
-                    shard_id = self.shard_id,
-                    log_id = id,
-                    "Archiving WAL file in parallel"
-                );
-                self.archive_log(id)
-            })
-            .collect();
 
         let success_count = results.iter().filter(|r| r.is_ok()).count();
         let error_count = results.iter().filter(|r| r.is_err()).count();
@@ -164,8 +143,7 @@ impl WalArchiver {
             shard_id = self.shard_id,
             success_count,
             error_count,
-            files_count = log_ids.len(),
-            "Parallel batch archive complete"
+            "Batch archive complete"
         );
 
         results
