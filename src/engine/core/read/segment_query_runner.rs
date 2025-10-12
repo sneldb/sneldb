@@ -95,4 +95,3 @@ impl<'a> SegmentQueryRunner<'a> {
         self
     }
 }
-
