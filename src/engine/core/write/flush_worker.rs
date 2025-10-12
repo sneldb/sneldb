@@ -85,7 +85,7 @@ impl FlushWorker {
                     "Cleaning up WAL files"
                 );
                 let cleaner = WalCleaner::new(self.shard_id);
-                cleaner.cleanup_up_to(segment_id + 1);
+                cleaner.cleanup_up_to_async(segment_id + 1).await;
             }
         }
 

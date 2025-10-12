@@ -22,9 +22,34 @@ impl WalCleaner {
         Self { shard_id, wal_dir }
     }
 
+    /// Async version that spawns blocking cleanup to avoid blocking the async runtime.
+    /// This is the preferred method to call from async contexts (e.g., flush worker).
+    pub async fn cleanup_up_to_async(&self, keep_from_log_id: u64) {
+        let shard_id = self.shard_id;
+        let wal_dir = self.wal_dir.clone();
+
+        // Spawn on blocking thread pool to avoid blocking async runtime
+        tokio::task::spawn_blocking(move || {
+            let cleaner = WalCleaner::with_wal_dir(shard_id, wal_dir);
+            cleaner.cleanup_up_to(keep_from_log_id);
+        })
+        .await
+        .unwrap_or_else(|e| {
+            error!(
+                target: "wal_cleaner::cleanup_up_to_async",
+                shard_id,
+                error = %e,
+                "Spawn blocking task panicked"
+            );
+        });
+    }
+
     /// Deletes all WAL logs with ID < `keep_from_log_id`.
     /// In conservative mode, archives WAL files before deletion.
     /// This should be called after segment flushes.
+    ///
+    /// Note: This is a synchronous method. Use `cleanup_up_to_async` from async contexts
+    /// to avoid blocking the runtime.
     pub fn cleanup_up_to(&self, keep_from_log_id: u64) {
         // Check if conservative mode is enabled
         let conservative_mode = crate::shared::config::CONFIG.wal.conservative_mode;
@@ -65,6 +90,11 @@ impl WalCleaner {
         }
 
         // Proceed with deletion (either after archiving or directly)
+        self.delete_logs_up_to(keep_from_log_id, conservative_mode);
+    }
+
+    /// Internal method to delete WAL log files
+    fn delete_logs_up_to(&self, keep_from_log_id: u64, conservative_mode: bool) {
         match std::fs::read_dir(&self.wal_dir) {
             Ok(entries) => {
                 for entry in entries.flatten() {
@@ -80,7 +110,7 @@ impl WalCleaner {
                                 match std::fs::remove_file(&path) {
                                     Ok(_) => {
                                         info!(
-                                            target: "wal_cleaner::cleanup_up_to",
+                                            target: "wal_cleaner::delete_logs_up_to",
                                             shard_id = self.shard_id,
                                             ?path,
                                             deleted_id = id,
@@ -91,7 +121,7 @@ impl WalCleaner {
                                     }
                                     Err(e) => {
                                         warn!(
-                                            target: "wal_cleaner::cleanup_up_to",
+                                            target: "wal_cleaner::delete_logs_up_to",
                                             shard_id = self.shard_id,
                                             ?path,
                                             deleted_id = id,
@@ -108,7 +138,7 @@ impl WalCleaner {
             }
             Err(e) => {
                 warn!(
-                    target: "wal_cleaner::cleanup_up_to",
+                    target: "wal_cleaner::delete_logs_up_to",
                     shard_id = self.shard_id,
                     wal_dir = %self.wal_dir.display(),
                     error = %e,
