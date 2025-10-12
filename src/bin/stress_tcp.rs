@@ -144,41 +144,62 @@ async fn main() -> Result<()> {
         rxs.push(rxi);
     }
 
-    // Spawn workers
+    // Spawn workers with pipelined writes
     let mut worker_handles = Vec::new();
     for mut rx_local in rxs {
         let addr_clone = addr.clone();
         let sent_inner = sent.clone();
         let handle = tokio::spawn(async move {
-            let mut stream = match TcpStream::connect(addr_clone.clone()).await {
+            let stream = match TcpStream::connect(addr_clone.clone()).await {
                 Ok(s) => s,
                 Err(_) => return,
             };
             let _ = stream.set_nodelay(true);
-            let mut reader = BufReader::new(stream);
-            while let Some(cmd) = rx_local.recv().await {
-                let mut retry_once = false;
-                if let Err(e) = write_all_with_timeout(&mut reader, cmd.as_bytes(), wait_dur).await
-                {
-                    if e.kind() == ErrorKind::BrokenPipe {
-                        retry_once = true;
-                    }
-                } else {
-                    // Read header and one body line
-                    let mut line = String::new();
-                    let _ = read_line_with_timeout(&mut reader, &mut line, wait_dur).await;
+
+            // Split stream into reader and writer
+            let (reader_half, writer_half) = stream.into_split();
+            let mut reader = BufReader::new(reader_half);
+
+            // Spawn background task to drain responses (abortable)
+            let response_drainer = tokio::spawn(async move {
+                let mut line = String::new();
+                loop {
                     line.clear();
-                    let _ = read_line_with_timeout(&mut reader, &mut line, wait_dur).await;
-                }
-                if retry_once {
-                    if let Ok(mut fresh) = TcpStream::connect(addr_clone.clone()).await {
-                        let _ = fresh.set_nodelay(true);
-                        // Best-effort retry without readback
-                        let _ = fresh.write_all(cmd.as_bytes()).await;
+                    match reader.read_line(&mut line).await {
+                        Ok(0) | Err(_) => break, // EOF or error
+                        Ok(_) => continue,       // Keep draining
                     }
                 }
-                sent_inner.fetch_add(1, Ordering::Relaxed);
+            });
+
+            // Get abort handle to cancel drainer when done
+            let drainer_abort = response_drainer.abort_handle();
+
+            // Main writer loop - pipeline requests without waiting
+            let mut writer = writer_half;
+            while let Some(cmd) = rx_local.recv().await {
+                match writer.write_all(cmd.as_bytes()).await {
+                    Ok(_) => {
+                        sent_inner.fetch_add(1, Ordering::Relaxed);
+                    }
+                    Err(e) if e.kind() == ErrorKind::BrokenPipe => {
+                        // Try to reconnect once
+                        if let Ok(fresh) = TcpStream::connect(addr_clone.clone()).await {
+                            let _ = fresh.set_nodelay(true);
+                            let (_, new_writer) = fresh.into_split();
+                            writer = new_writer;
+                            let _ = writer.write_all(cmd.as_bytes()).await;
+                            sent_inner.fetch_add(1, Ordering::Relaxed);
+                        }
+                        break; // Give up if reconnect fails
+                    }
+                    Err(_) => break, // Other errors, stop this worker
+                }
             }
+
+            // Abort the response drainer since we're done writing
+            drainer_abort.abort();
+            let _ = response_drainer.await; // Wait for cancellation (should be immediate)
         });
         worker_handles.push(handle);
     }
@@ -263,14 +284,6 @@ async fn send_and_drain(
     read_line_with_timeout(reader, &mut header, wait).await?;
     // Drain any following body lines until next prompt absence; here we assume single-line body for ok-lines
     Ok(())
-}
-
-async fn send_and_collect_json(
-    reader: &mut BufReader<TcpStream>,
-    cmd: &str,
-    max_lines: usize,
-) -> Result<Vec<Value>> {
-    send_and_collect_json_with_timeout(reader, cmd, max_lines, None).await
 }
 
 async fn send_and_collect_json_with_timeout(
