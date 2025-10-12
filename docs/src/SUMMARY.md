@@ -33,4 +33,5 @@
   - [Layering Strategy](./design/layering_strategy.md)
   - [Threading and Async](./design/threading_and_async.md)
   - [Logging](./design/logging.md)
+  - [WAL Archiving](./design/wal_archiving.md)
   - [File Formats and Data Layout](./design/file_formats.md)

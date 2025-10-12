@@ -25,6 +25,11 @@ pub struct WalConfig {
     pub buffer_size: usize,
     pub flush_each_write: bool,
     pub fsync_every_n: Option<usize>,
+    // Conservative mode: archive WAL files instead of deleting
+    pub conservative_mode: bool,
+    pub archive_dir: String,
+    pub compression_level: i32,
+    pub compression_algorithm: String,
 }
 
 #[derive(Debug, Deserialize)]
