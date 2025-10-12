@@ -52,4 +52,3 @@ impl std::fmt::Display for EventSorter {
         write!(f, "EventSorter({} {})", self.field, direction)
     }
 }
-

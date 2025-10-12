@@ -1,5 +1,5 @@
-use crate::engine::core::wal::wal_archive::WalArchive;
 use crate::engine::core::WalEntry;
+use crate::engine::core::wal::wal_archive::WalArchive;
 use std::path::{Path, PathBuf};
 use tracing::{error, info, warn};
 

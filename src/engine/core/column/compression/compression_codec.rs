@@ -26,4 +26,3 @@ impl CompressionCodec for Lz4Codec {
         lz4_decompress(input).map_err(|e| StoreError::FlushFailed(format!("lz4 decompress: {e}")))
     }
 }
-

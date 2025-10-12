@@ -392,4 +392,3 @@ fn should_defer_limit_only_with_ordering() {
     let ctx_with_order = QueryContext::from_command(&cmd_with_order);
     assert!(ctx_with_order.should_defer_limit());
 }
-

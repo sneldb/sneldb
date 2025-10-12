@@ -53,10 +53,16 @@ async fn enum_pruner_handles_unknown_variant_and_empty_index() {
         .with_events(vec![ev])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem,
+        1,
+        &seg1,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // Unknown variant should return None -> FieldSelector drops to xor/range (none) -> empty
     let f_unknown = FilterPlanFactory::new()
@@ -149,10 +155,16 @@ async fn enum_pruner_multiple_variants_same_zone_dedupes() {
         .with_events(vec![a, b])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem,
+        1,
+        &seg1,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // Eq pro -> exactly one zone should be returned
     let f_eq = FilterPlanFactory::new()

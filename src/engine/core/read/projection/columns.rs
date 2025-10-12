@@ -7,7 +7,9 @@ pub struct ProjectionColumns {
 
 impl ProjectionColumns {
     pub fn new() -> Self {
-        Self { set: HashSet::new() }
+        Self {
+            set: HashSet::new(),
+        }
     }
 
     pub fn add(&mut self, name: impl Into<String>) {
@@ -39,5 +41,3 @@ impl ProjectionColumns {
         self.set.into_iter().collect()
     }
 }
-
-

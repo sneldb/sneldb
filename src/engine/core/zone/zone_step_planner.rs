@@ -1,5 +1,4 @@
 use crate::engine::core::{ExecutionStep, LogicalOp, QueryPlan};
-
 /// Decides execution order and per-step segment subsets (for pruning)
 pub struct ZoneStepPlanner<'a> {
     plan: &'a QueryPlan,

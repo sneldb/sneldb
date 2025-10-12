@@ -215,7 +215,9 @@ fn sorts_large_list_efficiently() {
     let mut events: Vec<Event> = (0..1000)
         .map(|i| {
             let timestamp = 1000000 - (i * 997) % 100000; // pseudo-random order
-            Factory::event().with("timestamp", timestamp as u64).create()
+            Factory::event()
+                .with("timestamp", timestamp as u64)
+                .create()
         })
         .collect();
 
@@ -293,4 +295,3 @@ fn ascending_and_descending_are_inverses() {
     assert_eq!(events_asc[1].timestamp, events_desc[1].timestamp);
     assert_eq!(events_asc[2].timestamp, events_desc[0].timestamp);
 }
-

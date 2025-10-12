@@ -46,10 +46,16 @@ async fn xor_eq_uses_zxf_to_narrow_zones() {
             .with_events(vec![e1])
             .create()
             .unwrap();
-        crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-            .flush()
-            .await
-            .unwrap();
+        crate::engine::core::Flusher::new(
+            mem,
+            1,
+            &seg1,
+            registry.clone(),
+            Arc::new(tokio::sync::Mutex::new(())),
+        )
+        .flush()
+        .await
+        .unwrap();
     }
     {
         let e2 = EventFactory::new()
@@ -62,10 +68,16 @@ async fn xor_eq_uses_zxf_to_narrow_zones() {
             .with_events(vec![e2])
             .create()
             .unwrap();
-        crate::engine::core::Flusher::new(mem, 2, &seg2, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-            .flush()
-            .await
-            .unwrap();
+        crate::engine::core::Flusher::new(
+            mem,
+            2,
+            &seg2,
+            registry.clone(),
+            Arc::new(tokio::sync::Mutex::new(())),
+        )
+        .flush()
+        .await
+        .unwrap();
     }
 
     // Query key == "b" should favor segment-002 via .zxf
@@ -133,10 +145,16 @@ async fn range_pruner_uses_zonesurf_for_gt_and_lte() {
         .with_events(vec![e1, e2])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem1, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem1,
+        1,
+        &seg1,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // seg2: ids 15, 20
     let e3 = EventFactory::new()
@@ -154,10 +172,16 @@ async fn range_pruner_uses_zonesurf_for_gt_and_lte() {
         .with_events(vec![e3, e4])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem2, 2, &seg2, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem2,
+        2,
+        &seg2,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // id > 10 should select zones from segment-002
     let filter_gt = FilterPlanFactory::new()
@@ -256,10 +280,16 @@ async fn enum_pruner_respects_eq_and_neq() {
         .with_events(vec![a, b])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem1, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem1,
+        1,
+        &seg1,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // seg2: premium
     let c = EventFactory::new()
@@ -272,10 +302,16 @@ async fn enum_pruner_respects_eq_and_neq() {
         .with_events(vec![c])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem2, 2, &seg2, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem2,
+        2,
+        &seg2,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // plan == pro -> segment-001 only
     let f_eq = FilterPlanFactory::new()
@@ -351,10 +387,16 @@ async fn returns_all_zones_when_value_missing() {
         .with_events(vec![e])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem,
+        1,
+        &seg1,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // No value provided in FilterPlan
     let filter = FilterPlanFactory::new()
@@ -411,10 +453,16 @@ async fn returns_empty_when_uid_missing() {
         .with_events(vec![e])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem,
+        1,
+        &seg1,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // Missing uid
     let filter = FilterPlanFactory::new()
@@ -467,10 +515,16 @@ async fn xor_pruner_skips_on_neq_operation() {
         .with_events(vec![e])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem,
+        1,
+        &seg1,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // Neq should not use XOR; not enum; not range -> empty
     let filter = FilterPlanFactory::new()
@@ -527,10 +581,16 @@ async fn xor_pruner_falls_back_to_full_field_filter_when_zxf_missing() {
         .with_events(vec![e])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem,
+        1,
+        &seg1,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // Remove .zxf to force fallback to .xf
     let zxf_path = ZoneXorFilterIndex::file_path(&seg1, &uid, "key");
@@ -600,10 +660,16 @@ async fn zonesurf_ge_gt_le_lte_cover_boundaries_and_cross_segment() {
         .with_events(vec![a, b])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem1, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem1,
+        1,
+        &seg1,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // seg2: user_id 8, 10 (boundary)
     let c = EventFactory::new()
@@ -621,10 +687,16 @@ async fn zonesurf_ge_gt_le_lte_cover_boundaries_and_cross_segment() {
         .with_events(vec![c, d])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem2, 2, &seg2, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem2,
+        2,
+        &seg2,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     let cmd = CommandFactory::query().with_event_type(event_type).create();
     let q = QueryPlanFactory::new()

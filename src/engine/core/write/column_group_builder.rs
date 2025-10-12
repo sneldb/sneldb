@@ -32,4 +32,3 @@ impl ColumnGroupBuilder {
         self.groups
     }
 }
-

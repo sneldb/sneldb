@@ -69,10 +69,7 @@ fn test_list_archives_multiple() {
 
     // Verify they're sorted
     for i in 0..archives.len() - 1 {
-        assert!(
-            archives[i] < archives[i + 1],
-            "Archives should be sorted"
-        );
+        assert!(archives[i] < archives[i + 1], "Archives should be sorted");
     }
 }
 
@@ -120,11 +117,7 @@ fn test_list_archives_filters_non_zst_files() {
     let recovery = WalArchiveRecovery::new(1, archive_dir);
     let archives = recovery.list_archives().unwrap();
 
-    assert_eq!(
-        archives.len(),
-        1,
-        "Should only find .zst archive files"
-    );
+    assert_eq!(archives.len(), 1, "Should only find .zst archive files");
 }
 
 #[test]
@@ -170,10 +163,7 @@ fn test_recover_from_archive_nonexistent() {
     let recovery = WalArchiveRecovery::new(1, archive_dir);
     let result = recovery.recover_from_archive(&nonexistent);
 
-    assert!(
-        result.is_err(),
-        "Should fail for non-existent archive"
-    );
+    assert!(result.is_err(), "Should fail for non-existent archive");
 }
 
 #[test]
@@ -478,19 +468,21 @@ fn test_export_to_json_complex_payloads() {
     fs::create_dir_all(&archive_dir).unwrap();
     fs::create_dir_all(&output_dir).unwrap();
 
-    let entries = vec![WalEntryFactory::new()
-        .with("event_type", "complex_event")
-        .with(
-            "payload",
-            json!({
-                "nested": {
-                    "field": "value",
-                    "number": 42
-                },
-                "array": [1, 2, 3]
-            }),
-        )
-        .create()];
+    let entries = vec![
+        WalEntryFactory::new()
+            .with("event_type", "complex_event")
+            .with(
+                "payload",
+                json!({
+                    "nested": {
+                        "field": "value",
+                        "number": 42
+                    },
+                    "array": [1, 2, 3]
+                }),
+            )
+            .create(),
+    ];
 
     let header = WalArchiveHeader::new(1, 1, 1, 1000, 1000, "zstd".to_string(), 3);
     let archive = WalArchive {
@@ -542,12 +534,8 @@ fn test_recover_preserves_event_types() {
     fs::create_dir_all(&archive_dir).unwrap();
 
     let entries = vec![
-        WalEntryFactory::new()
-            .with("event_type", "signup")
-            .create(),
-        WalEntryFactory::new()
-            .with("event_type", "login")
-            .create(),
+        WalEntryFactory::new().with("event_type", "signup").create(),
+        WalEntryFactory::new().with("event_type", "login").create(),
         WalEntryFactory::new()
             .with("event_type", "purchase")
             .create(),
@@ -583,15 +571,7 @@ fn test_recover_preserves_all_fields() {
         .with("payload", json!({"key": "value", "num": 42}))
         .create();
 
-    let header = WalArchiveHeader::new(
-        1,
-        1,
-        1,
-        1234567890,
-        1234567890,
-        "zstd".to_string(),
-        3,
-    );
+    let header = WalArchiveHeader::new(1, 1, 1, 1234567890, 1234567890, "zstd".to_string(), 3);
     let archive = WalArchive {
         header,
         body: WalArchiveBody::new(vec![original.clone()]),
@@ -646,4 +626,3 @@ fn test_multiple_shards_separate_recovery() {
     assert_eq!(entries0.len(), 5, "Shard 0 should have 5 entries");
     assert_eq!(entries1.len(), 7, "Shard 1 should have 7 entries");
 }
-

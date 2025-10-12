@@ -25,5 +25,3 @@ fn builder_style_appends_values_and_creates_block() {
     assert_eq!(cv.get_str_at(0), Some("x"));
     assert_eq!(cv.get_str_at(1), Some("yz"));
 }
-
-

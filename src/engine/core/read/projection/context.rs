@@ -42,5 +42,3 @@ impl<'a> ProjectionContext<'a> {
         }
     }
 }
-
-

@@ -39,7 +39,12 @@ impl<'a> ZoneFinder<'a> {
         }
         let mut out: Vec<CandidateZone> = Vec::new();
         out.reserve(self.segment_ids.len());
-        let ctx = SelectionContext { plan: self.plan, query_plan: self.query_plan, base_dir: self.base_dir, caches: self.caches };
+        let ctx = SelectionContext {
+            plan: self.plan,
+            query_plan: self.query_plan,
+            base_dir: self.base_dir,
+            caches: self.caches,
+        };
         let selector = ZoneSelectorBuilder::new(ctx).build();
         for segment_id in self.segment_ids.iter() {
             let zones = selector.select_for_segment(segment_id);

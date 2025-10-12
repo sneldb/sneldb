@@ -51,10 +51,16 @@ async fn surf_ge_and_le_inclusive_boundaries_id_field() {
         .with_events(vec![a, b])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem1, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem1,
+        1,
+        &seg1,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // seg2: order_id 95, 100
     let c = EventFactory::new()
@@ -72,10 +78,16 @@ async fn surf_ge_and_le_inclusive_boundaries_id_field() {
         .with_events(vec![c, d])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem2, 2, &seg2, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem2,
+        2,
+        &seg2,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     let cmd = CommandFactory::query().with_event_type(event_type).create();
     let q = QueryPlanFactory::new()
@@ -155,10 +167,16 @@ async fn surf_gt_and_lt_exclusive_boundaries_id_field() {
         .with_events(vec![a])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem1, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem1,
+        1,
+        &seg1,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // seg2: user_id 9
     let b = EventFactory::new()
@@ -171,10 +189,16 @@ async fn surf_gt_and_lt_exclusive_boundaries_id_field() {
         .with_events(vec![b])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem2, 2, &seg2, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem2,
+        2,
+        &seg2,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     let cmd = CommandFactory::query().with_event_type(event_type).create();
     let q = QueryPlanFactory::new()
@@ -257,10 +281,16 @@ async fn falls_back_to_range_handler_on_non_id_field() {
         .with_events(vec![a])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem,
+        1,
+        &seg1,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     let cmd = CommandFactory::query().with_event_type(event_type).create();
     let q = QueryPlanFactory::new()

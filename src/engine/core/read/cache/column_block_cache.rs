@@ -2,6 +2,7 @@ use super::column_block_cache_key::ColumnBlockCacheKey;
 use super::column_block_cache_stats::ColumnBlockCacheStats;
 use super::decompressed_block::DecompressedBlock;
 use super::global_zone_index_cache::CacheOutcome;
+use crate::shared::path::absolutize;
 use lru::LruCache;
 use once_cell::sync::Lazy;
 use std::io;
@@ -84,11 +85,7 @@ impl GlobalColumnBlockCache {
     where
         F: FnOnce() -> Result<Vec<u8>, io::Error>,
     {
-        let abs_path = if col_path.is_absolute() {
-            col_path.to_path_buf()
-        } else {
-            std::fs::canonicalize(col_path).unwrap_or_else(|_| col_path.to_path_buf())
-        };
+        let abs_path = absolutize(col_path);
         let key = ColumnBlockCacheKey::new(abs_path, zone_id);
 
         // Try hit

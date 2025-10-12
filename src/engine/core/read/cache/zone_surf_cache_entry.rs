@@ -59,4 +59,3 @@ impl ZoneSurfCacheEntry {
         total.max(self.size as usize)
     }
 }
-

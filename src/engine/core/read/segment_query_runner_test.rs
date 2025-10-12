@@ -47,7 +47,13 @@ async fn segment_query_runner_returns_matching_events() {
         .create()
         .unwrap();
 
-    let flusher = Flusher::new(memtable, 7, &segment_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())));
+    let flusher = Flusher::new(
+        memtable,
+        7,
+        &segment_dir,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
     flusher.flush().await.expect("Flush failed");
 
     // Prepare query plan
@@ -114,7 +120,13 @@ async fn segment_query_runner_respects_limit_across_zones() {
         seg_builder = seg_builder.with_event(e);
     }
     let seg_memtable = seg_builder.create().unwrap();
-    let flusher = Flusher::new(seg_memtable, 5, &segment_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())));
+    let flusher = Flusher::new(
+        seg_memtable,
+        5,
+        &segment_dir,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
     flusher.flush().await.expect("Flush failed");
 
     // Query with LIMIT 3
@@ -178,7 +190,13 @@ async fn segment_query_runner_limit_zero_returns_empty() {
         ])
         .create()
         .unwrap();
-    let flusher = Flusher::new(seg_memtable, 2, &segment_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())));
+    let flusher = Flusher::new(
+        seg_memtable,
+        2,
+        &segment_dir,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
     flusher.flush().await.expect("Flush failed");
 
     let query_cmd = CommandFactory::query()

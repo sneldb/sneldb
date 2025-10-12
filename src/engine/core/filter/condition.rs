@@ -1,6 +1,6 @@
 use crate::command::types::CompareOp as CommandCompareOp;
 use crate::command::types::Expr;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 
 /// Represents a condition that can be evaluated against zone values
@@ -23,6 +23,14 @@ pub trait Condition: Send + Sync + Debug {
         &self,
         accessor: &crate::engine::core::filter::direct_event_accessor::DirectEventAccessor,
     ) -> bool;
+
+    /// Indicates whether this condition (or any of its descendants) requires numeric access.
+    fn is_numeric(&self) -> bool {
+        false
+    }
+
+    /// Collects the names of fields that require numeric access for this condition.
+    fn collect_numeric_fields(&self, _out: &mut HashSet<String>) {}
 }
 
 /// Provides indexed access to field values for a candidate zone.
@@ -47,6 +55,15 @@ impl<'a> PreparedAccessor<'a> {
         Self {
             columns,
             event_count,
+        }
+    }
+
+    /// Prepares numeric caches for the specified columns so numeric conditions avoid repeated parsing.
+    pub fn warm_numeric_cache(&self, fields: &HashSet<String>) {
+        for field in fields {
+            if let Some(column) = self.columns.get(field) {
+                column.warm_numeric_cache();
+            }
         }
     }
 }
@@ -141,6 +158,14 @@ impl Condition for NumericCondition {
         } else {
             false
         }
+    }
+
+    fn is_numeric(&self) -> bool {
+        true
+    }
+
+    fn collect_numeric_fields(&self, out: &mut HashSet<String>) {
+        out.insert(self.field.clone());
     }
 }
 
@@ -253,6 +278,16 @@ impl Condition for LogicalCondition {
                 .iter()
                 .any(|c| c.evaluate_event_direct(accessor)),
             LogicalOp::Not => !self.conditions[0].evaluate_event_direct(accessor),
+        }
+    }
+
+    fn is_numeric(&self) -> bool {
+        self.conditions.iter().any(|c| c.is_numeric())
+    }
+
+    fn collect_numeric_fields(&self, out: &mut HashSet<String>) {
+        for condition in &self.conditions {
+            condition.collect_numeric_fields(out);
         }
     }
 }

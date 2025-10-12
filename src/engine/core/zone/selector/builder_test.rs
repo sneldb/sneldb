@@ -31,11 +31,19 @@ async fn builder_returns_empty_when_event_type_missing_uid() {
         .with_value(serde_json::json!("ev"))
         .create();
 
-    let ctx = SelectionContext { plan: &filter, query_plan: &plan, base_dir: &plan.segment_base_dir, caches: None };
+    let ctx = SelectionContext {
+        plan: &filter,
+        query_plan: &plan,
+        base_dir: &plan.segment_base_dir,
+        caches: None,
+    };
 
     let selector = ZoneSelectorBuilder::new(ctx).build();
     let zones = selector.select_for_segment("seg1");
-    assert!(zones.is_empty(), "expected no zones for missing uid on event_type");
+    assert!(
+        zones.is_empty(),
+        "expected no zones for missing uid on event_type"
+    );
 }
 
 #[tokio::test]
@@ -58,12 +66,24 @@ async fn builder_returns_all_zones_when_context_id_missing_uid() {
         .with_value(serde_json::json!("ctx"))
         .create();
 
-    let ctx = SelectionContext { plan: &filter, query_plan: &plan, base_dir: &plan.segment_base_dir, caches: None };
+    let ctx = SelectionContext {
+        plan: &filter,
+        query_plan: &plan,
+        base_dir: &plan.segment_base_dir,
+        caches: None,
+    };
 
     let selector = ZoneSelectorBuilder::new(ctx).build();
     let zones = selector.select_for_segment("seg1");
-    let all_zones = crate::engine::core::zone::candidate_zone::CandidateZone::create_all_zones_for_segment("seg1");
-    assert_eq!(zones.len(), all_zones.len(), "expected all zones when uid missing on context_id");
+    let all_zones =
+        crate::engine::core::zone::candidate_zone::CandidateZone::create_all_zones_for_segment(
+            "seg1",
+        );
+    assert_eq!(
+        zones.len(),
+        all_zones.len(),
+        "expected all zones when uid missing on context_id"
+    );
 }
 
 #[tokio::test]
@@ -93,11 +113,15 @@ async fn builder_returns_field_selector_for_regular_column() {
         .with_uid(&uid)
         .create();
 
-    let ctx = SelectionContext { plan: &filter, query_plan: &plan, base_dir: &plan.segment_base_dir, caches: None };
+    let ctx = SelectionContext {
+        plan: &filter,
+        query_plan: &plan,
+        base_dir: &plan.segment_base_dir,
+        caches: None,
+    };
 
     let selector = ZoneSelectorBuilder::new(ctx).build();
     let zones = selector.select_for_segment("seg1");
     // For this test we only assert it doesn't crash and returns some vector (may be empty)
     assert!(zones.len() >= 0);
 }
-

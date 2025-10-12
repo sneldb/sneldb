@@ -7,9 +7,15 @@ use crate::test_helpers::factories::AggregateResultFactory;
 fn builds_aggregate_result_and_finalizes_headers_and_rows() {
     let specs = vec![
         AggregateOpSpec::CountAll,
-        AggregateOpSpec::Avg { field: "amount".into() },
-        AggregateOpSpec::Min { field: "name".into() },
-        AggregateOpSpec::Max { field: "name".into() },
+        AggregateOpSpec::Avg {
+            field: "amount".into(),
+        },
+        AggregateOpSpec::Min {
+            field: "name".into(),
+        },
+        AggregateOpSpec::Max {
+            field: "name".into(),
+        },
     ];
 
     let agg = AggregateResultFactory::new()
@@ -22,8 +28,14 @@ fn builds_aggregate_result_and_finalizes_headers_and_rows() {
             vec![
                 AggState::CountAll { count: 2 },
                 AggState::Avg { sum: 10, count: 2 },
-                AggState::Min { min_num: None, min_str: Some("bob".into()) },
-                AggState::Max { max_num: None, max_str: Some("zoe".into()) },
+                AggState::Min {
+                    min_num: None,
+                    min_str: Some("bob".into()),
+                },
+                AggState::Max {
+                    max_num: None,
+                    max_str: Some("zoe".into()),
+                },
             ],
         )
         .add_group_key(
@@ -32,8 +44,14 @@ fn builds_aggregate_result_and_finalizes_headers_and_rows() {
             vec![
                 AggState::CountAll { count: 1 },
                 AggState::Avg { sum: 5, count: 1 },
-                AggState::Min { min_num: Some(1), min_str: None },
-                AggState::Max { max_num: Some(9), max_str: None },
+                AggState::Min {
+                    min_num: Some(1),
+                    min_str: None,
+                },
+                AggState::Max {
+                    max_num: Some(9),
+                    max_str: None,
+                },
             ],
         )
         .create();
@@ -48,5 +66,3 @@ fn builds_aggregate_result_and_finalizes_headers_and_rows() {
     assert!(headers.contains(&"max_name".to_string()));
     assert_eq!(table.rows.len(), 2);
 }
-
-

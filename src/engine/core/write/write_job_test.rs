@@ -99,21 +99,30 @@ fn builds_jobs_with_empty_strings_for_missing_fields() {
     }
 
     // Verify 'country' field is present for BOTH events
-    assert!(field_names.contains("country"), "country field should be present");
-    assert!(field_names.contains("score"), "score field should be present");
+    assert!(
+        field_names.contains("country"),
+        "country field should be present"
+    );
+    assert!(
+        field_names.contains("score"),
+        "score field should be present"
+    );
 
     // Count how many jobs exist for 'country' field
-    let country_jobs: Vec<_> = jobs.iter()
-        .filter(|j| j.key.1 == "country")
-        .collect();
+    let country_jobs: Vec<_> = jobs.iter().filter(|j| j.key.1 == "country").collect();
 
-    assert_eq!(country_jobs.len(), 2, "Should have 2 country jobs (one per event)");
+    assert_eq!(
+        country_jobs.len(),
+        2,
+        "Should have 2 country jobs (one per event)"
+    );
 
     // One should be "US", one should be "" (empty string for missing field)
-    let country_values: HashSet<_> = country_jobs.iter()
-        .map(|j| j.value.as_str())
-        .collect();
+    let country_values: HashSet<_> = country_jobs.iter().map(|j| j.value.as_str()).collect();
 
     assert!(country_values.contains("US"), "Should have US value");
-    assert!(country_values.contains(""), "Should have empty string for missing field");
+    assert!(
+        country_values.contains(""),
+        "Should have empty string for missing field"
+    );
 }

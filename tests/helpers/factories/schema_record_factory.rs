@@ -1,5 +1,5 @@
-use crate::engine::schema::registry::{MiniSchema, SchemaRecord};
 use crate::engine::schema::FieldType;
+use crate::engine::schema::registry::{MiniSchema, SchemaRecord};
 use std::collections::HashMap;
 
 pub struct SchemaRecordFactory {

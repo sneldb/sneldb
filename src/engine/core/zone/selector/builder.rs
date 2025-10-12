@@ -1,10 +1,10 @@
-use crate::engine::core::zone::selector::selector_kind::ZoneSelector;
-use crate::engine::core::zone::selector::index_selector::{IndexZoneSelector, MissingIndexPolicy};
 use crate::engine::core::zone::selector::field_selector::FieldSelector;
-use crate::engine::core::zone::selector::selection_context::SelectionContext;
+use crate::engine::core::zone::selector::index_selector::{IndexZoneSelector, MissingIndexPolicy};
 use crate::engine::core::zone::selector::pruner::enum_pruner::EnumPruner;
 use crate::engine::core::zone::selector::pruner::range_pruner::RangePruner;
 use crate::engine::core::zone::selector::pruner::xor_pruner::XorPruner;
+use crate::engine::core::zone::selector::selection_context::SelectionContext;
+use crate::engine::core::zone::selector::selector_kind::ZoneSelector;
 use crate::engine::core::zone::zone_artifacts::ZoneArtifacts;
 
 pub struct ZoneSelectorBuilder<'a> {
@@ -23,8 +23,12 @@ impl<'a> ZoneSelectorBuilder<'a> {
 
     #[inline]
     fn make_field_selector(&self, artifacts: ZoneArtifacts<'a>) -> FieldSelector<'a> {
-        let range_pruner = RangePruner { artifacts: self.make_artifacts() };
-        let enum_pruner = EnumPruner { artifacts: self.make_artifacts() };
+        let range_pruner = RangePruner {
+            artifacts: self.make_artifacts(),
+        };
+        let enum_pruner = EnumPruner {
+            artifacts: self.make_artifacts(),
+        };
         let xor_pruner = XorPruner { artifacts };
         FieldSelector {
             plan: self.inputs.plan,
@@ -42,10 +46,13 @@ impl<'a> ZoneSelectorBuilder<'a> {
                 let Some(uid) = self.inputs.plan.uid.as_deref() else {
                     return Box::new(EmptySelector {});
                 };
-                let Some(event_type) = self.inputs.plan.value.as_ref().and_then(|v| v.as_str()) else {
+                let Some(event_type) = self.inputs.plan.value.as_ref().and_then(|v| v.as_str())
+                else {
                     return Box::new(EmptySelector {});
                 };
-                let context_id = self.inputs.query_plan
+                let context_id = self
+                    .inputs
+                    .query_plan
                     .context_id_plan()
                     .and_then(|p| p.value.as_ref().and_then(|v| v.as_str()));
                 Box::new(IndexZoneSelector {
@@ -62,7 +69,9 @@ impl<'a> ZoneSelectorBuilder<'a> {
                 let Some(uid) = self.inputs.plan.uid.as_deref() else {
                     return Box::new(AllZonesSelector {});
                 };
-                let event_type = self.inputs.query_plan
+                let event_type = self
+                    .inputs
+                    .query_plan
                     .event_type_plan()
                     .and_then(|p| p.value.as_ref().and_then(|v| v.as_str()));
                 let context_id = self.inputs.plan.value.as_ref().and_then(|v| v.as_str());
@@ -95,6 +104,7 @@ impl ZoneSelector for AllZonesSelector {
 
 struct EmptySelector {}
 impl ZoneSelector for EmptySelector {
-    fn select_for_segment(&self, _segment_id: &str) -> Vec<CandidateZone> { Vec::new() }
+    fn select_for_segment(&self, _segment_id: &str) -> Vec<CandidateZone> {
+        Vec::new()
+    }
 }
-

@@ -126,7 +126,11 @@ impl<'a> KWayMerger<'a> {
     }
 
     /// Applies offset and limit to the merged results.
-    pub fn apply_pagination(rows: Vec<Vec<Value>>, offset: Option<u32>, limit: Option<u32>) -> Vec<Vec<Value>> {
+    pub fn apply_pagination(
+        rows: Vec<Vec<Value>>,
+        offset: Option<u32>,
+        limit: Option<u32>,
+    ) -> Vec<Vec<Value>> {
         let mut result = rows;
 
         // Apply offset
@@ -150,4 +154,3 @@ impl<'a> KWayMerger<'a> {
         result
     }
 }
-

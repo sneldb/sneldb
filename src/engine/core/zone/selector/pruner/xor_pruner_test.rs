@@ -48,10 +48,16 @@ async fn xor_uses_zxf_primary_and_xf_fallback_and_skips_on_miss() {
         .with_events(vec![a, b])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem1, 1, &seg1, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem1,
+        1,
+        &seg1,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // seg2: key values ["c"]
     let c = EventFactory::new()
@@ -64,10 +70,16 @@ async fn xor_uses_zxf_primary_and_xf_fallback_and_skips_on_miss() {
         .with_events(vec![c])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(mem2, 2, &seg2, registry.clone(), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem2,
+        2,
+        &seg2,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     let cmd = CommandFactory::query().with_event_type(event_type).create();
     let q = QueryPlanFactory::new()

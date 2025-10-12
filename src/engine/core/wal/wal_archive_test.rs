@@ -1,7 +1,7 @@
-use crate::engine::core::wal::wal_archive::{
-    WalArchive, WalArchiveBody, WalArchiveHeader, ARCHIVE_VERSION,
-};
 use crate::engine::core::WalEntry;
+use crate::engine::core::wal::wal_archive::{
+    ARCHIVE_VERSION, WalArchive, WalArchiveBody, WalArchiveHeader,
+};
 use crate::test_helpers::factories::WalEntryFactory;
 use serde_json::json;
 use std::fs::{self, File};
@@ -69,8 +69,7 @@ fn test_from_wal_file_with_entries() {
 
     create_test_wal_file(&wal_path, entries.clone()).unwrap();
 
-    let archive =
-        WalArchive::from_wal_file(&wal_path, 1, 5, "zstd".to_string(), 3).unwrap();
+    let archive = WalArchive::from_wal_file(&wal_path, 1, 5, "zstd".to_string(), 3).unwrap();
 
     assert_eq!(archive.header.shard_id, 1);
     assert_eq!(archive.header.log_id, 5);
@@ -92,8 +91,7 @@ fn test_from_wal_file_empty() {
 
     create_test_wal_file(&wal_path, vec![]).unwrap();
 
-    let archive =
-        WalArchive::from_wal_file(&wal_path, 1, 5, "zstd".to_string(), 3).unwrap();
+    let archive = WalArchive::from_wal_file(&wal_path, 1, 5, "zstd".to_string(), 3).unwrap();
 
     assert_eq!(archive.header.entry_count, 0);
     assert_eq!(archive.header.start_timestamp, 0);
@@ -116,13 +114,9 @@ fn test_from_wal_file_with_blank_lines() {
 
     drop(file);
 
-    let archive =
-        WalArchive::from_wal_file(&wal_path, 1, 5, "zstd".to_string(), 3).unwrap();
+    let archive = WalArchive::from_wal_file(&wal_path, 1, 5, "zstd".to_string(), 3).unwrap();
 
-    assert_eq!(
-        archive.header.entry_count, 2,
-        "Should skip blank lines"
-    );
+    assert_eq!(archive.header.entry_count, 2, "Should skip blank lines");
 }
 
 #[test]
@@ -139,8 +133,7 @@ fn test_from_wal_file_with_invalid_json() {
 
     drop(file);
 
-    let archive =
-        WalArchive::from_wal_file(&wal_path, 1, 5, "zstd".to_string(), 3).unwrap();
+    let archive = WalArchive::from_wal_file(&wal_path, 1, 5, "zstd".to_string(), 3).unwrap();
 
     assert_eq!(
         archive.header.entry_count, 2,
@@ -172,8 +165,7 @@ fn test_from_wal_file_timestamp_range() {
 
     create_test_wal_file(&wal_path, entries).unwrap();
 
-    let archive =
-        WalArchive::from_wal_file(&wal_path, 1, 5, "zstd".to_string(), 3).unwrap();
+    let archive = WalArchive::from_wal_file(&wal_path, 1, 5, "zstd".to_string(), 3).unwrap();
 
     assert_eq!(
         archive.header.start_timestamp, 1000,
@@ -211,15 +203,7 @@ fn test_compression_reduces_size() {
         .with("payload", json!({"data": "x".repeat(1000)}))
         .create_list(50);
 
-    let header = WalArchiveHeader::new(
-        1,
-        42,
-        50,
-        1000,
-        2000,
-        "zstd".to_string(),
-        3,
-    );
+    let header = WalArchiveHeader::new(1, 42, 50, 1000, 2000, "zstd".to_string(), 3);
     let body = WalArchiveBody::new(entries.clone());
     let archive = WalArchive { header, body };
 
@@ -250,15 +234,7 @@ fn test_compression_levels() {
     let mut sizes = Vec::new();
 
     for level in [1, 3, 9, 19] {
-        let header = WalArchiveHeader::new(
-            1,
-            42,
-            20,
-            1000,
-            2000,
-            "zstd".to_string(),
-            level,
-        );
+        let header = WalArchiveHeader::new(1, 42, 20, 1000, 2000, "zstd".to_string(), level);
         let body = WalArchiveBody::new(entries.clone());
         let archive = WalArchive { header, body };
 
@@ -284,10 +260,7 @@ fn test_from_compressed_bytes_invalid_data() {
 
     let result = WalArchive::from_compressed_bytes(&invalid_data);
 
-    assert!(
-        result.is_err(),
-        "Should fail for invalid compressed data"
-    );
+    assert!(result.is_err(), "Should fail for invalid compressed data");
 }
 
 #[test]
@@ -314,15 +287,7 @@ fn test_from_compressed_bytes_corrupted_zstd() {
 
 #[test]
 fn test_generate_filename() {
-    let header = WalArchiveHeader::new(
-        1,
-        42,
-        10,
-        1700000000,
-        1700003600,
-        "zstd".to_string(),
-        3,
-    );
+    let header = WalArchiveHeader::new(1, 42, 10, 1700000000, 1700003600, "zstd".to_string(), 3);
     let body = WalArchiveBody::new(vec![]);
     let archive = WalArchive { header, body };
 
@@ -355,15 +320,7 @@ fn test_write_to_file_and_read_back() {
     let entries = WalEntryFactory::new()
         .with("event_type", "test_event")
         .create_list(5);
-    let header = WalArchiveHeader::new(
-        1,
-        42,
-        5,
-        1700000000,
-        1700003600,
-        "zstd".to_string(),
-        3,
-    );
+    let header = WalArchiveHeader::new(1, 42, 5, 1700000000, 1700003600, "zstd".to_string(), 3);
     let body = WalArchiveBody::new(entries);
     let archive = WalArchive {
         header: header.clone(),
@@ -469,15 +426,7 @@ fn test_roundtrip_with_complex_payloads() {
             .create(),
     ];
 
-    let header = WalArchiveHeader::new(
-        1,
-        42,
-        2,
-        1700000000,
-        1700000100,
-        "zstd".to_string(),
-        3,
-    );
+    let header = WalArchiveHeader::new(1, 42, 2, 1700000000, 1700000100, "zstd".to_string(), 3);
     let body = WalArchiveBody::new(entries.clone());
     let archive = WalArchive { header, body };
 
@@ -511,15 +460,7 @@ fn test_roundtrip_preserves_all_entry_fields() {
         )
         .create();
 
-    let header = WalArchiveHeader::new(
-        5,
-        99,
-        1,
-        1234567890,
-        1234567890,
-        "zstd".to_string(),
-        3,
-    );
+    let header = WalArchiveHeader::new(5, 99, 1, 1234567890, 1234567890, "zstd".to_string(), 3);
     let body = WalArchiveBody::new(vec![original_entry.clone()]);
     let archive = WalArchive { header, body };
 
@@ -539,15 +480,7 @@ fn test_archive_with_many_entries() {
     let archive_dir = temp_dir.path();
 
     let entries = WalEntryFactory::new().create_list(1000);
-    let header = WalArchiveHeader::new(
-        1,
-        42,
-        1000,
-        1000,
-        2000,
-        "zstd".to_string(),
-        3,
-    );
+    let header = WalArchiveHeader::new(1, 42, 1000, 1000, 2000, "zstd".to_string(), 3);
     let body = WalArchiveBody::new(entries);
     let archive = WalArchive { header, body };
 
@@ -571,27 +504,11 @@ fn test_archive_version_constant() {
 
 #[test]
 fn test_header_records_compression_metadata() {
-    let header1 = WalArchiveHeader::new(
-        1,
-        42,
-        10,
-        1000,
-        2000,
-        "zstd".to_string(),
-        3,
-    );
+    let header1 = WalArchiveHeader::new(1, 42, 10, 1000, 2000, "zstd".to_string(), 3);
     assert_eq!(header1.compression, "zstd");
     assert_eq!(header1.compression_level, 3);
 
-    let header2 = WalArchiveHeader::new(
-        1,
-        42,
-        10,
-        1000,
-        2000,
-        "lz4".to_string(),
-        9,
-    );
+    let header2 = WalArchiveHeader::new(1, 42, 10, 1000, 2000, "lz4".to_string(), 9);
     assert_eq!(header2.compression, "lz4");
     assert_eq!(header2.compression_level, 9);
 }
@@ -605,15 +522,7 @@ fn test_file_size_after_compression() {
         .with("payload", json!({"data": "test".repeat(100)}))
         .create_list(50);
 
-    let header = WalArchiveHeader::new(
-        1,
-        42,
-        50,
-        1000,
-        2000,
-        "zstd".to_string(),
-        3,
-    );
+    let header = WalArchiveHeader::new(1, 42, 50, 1000, 2000, "zstd".to_string(), 3);
     let body = WalArchiveBody::new(entries);
     let archive = WalArchive { header, body };
 
@@ -626,4 +535,3 @@ fn test_file_size_after_compression() {
         "Compressed file should be reasonably small"
     );
 }
-

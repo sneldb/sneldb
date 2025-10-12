@@ -24,9 +24,9 @@ impl QueryContext {
                 order_by,
                 ..
             } => Self {
-                picked_zones: picked_zones.as_ref().map(|pz| {
-                    pz.zones.iter().cloned().collect::<HashSet<(String, u32)>>()
-                }),
+                picked_zones: picked_zones
+                    .as_ref()
+                    .map(|pz| pz.zones.iter().cloned().collect::<HashSet<(String, u32)>>()),
                 order_by: order_by.clone(),
             },
             _ => Self::empty(),
@@ -81,4 +81,3 @@ impl std::fmt::Display for QueryContext {
         )
     }
 }
-

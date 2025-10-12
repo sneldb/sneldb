@@ -44,7 +44,13 @@ async fn scan_query_returns_expected_events() {
 
     let passive_buffers = Arc::new(PassiveBufferSet::new(8));
 
-    let flusher = Flusher::new(memtable.clone(), 1, &segment_base_dir, registry.clone(), Arc::new(tokio::sync::Mutex::new(())));
+    let flusher = Flusher::new(
+        memtable.clone(),
+        1,
+        &segment_base_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
     flusher.flush().await.expect("Flush failed");
 
     let command = CommandFactory::query()

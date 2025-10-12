@@ -19,9 +19,7 @@ impl SegmentDiscovery {
     ///
     /// Uses spawn_blocking to avoid blocking the async runtime during filesystem operations.
     /// Returns a HashMap mapping shard_id to ShardData.
-    pub async fn discover_all(
-        shard_info: Vec<(usize, PathBuf)>,
-    ) -> HashMap<usize, ShardData> {
+    pub async fn discover_all(shard_info: Vec<(usize, PathBuf)>) -> HashMap<usize, ShardData> {
         debug!(
             target: "sneldb::segment_discovery",
             shard_count = shard_info.len(),
@@ -108,7 +106,9 @@ impl SegmentDiscovery {
     }
 
     /// Extracts segment lists from ShardData for RLTE planning.
-    pub fn extract_segment_map(shard_data: &HashMap<usize, ShardData>) -> HashMap<usize, Vec<String>> {
+    pub fn extract_segment_map(
+        shard_data: &HashMap<usize, ShardData>,
+    ) -> HashMap<usize, Vec<String>> {
         shard_data
             .iter()
             .map(|(id, data)| (*id, data.segments.clone()))
@@ -123,4 +123,3 @@ impl SegmentDiscovery {
             .collect()
     }
 }
-

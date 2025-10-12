@@ -1,10 +1,10 @@
+use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
 use crate::engine::replay::scan::scan;
 use crate::test_helpers::factories::{
     CommandFactory, EventFactory, MemTableFactory, SchemaRegistryFactory,
 };
 use serde_json::json;
 use std::sync::Arc;
-use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[tokio::test]

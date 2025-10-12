@@ -53,7 +53,10 @@ async fn reads_column_values_for_zone() {
 
     // Write columns
     let writer = ColumnWriter::new(segment_dir.clone(), Arc::clone(&registry));
-    writer.write_all(&[zone.clone()]).await.expect("write failed");
+    writer
+        .write_all(&[zone.clone()])
+        .await
+        .expect("write failed");
 
     let writer = ZoneWriter::new("uid-login", &segment_dir, Arc::clone(&registry));
     writer.write_all(&[zone]).await.unwrap();

@@ -1,5 +1,6 @@
 pub mod config;
 pub mod debugger;
+pub mod path;
 pub mod response;
 pub mod storage_header;
 pub mod time;
