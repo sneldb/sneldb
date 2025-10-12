@@ -1,10 +1,124 @@
-.hljs{display:block;overflow-x:auto;padding:0.5em;background:#1d1f21;color:#c5c8c6}
-.hljs-comment,.hljs-quote{color:#969896}
-.hljs-keyword,.hljs-selector-tag,.hljs-literal,.hljs-section,.hljs-link{color:#b294bb}
-.hljs-string,.hljs-title,.hljs-name,.hljs-type,.hljs-attribute{color:#b5bd68}
-.hljs-symbol,.hljs-bullet,.hljs-built_in,.hljs-addition{color:#81a2be}
-.hljs-variable,.hljs-template-variable,.hljs-class .hljs-title,.hljs-number{color:#de935f}
-.hljs-deletion{color:#cc6666}
-.hljs-emphasis{font-style:italic}
-.hljs-strong{font-weight:700}
+/* Light theme syntax highlighting (default) */
+:root, :root[data-theme="light"] {
+  --hljs-bg: transparent;
+  --hljs-color: #1f2937;
+  --hljs-comment: #6b7280;
+  --hljs-keyword: #7c3aed;
+  --hljs-string: #059669;
+  --hljs-number: #dc2626;
+  --hljs-attr: #2563eb;
+  --hljs-symbol: #0891b2;
+  --hljs-operator: #9333ea;
+  --hljs-event-type: #db2777;
+  --hljs-identifier: #374151;
+}
+
+/* Dark theme syntax highlighting */
+:root[data-theme="dark"] {
+  --hljs-bg: transparent;
+  --hljs-color: #e7e5e4;
+  --hljs-comment: #78716c;
+  --hljs-keyword: #fbbf24;
+  --hljs-string: #34d399;
+  --hljs-number: #fb923c;
+  --hljs-attr: #60a5fa;
+  --hljs-symbol: #22d3ee;
+  --hljs-operator: #c084fc;
+  --hljs-event-type: #f472b6;
+  --hljs-identifier: #d6d3d1;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --hljs-bg: transparent;
+    --hljs-color: #e7e5e4;
+    --hljs-comment: #78716c;
+    --hljs-keyword: #fbbf24;
+    --hljs-string: #34d399;
+    --hljs-number: #fb923c;
+    --hljs-attr: #60a5fa;
+    --hljs-symbol: #22d3ee;
+    --hljs-operator: #c084fc;
+    --hljs-event-type: #f472b6;
+    --hljs-identifier: #d6d3d1;
+  }
+}
+
+.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 0.5em;
+  background: var(--hljs-bg);
+  color: var(--hljs-color);
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--hljs-comment);
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section,
+.hljs-link {
+  color: var(--hljs-keyword);
+  font-weight: 600;
+}
+
+.hljs-string,
+.hljs-title,
+.hljs-name,
+.hljs-type {
+  color: var(--hljs-string);
+}
+
+.hljs-attr,
+.hljs-attribute {
+  color: var(--hljs-attr);
+}
+
+.hljs-symbol,
+.hljs-bullet,
+.hljs-built_in,
+.hljs-addition {
+  color: var(--hljs-symbol);
+}
+
+.hljs-variable,
+.hljs-template-variable,
+.hljs-class .hljs-title {
+  color: var(--hljs-identifier);
+}
+
+.hljs-number {
+  color: var(--hljs-number);
+}
+
+.hljs-operator,
+.hljs-punctuation {
+  color: var(--hljs-operator);
+}
+
+.hljs-event-type {
+  color: var(--hljs-event-type);
+  font-weight: 600;
+}
+
+.hljs-identifier {
+  color: var(--hljs-identifier);
+}
+
+.hljs-deletion {
+  color: #ef4444;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 700;
+}
 

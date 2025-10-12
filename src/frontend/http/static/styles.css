@@ -19,19 +19,19 @@
 }
 
 :root[data-theme="dark"] {
-  --primary: #6366f1;
-  --primary-hover: #818cf8;
-  --primary-light: #1e1b4b;
-  --secondary: #9ca3af;
+  --primary: #f59e0b;
+  --primary-hover: #fbbf24;
+  --primary-light: #451a03;
+  --secondary: #a8a29e;
   --success: #34d399;
   --danger: #f87171;
-  --bg-primary: #111827;
-  --bg-secondary: #1f2937;
-  --bg-tertiary: #374151;
-  --text-primary: #f9fafb;
-  --text-secondary: #9ca3af;
-  --border: #374151;
-  --border-focus: #6366f1;
+  --bg-primary: #1c1917;
+  --bg-secondary: #292524;
+  --bg-tertiary: #44403c;
+  --text-primary: #fafaf9;
+  --text-secondary: #a8a29e;
+  --border: #44403c;
+  --border-focus: #f59e0b;
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
   --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px 0 rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.4);
@@ -39,19 +39,19 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --primary: #6366f1;
-    --primary-hover: #818cf8;
-    --primary-light: #1e1b4b;
-    --secondary: #9ca3af;
+    --primary: #f59e0b;
+    --primary-hover: #fbbf24;
+    --primary-light: #451a03;
+    --secondary: #a8a29e;
     --success: #34d399;
     --danger: #f87171;
-    --bg-primary: #111827;
-    --bg-secondary: #1f2937;
-    --bg-tertiary: #374151;
-    --text-primary: #f9fafb;
-    --text-secondary: #9ca3af;
-    --border: #374151;
-    --border-focus: #6366f1;
+    --bg-primary: #1c1917;
+    --bg-secondary: #292524;
+    --bg-tertiary: #44403c;
+    --text-primary: #fafaf9;
+    --text-secondary: #a8a29e;
+    --border: #44403c;
+    --border-focus: #f59e0b;
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
     --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px 0 rgba(0, 0, 0, 0.3);
     --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.4);
@@ -317,7 +317,7 @@ textarea {
 }
 
 textarea::selection {
-  background: rgba(79, 70, 229, 0.2);
+  background: rgba(245, 158, 11, 0.2);
 }
 
 textarea::-webkit-scrollbar {
