@@ -130,10 +130,16 @@ async fn segment_aggregate_runner_count_unique_mixed_missing_and_empty() {
         .with_events(vec![e1, e2, e3, e4, e5])
         .create()
         .unwrap();
-    Flusher::new(mem, 50, &seg_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    Flusher::new(
+        mem,
+        50,
+        &seg_dir,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     let plan = make_plan(
         "evt5",
@@ -164,8 +170,9 @@ async fn segment_aggregate_runner_count_unique_mixed_missing_and_empty() {
     let events = sink.into_events(&plan);
     assert_eq!(events.len(), 1);
     let p = events[0].payload.as_object().unwrap();
-    // Storage treats empty string as missing on disk; unique set becomes {"u1","u2"}
-    assert_eq!(p["count_unique_user"], json!(2));
+    // With columnar storage, all fields written for all events (for proper column alignment)
+    // Missing and explicit empty both become "", so unique set is {"u1","u2",""}
+    assert_eq!(p["count_unique_user"], json!(3));
 }
 
 #[tokio::test]
@@ -203,10 +210,16 @@ async fn segment_aggregate_runner_min_max_numeric_preference() {
         .with_events(vec![e1, e2, e3])
         .create()
         .unwrap();
-    Flusher::new(mem, 60, &seg_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    Flusher::new(
+        mem,
+        60,
+        &seg_dir,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     let plan = make_plan(
         "evt6",
@@ -277,10 +290,16 @@ async fn segment_aggregate_runner_count_field_missing_is_zero() {
         .with_events(vec![e1, e2])
         .create()
         .unwrap();
-    Flusher::new(mem, 70, &seg_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    Flusher::new(
+        mem,
+        70,
+        &seg_dir,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     let plan = make_plan(
         "evt7",
@@ -346,10 +365,16 @@ async fn segment_aggregate_runner_since_ignored_in_aggregation() {
         .with_events(vec![e1, e2])
         .create()
         .unwrap();
-    Flusher::new(mem, 80, &seg_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    Flusher::new(
+        mem,
+        80,
+        &seg_dir,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // Set since far in the future; aggregator builder should skip special-field injection
     let plan = make_plan_with_since(
@@ -415,10 +440,16 @@ async fn segment_aggregate_runner_count_across_segments() {
         )
         .create()
         .unwrap();
-    Flusher::new(mem1, 1, &seg1_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    Flusher::new(
+        mem1,
+        1,
+        &seg1_dir,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     let mem2 = MemTableFactory::new()
         .with_capacity(10)
@@ -430,10 +461,16 @@ async fn segment_aggregate_runner_count_across_segments() {
         )
         .create()
         .unwrap();
-    Flusher::new(mem2, 2, &seg2_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    Flusher::new(
+        mem2,
+        2,
+        &seg2_dir,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // Plan: COUNT
     let plan = make_plan(
@@ -512,10 +549,16 @@ async fn segment_aggregate_runner_respects_where_predicate() {
         .with_events(events)
         .create()
         .unwrap();
-    Flusher::new(mem, 10, &seg_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    Flusher::new(
+        mem,
+        10,
+        &seg_dir,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // WHERE amount >= 7, COUNT
     let where_clause = Expr::Compare {
@@ -594,10 +637,16 @@ async fn segment_aggregate_runner_group_by_and_bucket_total() {
         .with_events(vec![e1, e2, e3])
         .create()
         .unwrap();
-    Flusher::new(mem, 20, &seg_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    Flusher::new(
+        mem,
+        20,
+        &seg_dir,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     let plan = make_plan(
         "order",
@@ -679,10 +728,16 @@ async fn segment_aggregate_runner_missing_groupby_field_emits_empty_string() {
         .with_events(vec![e])
         .create()
         .unwrap();
-    Flusher::new(mem, 30, &seg_dir, Arc::clone(&registry), Arc::new(tokio::sync::Mutex::new(())))
-        .flush()
-        .await
-        .unwrap();
+    Flusher::new(
+        mem,
+        30,
+        &seg_dir,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
 
     // GROUP BY country (missing), COUNT
     let plan = make_plan(

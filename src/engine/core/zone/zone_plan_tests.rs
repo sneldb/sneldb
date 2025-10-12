@@ -106,3 +106,49 @@ fn test_from_rows_constructs_zone_plan() {
     assert_eq!(plan.end_index, 1);
     assert_eq!(plan.events.len(), 2);
 }
+
+#[test]
+fn test_collect_unique_field_values_includes_empty_for_missing() {
+    // Test that collect_unique_field_values includes empty strings for missing fields
+    // This is critical for columnar storage alignment
+    let mut events = Factory::event().create_list(3);
+
+    // Event 0: has 'country' and 'score'
+    events[0].payload = json!({"country": "US", "score": 100});
+
+    // Event 1: has 'score' but missing 'country'
+    events[1].payload = json!({"score": 200});
+
+    // Event 2: has 'country' but missing 'score'
+    events[2].payload = json!({"country": "UK"});
+
+    let plan = ZonePlan::build_all(&events, 3, "uid-test".into(), 1)
+        .unwrap()
+        .remove(0);
+
+    let values = plan.collect_unique_field_values();
+
+    // 'country' should have 3 unique values: "US", "UK", and "" (empty for event 1)
+    let country_values = &values[&("uid-test".into(), "country".into())];
+    assert_eq!(
+        country_values.len(),
+        3,
+        "country should have 3 unique values"
+    );
+    assert!(country_values.contains("US"));
+    assert!(country_values.contains("UK"));
+    assert!(
+        country_values.contains(""),
+        "should contain empty string for missing field"
+    );
+
+    // 'score' should have 3 unique values: "100", "200", and "" (empty for event 2)
+    let score_values = &values[&("uid-test".into(), "score".into())];
+    assert_eq!(score_values.len(), 3, "score should have 3 unique values");
+    assert!(score_values.contains("100"));
+    assert!(score_values.contains("200"));
+    assert!(
+        score_values.contains(""),
+        "should contain empty string for missing field"
+    );
+}

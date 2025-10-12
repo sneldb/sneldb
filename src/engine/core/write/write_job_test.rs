@@ -1,6 +1,7 @@
 use crate::engine::core::{WriteJob, ZonePlan};
 use crate::test_helpers::factories::{EventFactory, ResolverFactory};
 use serde_json::json;
+use std::collections::HashSet;
 use tempfile::tempdir;
 
 #[test]
@@ -57,4 +58,62 @@ fn builds_jobs_for_zone_plan_with_events() {
             job.key.1
         );
     }
+}
+
+#[test]
+fn builds_jobs_with_empty_strings_for_missing_fields() {
+    // Test that columnar storage writes empty strings for missing fields
+    // This is critical for maintaining consistent column offsets
+    let event_type = "action";
+    let uid = "uid-action";
+
+    // First event has field 'country', second doesn't
+    let event1 = EventFactory::new()
+        .with("event_type", event_type)
+        .with("payload", json!({"country": "US", "score": 100}))
+        .create();
+
+    let event2 = EventFactory::new()
+        .with("event_type", event_type)
+        .with("payload", json!({"score": 200})) // Missing 'country'
+        .create();
+
+    let zone = ZonePlan {
+        id: 1,
+        start_index: 0,
+        end_index: 1,
+        events: vec![event1, event2],
+        uid: uid.to_string(),
+        event_type: event_type.to_string(),
+        segment_id: 1,
+    };
+
+    let resolver = ResolverFactory::new().with(event_type, uid).create();
+    let dir = tempdir().unwrap();
+    let jobs = WriteJob::build(&[zone], dir.path(), &resolver);
+
+    // Collect all unique field names
+    let mut field_names: HashSet<String> = HashSet::new();
+    for job in &jobs {
+        field_names.insert(job.key.1.clone());
+    }
+
+    // Verify 'country' field is present for BOTH events
+    assert!(field_names.contains("country"), "country field should be present");
+    assert!(field_names.contains("score"), "score field should be present");
+
+    // Count how many jobs exist for 'country' field
+    let country_jobs: Vec<_> = jobs.iter()
+        .filter(|j| j.key.1 == "country")
+        .collect();
+
+    assert_eq!(country_jobs.len(), 2, "Should have 2 country jobs (one per event)");
+
+    // One should be "US", one should be "" (empty string for missing field)
+    let country_values: HashSet<_> = country_jobs.iter()
+        .map(|j| j.value.as_str())
+        .collect();
+
+    assert!(country_values.contains("US"), "Should have US value");
+    assert!(country_values.contains(""), "Should have empty string for missing field");
 }

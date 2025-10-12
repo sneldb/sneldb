@@ -16,6 +16,13 @@ pub trait Condition: Send + Sync + Debug {
         // All current implementors override this method.
         false
     }
+
+    /// Fast path evaluation against a single event without materializing all fields.
+    /// All implementors must override this for optimal memtable query performance.
+    fn evaluate_event_direct(
+        &self,
+        accessor: &crate::engine::core::filter::direct_event_accessor::DirectEventAccessor,
+    ) -> bool;
 }
 
 /// Provides indexed access to field values for a candidate zone.
@@ -33,7 +40,9 @@ pub struct PreparedAccessor<'a> {
 }
 
 impl<'a> PreparedAccessor<'a> {
-    pub fn new(columns: &'a HashMap<String, crate::engine::core::column::column_values::ColumnValues>) -> Self {
+    pub fn new(
+        columns: &'a HashMap<String, crate::engine::core::column::column_values::ColumnValues>,
+    ) -> Self {
         let event_count = columns.values().next().map(|v| v.len()).unwrap_or(0);
         Self {
             columns,
@@ -115,6 +124,24 @@ impl Condition for NumericCondition {
             false
         }
     }
+
+    fn evaluate_event_direct(
+        &self,
+        accessor: &crate::engine::core::filter::direct_event_accessor::DirectEventAccessor,
+    ) -> bool {
+        if let Some(num) = accessor.get_field_as_i64(&self.field) {
+            match self.operation {
+                CompareOp::Gt => num > self.value,
+                CompareOp::Gte => num >= self.value,
+                CompareOp::Lt => num < self.value,
+                CompareOp::Lte => num <= self.value,
+                CompareOp::Eq => num == self.value,
+                CompareOp::Neq => num != self.value,
+            }
+        } else {
+            false
+        }
+    }
 }
 
 /// String comparison condition
@@ -159,6 +186,18 @@ impl Condition for StringCondition {
             false
         }
     }
+
+    fn evaluate_event_direct(
+        &self,
+        accessor: &crate::engine::core::filter::direct_event_accessor::DirectEventAccessor,
+    ) -> bool {
+        let val = accessor.get_field_value(&self.field);
+        match self.operation {
+            CompareOp::Eq => val == self.value,
+            CompareOp::Neq => val != self.value,
+            _ => false,
+        }
+    }
 }
 
 /// Logical combination of conditions
@@ -197,6 +236,23 @@ impl Condition for LogicalCondition {
                 .iter()
                 .any(|c| c.evaluate_at(accessor, index)),
             LogicalOp::Not => !self.conditions[0].evaluate_at(accessor, index),
+        }
+    }
+
+    fn evaluate_event_direct(
+        &self,
+        accessor: &crate::engine::core::filter::direct_event_accessor::DirectEventAccessor,
+    ) -> bool {
+        match self.operation {
+            LogicalOp::And => self
+                .conditions
+                .iter()
+                .all(|c| c.evaluate_event_direct(accessor)),
+            LogicalOp::Or => self
+                .conditions
+                .iter()
+                .any(|c| c.evaluate_event_direct(accessor)),
+            LogicalOp::Not => !self.conditions[0].evaluate_event_direct(accessor),
         }
     }
 }

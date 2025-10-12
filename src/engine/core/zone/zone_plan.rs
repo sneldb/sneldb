@@ -93,15 +93,33 @@ impl ZonePlan {
     pub fn collect_unique_field_values(&self) -> HashMap<(String, String), HashSet<String>> {
         let mut field_values = HashMap::new();
 
+        // Optimization: collect all field names once for the entire zone
+        // This is required for columnar storage - all columns must have same row count
+        // Missing fields will be stored as empty strings
+        let mut all_field_names = HashSet::new();
+        all_field_names.insert("context_id".to_string());
+        all_field_names.insert("event_type".to_string());
+        all_field_names.insert("timestamp".to_string());
+
+        // Collect dynamic field names from all events in one pass
+
         for event in &self.events {
-            let all_fields = event.collect_all_fields();
-            for field in &all_fields {
+            if let Some(obj) = event.payload.as_object() {
+                for key in obj.keys() {
+                    all_field_names.insert(key.clone());
+                }
+            }
+        }
+
+        // Now iterate through all fields and collect values from all events
+        // (including empty strings for missing fields)
+        for field in &all_field_names {
+            let key = (self.uid.clone(), field.clone());
+            let values = field_values.entry(key).or_insert_with(HashSet::new);
+
+            for event in &self.events {
                 let value = event.get_field_value(field);
-                let key = (self.uid.clone(), field.clone());
-                field_values
-                    .entry(key)
-                    .or_insert_with(HashSet::new)
-                    .insert(value);
+                values.insert(value);
             }
         }
 

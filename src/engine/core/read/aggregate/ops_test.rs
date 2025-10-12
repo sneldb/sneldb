@@ -107,8 +107,8 @@ fn count_unique_collects_unique_values() {
     agg.update(0, &cols);
     agg.update(1, &cols);
     agg.update(2, &cols);
-    agg.update(3, &cols);
-    assert_eq!(agg.finalize(), AggOutput::CountUnique(3));
+    agg.update(3, &cols); // empty string at index 3
+    assert_eq!(agg.finalize(), AggOutput::CountUnique(3)); // "u1", "u2", and ""
 }
 
 #[test]
