@@ -666,6 +666,7 @@ async fn aggregate_sink_event_count_unique_empty_and_missing_collapsed() {
     let plan = make_plan("evt", None).await;
     let events = sink.into_events(&plan);
     let p = events[0].payload.as_object().unwrap();
+    // Both missing and explicit empty become "" - they're the same unique value
     assert_eq!(p["count_unique_user"], json!(1));
 }
 

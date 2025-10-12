@@ -1,9 +1,9 @@
 use crate::engine::core::filter::condition::{FieldAccessor, PreparedAccessor};
+use crate::engine::core::filter::direct_event_accessor::DirectEventAccessor;
 use crate::engine::core::{
     CandidateZone, Condition, Event, EventBuilder, LogicalCondition, NumericCondition,
     StringCondition,
 };
-use std::collections::HashMap;
 use std::thread;
 use tracing::info;
 
@@ -69,35 +69,17 @@ impl ConditionEvaluator {
         self.conditions
     }
 
-    /// Evaluates all conditions against a single event
+    /// Evaluates all conditions against a single event using direct field access
+    #[inline]
     pub fn evaluate_event(&self, event: &Event) -> bool {
-        if tracing::enabled!(tracing::Level::INFO) {
-            info!(target: "sneldb::evaluator", "Evaluating single event");
-        }
-
-        let mut event_values = HashMap::new();
-        event_values.insert("event_type".to_string(), vec![event.event_type.clone()]);
-        event_values.insert("context_id".to_string(), vec![event.context_id.clone()]);
-        event_values.insert("timestamp".to_string(), vec![event.timestamp.to_string()]);
-
-        if let Some(obj) = event.payload.as_object() {
-            for (key, _) in obj {
-                event_values.insert(key.clone(), vec![event.get_field_value(key)]);
+        let accessor = DirectEventAccessor::new(event);
+        // Short-circuit: if any condition fails, return false immediately
+        for condition in &self.conditions {
+            if !condition.evaluate_event_direct(&accessor) {
+                return false;
             }
         }
-
-        if tracing::enabled!(tracing::Level::INFO) {
-            info!(
-                target: "sneldb::evaluator",
-                "Event values: {:?}, Evaluating against {} condition(s)",
-                event_values,
-                self.conditions.len()
-            );
-        }
-
-        self.conditions
-            .iter()
-            .all(|condition| condition.evaluate(&event_values))
+        true
     }
 
     pub fn evaluate_zones(&self, zones: Vec<CandidateZone>) -> Vec<Event> {

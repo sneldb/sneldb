@@ -27,8 +27,30 @@ impl WriteJob {
         );
 
         for zone_plan in zone_plans {
+            // Optimization: collect all field names once per zone
+            // This is required for columnar storage - all columns must have same row count
+            let mut all_fields = std::collections::HashSet::new();
+            all_fields.insert("context_id".to_string());
+            all_fields.insert("event_type".to_string());
+            all_fields.insert("timestamp".to_string());
+
             for event in &zone_plan.events {
-                jobs.extend(Self::from_event(event, zone_plan.id, segment_dir, resolver));
+                if let Some(obj) = event.payload.as_object() {
+                    for key in obj.keys() {
+                        all_fields.insert(key.clone());
+                    }
+                }
+            }
+
+            // Now create jobs for each event using the cached field list
+            for event in &zone_plan.events {
+                jobs.extend(Self::from_event_with_fields(
+                    event,
+                    &all_fields,
+                    zone_plan.id,
+                    segment_dir,
+                    resolver,
+                ));
             }
         }
 
@@ -41,8 +63,9 @@ impl WriteJob {
         jobs
     }
 
-    fn from_event(
+    fn from_event_with_fields(
         event: &Event,
+        fields: &std::collections::HashSet<String>,
         zone_id: u32,
         segment_dir: &Path,
         resolver: &UidResolver,
@@ -59,16 +82,16 @@ impl WriteJob {
             return jobs;
         };
 
-        for field in event.collect_all_fields() {
-            let value = event.get_field_value(&field);
-            let path = segment_dir.join(format!("{}_{}.col", uid, &field));
-            let key = (event_type.clone(), field);
+        for field in fields {
+            let value = event.get_field_value(field);
+            let path = segment_dir.join(format!("{}_{}.col", uid, field));
+            let key = (event_type.clone(), field.clone());
 
             jobs.push(WriteJob {
                 key,
                 zone_id,
                 path,
-                value: value.to_owned(),
+                value,
             });
         }
 
