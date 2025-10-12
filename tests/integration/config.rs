@@ -26,6 +26,10 @@ pub struct WalConfig {
     pub buffer_size: usize,
     pub flush_each_write: bool,
     pub fsync_every_n: Option<usize>,
+    pub conservative_mode: bool,
+    pub archive_dir: String,
+    pub compression_level: i32,
+    pub compression_algorithm: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -92,6 +96,10 @@ fn default_test_config(paths: &TestPaths) -> TestConfig {
             dir: format!("{}/wal", paths.base_dir),
             flush_each_write: true,
             fsync_every_n: None,
+            conservative_mode: false,
+            archive_dir: format!("{}/wal/archived", paths.base_dir),
+            compression_level: 3,
+            compression_algorithm: "zstd".to_string(),
         },
         engine: EngineConfig {
             flush_threshold: 2,

@@ -6,6 +6,10 @@ buffer_size = 8388608
 dir = "../data/wal/"
 flush_each_write = false
 fsync_every_n = 2000
+conservative_mode = true
+archive_dir = "../data/wal/archived/"
+compression_level = 3
+compression_algorithm = "zstd"
 
 [engine]
 flush_threshold =32000

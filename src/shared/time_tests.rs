@@ -1,5 +1,6 @@
-use crate::shared::time::{TimeKind, TimeParser};
+use crate::shared::time::{TimeKind, TimeParser, format_timestamp, now};
 use chrono::{TimeZone, Utc};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
 fn parses_rfc3339_z_to_epoch_seconds() {
@@ -104,4 +105,133 @@ fn normalize_json_value_variants() {
     let mut v = serde_json::json!({"x":1});
     let err = TimeParser::normalize_json_value(&mut v, TimeKind::DateTime).unwrap_err();
     assert!(err.contains("Time field must be a number or string"));
+}
+
+#[test]
+fn test_now_returns_valid_timestamp() {
+    let timestamp = now();
+
+    // Should be a reasonable timestamp (after 2020, before 2100)
+    assert!(timestamp > 1_600_000_000, "Timestamp should be after 2020");
+    assert!(timestamp < 4_000_000_000, "Timestamp should be before 2100");
+
+    // Should be close to system time
+    let system_now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    assert!(
+        timestamp.abs_diff(system_now) < 2,
+        "Timestamp should be within 2 seconds of system time"
+    );
+}
+
+#[test]
+fn test_now_is_monotonic() {
+    let t1 = now();
+    std::thread::sleep(std::time::Duration::from_millis(10));
+    let t2 = now();
+
+    assert!(t2 >= t1, "Timestamps should be monotonically increasing");
+}
+
+#[test]
+fn test_format_timestamp_rfc3339() {
+    // Known timestamp: 2023-11-14T22:13:20Z
+    let timestamp = 1700000000;
+    let formatted = format_timestamp(timestamp);
+
+    assert_eq!(formatted, "2023-11-14T22:13:20+00:00");
+}
+
+#[test]
+fn test_format_timestamp_zero() {
+    let formatted = format_timestamp(0);
+    assert_eq!(formatted, "1970-01-01T00:00:00+00:00");
+}
+
+#[test]
+fn test_format_timestamp_various_times() {
+    // Test various timestamps
+    let test_cases = vec![
+        (1_000_000_000, "2001-09-09T01:46:40+00:00"),
+        (1_500_000_000, "2017-07-14T02:40:00+00:00"),
+        (1_700_000_000, "2023-11-14T22:13:20+00:00"),
+    ];
+
+    for (timestamp, expected) in test_cases {
+        let formatted = format_timestamp(timestamp);
+        assert_eq!(
+            formatted, expected,
+            "Timestamp {} should format to {}",
+            timestamp, expected
+        );
+    }
+}
+
+#[test]
+fn test_format_timestamp_invalid() {
+    // Very large timestamp that might be invalid
+    let timestamp = u64::MAX;
+    let formatted = format_timestamp(timestamp);
+
+    // Should handle gracefully, either format or return error string
+    assert!(
+        formatted.contains("invalid") || formatted.contains("+"),
+        "Should either format or indicate invalid: {}",
+        formatted
+    );
+}
+
+#[test]
+fn test_format_timestamp_roundtrip() {
+    // Test that formatting and parsing work together
+    let original = 1700000000u64;
+    let formatted = format_timestamp(original);
+    let parsed = TimeParser::parse_str_to_epoch_seconds(&formatted, TimeKind::DateTime).unwrap();
+
+    assert_eq!(
+        parsed, original as i64,
+        "Roundtrip should preserve timestamp"
+    );
+}
+
+#[test]
+fn test_now_and_format_together() {
+    let timestamp = now();
+    let formatted = format_timestamp(timestamp);
+
+    // Should produce valid RFC3339 format
+    assert!(formatted.contains("T"), "Should contain T separator");
+    assert!(
+        formatted.contains("+") || formatted.contains("Z"),
+        "Should contain timezone"
+    );
+
+    // Should be parseable back
+    let parsed = TimeParser::parse_str_to_epoch_seconds(&formatted, TimeKind::DateTime);
+    assert!(parsed.is_some(), "Formatted timestamp should be parseable");
+}
+
+#[test]
+fn test_format_timestamp_recent() {
+    // Test with a recent timestamp (2024)
+    let timestamp = 1704067200; // 2024-01-01T00:00:00Z
+    let formatted = format_timestamp(timestamp);
+
+    assert!(
+        formatted.starts_with("2024-01-01"),
+        "Should format 2024 correctly"
+    );
+}
+
+#[test]
+fn test_format_timestamp_consistency() {
+    // Same timestamp should always format the same way
+    let timestamp = 1700000000;
+    let formatted1 = format_timestamp(timestamp);
+    let formatted2 = format_timestamp(timestamp);
+
+    assert_eq!(formatted1, formatted2, "Formatting should be deterministic");
 }

@@ -1,4 +1,5 @@
 use chrono::{DateTime, NaiveDate, TimeZone, Utc};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Logical kind of time field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,4 +104,21 @@ fn num_digits_u128(mut x: u128) -> u32 {
         c += 1;
     }
     c
+}
+
+/// Get current Unix timestamp in seconds
+pub fn now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+/// Format a Unix timestamp to a human-readable string (RFC3339)
+pub fn format_timestamp(timestamp: u64) -> String {
+    let dt = Utc.timestamp_opt(timestamp as i64, 0);
+    match dt.single() {
+        Some(dt) => dt.to_rfc3339(),
+        None => format!("<invalid timestamp: {}>", timestamp),
+    }
 }

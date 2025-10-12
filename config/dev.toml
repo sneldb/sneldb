@@ -7,6 +7,12 @@ dir = "../data/wal/"
 flush_each_write = true
 fsync_every_n = 1024
 
+# Conservative mode: archive WAL files before deletion
+conservative_mode = true
+archive_dir = "../data/wal/archived/"
+compression_level = 3
+compression_algorithm = "zstd"
+
 [engine]
 flush_threshold = 1
 data_dir = "../data/cols"

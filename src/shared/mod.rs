@@ -6,3 +6,5 @@ pub mod time;
 
 #[cfg(test)]
 pub mod storage_header_tests;
+#[cfg(test)]
+pub mod time_tests;
