@@ -14,7 +14,7 @@ compression_level = 3
 compression_algorithm = "zstd"
 
 [engine]
-flush_threshold = 1
+fill_factor = 1
 data_dir = "../data/cols"
 index_dir = "../data/index/"
 shard_count = 1

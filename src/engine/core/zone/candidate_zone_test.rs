@@ -33,11 +33,11 @@ fn sets_zone_values_correctly() {
 #[test]
 fn creates_all_zones_for_segment_according_to_fill_factor() {
     let zones = CandidateZone::create_all_zones_for_segment("segment-999");
-    assert_eq!(zones.len(), CONFIG.engine.fill_factor());
+    assert_eq!(zones.len(), CONFIG.engine.fill_factor);
     assert_eq!(zones[0].zone_id, 0);
     assert_eq!(
         zones.last().unwrap().zone_id,
-        (CONFIG.engine.fill_factor() - 1) as u32
+        (CONFIG.engine.fill_factor - 1) as u32
     );
     assert!(zones.iter().all(|z| z.segment_id == "segment-999"));
 }

@@ -1,4 +1,5 @@
 use crate::engine::core::{Flusher, ZoneCursorLoader};
+use crate::shared::config::CONFIG;
 use crate::test_helpers::factories::{EventFactory, MemTableFactory, SchemaRegistryFactory};
 use serde_json::json;
 use std::sync::Arc;
@@ -76,7 +77,10 @@ async fn test_zone_cursor_loader_e2e() {
     );
     let cursors = loader.load_all().await.expect("load_all failed");
 
-    assert_eq!(cursors.len(), 2);
+    let num_events: usize = 3;
+    let zone_size: usize = CONFIG.engine.event_per_zone;
+    let expected_zones: usize = (num_events + zone_size - 1) / zone_size;
+    assert_eq!(cursors.len(), expected_zones);
 
     let mut all_rows = vec![];
     for mut cursor in cursors.clone() {
@@ -100,5 +104,5 @@ async fn test_zone_cursor_loader_e2e() {
     assert_eq!(all_rows[0].timestamp, "123456");
     assert_eq!(all_rows[1].timestamp, "123457");
 
-    assert!(cursors.len() == 2);
+    assert_eq!(cursors.len(), expected_zones);
 }

@@ -616,10 +616,11 @@ async fn xor_pruner_falls_back_to_full_field_filter_when_zxf_missing() {
     };
     let sel = ZoneSelectorBuilder::new(ctx).build();
     let zones = sel.select_for_segment("segment-001");
-    let all =
-        crate::engine::core::zone::candidate_zone::CandidateZone::create_all_zones_for_segment(
-            "segment-001",
-        );
+    let all = crate::engine::core::zone::candidate_zone::CandidateZone::create_all_zones_for_segment_from_meta(
+        &shard_dir,
+        "segment-001",
+        &uid,
+    );
     assert_eq!(zones.len(), all.len());
 }
 

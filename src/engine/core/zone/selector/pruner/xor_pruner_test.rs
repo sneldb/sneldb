@@ -128,8 +128,10 @@ async fn xor_uses_zxf_primary_and_xf_fallback_and_skips_on_miss() {
     let xa1 = sel_a.select_for_segment("segment-001");
     assert_eq!(
         xa1.len(),
-        crate::engine::core::zone::candidate_zone::CandidateZone::create_all_zones_for_segment(
-            "segment-001"
+        crate::engine::core::zone::candidate_zone::CandidateZone::create_all_zones_for_segment_from_meta(
+            &shard_dir,
+            "segment-001",
+            &uid
         )
         .len()
     );

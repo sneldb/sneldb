@@ -113,7 +113,8 @@ impl WalHandle {
                             "Entry appended to WAL"
                         );
 
-                        if writer.entries_written >= CONFIG.engine.flush_threshold as u64 {
+                        let capacity = CONFIG.engine.fill_factor * CONFIG.engine.event_per_zone;
+                        if writer.entries_written >= capacity as u64 {
                             if let Err(err) = writer.rotate_log_file() {
                                 error!(
                                     target: "wal_handle::spawn_wal_thread",

@@ -34,22 +34,15 @@ pub struct WalConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct EngineConfig {
-    pub flush_threshold: usize,
     pub data_dir: String,
     pub shard_count: usize,
     pub index_dir: String,
+    pub fill_factor: usize,
     pub event_per_zone: usize,
     pub compaction_threshold: usize,
     pub compaction_interval: u64,
     pub sys_io_threshold: usize,
     pub max_inflight_passives: Option<usize>,
-}
-
-impl EngineConfig {
-    /// Calculates the fill factor as the ceiling of flush threshold divided by events per zone
-    pub fn fill_factor(&self) -> usize {
-        (self.flush_threshold + self.event_per_zone - 1) / self.event_per_zone
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -87,8 +80,10 @@ use std::env;
 pub fn load_settings() -> Result<Settings, config::ConfigError> {
     let config_path = env::var("SNELDB_CONFIG").unwrap_or_else(|_| "config".to_string());
 
-    config::Config::builder()
+    let mut settings: Settings = config::Config::builder()
         .add_source(config::File::with_name(&config_path))
         .build()?
-        .try_deserialize()
+        .try_deserialize()?;
+
+    Ok(settings)
 }

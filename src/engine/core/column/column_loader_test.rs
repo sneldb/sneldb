@@ -1,4 +1,5 @@
 use crate::engine::core::{ColumnLoader, ZoneWriter};
+use crate::shared::config::CONFIG;
 use crate::test_helpers::factories::{
     CandidateZoneFactory, EventFactory, SchemaRegistryFactory, ZonePlannerFactory,
 };
@@ -74,8 +75,10 @@ async fn loads_column_values_for_zone() {
     assert!(result.contains_key("device"));
 
     let devices = result.get("device").unwrap();
-
-    assert_eq!(devices.len(), 2);
+    let expected_len = std::cmp::min(CONFIG.engine.event_per_zone, 2);
+    assert_eq!(devices.len(), expected_len);
     assert!(devices.get_str_at(0).unwrap() == "mobile");
-    assert!(devices.get_str_at(1).unwrap() == "web");
+    if expected_len > 1 {
+        assert!(devices.get_str_at(1).unwrap() == "web");
+    }
 }

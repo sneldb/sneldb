@@ -14,11 +14,11 @@ compression_level = 3
 compression_algorithm = "zstd"
 
 [engine]
-flush_threshold = 3
+fill_factor = 3
 data_dir = "../data/cols"
 index_dir = "../data/index/"
 shard_count = 3
-event_per_zone = 2
+event_per_zone = 1
 compaction_threshold = 8
 compaction_interval = 300
 sys_io_threshold = 10

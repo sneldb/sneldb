@@ -26,7 +26,7 @@ impl ShardMessageFactory {
             tx,
             Arc::clone(&self.registry),
             Arc::new(tokio::sync::Mutex::new(MemTable::new(
-                CONFIG.engine.flush_threshold,
+                CONFIG.engine.fill_factor * CONFIG.engine.event_per_zone,
             ))),
         )
     }

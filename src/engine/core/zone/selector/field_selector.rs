@@ -30,6 +30,13 @@ impl<'a> ZoneSelector for FieldSelector<'a> {
             return Vec::new();
         };
         if self.plan.value.is_none() {
+            if let Some(uid) = &self.plan.uid {
+                return CandidateZone::create_all_zones_for_segment_from_meta(
+                    &self.qplan.segment_base_dir,
+                    segment_id,
+                    uid,
+                );
+            }
             return CandidateZone::create_all_zones_for_segment(segment_id);
         }
 

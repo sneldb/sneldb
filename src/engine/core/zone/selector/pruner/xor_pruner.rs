@@ -45,9 +45,13 @@ impl<'a> XorPruner<'a> {
                     match self.artifacts.load_xf(segment_id, uid, column) {
                         Ok(filter) => {
                             if filter.contains_value(value) {
-                                return Some(CandidateZone::create_all_zones_for_segment(
-                                    segment_id,
-                                ));
+                                return Some(
+                                    CandidateZone::create_all_zones_for_segment_from_meta(
+                                        self.artifacts.base_dir,
+                                        segment_id,
+                                        uid,
+                                    ),
+                                );
                             }
                             None
                         }
@@ -60,7 +64,11 @@ impl<'a> XorPruner<'a> {
                 match self.artifacts.load_xf(segment_id, uid, column) {
                     Ok(filter) => {
                         if filter.contains_value(value) {
-                            return Some(CandidateZone::create_all_zones_for_segment(segment_id));
+                            return Some(CandidateZone::create_all_zones_for_segment_from_meta(
+                                self.artifacts.base_dir,
+                                segment_id,
+                                uid,
+                            ));
                         }
                         None
                     }
