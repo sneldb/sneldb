@@ -38,7 +38,7 @@ impl ZoneXorFilterIndex {
         };
         match value_to_string(value) {
             Some(s) => {
-                let h = hash64(&s);
+                let h = crate::shared::hash::stable_hash64(&s);
                 filter.contains(&h)
             }
             None => false,
@@ -49,7 +49,7 @@ impl ZoneXorFilterIndex {
         let Some(s) = value_to_string(value) else {
             return Vec::new();
         };
-        let h = hash64(&s);
+        let h = crate::shared::hash::stable_hash64(&s);
         self.filters
             .iter()
             .filter_map(|(z, f)| if f.contains(&h) { Some(*z) } else { None })
@@ -85,7 +85,10 @@ impl ZoneXorFilterIndex {
 
             values.sort();
             values.dedup();
-            let hashes = values.into_iter().map(|s| hash64(&s)).collect::<Vec<u64>>();
+            let hashes = values
+                .into_iter()
+                .map(|s| crate::shared::hash::stable_hash64(&s))
+                .collect::<Vec<u64>>();
             match BinaryFuse8::try_from_iterator(hashes.into_iter()) {
                 Ok(filter) => index.put_zone_filter(zone.id, filter),
                 Err(e) => {
@@ -200,13 +203,7 @@ fn value_to_string(value: &Value) -> Option<String> {
     }
 }
 
-fn hash64(s: &str) -> u64 {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let mut hasher = DefaultHasher::new();
-    s.hash(&mut hasher);
-    hasher.finish()
-}
+// Removed local hasher; use crate::shared::hash::stable_hash64
 
 /// Builds and writes one .zxf per field for the given zone plans
 pub fn build_all_zxf(zone_plans: &[ZonePlan], segment_dir: &Path) -> std::io::Result<()> {

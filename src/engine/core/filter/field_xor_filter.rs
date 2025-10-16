@@ -1,9 +1,7 @@
 use crate::engine::core::ZonePlan;
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 use serde_json::Value;
-use std::collections::hash_map::DefaultHasher;
 use std::fs::OpenOptions;
-use std::hash::{Hash, Hasher};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use tracing::{debug, info};
@@ -24,11 +22,7 @@ impl FieldXorFilter {
         );
         let hashes: Vec<u64> = values
             .iter()
-            .map(|s| {
-                let mut hasher = DefaultHasher::new();
-                s.hash(&mut hasher);
-                hasher.finish()
-            })
+            .map(|s| crate::shared::hash::stable_hash64(s))
             .collect();
 
         let filter = BinaryFuse8::try_from_iterator(hashes.iter().cloned())
@@ -61,9 +55,8 @@ impl FieldXorFilter {
     }
 
     pub fn contains(&self, value: &str) -> bool {
-        let mut hasher = DefaultHasher::new();
-        value.hash(&mut hasher);
-        self.inner.contains(&hasher.finish())
+        let h = crate::shared::hash::stable_hash64(&value);
+        self.inner.contains(&h)
     }
 
     pub fn contains_value(&self, value: &Value) -> bool {
