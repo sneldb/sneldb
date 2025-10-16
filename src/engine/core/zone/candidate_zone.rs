@@ -25,7 +25,7 @@ impl CandidateZone {
     }
 
     pub fn create_all_zones_for_segment(segment_id: &str) -> Vec<Self> {
-        let count = CONFIG.engine.fill_factor();
+        let count = CONFIG.engine.fill_factor;
         info!(
             target: "sneldb::candidate_zone",
             %segment_id,

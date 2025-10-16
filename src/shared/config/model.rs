@@ -38,6 +38,8 @@ pub struct EngineConfig {
     pub data_dir: String,
     pub shard_count: usize,
     pub index_dir: String,
+    #[serde(default)]
+    pub fill_factor: usize,
     pub event_per_zone: usize,
     pub compaction_threshold: usize,
     pub compaction_interval: u64,
@@ -45,12 +47,8 @@ pub struct EngineConfig {
     pub max_inflight_passives: Option<usize>,
 }
 
-impl EngineConfig {
-    /// Calculates the fill factor as the ceiling of flush threshold divided by events per zone
-    pub fn fill_factor(&self) -> usize {
-        (self.flush_threshold + self.event_per_zone - 1) / self.event_per_zone
-    }
-}
+// Removed fill_factor() method; `fill_factor` is now provided via config and
+// `flush_threshold` is derived from it during settings load when present.
 
 #[derive(Debug, Deserialize)]
 pub struct QueryConfig {
@@ -87,8 +85,21 @@ use std::env;
 pub fn load_settings() -> Result<Settings, config::ConfigError> {
     let config_path = env::var("SNELDB_CONFIG").unwrap_or_else(|_| "config".to_string());
 
-    config::Config::builder()
+    let mut settings: Settings = config::Config::builder()
         .add_source(config::File::with_name(&config_path))
         .build()?
-        .try_deserialize()
+        .try_deserialize()?;
+
+    // If fill_factor is provided (non-zero), derive flush_threshold from it.
+    // Otherwise, compute fill_factor from existing flush_threshold for backward compatibility.
+    if settings.engine.fill_factor > 0 {
+        settings.engine.flush_threshold =
+            settings.engine.fill_factor * settings.engine.event_per_zone;
+    } else {
+        settings.engine.fill_factor =
+            (settings.engine.flush_threshold + settings.engine.event_per_zone - 1)
+                / settings.engine.event_per_zone;
+    }
+
+    Ok(settings)
 }

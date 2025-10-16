@@ -225,7 +225,7 @@
   {
     "name": "segment_memory_hybrid_query",
     "config": {
-      "engine": { "flush_threshold": 1 }
+      "engine": { "fill_factor": 1 }
     },
     "input_commands": [
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"status\": \"string\" }",
@@ -668,7 +668,7 @@
   ,
   {
     "name": "query_limit_memtable_only_two",
-    "config": { "engine": { "flush_threshold": 100 } },
+    "config": { "engine": { "fill_factor": 100 } },
     "input_commands": [
       "DEFINE limit_mem_only FIELDS { \"status\": \"string\" }",
       "STORE limit_mem_only FOR u1 PAYLOAD {\"status\":\"ok\"}",
@@ -684,7 +684,7 @@
   ,
   {
     "name": "query_limit_memtable_only_two_same_shard",
-    "config": { "engine": { "flush_threshold": 100 } },
+    "config": { "engine": { "fill_factor": 100 } },
     "input_commands": [
       "DEFINE limit_mem_only FIELDS { \"status\": \"int\" }",
       "STORE limit_mem_only FOR u1 PAYLOAD {\"status\":400}",
@@ -714,7 +714,7 @@
   ,
   {
     "name": "query_limit_equal_to_total",
-    "config": { "engine": { "flush_threshold": 100 } },
+    "config": { "engine": { "fill_factor": 100 } },
     "input_commands": [
       "DEFINE limit_eq_total FIELDS { \"status\": \"string\" }",
       "STORE limit_eq_total FOR c1 PAYLOAD {\"status\":\"ok\"}",
@@ -729,7 +729,7 @@
   ,
   {
     "name": "query_limit_greater_than_total",
-    "config": { "engine": { "flush_threshold": 100 } },
+    "config": { "engine": { "fill_factor": 100 } },
     "input_commands": [
       "DEFINE limit_gt_total FIELDS { \"status\": \"string\" }",
       "STORE limit_gt_total FOR d1 PAYLOAD {\"status\":\"ok\"}",
@@ -1381,7 +1381,7 @@
   {
     "name": "query_hits_passive_memtable",
     "config": {
-      "engine": { "flush_threshold": 1 }
+      "engine": { "fill_factor": 1 }
     },
     "input_commands": [
       "DEFINE warm_path FIELDS { \"device\": \"string\" }",
@@ -1397,7 +1397,7 @@
   },
   {
     "name": "wal_reload_after_restart",
-    "config": { "engine": { "flush_threshold": 100 }, "wal": { "enabled": true } },
+  "config": { "engine": { "fill_factor": 100 }, "wal": { "enabled": true } },
     "input_commands": [
       "DEFINE login FIELDS { \"device\": \"string\" }",
       "STORE login FOR u1 PAYLOAD {\"device\":\"android\"}",
@@ -1411,7 +1411,7 @@
   ,
   {
     "name": "wal_recover_no_flush",
-    "config": { "engine": { "flush_threshold": 100 }, "wal": { "enabled": true } },
+  "config": { "engine": { "fill_factor": 100 }, "wal": { "enabled": true } },
     "input_commands": [
       "DEFINE login FIELDS { \"device\": \"string\" }",
       "STORE login FOR u1 PAYLOAD {\"device\":\"android\"}",
@@ -1425,7 +1425,7 @@
   ,
   {
     "name": "wal_disabled_no_recovery",
-    "config": { "engine": { "flush_threshold": 100 }, "wal": { "enabled": false} },
+  "config": { "engine": { "fill_factor": 100 }, "wal": { "enabled": false} },
     "input_commands": [
       "DEFINE login FIELDS { \"device\": \"string\" }",
       "STORE login FOR u1 PAYLOAD {\"device\":\"android\"}",
@@ -1439,7 +1439,7 @@
   ,
   {
     "name": "wal_multi_log_recovery",
-    "config": { "engine": { "flush_threshold": 2 }, "wal": { "enabled": true } },
+  "config": { "engine": { "fill_factor": 2 }, "wal": { "enabled": true } },
     "input_commands": [
       "DEFINE evt FIELDS { \"v\": \"int\" }",
       "STORE evt FOR a PAYLOAD {\"v\":1}",
@@ -1455,7 +1455,7 @@
   ,
   {
     "name": "wal_recover_during_pending_flush",
-    "config": { "engine": { "flush_threshold": 1 }, "wal": { "enabled": true } },
+  "config": { "engine": { "fill_factor": 1 }, "wal": { "enabled": true } },
     "input_commands": [
       "DEFINE evt FIELDS { \"v\": \"int\" }",
       "STORE evt FOR a PAYLOAD {\"v\":1}",
@@ -1469,7 +1469,7 @@
   ,
   {
     "name": "wal_flush_then_restart_segment_only",
-    "config": { "engine": { "flush_threshold": 2 }, "wal": { "enabled": true } },
+  "config": { "engine": { "fill_factor": 2 }, "wal": { "enabled": true } },
     "input_commands": [
       "DEFINE order FIELDS { \"id\": \"int\" }",
       "STORE order FOR c1 PAYLOAD {\"id\":1}",
@@ -1484,7 +1484,7 @@
   ,
   {
     "name": "wal_recover_multi_shard",
-    "config": { "engine": { "flush_threshold": 100, "shard_count": 2 }, "wal": { "enabled": true } },
+  "config": { "engine": { "fill_factor": 100, "shard_count": 2 }, "wal": { "enabled": true } },
     "input_commands": [
       "DEFINE ping FIELDS { \"x\": \"int\" }",
       "STORE ping FOR shard-a PAYLOAD {\"x\":1}",
@@ -1500,7 +1500,7 @@
   {
     "name": "wal_durable_flush_each_write",
     "config": {
-      "engine": { "flush_threshold": 100 },
+      "engine": { "fill_factor": 100 },
       "wal": { "enabled": true, "buffered": true, "flush_each_write": true, "fsync": false }
     },
     "input_commands": [
@@ -1517,7 +1517,7 @@
   {
     "name": "wal_fsync_every_n_without_flush_each_write",
     "config": {
-      "engine": { "flush_threshold": 100 },
+      "engine": { "fill_factor": 100 },
       "wal": { "enabled": true, "buffered": true, "flush_each_write": false, "fsync": true, "fsync_every_n": 1 }
     },
     "input_commands": [
@@ -1685,7 +1685,7 @@
 
   {
     "name": "query_order_by_large_offset",
-    "config": { "engine": { "flush_threshold": 3 } },
+    "config": { "engine": { "fill_factor": 3 } },
     "input_commands": [
       "DEFINE large FIELDS { \"val\": \"int\" }",
       "STORE large FOR l1 PAYLOAD {\"val\":1}",
