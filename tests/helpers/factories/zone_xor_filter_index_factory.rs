@@ -37,7 +37,10 @@ impl ZoneXorFilterIndexFactory {
             let mut v = values;
             v.sort();
             v.dedup();
-            let hashes = v.into_iter().map(|s| hash64(&s)).collect::<Vec<u64>>();
+            let hashes = v
+                .into_iter()
+                .map(|s| crate::shared::hash::stable_hash64(&s))
+                .collect::<Vec<u64>>();
             let filter = BinaryFuse8::try_from_iterator(hashes.into_iter())
                 .expect("failed to build BinaryFuse8");
             idx.put_zone_filter(zone_id, filter);
@@ -46,10 +49,4 @@ impl ZoneXorFilterIndexFactory {
     }
 }
 
-fn hash64(s: &str) -> u64 {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let mut hasher = DefaultHasher::new();
-    s.hash(&mut hasher);
-    hasher.finish()
-}
+// Use the shared stable hasher to match production code
