@@ -66,17 +66,15 @@ impl<'a> ZoneSelectorBuilder<'a> {
                 })
             }
             "context_id" => {
-                let Some(uid) = self.inputs.plan.uid.as_deref() else {
-                    return Box::new(AllZonesSelector {});
-                };
                 let event_type = self
                     .inputs
                     .query_plan
                     .event_type_plan()
                     .and_then(|p| p.value.as_ref().and_then(|v| v.as_str()));
                 let context_id = self.inputs.plan.value.as_ref().and_then(|v| v.as_str());
-                match event_type {
-                    Some(et) => Box::new(IndexZoneSelector {
+
+                match (self.inputs.plan.uid.as_deref(), event_type) {
+                    (Some(uid), Some(et)) => Box::new(IndexZoneSelector {
                         plan: self.inputs.query_plan,
                         caches: self.inputs.caches,
                         artifacts,
@@ -85,7 +83,19 @@ impl<'a> ZoneSelectorBuilder<'a> {
                         event_type: et,
                         context_id,
                     }),
-                    None => Box::new(AllZonesSelector {}),
+                    (None, Some(et)) => {
+                        // Resolve uid from registry for event_type and return all zones via metadata
+                        if let Ok(reg) = self.inputs.query_plan.registry.try_read() {
+                            if let Some(uid) = reg.get_uid(et) {
+                                return Box::new(AllZonesSelectorMeta {
+                                    base_dir: self.inputs.base_dir,
+                                    uid: uid.to_string(),
+                                });
+                            }
+                        }
+                        Box::new(AllZonesSelector {})
+                    }
+                    _ => Box::new(AllZonesSelector {}),
                 }
             }
             _ => Box::new(self.make_field_selector(artifacts)),
@@ -98,7 +108,18 @@ use crate::engine::core::CandidateZone;
 struct AllZonesSelector {}
 impl ZoneSelector for AllZonesSelector {
     fn select_for_segment(&self, segment_id: &str) -> Vec<CandidateZone> {
+        // Fallback: no uid/event_type to resolve metadata; return configured fill_factor zones
         CandidateZone::create_all_zones_for_segment(segment_id)
+    }
+}
+
+struct AllZonesSelectorMeta<'a> {
+    base_dir: &'a std::path::PathBuf,
+    uid: String,
+}
+impl<'a> ZoneSelector for AllZonesSelectorMeta<'a> {
+    fn select_for_segment(&self, segment_id: &str) -> Vec<CandidateZone> {
+        CandidateZone::create_all_zones_for_segment_from_meta(self.base_dir, segment_id, &self.uid)
     }
 }
 

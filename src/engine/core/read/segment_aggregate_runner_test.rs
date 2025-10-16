@@ -9,6 +9,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tempfile::tempdir;
+use tracing::info;
 
 async fn make_plan(
     event_type: &str,
@@ -130,6 +131,7 @@ async fn segment_aggregate_runner_count_unique_mixed_missing_and_empty() {
         .with_events(vec![e1, e2, e3, e4, e5])
         .create()
         .unwrap();
+
     Flusher::new(
         mem,
         50,
@@ -168,8 +170,10 @@ async fn segment_aggregate_runner_count_unique_mixed_missing_and_empty() {
         .await;
 
     let events = sink.into_events(&plan);
+    eprintln!("events: {:?}", events);
     assert_eq!(events.len(), 1);
     let p = events[0].payload.as_object().unwrap();
+    eprintln!("p: {:?}", p);
     // With columnar storage, all fields written for all events (for proper column alignment)
     // Missing and explicit empty both become "", so unique set is {"u1","u2",""}
     assert_eq!(p["count_unique_user"], json!(3));

@@ -34,11 +34,9 @@ pub struct WalConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct EngineConfig {
-    pub flush_threshold: usize,
     pub data_dir: String,
     pub shard_count: usize,
     pub index_dir: String,
-    #[serde(default)]
     pub fill_factor: usize,
     pub event_per_zone: usize,
     pub compaction_threshold: usize,
@@ -46,9 +44,6 @@ pub struct EngineConfig {
     pub sys_io_threshold: usize,
     pub max_inflight_passives: Option<usize>,
 }
-
-// Removed fill_factor() method; `fill_factor` is now provided via config and
-// `flush_threshold` is derived from it during settings load when present.
 
 #[derive(Debug, Deserialize)]
 pub struct QueryConfig {
@@ -89,17 +84,6 @@ pub fn load_settings() -> Result<Settings, config::ConfigError> {
         .add_source(config::File::with_name(&config_path))
         .build()?
         .try_deserialize()?;
-
-    // If fill_factor is provided (non-zero), derive flush_threshold from it.
-    // Otherwise, compute fill_factor from existing flush_threshold for backward compatibility.
-    if settings.engine.fill_factor > 0 {
-        settings.engine.flush_threshold =
-            settings.engine.fill_factor * settings.engine.event_per_zone;
-    } else {
-        settings.engine.fill_factor =
-            (settings.engine.flush_threshold + settings.engine.event_per_zone - 1)
-                / settings.engine.event_per_zone;
-    }
 
     Ok(settings)
 }

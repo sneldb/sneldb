@@ -18,7 +18,7 @@ impl ShardContextFactory {
     pub fn new() -> Self {
         Self {
             id: 0,
-            capacity: CONFIG.engine.flush_threshold,
+            capacity: CONFIG.engine.fill_factor * CONFIG.engine.event_per_zone,
             base_dir: None,
             wal_dir: None,
         }

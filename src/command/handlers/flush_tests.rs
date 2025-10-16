@@ -47,7 +47,7 @@ async fn test_flush_dispatches_message_to_all_shards() {
                 tx,
                 Arc::clone(&registry),
                 Arc::new(tokio::sync::Mutex::new(MemTable::new(
-                    CONFIG.engine.flush_threshold,
+                    CONFIG.engine.fill_factor * CONFIG.engine.event_per_zone,
                 ))),
             ))
             .await;

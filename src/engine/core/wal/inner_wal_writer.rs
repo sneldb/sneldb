@@ -181,12 +181,16 @@ impl InnerWalWriter {
         if let Ok(file) = File::open(&last_log_path) {
             let reader = BufReader::new(file);
             let line_count = reader.lines().count();
-            debug!(
-                target: "inner_wal_writer::find_next_wal_id",
-                last_log_id, line_count, threshold = CONFIG.engine.flush_threshold,
-                "Checking if rollover needed"
-            );
-            if line_count < CONFIG.engine.flush_threshold {
+            let capacity = CONFIG.engine.fill_factor * CONFIG.engine.event_per_zone;
+
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                debug!(
+                    target: "inner_wal_writer::find_next_wal_id",
+                    last_log_id, line_count, threshold = capacity,
+                    "Checking if rollover needed"
+                );
+            }
+            if line_count < capacity as usize {
                 return last_log_id;
             }
         }

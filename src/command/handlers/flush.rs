@@ -22,6 +22,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
     debug!(target: "sneldb::flush", "Received Flush command");
 
     let (tx, _rx) = channel(4096);
+    let capacity = CONFIG.engine.fill_factor * CONFIG.engine.event_per_zone;
 
     for shard in shard_manager.all_shards() {
         let tx_clone = tx.clone();
@@ -35,9 +36,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
             .send(ShardMessage::Flush(
                 tx_clone,
                 Arc::clone(registry),
-                Arc::new(tokio::sync::Mutex::new(MemTable::new(
-                    CONFIG.engine.flush_threshold,
-                ))),
+                Arc::new(tokio::sync::Mutex::new(MemTable::new(capacity))),
             ))
             .await;
     }

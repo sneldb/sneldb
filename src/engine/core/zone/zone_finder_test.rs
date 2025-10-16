@@ -361,7 +361,8 @@ async fn ebm_eq_prunes_zones() {
 
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].segment_id, "segment-001");
-    assert_eq!(found[0].zone_id, 0);
+    let expected_zone_id = (1usize / crate::shared::config::CONFIG.engine.event_per_zone) as u32;
+    assert_eq!(found[0].zone_id, expected_zone_id);
 }
 
 #[tokio::test]
@@ -480,9 +481,29 @@ async fn ebm_neq_prunes_zones() {
     let finder = ZoneFinder::new(&filter_plan, &query_plan, &binding, &shard_dir);
     let found = finder.find();
 
-    assert_eq!(found.len(), 2);
-    assert_eq!(found[0].zone_id, 0);
-    assert_eq!(found[1].zone_id, 0);
+    // With dynamic zone size, the NEQ("pro") matches:
+    // - segment-001: index 0 ("free") => one zone id = 0 / zone_size
+    // - segment-002: indices 0 ("premium"), 1 ("enterprise") => zone ids = {0/zone_size, 1/zone_size}
+    let zone_size = crate::shared::config::CONFIG.engine.event_per_zone;
+    let seg1_zone_id = (0usize / zone_size) as u32;
+    let mut seg2_zone_ids = vec![(0usize / zone_size) as u32, (1usize / zone_size) as u32];
+    seg2_zone_ids.sort_unstable();
+    seg2_zone_ids.dedup();
+
+    let mut expected: Vec<(String, u32)> = vec![("segment-001".to_string(), seg1_zone_id)];
+    for zid in &seg2_zone_ids {
+        expected.push(("segment-002".to_string(), *zid));
+    }
+
+    // Compare sets ignoring order
+    let mut actual: Vec<(String, u32)> = found
+        .iter()
+        .map(|z| (z.segment_id.clone(), z.zone_id))
+        .collect();
+    expected.sort();
+    actual.sort();
+
+    assert_eq!(actual, expected);
 }
 
 #[tokio::test]

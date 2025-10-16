@@ -1,5 +1,6 @@
 use crate::command::types::{CompareOp, Expr};
 use crate::engine::core::{Flusher, ZoneCollector};
+use crate::shared::config::CONFIG;
 use crate::test_helpers::factories::{
     CommandFactory, EventFactory, ExecutionStepFactory, FilterPlanFactory, MemTableFactory,
     QueryPlanFactory, SchemaRegistryFactory,
@@ -124,7 +125,7 @@ async fn zone_collector_combines_zones_across_segments() {
     let filter_context_id = FilterPlanFactory::new()
         .with_column("context_id")
         .with_operation(CompareOp::Eq)
-        .with_value(json!("ctx2"))
+        .with_value(json!("ctx1"))
         .with_uid(&uid)
         .create();
 
@@ -143,9 +144,12 @@ async fn zone_collector_combines_zones_across_segments() {
     let mut collector = ZoneCollector::new(&plan, vec![step_id, step_context_id]);
     let zones = collector.collect_zones();
 
+    // Both filters target the same event (ctx1, id=1), so their AND must yield exactly one zone.
+    let zone_size = CONFIG.engine.event_per_zone;
+    let expected_zone_id = (0usize / zone_size) as u32; // index of id=1 and ctx1 is 0
     assert_eq!(zones.len(), 1);
     assert_eq!(zones[0].segment_id, "segment-001");
-    assert_eq!(zones[0].zone_id, 0);
+    assert_eq!(zones[0].zone_id, expected_zone_id);
 }
 
 #[tokio::test]

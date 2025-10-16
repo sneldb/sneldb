@@ -74,9 +74,11 @@ impl ShardContext {
             Arc::clone(&flush_coordination_lock),
         );
 
+        let capacity = CONFIG.engine.fill_factor * CONFIG.engine.event_per_zone;
+
         let mut ctx = Self {
             id,
-            memtable: MemTable::new(CONFIG.engine.flush_threshold),
+            memtable: MemTable::new(capacity),
             passive_buffers: Arc::new(PassiveBufferSet::new(
                 CONFIG.engine.max_inflight_passives.unwrap_or(8),
             )),
