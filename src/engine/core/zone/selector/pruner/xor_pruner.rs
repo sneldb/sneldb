@@ -24,16 +24,20 @@ impl<'a> XorPruner<'a> {
         // Prefer zone-level XOR index; fall back to full-field XOR filter
         match self.artifacts.load_zxf(segment_id, uid, column) {
             Ok(zxf) => {
-                debug!(target: "sneldb::query", %column, %segment_id, "Loaded .zxf zone index");
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    debug!(target: "sneldb::query", %column, %segment_id, "Loaded .zxf zone index");
+                }
                 let zone_ids = zxf.zones_maybe_containing(value);
-                debug!(
-                    target: "sneldb::query",
-                    %column,
-                    value = ?value,
-                    zone_count = zone_ids.len(),
-                    zones = ?zone_ids,
-                    "Zone XOR candidate zones"
-                );
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    debug!(
+                        target: "sneldb::query",
+                        %column,
+                        value = ?value,
+                        zone_count = zone_ids.len(),
+                        zones = ?zone_ids,
+                        "Zone XOR candidate zones"
+                    );
+                }
                 if !zone_ids.is_empty() {
                     let maybe_zones = zone_ids
                         .into_iter()

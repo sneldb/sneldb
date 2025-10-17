@@ -92,7 +92,9 @@ impl ZoneXorFilterIndex {
             match BinaryFuse8::try_from_iterator(hashes.into_iter()) {
                 Ok(filter) => index.put_zone_filter(zone.id, filter),
                 Err(e) => {
-                    warn!(target: "sneldb::zxf", zone_id = zone.id, field, "Failed to build BinaryFuse8: {:?}", e);
+                    if tracing::enabled!(tracing::Level::WARN) {
+                        warn!(target: "sneldb::zxf", zone_id = zone.id, field, "Failed to build BinaryFuse8: {:?}", e);
+                    }
                 }
             }
         }
@@ -107,7 +109,9 @@ impl ZoneXorFilterIndex {
     /// Save as: header | u32 zone_count | [entries...]
     /// Each entry: u32 zone_id | u32 blob_len | blob_bytes
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
-        debug!(target: "sneldb::zxf", path = %path.display(), uid = %self.uid, field = %self.field, zone_count = self.filters.len(), "Saving .zxf");
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(target: "sneldb::zxf", path = %path.display(), uid = %self.uid, field = %self.field, zone_count = self.filters.len(), "Saving .zxf");
+        }
 
         let mut file = OpenOptions::new()
             .create(true)
@@ -230,7 +234,9 @@ pub fn build_all_zxf(zone_plans: &[ZonePlan], segment_dir: &Path) -> std::io::Re
         if let Some(index) = ZoneXorFilterIndex::build_for_field(&uid, &field, zone_plans) {
             let path = ZoneXorFilterIndex::file_path(segment_dir, &uid, &field);
             index.save(&path)?;
-            info!(target: "sneldb::zxf", uid = %uid, field = %field, path = %path.display(), zone_count = index.filters.len(), "Wrote .zxf index");
+            if tracing::enabled!(tracing::Level::INFO) {
+                info!(target: "sneldb::zxf", uid = %uid, field = %field, path = %path.display(), zone_count = index.filters.len(), "Wrote .zxf index");
+            }
         }
     }
 

@@ -24,12 +24,14 @@ impl ZonePlan {
         segment_id: u64,
     ) -> Result<Vec<ZonePlan>, StoreError> {
         if events.is_empty() {
-            warn!(
-                target: "sneldb::flush",
-                uid,
-                segment_id,
-                "ZonePlan::build_all received empty event list"
-            );
+            if tracing::enabled!(tracing::Level::WARN) {
+                warn!(
+                    target: "sneldb::flush",
+                    uid,
+                    segment_id,
+                    "ZonePlan::build_all received empty event list"
+                );
+            }
             return Err(StoreError::EmptyFlush);
         }
 
@@ -41,15 +43,17 @@ impl ZonePlan {
         while start < events.len() {
             let end = (start + rows_per_zone).min(events.len()) - 1;
 
-            trace!(
-                target: "sneldb::flush",
-                uid,
-                segment_id,
-                zone_id,
-                start,
-                end,
-                "Building zone"
-            );
+            if tracing::enabled!(tracing::Level::TRACE) {
+                trace!(
+                    target: "sneldb::flush",
+                    uid,
+                    segment_id,
+                    zone_id,
+                    start,
+                    end,
+                    "Building zone"
+                );
+            }
 
             zones.push(ZonePlan {
                 id: zone_id,
@@ -65,13 +69,15 @@ impl ZonePlan {
             start = end + 1;
         }
 
-        info!(
-            target: "sneldb::flush",
-            uid,
-            segment_id,
-            zone_count = zones.len(),
-            "Zone planning completed"
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::flush",
+                uid,
+                segment_id,
+                zone_count = zones.len(),
+                "Zone planning completed"
+            );
+        }
 
         Ok(zones)
     }
@@ -151,13 +157,15 @@ impl ZonePlan {
         zone_id: u32,
     ) -> Result<ZonePlan, StoreError> {
         if rows.is_empty() {
-            warn!(
-                target: "sneldb::flush",
-                uid,
-                segment_id,
-                zone_id,
-                "ZonePlan::from_rows received empty input"
-            );
+            if tracing::enabled!(tracing::Level::WARN) {
+                warn!(
+                    target: "sneldb::flush",
+                    uid,
+                    segment_id,
+                    zone_id,
+                    "ZonePlan::from_rows received empty input"
+                );
+            }
             return Err(StoreError::EmptyFlush);
         }
 
@@ -165,14 +173,16 @@ impl ZonePlan {
         let start_index = 0;
         let end_index = rows.len() - 1;
 
-        trace!(
-            target: "sneldb::flush",
-            uid,
-            segment_id,
-            zone_id,
-            row_count = rows.len(),
-            "Deserializing zone rows into events"
-        );
+        if tracing::enabled!(tracing::Level::TRACE) {
+            trace!(
+                target: "sneldb::flush",
+                uid,
+                segment_id,
+                zone_id,
+                row_count = rows.len(),
+                "Deserializing zone rows into events"
+            );
+        }
 
         let events: Vec<Event> = rows
             .into_iter()

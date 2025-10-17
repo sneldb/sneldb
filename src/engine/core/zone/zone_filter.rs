@@ -56,11 +56,13 @@ impl ZoneFilter {
     /// modifying the vector in place. It logs before and after counts
     /// for debugging purposes.
     pub fn apply(&self, candidate_zones: &mut Vec<CandidateZone>) {
-        debug!(
-            target: "sneldb::query",
-            "Applying zone filter with {} allowed entries",
-            self.allowed.len()
-        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target: "sneldb::query",
+                "Applying zone filter with {} allowed entries",
+                self.allowed.len()
+            );
+        }
 
         // Build normalized lookup set once to avoid repeated allocations
         let normalized_allowed: HashSet<(&str, u32)> =
@@ -74,13 +76,15 @@ impl ZoneFilter {
         });
 
         let after_count = candidate_zones.len();
-        debug!(
-            target: "sneldb::query",
-            before = before_count,
-            after = after_count,
-            filtered = before_count - after_count,
-            "Zone filter applied"
-        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target: "sneldb::query",
+                before = before_count,
+                after = after_count,
+                filtered = before_count - after_count,
+                "Zone filter applied"
+            );
+        }
     }
 
     /// Returns true if the filter allows all zones (no restrictions).

@@ -56,7 +56,9 @@ impl ZoneCombiner {
                 all
             }
             LogicalOp::Not => {
-                warn!(target: "sneldb::zone_combiner", "ZoneCombiner: NOT operation not implemented");
+                if tracing::enabled!(tracing::Level::WARN) {
+                    warn!(target: "sneldb::zone_combiner", "ZoneCombiner: NOT operation not implemented");
+                }
                 HashMap::new()
             }
         };

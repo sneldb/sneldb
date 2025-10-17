@@ -36,22 +36,26 @@ impl ZoneCursorLoader {
             let reg = self.registry.read().await;
             reg.get_schema_by_uid(&self.uid)
                 .ok_or_else(|| {
-                    error!(
-                        target: "sneldb::cursor_loader",
-                        uid = self.uid,
-                        "Schema not found"
-                    );
+                    if tracing::enabled!(tracing::Level::ERROR) {
+                        error!(
+                            target: "sneldb::cursor_loader",
+                            uid = self.uid,
+                            "Schema not found"
+                        );
+                    }
                     QueryExecutionError::SchemaNotFound(format!("No schema for UID {}", self.uid))
                 })?
                 .clone()
         };
 
-        info!(
-            target: "sneldb::cursor_loader",
-            uid = self.uid,
-            fields = ?schema.fields().collect::<Vec<_>>(),
-            "Loaded schema for UID"
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::cursor_loader",
+                uid = self.uid,
+                fields = ?schema.fields().collect::<Vec<_>>(),
+                "Loaded schema for UID"
+            );
+        }
 
         let mut all_cursors = vec![];
 
@@ -59,13 +63,15 @@ impl ZoneCursorLoader {
             let segment_dir = self.base_dir.join(format!("segment-{}", segment_id));
             let zones_path = segment_dir.join(format!("{}.zones", self.uid));
 
-            debug!(
-                target: "sneldb::cursor_loader",
-                uid = self.uid,
-                segment_id = segment_id,
-                path = ?zones_path,
-                "Attempting to load zone metadata"
-            );
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                debug!(
+                    target: "sneldb::cursor_loader",
+                    uid = self.uid,
+                    segment_id = segment_id,
+                    path = ?zones_path,
+                    "Attempting to load zone metadata"
+                );
+            }
 
             let zone_metas =
                 ZoneMeta::load(&zones_path).map_err(|e| ZoneMetaError::Other(e.to_string()))?;
@@ -107,23 +113,27 @@ impl ZoneCursorLoader {
                     payload_fields.insert(field.clone(), values);
                 }
 
-                debug!(
-                    target: "sneldb::cursor_loader",
-                    uid = self.uid,
-                    segment_id = segment_id,
-                    zone_id = zone.zone_id,
-                    fields = ?schema.fields().collect::<Vec<_>>(),
-                    "Constructed ZoneCursor"
-                );
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    debug!(
+                        target: "sneldb::cursor_loader",
+                        uid = self.uid,
+                        segment_id = segment_id,
+                        zone_id = zone.zone_id,
+                        fields = ?schema.fields().collect::<Vec<_>>(),
+                        "Constructed ZoneCursor"
+                    );
+                }
 
                 let parsed_segment_id = match segment_id.parse::<u64>() {
                     Ok(id) => id,
                     Err(_) => {
-                        error!(
-                            target: "sneldb::cursor_loader",
-                            segment_id = segment_id,
-                            "Failed to parse segment_id to u64"
-                        );
+                        if tracing::enabled!(tracing::Level::ERROR) {
+                            error!(
+                                target: "sneldb::cursor_loader",
+                                segment_id = segment_id,
+                                "Failed to parse segment_id to u64"
+                            );
+                        }
                         return Err(QueryExecutionError::InvalidSegmentId(segment_id.clone()));
                     }
                 };
@@ -140,12 +150,14 @@ impl ZoneCursorLoader {
             }
         }
 
-        info!(
-            target: "sneldb::cursor_loader",
-            uid = self.uid,
-            count = all_cursors.len(),
-            "Loaded all ZoneCursors"
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::cursor_loader",
+                uid = self.uid,
+                count = all_cursors.len(),
+                "Loaded all ZoneCursors"
+            );
+        }
 
         Ok(all_cursors)
     }

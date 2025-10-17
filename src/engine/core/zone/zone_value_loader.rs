@@ -27,34 +27,40 @@ impl<'a> ZoneValueLoader<'a> {
 
     /// Loads values for all zones
     pub fn load_zone_values(&self, zones: &mut [CandidateZone], columns: &[String]) {
-        info!(
-            target: "sneldb::query",
-            uid = self.uid,
-            zone_count = zones.len(),
-            columns = ?columns,
-            "Loading values for candidate zones"
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::query",
+                uid = self.uid,
+                zone_count = zones.len(),
+                columns = ?columns,
+                "Loading values for candidate zones"
+            );
+        }
 
         let loader = ColumnLoader::new(self.segment_base_dir.clone(), self.uid.clone())
             .with_caches(self.caches);
 
         for zone in zones {
-            debug!(
-                target: "sneldb::query",
-                uid = self.uid,
-                segment_id = %zone.segment_id,
-                zone_id = zone.zone_id,
-                "Loading column values for zone"
-            );
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                debug!(
+                    target: "sneldb::query",
+                    uid = self.uid,
+                    segment_id = %zone.segment_id,
+                    zone_id = zone.zone_id,
+                    "Loading column values for zone"
+                );
+            }
 
             let values = loader.load_all_columns(zone, columns);
             zone.set_values(values);
         }
 
-        info!(
-            target: "sneldb::query",
-            uid = self.uid,
-            "Completed loading values for all zones"
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::query",
+                uid = self.uid,
+                "Completed loading values for all zones"
+            );
+        }
     }
 }

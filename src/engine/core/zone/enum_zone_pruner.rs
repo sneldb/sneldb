@@ -36,11 +36,13 @@ impl<'a> EnumZonePruner<'a> {
                 zones.push(CandidateZone::new(*zone_id, self.segment_id.to_string()));
             }
         }
-        debug!(
-            target = "sneldb::query",
-            pruned = zones.len(),
-            "EBM pruning applied"
-        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target = "sneldb::query",
+                pruned = zones.len(),
+                "EBM pruning applied"
+            );
+        }
         zones
     }
 }

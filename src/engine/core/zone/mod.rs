@@ -15,6 +15,7 @@ pub mod zone_hydrator;
 pub mod zone_index;
 pub mod zone_merger;
 pub mod zone_meta;
+pub mod zone_metadata_writer;
 pub mod zone_plan;
 pub mod zone_planner;
 pub mod zone_row;

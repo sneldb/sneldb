@@ -34,28 +34,32 @@ impl ZoneCursor {
     /// Peek the current context_id without advancing
     pub fn peek_context_id(&self) -> Option<&str> {
         let id = self.context_ids.get(self.pos).map(String::as_str);
-        trace!(
-            target: "sneldb::cursor",
-            segment_id = self.segment_id,
-            zone_id = self.zone_id,
-            pos = self.pos,
-            peek = ?id,
-            "Peeking context_id"
-        );
+        if tracing::enabled!(tracing::Level::TRACE) {
+            trace!(
+                target: "sneldb::cursor",
+                segment_id = self.segment_id,
+                zone_id = self.zone_id,
+                pos = self.pos,
+                peek = ?id,
+                "Peeking context_id"
+            );
+        }
         id
     }
 
     /// Advance and return full row
     pub fn next_row(&mut self) -> Option<ZoneRow> {
         if self.pos >= self.context_ids.len() {
-            trace!(
-                target: "sneldb::cursor",
-                segment_id = self.segment_id,
-                zone_id = self.zone_id,
-                pos = self.pos,
-                len = self.context_ids.len(),
-                "End of cursor reached"
-            );
+            if tracing::enabled!(tracing::Level::TRACE) {
+                trace!(
+                    target: "sneldb::cursor",
+                    segment_id = self.segment_id,
+                    zone_id = self.zone_id,
+                    pos = self.pos,
+                    len = self.context_ids.len(),
+                    "End of cursor reached"
+                );
+            }
             return None;
         }
 
@@ -68,13 +72,15 @@ impl ZoneCursor {
             .map(|(k, v)| (k.clone(), v[idx].clone()))
             .collect();
 
-        trace!(
-            target: "sneldb::cursor",
-            segment_id = self.segment_id,
-            zone_id = self.zone_id,
-            row_idx = idx,
-            "Returning next row"
-        );
+        if tracing::enabled!(tracing::Level::TRACE) {
+            trace!(
+                target: "sneldb::cursor",
+                segment_id = self.segment_id,
+                zone_id = self.zone_id,
+                row_idx = idx,
+                "Returning next row"
+            );
+        }
 
         Some(ZoneRow {
             segment_id: self.segment_id,

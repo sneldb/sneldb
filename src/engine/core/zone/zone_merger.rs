@@ -41,12 +41,14 @@ impl ZoneMerger {
 
         for (i, cursor) in cursors.iter_mut().enumerate() {
             if let Some(ctx_id) = cursor.peek_context_id() {
-                trace!(
-                    target: "sneldb::query",
-                    cursor_index = i,
-                    context_id = ctx_id,
-                    "Initializing heap with first context_id"
-                );
+                if tracing::enabled!(tracing::Level::TRACE) {
+                    trace!(
+                        target: "sneldb::query",
+                        cursor_index = i,
+                        context_id = ctx_id,
+                        "Initializing heap with first context_id"
+                    );
+                }
                 heap.push(Reverse(HeapItem {
                     context_id: ctx_id.to_string(),
                     cursor_index: i,
@@ -54,12 +56,14 @@ impl ZoneMerger {
             }
         }
 
-        debug!(
-            target: "sneldb::query",
-            total_cursors = cursors.len(),
-            initialized_entries = heap.len(),
-            "ZoneMerger initialized"
-        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target: "sneldb::query",
+                total_cursors = cursors.len(),
+                initialized_entries = heap.len(),
+                "ZoneMerger initialized"
+            );
+        }
 
         Self { cursors, heap }
     }
@@ -72,32 +76,38 @@ impl ZoneMerger {
             let cursor = &mut self.cursors[top.cursor_index];
             let row = cursor.next_row();
 
-            trace!(
-                target: "sneldb::query",
-                cursor_index = top.cursor_index,
-                context_id = top.context_id,
-                "Returning next row from cursor"
-            );
+            if tracing::enabled!(tracing::Level::TRACE) {
+                trace!(
+                    target: "sneldb::query",
+                    cursor_index = top.cursor_index,
+                    context_id = top.context_id,
+                    "Returning next row from cursor"
+                );
+            }
 
             if let Some(next_ctx) = cursor.peek_context_id() {
                 self.heap.push(Reverse(HeapItem {
                     context_id: next_ctx.to_string(),
                     cursor_index: top.cursor_index,
                 }));
-                trace!(
-                    target: "sneldb::query",
-                    cursor_index = top.cursor_index,
-                    context_id = next_ctx,
-                    "Pushed next context_id to heap"
-                );
+                if tracing::enabled!(tracing::Level::TRACE) {
+                    trace!(
+                        target: "sneldb::query",
+                        cursor_index = top.cursor_index,
+                        context_id = next_ctx,
+                        "Pushed next context_id to heap"
+                    );
+                }
             }
 
             row
         } else {
-            trace!(
-                target: "sneldb::query",
-                "No more rows to merge, heap exhausted"
-            );
+            if tracing::enabled!(tracing::Level::TRACE) {
+                trace!(
+                    target: "sneldb::query",
+                    "No more rows to merge, heap exhausted"
+                );
+            }
             None
         }
     }
@@ -123,11 +133,13 @@ impl ZoneMerger {
             );
             None
         } else {
-            debug!(
-                target: "sneldb::query",
-                batch_size = batch.len(),
-                "next_zone returned batch"
-            );
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                debug!(
+                    target: "sneldb::query",
+                    batch_size = batch.len(),
+                    "next_zone returned batch"
+                );
+            }
             Some(batch)
         }
     }

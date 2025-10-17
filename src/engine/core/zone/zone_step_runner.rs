@@ -62,12 +62,14 @@ impl<'a> ZoneStepRunner<'a> {
                 let kept: std::collections::HashSet<String> =
                     zones.iter().map(|z| z.segment_id.clone()).collect();
                 pruned = Some(kept.into_iter().collect());
-                info!(
-                    target = "sneldb::zone_runner",
-                    seg_kept = pruned.as_ref().map(|v| v.len()).unwrap_or(0),
-                    zones_found = zones.len(),
-                    "Derived pruned segment list"
-                );
+                if tracing::enabled!(tracing::Level::INFO) {
+                    info!(
+                        target = "sneldb::zone_runner",
+                        seg_kept = pruned.as_ref().map(|v| v.len()).unwrap_or(0),
+                        zones_found = zones.len(),
+                        "Derived pruned segment list"
+                    );
+                }
             }
             outputs.push(zones);
         }
