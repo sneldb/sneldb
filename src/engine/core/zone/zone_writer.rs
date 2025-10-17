@@ -80,7 +80,19 @@ impl<'a> ZoneWriter<'a> {
             uid = self.uid,
             "Building Zone-level SuRF filters"
         );
-        if let Err(e) = ZoneSurfFilter::build_all(zone_plans, self.segment_dir) {
+        let schema = self
+            .registry
+            .read()
+            .await
+            .get(&zone_plans[0].event_type)
+            .cloned();
+        if let Some(schema) = schema {
+            if let Err(e) =
+                ZoneSurfFilter::build_all_with_schema(zone_plans, self.segment_dir, &schema)
+            {
+                debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping Zone SuRF (schema-aware) due to error");
+            }
+        } else if let Err(e) = ZoneSurfFilter::build_all(zone_plans, self.segment_dir) {
             debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping Zone SuRF due to error");
         }
 
