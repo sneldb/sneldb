@@ -1,6 +1,6 @@
-use std::path::PathBuf;
-
 use crate::engine::core::{ColumnKey, WriteJob};
+use serde_json::Value;
+use std::path::PathBuf;
 
 #[derive(Clone)]
 pub struct WriteJobFactory {
@@ -38,7 +38,7 @@ impl WriteJobFactory {
             key: self.key.clone(),
             zone_id: self.zone_id,
             path: self.path.clone(),
-            value: value.into(),
+            value: Value::String(value.into()),
         }
     }
 

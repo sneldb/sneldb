@@ -1,7 +1,8 @@
 use crate::engine::errors::StoreError;
 
 use lz4_flex::block::{
-    compress_prepend_size as lz4_compress, decompress_size_prepended as lz4_decompress,
+    compress_prepend_size as lz4_compress, decompress_into as lz4_decompress_into,
+    decompress_size_prepended as lz4_decompress,
 };
 
 pub const FLAG_COMPRESSED: u16 = 0x0001;
@@ -11,6 +12,7 @@ pub trait CompressionCodec {
     fn algo_id(&self) -> u16;
     fn compress(&self, input: &[u8]) -> Result<Vec<u8>, StoreError>;
     fn decompress(&self, input: &[u8], _uncompressed_len: usize) -> Result<Vec<u8>, StoreError>;
+    fn decompress_into(&self, input: &[u8], out: &mut [u8]) -> Result<(), StoreError>;
 }
 
 pub struct Lz4Codec;
@@ -24,5 +26,10 @@ impl CompressionCodec for Lz4Codec {
     }
     fn decompress(&self, input: &[u8], _uncompressed_len: usize) -> Result<Vec<u8>, StoreError> {
         lz4_decompress(input).map_err(|e| StoreError::FlushFailed(format!("lz4 decompress: {e}")))
+    }
+    fn decompress_into(&self, input: &[u8], out: &mut [u8]) -> Result<(), StoreError> {
+        lz4_decompress_into(input, out)
+            .map(|_| ())
+            .map_err(|e| StoreError::FlushFailed(format!("lz4 decompress_into: {e}")))
     }
 }

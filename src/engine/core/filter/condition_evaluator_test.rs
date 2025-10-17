@@ -1,7 +1,47 @@
-use crate::engine::core::ConditionEvaluator;
-use crate::engine::core::filter::condition::*;
+use crate::engine::core::column::column_values::ColumnValues;
+use crate::engine::core::filter::condition::CompareOp;
+use crate::engine::core::filter::condition_evaluator::ConditionEvaluator;
+use crate::engine::core::read::cache::DecompressedBlock;
+use crate::engine::core::zone::candidate_zone::CandidateZone;
 use crate::test_helpers::factories::CandidateZoneFactory;
 use std::collections::HashMap;
+
+fn make_u64_column(values: &[u64]) -> ColumnValues {
+    // Build a fake typed-u64 ColumnValues backed by a single block
+    let mut buf: Vec<u8> = Vec::with_capacity(values.len() * 8);
+    for v in values {
+        buf.extend_from_slice(&v.to_le_bytes());
+    }
+    let block = DecompressedBlock::from_bytes(buf);
+    ColumnValues::new_typed_u64(std::sync::Arc::new(block), 0, values.len(), None)
+}
+
+#[test]
+fn numeric_condition_prefers_u64_and_matches() {
+    // id column contains 1..=20 step 1
+    let mut zone = CandidateZone::new(0, "segment-00000".into());
+    let mut cols: HashMap<String, ColumnValues> = HashMap::new();
+    cols.insert("id".into(), make_u64_column(&[1, 2, 3, 9, 10, 11, 12]));
+    zone.set_values(cols);
+
+    let mut ev = ConditionEvaluator::new();
+    ev.add_numeric_condition("id".into(), CompareOp::Eq, 10);
+    let out = ev.evaluate_zones(vec![zone]);
+    assert_eq!(out.len(), 1, "should match exactly one row with id=10");
+}
+
+#[test]
+fn numeric_condition_handles_u64_lt() {
+    let mut zone = CandidateZone::new(0, "segment-00000".into());
+    let mut cols: HashMap<String, ColumnValues> = HashMap::new();
+    cols.insert("id".into(), make_u64_column(&[1, 2, 3, 4, 5]));
+    zone.set_values(cols);
+
+    let mut ev = ConditionEvaluator::new();
+    ev.add_numeric_condition("id".into(), CompareOp::Lt, 3);
+    let out = ev.evaluate_zones(vec![zone]);
+    assert_eq!(out.len(), 2, "ids 1 and 2 are < 3");
+}
 
 #[test]
 fn evaluates_zone_with_mixed_conditions() {

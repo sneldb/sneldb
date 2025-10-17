@@ -30,7 +30,6 @@ impl CompressedColumnIndexFactory {
                 comp_len,
                 uncomp_len,
                 num_rows,
-                in_block_offsets,
             },
         );
         Self {

@@ -135,6 +135,17 @@ impl ConditionEvaluator {
             if self.has_numeric_conditions() {
                 accessor.warm_numeric_cache(&self.numeric_fields);
             }
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                if let Some(id_vals) = zone.values.get("id") {
+                    let sample = usize::min(3, event_count);
+                    for i in 0..sample {
+                        let has_u64 = id_vals.get_u64_at(i).is_some();
+                        let has_i64 = id_vals.get_i64_at(i).is_some();
+                        let has_f64 = id_vals.get_f64_at(i).is_some();
+                        tracing::debug!(target: "sneldb::evaluator", zone_id = zone.zone_id, row = i, has_u64, has_i64, has_f64, u64 = id_vals.get_u64_at(i), i64 = id_vals.get_i64_at(i), f64 = id_vals.get_f64_at(i), "id field sample");
+                    }
+                }
+            }
             for i in 0..event_count {
                 if let Some(lim) = limit {
                     if results.len() >= lim {
@@ -148,8 +159,26 @@ impl ConditionEvaluator {
                 if passes {
                     let mut builder = EventBuilder::new();
                     for (field, values) in &zone.values {
+                        if let Some(n) = values.get_u64_at(i) {
+                            builder.add_field_u64(field, n);
+                            continue;
+                        }
+                        if let Some(n) = values.get_i64_at(i) {
+                            builder.add_field_i64(field, n);
+                            continue;
+                        }
+                        if let Some(f) = values.get_f64_at(i) {
+                            builder.add_field_f64(field, f);
+                            continue;
+                        }
+                        if let Some(b) = values.get_bool_at(i) {
+                            builder.add_field_bool(field, b);
+                            continue;
+                        }
                         if let Some(value) = values.get_str_at(i) {
                             builder.add_field(field, value);
+                        } else {
+                            builder.add_field_null(field);
                         }
                     }
                     results.push(builder.build());

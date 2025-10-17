@@ -9,4 +9,6 @@ pub use le_slice_reader::{LeSliceReader, SIZE_U32, SIZE_U64};
 #[cfg(test)]
 mod compressed_column_index_test;
 #[cfg(test)]
+mod compression_codec_test;
+#[cfg(test)]
 mod le_slice_reader_test;

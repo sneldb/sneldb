@@ -1352,7 +1352,7 @@
   {
     "name": "query_hits_memtable_only",
     "config": {
-      "engine": { "flush_threshold": 100 }
+      "engine": { "fill_factor": 100 }
     },
     "input_commands": [
       "DEFINE hot_path FIELDS { \"device\": \"string\" }",

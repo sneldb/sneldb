@@ -51,7 +51,7 @@ fn writes_blocks_and_reads_them_back_via_index() {
     for ((key, zone_id), (buf, offs, _values)) in groups {
         let index = indexes.entry(key.clone()).or_default();
         writer
-            .append_zone(index, key.clone(), zone_id, &buf, offs, &codec)
+            .append_zone(index, key.clone(), zone_id, &buf, offs.len() as u32, &codec)
             .expect("append_zone failed");
     }
     writer.finish().expect("finish failed");

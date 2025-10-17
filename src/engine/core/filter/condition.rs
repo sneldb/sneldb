@@ -37,6 +37,8 @@ pub trait Condition: Send + Sync + Debug {
 pub trait FieldAccessor {
     fn get_str_at(&self, field: &str, index: usize) -> Option<&str>;
     fn get_i64_at(&self, field: &str, index: usize) -> Option<i64>;
+    fn get_u64_at(&self, field: &str, index: usize) -> Option<u64>;
+    fn get_f64_at(&self, field: &str, index: usize) -> Option<f64>;
     fn event_count(&self) -> usize;
 }
 
@@ -79,6 +81,18 @@ impl<'a> FieldAccessor for PreparedAccessor<'a> {
         self.columns
             .get(field)
             .and_then(|col| col.get_i64_at(index))
+    }
+
+    fn get_u64_at(&self, field: &str, index: usize) -> Option<u64> {
+        self.columns
+            .get(field)
+            .and_then(|col| col.get_u64_at(index))
+    }
+
+    fn get_f64_at(&self, field: &str, index: usize) -> Option<f64> {
+        self.columns
+            .get(field)
+            .and_then(|col| col.get_f64_at(index))
     }
 
     fn event_count(&self) -> usize {
@@ -128,18 +142,44 @@ impl Condition for NumericCondition {
     }
 
     fn evaluate_at(&self, accessor: &dyn FieldAccessor, index: usize) -> bool {
+        // Prefer u64 for performance and to match common schemas (e.g., id)
+        if let Some(u) = accessor.get_u64_at(&self.field, index) {
+            let rhs = if self.value < 0 {
+                return false;
+            } else {
+                self.value as u64
+            };
+            return match self.operation {
+                CompareOp::Gt => u > rhs,
+                CompareOp::Gte => u >= rhs,
+                CompareOp::Lt => u < rhs,
+                CompareOp::Lte => u <= rhs,
+                CompareOp::Eq => u == rhs,
+                CompareOp::Neq => u != rhs,
+            };
+        }
         if let Some(num) = accessor.get_i64_at(&self.field, index) {
-            match self.operation {
+            return match self.operation {
                 CompareOp::Gt => num > self.value,
                 CompareOp::Gte => num >= self.value,
                 CompareOp::Lt => num < self.value,
                 CompareOp::Lte => num <= self.value,
                 CompareOp::Eq => num == self.value,
                 CompareOp::Neq => num != self.value,
-            }
-        } else {
-            false
+            };
         }
+        if let Some(f) = accessor.get_f64_at(&self.field, index) {
+            let rhs = self.value as f64;
+            return match self.operation {
+                CompareOp::Gt => f > rhs,
+                CompareOp::Gte => f >= rhs,
+                CompareOp::Lt => f < rhs,
+                CompareOp::Lte => f <= rhs,
+                CompareOp::Eq => f == rhs,
+                CompareOp::Neq => f != rhs,
+            };
+        }
+        false
     }
 
     fn evaluate_event_direct(

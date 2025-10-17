@@ -30,6 +30,76 @@ impl EventBuilder {
         }
     }
 
+    pub fn add_field_i64(&mut self, field: &str, value: i64) {
+        debug!(target: "builder::event", %field, value = value, "Adding i64 field");
+        match field {
+            "timestamp" => {
+                self.timestamp = value as u64;
+                debug!(target: "builder::event", "Set timestamp = {}", self.timestamp);
+            }
+            "context_id" | "event_type" => {
+                // fall back to string semantics for non-numeric fixed fields
+                self.add_field(field, &value.to_string());
+            }
+            _ => {
+                self.payload
+                    .insert(field.to_string(), Value::Number(value.into()));
+                debug!(target: "builder::event", %field, "Inserted i64 payload value");
+            }
+        }
+    }
+
+    pub fn add_field_u64(&mut self, field: &str, value: u64) {
+        debug!(target: "builder::event", %field, value = value, "Adding u64 field");
+        match field {
+            "timestamp" => {
+                self.timestamp = value;
+                debug!(target: "builder::event", "Set timestamp = {}", self.timestamp);
+            }
+            "context_id" | "event_type" => {
+                self.add_field(field, &value.to_string());
+            }
+            _ => {
+                self.payload.insert(
+                    field.to_string(),
+                    Value::Number(serde_json::Number::from(value)),
+                );
+                debug!(target: "builder::event", %field, "Inserted u64 payload value");
+            }
+        }
+    }
+
+    pub fn add_field_f64(&mut self, field: &str, value: f64) {
+        debug!(target: "builder::event", %field, value = value, "Adding f64 field");
+        if let Some(n) = serde_json::Number::from_f64(value) {
+            self.payload.insert(field.to_string(), Value::Number(n));
+        } else {
+            self.payload.insert(field.to_string(), Value::Null);
+        }
+    }
+
+    pub fn add_field_bool(&mut self, field: &str, value: bool) {
+        debug!(target: "builder::event", %field, value = value, "Adding bool field");
+        match field {
+            "context_id" | "event_type" => {
+                self.add_field(field, if value { "true" } else { "false" })
+            }
+            _ => {
+                self.payload.insert(field.to_string(), Value::Bool(value));
+            }
+        }
+    }
+
+    pub fn add_field_null(&mut self, field: &str) {
+        debug!(target: "builder::event", %field, "Adding null field");
+        match field {
+            "context_id" | "event_type" => self.add_field(field, ""),
+            _ => {
+                self.payload.insert(field.to_string(), Value::Null);
+            }
+        }
+    }
+
     pub fn add_field(&mut self, field: &str, value: &str) {
         debug!(target: "builder::event", %field, %value, "Adding field");
         match field {

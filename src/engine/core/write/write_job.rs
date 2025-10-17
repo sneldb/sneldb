@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::engine::core::{ColumnKey, Event, UidResolver, ZonePlan};
+use serde_json::Value;
 use tracing::{error, info};
 
 #[derive(Debug, Clone)]
@@ -8,7 +9,7 @@ pub struct WriteJob {
     pub key: ColumnKey,
     pub zone_id: u32,
     pub path: PathBuf,
-    pub value: String,
+    pub value: Value,
 }
 
 impl WriteJob {
@@ -83,7 +84,7 @@ impl WriteJob {
         };
 
         for field in fields {
-            let value = event.get_field_value(field);
+            let value = event.get_field(field).unwrap_or(Value::Null);
             let path = segment_dir.join(format!("{}_{}.col", uid, field));
             let key = (event_type.clone(), field.clone());
 
