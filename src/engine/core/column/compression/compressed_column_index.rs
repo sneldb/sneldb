@@ -15,7 +15,6 @@ pub struct ZoneBlockEntry {
     pub comp_len: u32,
     pub uncomp_len: u32,
     pub num_rows: u32,
-    pub in_block_offsets: Vec<u32>,
 }
 
 #[derive(Debug, Default)]
@@ -42,9 +41,6 @@ impl CompressedColumnIndex {
             writer.write_all(&e.comp_len.to_le_bytes())?;
             writer.write_all(&e.uncomp_len.to_le_bytes())?;
             writer.write_all(&e.num_rows.to_le_bytes())?;
-            for off in &e.in_block_offsets {
-                writer.write_all(&off.to_le_bytes())?;
-            }
         }
         writer.flush()?;
         Ok(())
@@ -82,20 +78,6 @@ impl CompressedColumnIndex {
                 None => break,
             };
 
-            let needed = (num_rows as usize) * SIZE_U32;
-            if !reader.has_bytes(needed) {
-                break;
-            }
-
-            let mut in_block_offsets = Vec::with_capacity(num_rows as usize);
-            for _ in 0..num_rows {
-                if let Some(off) = reader.read_u32() {
-                    in_block_offsets.push(off);
-                } else {
-                    break;
-                }
-            }
-
             entries.insert(
                 zone_id,
                 ZoneBlockEntry {
@@ -104,7 +86,6 @@ impl CompressedColumnIndex {
                     comp_len,
                     uncomp_len,
                     num_rows,
-                    in_block_offsets,
                 },
             );
         }

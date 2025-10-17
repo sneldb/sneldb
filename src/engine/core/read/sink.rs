@@ -37,9 +37,30 @@ impl ResultSink for EventSink {
     fn on_row(&mut self, row_idx: usize, columns: &HashMap<String, ColumnValues>) {
         let mut builder = EventBuilder::new();
         // Emit all available fields from this zone row
+
         for (field, values) in columns {
-            if let Some(val) = values.get_str_at(row_idx) {
-                builder.add_field(field, val);
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                tracing::debug!(target: "event_emit", field = %field, row_idx, has_i64 = values.get_i64_at(row_idx).is_some(), has_u64 = values.get_u64_at(row_idx).is_some(), has_f64 = values.get_f64_at(row_idx).is_some(), has_bool = values.get_bool_at(row_idx).is_some(), has_str = values.get_str_at(row_idx).is_some(), "Emitting field for row");
+            }
+            if let Some(n) = values.get_i64_at(row_idx) {
+                builder.add_field_i64(field, n);
+                continue;
+            }
+            if let Some(n) = values.get_u64_at(row_idx) {
+                builder.add_field_u64(field, n);
+                continue;
+            }
+            if let Some(f) = values.get_f64_at(row_idx) {
+                builder.add_field_f64(field, f);
+                continue;
+            }
+            if let Some(b) = values.get_bool_at(row_idx) {
+                builder.add_field_bool(field, b);
+                continue;
+            }
+            match values.get_str_at(row_idx) {
+                Some(val) => builder.add_field(field, val),
+                None => builder.add_field_null(field),
             }
         }
         self.events.push(builder.build());

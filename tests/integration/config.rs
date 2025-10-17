@@ -34,7 +34,6 @@ pub struct WalConfig {
 
 #[derive(Serialize, Deserialize)]
 pub struct EngineConfig {
-    pub flush_threshold: usize,
     pub data_dir: String,
     pub shard_count: usize,
     pub index_dir: String,
@@ -103,7 +102,6 @@ fn default_test_config(paths: &TestPaths) -> TestConfig {
             compression_algorithm: "zstd".to_string(),
         },
         engine: EngineConfig {
-            flush_threshold: 2,
             data_dir: format!("{}/data", paths.base_dir),
             index_dir: format!("{}/index", paths.base_dir),
             shard_count: 2,
@@ -118,8 +116,8 @@ fn default_test_config(paths: &TestPaths) -> TestConfig {
             socket_path: paths.socket_path.clone(),
             log_level: "debug".into(),
             output_format: "json".into(),
-            tcp_addr: "127.0.0.1:7171".into(),
-            http_addr: "127.0.0.1:8085".into(),
+            tcp_addr: "127.0.0.1:7172".into(),
+            http_addr: "127.0.0.1:8086".into(),
             auth_token: "test".into(),
         },
         logging: LoggingConfig {

@@ -21,7 +21,6 @@ fn compressed_index_write_and_load_roundtrip() {
             comp_len: 64,
             uncomp_len: 256,
             num_rows: 3,
-            in_block_offsets: vec![0, 10, 25],
         },
     );
     idx.entries.insert(
@@ -32,7 +31,6 @@ fn compressed_index_write_and_load_roundtrip() {
             comp_len: 40,
             uncomp_len: 100,
             num_rows: 2,
-            in_block_offsets: vec![0, 20],
         },
     );
 
@@ -46,14 +44,12 @@ fn compressed_index_write_and_load_roundtrip() {
     assert_eq!(z1.comp_len, 64);
     assert_eq!(z1.uncomp_len, 256);
     assert_eq!(z1.num_rows, 3);
-    assert_eq!(z1.in_block_offsets, vec![0, 10, 25]);
 
     let z2 = loaded.entries.get(&2).expect("missing zone 2");
     assert_eq!(z2.block_start, 192);
     assert_eq!(z2.comp_len, 40);
     assert_eq!(z2.uncomp_len, 100);
     assert_eq!(z2.num_rows, 2);
-    assert_eq!(z2.in_block_offsets, vec![0, 20]);
 }
 
 #[test]
@@ -71,7 +67,6 @@ fn compressed_index_ignores_trailing_partial_record() {
             comp_len: 11,
             uncomp_len: 22,
             num_rows: 1,
-            in_block_offsets: vec![123],
         },
     );
     let path = CompressedColumnIndex::path_for("001", "ip", segment_dir);
@@ -89,5 +84,4 @@ fn compressed_index_ignores_trailing_partial_record() {
     // Should load without panic and include the valid entry; trailing bytes are ignored
     let loaded = CompressedColumnIndex::load_from_path(&path).expect("load zfc failed");
     let z = loaded.entries.get(&9).expect("missing zone 9");
-    assert_eq!(z.in_block_offsets, vec![123]);
 }

@@ -1,3 +1,4 @@
+use crate::engine::core::column::format::ColumnBlockHeader;
 use crate::engine::core::write::column_group_builder::ColumnGroupBuilder;
 use crate::test_helpers::factories::WriteJobFactory;
 
@@ -18,25 +19,27 @@ fn groups_jobs_by_key_and_zone_and_tracks_offsets() {
     let groups = builder.finish();
     assert_eq!(groups.len(), 1);
 
-    let ((_key, _zone), (buf, offs, values)) = groups.into_iter().next().unwrap();
+    let ((_key, _zone), (buf, lens, values)) = groups.into_iter().next().unwrap();
     assert_eq!(values, vec!["laptop", "mobile", "tablet"]);
 
-    // Offsets are within the buffer and monotonically increasing
-    assert_eq!(offs.len(), 3);
-    assert!(offs[0] < buf.len() as u32);
-    assert!(offs[1] < buf.len() as u32);
-    assert!(offs[2] < buf.len() as u32);
-    assert!(offs[0] < offs[1] && offs[1] < offs[2]);
+    // Lengths should match the strings
+    assert_eq!(lens, vec![6, 6, 6]);
 
-    // Verify serialization format: [u16 len][bytes] repeated
-    let mut cursor = 0usize;
-    for expected in ["laptop", "mobile", "tablet"] {
-        let len = u16::from_le_bytes([buf[cursor], buf[cursor + 1]]) as usize;
-        cursor += 2;
-        let bytes = &buf[cursor..cursor + len];
-        cursor += len;
-        assert_eq!(std::str::from_utf8(bytes).unwrap(), expected);
+    // Verify new format: header + aux (u32 lengths) + payload
+    let hdr = ColumnBlockHeader::read_from(&buf[..ColumnBlockHeader::LEN]).expect("hdr");
+    assert_eq!(hdr.phys, 0); // VarBytes
+    assert_eq!(hdr.row_count, 3);
+    assert_eq!(hdr.aux_len, 3 * 4);
+    let aux_start = ColumnBlockHeader::LEN;
+    let aux_end = aux_start + (hdr.aux_len as usize);
+    for i in 0..3 {
+        let base = aux_start + i * 4;
+        let len = u32::from_le_bytes(buf[base..base + 4].try_into().unwrap()) as usize;
+        assert_eq!(len, lens[i] as usize);
     }
+    let payload = &buf[aux_end..];
+    let concatenated = b"laptopmobiletablet".to_vec();
+    assert_eq!(payload, &concatenated);
 }
 
 #[test]

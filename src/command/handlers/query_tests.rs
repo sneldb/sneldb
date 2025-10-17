@@ -1368,7 +1368,7 @@ async fn test_orchestrator_multi_shard_query() {
     // Create 3 shards
     let shard_manager = ShardManager::new(3, base_dir, wal_dir).await;
 
-    // Store 30 events (multiple of flush_threshold=3) across multiple shards
+    // Store 30 events
     for i in 1..=30 {
         let store_cmd = CommandFactory::store()
             .with_event_type("multi_shard_evt")

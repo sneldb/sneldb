@@ -117,12 +117,14 @@ fn builds_jobs_with_empty_strings_for_missing_fields() {
         "Should have 2 country jobs (one per event)"
     );
 
-    // One should be "US", one should be "" (empty string for missing field)
-    let country_values: HashSet<_> = country_jobs.iter().map(|j| j.value.as_str()).collect();
-
-    assert!(country_values.contains("US"), "Should have US value");
+    // Missing field now recorded as explicit null in typed pipeline
+    let country_values: HashSet<_> = country_jobs.iter().map(|j| j.value.clone()).collect();
     assert!(
-        country_values.contains(""),
-        "Should have empty string for missing field"
+        country_values.contains(&json!("US")),
+        "Should have US value"
+    );
+    assert!(
+        country_values.contains(&serde_json::Value::Null),
+        "Should have null for missing field"
     );
 }

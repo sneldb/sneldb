@@ -190,18 +190,28 @@ fn column_handle_cache_reuses_arc() {
     assert!(Arc::ptr_eq(&h1, &h2), "expected same Arc from cache");
 }
 
-fn write_decompressed_values(values: &[&str]) -> (Vec<u8>, Vec<u32>) {
-    let mut buf = Vec::new();
-    let mut offsets = Vec::new();
-    let mut cursor: u32 = 0;
+fn write_typed_varbytes_block(values: &[&str]) -> (Vec<u8>, Vec<u32>) {
+    use crate::engine::core::column::format::{ColumnBlockHeader, PhysicalType};
+    // Build aux = u32 lengths, payload = concatenated bytes
+    let mut aux: Vec<u8> = Vec::with_capacity(values.len() * 4);
+    let mut payload: Vec<u8> = Vec::new();
     for v in values {
-        offsets.push(cursor);
-        let bytes = v.as_bytes();
-        let len = bytes.len() as u16;
-        buf.extend_from_slice(&len.to_le_bytes());
-        buf.extend_from_slice(bytes);
-        cursor += 2 + bytes.len() as u32;
+        let b = v.as_bytes();
+        aux.extend_from_slice(&(b.len() as u32).to_le_bytes());
+        payload.extend_from_slice(b);
     }
+    let hdr = ColumnBlockHeader::new(
+        PhysicalType::VarBytes,
+        false,
+        values.len() as u32,
+        aux.len() as u32,
+    );
+    let mut buf: Vec<u8> = Vec::with_capacity(ColumnBlockHeader::LEN + aux.len() + payload.len());
+    hdr.write_to(&mut buf);
+    buf.extend_from_slice(&aux);
+    buf.extend_from_slice(&payload);
+    // Offsets in the zfc are per-row logical positions; keep 0..N like before
+    let offsets: Vec<u32> = (0..values.len() as u32).collect();
     (buf, offsets)
 }
 
@@ -216,7 +226,7 @@ fn per_query_memo_for_decompressed_blocks_reuses_arc() {
     create_dir_all(&seg_dir).unwrap();
 
     // Build decompressed payload and offsets
-    let (decomp, offsets) = write_decompressed_values(&["a", "bb"]);
+    let (decomp, offsets) = write_typed_varbytes_block(&["a", "bb"]);
     let codec = Lz4Codec;
     let comp = CompressionCodec::compress(&codec, &decomp).expect("compress");
 
@@ -276,7 +286,7 @@ fn column_reader_loads_values_using_per_query_memo() {
     let seg_dir = base_dir.join(segment_id);
     create_dir_all(&seg_dir).unwrap();
 
-    let (decomp, offsets) = write_decompressed_values(&["hello", "z"]);
+    let (decomp, offsets) = write_typed_varbytes_block(&["hello", "z"]);
     let codec = Lz4Codec;
     let comp = CompressionCodec::compress(&codec, &decomp).expect("compress");
     let block_start = BinaryHeader::TOTAL_LEN as u64;

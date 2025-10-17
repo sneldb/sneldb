@@ -1,7 +1,10 @@
+use crate::engine::core::column::column_values::ColumnValues;
+use crate::engine::core::read::cache::DecompressedBlock;
 use crate::engine::core::{CandidateZone, ColumnReader, QueryCaches};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use tracing::{debug, info};
+use std::sync::Arc;
+use tracing::info;
 
 /// Handles loading column values for a specific zone
 pub struct ColumnLoader<'a> {
@@ -36,7 +39,7 @@ impl<'a> ColumnLoader<'a> {
         &self,
         zone: &CandidateZone,
         columns: &[String],
-    ) -> HashMap<String, crate::engine::core::column::column_values::ColumnValues> {
+    ) -> HashMap<String, ColumnValues> {
         info!(
             target: "col_loader::load",
             zone_id = %zone.zone_id,
@@ -50,7 +53,9 @@ impl<'a> ColumnLoader<'a> {
 
         for column in columns {
             let values = self.read_column_for_zone(zone, column);
-            debug!(target: "col_loader::values", column = %column, values_len = values.len(), "Loaded values for column");
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                tracing::debug!(target: "col_loader::values", zone_id = zone.zone_id, segment_id = %zone.segment_id, column = %column, values_len = values.len(), "Loaded values for column");
+            }
             result.insert(column.clone(), values);
         }
 
@@ -58,7 +63,7 @@ impl<'a> ColumnLoader<'a> {
     }
 
     /// Reads values for a column using the compressed zone index (.zfc)
-    fn read_column_for_zone(&self, zone: &CandidateZone, column: &str) -> crate::engine::core::column::column_values::ColumnValues {
+    fn read_column_for_zone(&self, zone: &CandidateZone, column: &str) -> ColumnValues {
         let segment_dir = self.segment_base_dir.join(&zone.segment_id);
         ColumnReader::load_for_zone_with_cache(
             &segment_dir,
@@ -68,9 +73,11 @@ impl<'a> ColumnLoader<'a> {
             zone.zone_id,
             self.caches,
         )
-        .unwrap_or_else(|_| crate::engine::core::column::column_values::ColumnValues::new(
-            std::sync::Arc::new(crate::engine::core::read::cache::DecompressedBlock::from_bytes(Vec::new())),
-            Vec::new(),
-        ))
+        .unwrap_or_else(|_| {
+            ColumnValues::new(
+                Arc::new(DecompressedBlock::from_bytes(Vec::new())),
+                Vec::new(),
+            )
+        })
     }
 }

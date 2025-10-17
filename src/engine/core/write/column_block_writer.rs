@@ -53,7 +53,7 @@ impl ColumnBlockWriter {
         key: ColumnKey,
         zone_id: u32,
         uncompressed_block: &[u8],
-        in_block_offsets: Vec<u32>,
+        row_count: u32,
         codec: &C,
     ) -> Result<(), StoreError> {
         // Ensure writer exists without borrowing self immutably during the entry borrow
@@ -83,8 +83,7 @@ impl ColumnBlockWriter {
                 block_start,
                 comp_len: compressed.len() as u32,
                 uncomp_len: uncompressed_len,
-                num_rows: in_block_offsets.len() as u32,
-                in_block_offsets,
+                num_rows: row_count,
             },
         );
 
