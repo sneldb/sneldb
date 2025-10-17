@@ -3,8 +3,9 @@ use crate::engine::core::FieldXorFilter;
 use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
 use crate::engine::core::zone::enum_bitmap_index::EnumBitmapBuilder;
 use crate::engine::core::zone::rlte_index::RlteIndex;
+use crate::engine::core::zone::zone_metadata_writer::ZoneMetadataWriter;
 use crate::engine::core::zone::zone_xor_index::build_all_zxf;
-use crate::engine::core::{ZoneIndex, ZoneMeta, ZonePlan};
+use crate::engine::core::{ZoneIndex, ZonePlan};
 use crate::engine::errors::StoreError;
 use crate::engine::schema::registry::SchemaRegistry;
 use std::path::Path;
@@ -29,57 +30,64 @@ impl<'a> ZoneWriter<'a> {
     }
 
     pub async fn write_all(&self, zone_plans: &[ZonePlan]) -> Result<(), StoreError> {
-        info!(
-            target: "sneldb::flush",
-            uid = self.uid,
-            segment_dir = %self.segment_dir.display(),
-            zone_count = zone_plans.len(),
-            "Starting zone file write"
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::flush",
+                uid = self.uid,
+                segment_dir = %self.segment_dir.display(),
+                zone_count = zone_plans.len(),
+                "Starting zone file write"
+            );
+        }
 
-        // Write .zones metadata
-        let zone_meta = ZoneMeta::build_all(zone_plans);
-        debug!(
-            target: "sneldb::flush",
-            uid = self.uid,
-            "Writing .zones metadata"
-        );
-        ZoneMeta::save(self.uid, &zone_meta, self.segment_dir)?;
+        // Write .zones metadata (delegated)
+        let metadata_writer = ZoneMetadataWriter::new(self.uid, self.segment_dir);
+        metadata_writer.write(zone_plans)?;
 
         // Write .col files
         let writer = ColumnWriter::new(self.segment_dir.to_path_buf(), self.registry.clone());
-        debug!(
-            target: "sneldb::flush",
-            uid = self.uid,
-            "Writing .col files"
-        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target: "sneldb::flush",
+                uid = self.uid,
+                "Writing .col files"
+            );
+        }
         writer.write_all(zone_plans).await?;
 
         // Build XOR filters
-        debug!(
-            target: "sneldb::flush",
-            uid = self.uid,
-            "Building XOR filters"
-        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target: "sneldb::flush",
+                uid = self.uid,
+                "Building XOR filters"
+            );
+        }
         FieldXorFilter::build_all(zone_plans, self.segment_dir)
             .map_err(|e| StoreError::FlushFailed(format!("Failed to build XOR filters: {}", e)))?;
 
         // Build per-zone XOR index (.zxf)
-        debug!(
-            target: "sneldb::flush",
-            uid = self.uid,
-            "Building zone XOR filters (.zxf)"
-        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target: "sneldb::flush",
+                uid = self.uid,
+                "Building zone XOR filters (.zxf)"
+            );
+        }
         if let Err(e) = build_all_zxf(zone_plans, self.segment_dir) {
-            debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping .zxf due to error");
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping .zxf due to error");
+            }
         }
 
         // Build Zone-level SuRF filters (best-effort)
-        debug!(
-            target: "sneldb::flush",
-            uid = self.uid,
-            "Building Zone-level SuRF filters"
-        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target: "sneldb::flush",
+                uid = self.uid,
+                "Building Zone-level SuRF filters"
+            );
+        }
         let schema = self
             .registry
             .read()
@@ -90,47 +98,63 @@ impl<'a> ZoneWriter<'a> {
             if let Err(e) =
                 ZoneSurfFilter::build_all_with_schema(zone_plans, self.segment_dir, &schema)
             {
-                debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping Zone SuRF (schema-aware) due to error");
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping Zone SuRF (schema-aware) due to error");
+                }
             }
         } else if let Err(e) = ZoneSurfFilter::build_all(zone_plans, self.segment_dir) {
-            debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping Zone SuRF due to error");
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping Zone SuRF due to error");
+            }
         }
 
         // Build RLTE index (best-effort)
-        debug!(
-            target: "sneldb::flush",
-            uid = self.uid,
-            "Building RLTE index"
-        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target: "sneldb::flush",
+                uid = self.uid,
+                "Building RLTE index"
+            );
+        }
         match std::panic::catch_unwind(|| RlteIndex::build_from_zones(zone_plans)) {
             Ok(rlte) => {
                 if let Err(e) = rlte.save(self.uid, self.segment_dir) {
-                    debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping RLTE due to IO error");
+                    if tracing::enabled!(tracing::Level::DEBUG) {
+                        debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping RLTE due to IO error");
+                    }
                 }
             }
             Err(_) => {
-                debug!(target: "sneldb::flush", uid = self.uid, "Skipping RLTE due to build panic");
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    debug!(target: "sneldb::flush", uid = self.uid, "Skipping RLTE due to build panic");
+                }
             }
         }
 
         // Build Enum Bitmap Indexes for enum fields (best-effort)
-        debug!(
-            target: "sneldb::flush",
-            uid = self.uid,
-            "Building enum bitmap indexes"
-        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target: "sneldb::flush",
+                uid = self.uid,
+                "Building enum bitmap indexes"
+            );
+        }
         if let Err(e) =
             EnumBitmapBuilder::build_all(zone_plans, self.segment_dir, &self.registry).await
         {
-            debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping EBM due to error");
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping EBM due to error");
+            }
         }
 
         // Build and write index
-        debug!(
-            target: "sneldb::flush",
-            uid = self.uid,
-            "Building zone index"
-        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target: "sneldb::flush",
+                uid = self.uid,
+                "Building zone index"
+            );
+        }
         let mut index = ZoneIndex::default();
         for zp in zone_plans {
             for ev in &zp.events {
@@ -139,19 +163,23 @@ impl<'a> ZoneWriter<'a> {
         }
 
         let index_path = self.segment_dir.join(format!("{}.idx", self.uid));
-        debug!(
-            target: "sneldb::flush",
-            uid = self.uid,
-            path = %index_path.display(),
-            "Writing zone index"
-        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target: "sneldb::flush",
+                uid = self.uid,
+                path = %index_path.display(),
+                "Writing zone index"
+            );
+        }
         index.write_to_path(index_path)?;
 
-        info!(
-            target: "sneldb::flush",
-            uid = self.uid,
-            "Zone write completed"
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::flush",
+                uid = self.uid,
+                "Zone write completed"
+            );
+        }
 
         Ok(())
     }

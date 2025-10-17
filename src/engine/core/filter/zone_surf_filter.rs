@@ -153,7 +153,9 @@ impl ZoneSurfFilter {
     }
 
     pub fn build_all(zone_plans: &[ZonePlan], segment_dir: &Path) -> std::io::Result<()> {
-        debug!(target: "sneldb::surf", "Building Zone SuRF for {} zones", zone_plans.len());
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(target: "sneldb::surf", "Building Zone SuRF for {} zones", zone_plans.len());
+        }
         let mut map: HashMap<(String, String), Vec<(u32, Vec<Vec<u8>>)>> = HashMap::new();
 
         for zp in zone_plans {
@@ -211,9 +213,13 @@ impl ZoneSurfFilter {
             entries.sort_by_key(|e| e.zone_id);
             let out = ZoneSurfFilter { entries };
             let path = Self::get_filter_path(&uid, &field, segment_dir);
-            info!(target: "sneldb::surf", uid = %uid, field = %field, path = %path.display(), "Writing Zone SuRF");
+            if tracing::enabled!(tracing::Level::INFO) {
+                info!(target: "sneldb::surf", uid = %uid, field = %field, path = %path.display(), "Writing Zone SuRF");
+            }
             if let Err(e) = out.save(&path) {
-                warn!(target: "sneldb::surf", error = %e, "Failed to save Zone SuRF; continuing");
+                if tracing::enabled!(tracing::Level::WARN) {
+                    warn!(target: "sneldb::surf", error = %e, "Failed to save Zone SuRF; continuing");
+                }
             }
         }
         Ok(())
@@ -224,7 +230,9 @@ impl ZoneSurfFilter {
         segment_dir: &Path,
         schema: &MiniSchema,
     ) -> std::io::Result<()> {
-        debug!(target: "sneldb::surf", "Building Zone SuRF (schema-aware) for {} zones", zone_plans.len());
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(target: "sneldb::surf", "Building Zone SuRF (schema-aware) for {} zones", zone_plans.len());
+        }
         let mut map: HashMap<(String, String), Vec<(u32, Vec<Vec<u8>>)>> = HashMap::new();
 
         // Collect schema-defined time fields
@@ -313,9 +321,13 @@ impl ZoneSurfFilter {
             entries.sort_by_key(|e| e.zone_id);
             let out = ZoneSurfFilter { entries };
             let path = Self::get_filter_path(&uid, &field, segment_dir);
-            info!(target = "sneldb::surf", uid = %uid, field = %field, path = %path.display(), "Writing Zone SuRF");
+            if tracing::enabled!(tracing::Level::INFO) {
+                info!(target = "sneldb::surf", uid = %uid, field = %field, path = %path.display(), "Writing Zone SuRF");
+            }
             if let Err(e) = out.save(&path) {
-                warn!(target = "sneldb::surf", error = %e, "Failed to save Zone SuRF; continuing");
+                if tracing::enabled!(tracing::Level::WARN) {
+                    warn!(target = "sneldb::surf", error = %e, "Failed to save Zone SuRF; continuing");
+                }
             }
         }
         Ok(())
@@ -351,19 +363,21 @@ impl ZoneSurfFilter {
             }
         }
 
-        info!(
-            target: "sneldb::surf",
-            segment_id = %segment_id,
-            zones_total = self.entries.len(),
-            zones_matched = result.len(),
-            nodes_visited = total_nodes_visited,
-            edges_examined = total_edges_examined,
-            backtracks = total_backtracks,
-            left_descents = total_left_descents,
-            inclusive,
-            lower_b64 = %B64.encode(lower),
-            "SuRF GE probe summary"
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::surf",
+                segment_id = %segment_id,
+                zones_total = self.entries.len(),
+                zones_matched = result.len(),
+                nodes_visited = total_nodes_visited,
+                edges_examined = total_edges_examined,
+                backtracks = total_backtracks,
+                left_descents = total_left_descents,
+                inclusive,
+                lower_b64 = %B64.encode(lower),
+                "SuRF GE probe summary"
+            );
+        }
 
         result
     }
@@ -398,19 +412,21 @@ impl ZoneSurfFilter {
             }
         }
 
-        info!(
-            target: "sneldb::surf",
-            segment_id = %segment_id,
-            zones_total = self.entries.len(),
-            zones_matched = result.len(),
-            nodes_visited = total_nodes_visited,
-            edges_examined = total_edges_examined,
-            backtracks = total_backtracks,
-            right_descents = total_right_descents,
-            inclusive,
-            upper_b64 = %B64.encode(upper),
-            "SuRF LE probe summary"
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::surf",
+                segment_id = %segment_id,
+                zones_total = self.entries.len(),
+                zones_matched = result.len(),
+                nodes_visited = total_nodes_visited,
+                edges_examined = total_edges_examined,
+                backtracks = total_backtracks,
+                right_descents = total_right_descents,
+                inclusive,
+                upper_b64 = %B64.encode(upper),
+                "SuRF LE probe summary"
+            );
+        }
 
         result
     }

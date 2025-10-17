@@ -20,11 +20,13 @@ pub struct ZoneMeta {
 
 impl ZoneMeta {
     pub fn load(path: &Path) -> Result<Vec<ZoneMeta>, ZoneMetaError> {
-        trace!(
-            target: "sneldb::flush",
-            path = %path.display(),
-            "Loading zone meta from disk"
-        );
+        if tracing::enabled!(tracing::Level::TRACE) {
+            trace!(
+                target: "sneldb::flush",
+                path = %path.display(),
+                "Loading zone meta from disk"
+            );
+        }
 
         let mut file = File::open(path)?;
         let header = BinaryHeader::read_from(&mut file)?;
@@ -34,25 +36,29 @@ impl ZoneMeta {
         let reader = BufReader::new(file);
         let zones: Vec<ZoneMeta> = bincode::deserialize_from(reader)?;
 
-        debug!(
-            target: "sneldb::flush",
-            zone_count = zones.len(),
-            path = %path.display(),
-            "Zone meta loaded successfully"
-        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target: "sneldb::flush",
+                zone_count = zones.len(),
+                path = %path.display(),
+                "Zone meta loaded successfully"
+            );
+        }
         Ok(zones)
     }
 
     pub fn save(uid: &str, zones: &[ZoneMeta], segment_dir: &Path) -> Result<(), ZoneMetaError> {
         let path = segment_dir.join(format!("{}.zones", uid));
 
-        trace!(
-            target: "sneldb::flush",
-            uid,
-            zone_count = zones.len(),
-            path = %path.display(),
-            "Saving zone meta to disk"
-        );
+        if tracing::enabled!(tracing::Level::TRACE) {
+            trace!(
+                target: "sneldb::flush",
+                uid,
+                zone_count = zones.len(),
+                path = %path.display(),
+                "Saving zone meta to disk"
+            );
+        }
 
         let mut file = File::create(&path)?;
         let header = BinaryHeader::new(FileKind::ZoneMeta.magic(), 1, 0);
@@ -60,37 +66,43 @@ impl ZoneMeta {
         let writer = BufWriter::new(file);
         bincode::serialize_into(writer, zones)?;
 
-        debug!(
-            target: "sneldb::flush",
-            uid,
-            zone_count = zones.len(),
-            path = %path.display(),
-            "Wrote zone meta file"
-        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target: "sneldb::flush",
+                uid,
+                zone_count = zones.len(),
+                path = %path.display(),
+                "Wrote zone meta file"
+            );
+        }
 
         Ok(())
     }
 
     pub fn build(zone_plan: &ZonePlan) -> Result<ZoneMeta, StoreError> {
         if zone_plan.events.is_empty() {
-            warn!(
+            if tracing::enabled!(tracing::Level::WARN) {
+                warn!(
+                    target: "sneldb::flush",
+                    uid = zone_plan.uid,
+                    segment_id = zone_plan.segment_id,
+                    zone_id = zone_plan.id,
+                    "Skipping empty zone plan"
+                );
+            }
+            return Err(StoreError::EmptyFlush);
+        }
+
+        if tracing::enabled!(tracing::Level::TRACE) {
+            trace!(
                 target: "sneldb::flush",
                 uid = zone_plan.uid,
                 segment_id = zone_plan.segment_id,
                 zone_id = zone_plan.id,
-                "Skipping empty zone plan"
+                event_count = zone_plan.events.len(),
+                "Building ZoneMeta from zone plan"
             );
-            return Err(StoreError::EmptyFlush);
         }
-
-        trace!(
-            target: "sneldb::flush",
-            uid = zone_plan.uid,
-            segment_id = zone_plan.segment_id,
-            zone_id = zone_plan.id,
-            event_count = zone_plan.events.len(),
-            "Building ZoneMeta from zone plan"
-        );
 
         let sorted_by_time = Event::order_by(&zone_plan.events, "timestamp");
 
@@ -111,14 +123,16 @@ impl ZoneMeta {
             .filter_map(|plan| match ZoneMeta::build(plan) {
                 Ok(meta) => Some(meta),
                 Err(e) => {
-                    error!(
-                        target: "sneldb::flush",
-                        uid = plan.uid,
-                        segment_id = plan.segment_id,
-                        zone_id = plan.id,
-                        error = %e,
-                        "Failed to build ZoneMeta"
-                    );
+                    if tracing::enabled!(tracing::Level::ERROR) {
+                        error!(
+                            target: "sneldb::flush",
+                            uid = plan.uid,
+                            segment_id = plan.segment_id,
+                            zone_id = plan.id,
+                            error = %e,
+                            "Failed to build ZoneMeta"
+                        );
+                    }
                     None
                 }
             })
@@ -126,11 +140,13 @@ impl ZoneMeta {
     }
 
     pub fn sort_by<'a>(zones: &'a mut [ZoneMeta], field: &str) -> &'a [ZoneMeta] {
-        debug!(
-            target: "sneldb::flush",
-            field,
-            "Sorting zone meta by field"
-        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target: "sneldb::flush",
+                field,
+                "Sorting zone meta by field"
+            );
+        }
 
         match field {
             "zone_id" => zones.sort_by_key(|z| z.zone_id),
@@ -139,11 +155,13 @@ impl ZoneMeta {
             "timestamp_min" => zones.sort_by_key(|z| z.timestamp_min),
             "timestamp_max" => zones.sort_by_key(|z| z.timestamp_max),
             _ => {
-                error!(
-                    target: "sneldb::flush",
-                    field,
-                    "Invalid field provided to ZoneMeta::sort_by"
-                );
+                if tracing::enabled!(tracing::Level::ERROR) {
+                    error!(
+                        target: "sneldb::flush",
+                        field,
+                        "Invalid field provided to ZoneMeta::sort_by"
+                    );
+                }
             }
         }
 

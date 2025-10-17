@@ -2,7 +2,7 @@ use crate::engine::core::{
     CandidateZone, ExecutionStep, LogicalOp, QueryCaches, QueryPlan, ZoneCombiner,
 };
 
-use tracing::{info, warn};
+use tracing::info;
 
 use super::zone_step_planner::ZoneStepPlanner;
 use super::zone_step_runner::ZoneStepRunner;
@@ -26,7 +26,9 @@ impl<'a> ZoneCollector<'a> {
 
     /// Collects and combines zones from all execution steps
     pub fn collect_zones(&mut self) -> Vec<CandidateZone> {
-        info!(target: "sneldb::zone_collector", step_count = self.steps.len(), "Starting zone collection");
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(target: "sneldb::zone_collector", step_count = self.steps.len(), "Starting zone collection");
+        }
 
         if tracing::enabled!(tracing::Level::INFO) {
             let columns: Vec<&str> = self
@@ -45,18 +47,24 @@ impl<'a> ZoneCollector<'a> {
         let runner = ZoneStepRunner::new(self.plan).with_caches(self.caches);
         let (all_zones, _pruned) = runner.run(&mut self.steps, &order);
 
-        info!(target: "sneldb::zone_collector", "All steps completed");
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(target: "sneldb::zone_collector", "All steps completed");
+        }
 
         let op = LogicalOp::from_expr(self.plan.where_clause());
-        info!(target: "sneldb::zone_collector", ?op, "Combining zones with logical operation");
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(target: "sneldb::zone_collector", ?op, "Combining zones with logical operation");
+        }
 
         let result = ZoneCombiner::new(all_zones, op).combine();
 
-        info!(
-            target: "sneldb::zone_collector",
-            zone_count = result.len(),
-            "Zone collection complete"
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::zone_collector",
+                zone_count = result.len(),
+                "Zone collection complete"
+            );
+        }
         //   warn!("result: {:?}", result);
 
         result

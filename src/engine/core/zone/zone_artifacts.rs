@@ -53,7 +53,9 @@ impl<'a> ZoneArtifacts<'a> {
     pub fn load_zone_index(&self, segment_id: &str, uid: &str) -> Result<Arc<ZoneIndex>, String> {
         if let Some(caches) = self.caches {
             if let Ok(index) = caches.get_or_load_zone_index(segment_id, uid) {
-                info!(target: "cache::zone_index::hit", %segment_id, %uid, "Using cached ZoneIndex");
+                if tracing::enabled!(tracing::Level::INFO) {
+                    info!(target: "cache::zone_index::hit", %segment_id, %uid, "Using cached ZoneIndex");
+                }
                 return Ok(index);
             }
         }

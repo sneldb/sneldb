@@ -28,12 +28,14 @@ impl CandidateZone {
 
     pub fn create_all_zones_for_segment(segment_id: &str) -> Vec<Self> {
         let count = CONFIG.engine.fill_factor;
-        info!(
-            target: "sneldb::candidate_zone",
-            %segment_id,
-            zone_count = count,
-            "Creating all zones for segment"
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::candidate_zone",
+                %segment_id,
+                zone_count = count,
+                "Creating all zones for segment"
+            );
+        }
 
         (0..count)
             .map(|zone_id| Self::new(zone_id as u32, segment_id.to_string()))
@@ -68,12 +70,14 @@ impl CandidateZone {
             }
         }
 
-        info!(
-            target: "sneldb::candidate_zone",
-            original = original_len,
-            deduplicated = unique.len(),
-            "Deduplicated zones"
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::candidate_zone",
+                original = original_len,
+                deduplicated = unique.len(),
+                "Deduplicated zones"
+            );
+        }
 
         unique
     }
