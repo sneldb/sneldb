@@ -3,20 +3,17 @@ use tokio::io::{BufReader, split};
 use tokio::net::UnixListener;
 use tokio::task;
 
-use crate::engine::schema::SchemaRegistry;
-use crate::engine::shard::manager::ShardManager;
 use crate::frontend::unix::connection::Connection;
 use crate::shared::config::CONFIG;
 use crate::shared::response::json::JsonRenderer;
 use crate::shared::response::render::Renderer;
 use crate::shared::response::unix::UnixRenderer;
 use anyhow::Context;
-use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::io::{ReadHalf, WriteHalf};
-use tokio::sync::RwLock;
+use crate::frontend::context::FrontendContext;
 
-pub async fn run_server() -> anyhow::Result<()> {
+pub async fn run_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
     let socket_path = &CONFIG.server.socket_path;
 
     eprintln!("socket_path: {}", socket_path);
@@ -29,16 +26,8 @@ pub async fn run_server() -> anyhow::Result<()> {
     eprintln!("listener: {:?}", listener);
     tracing::info!("Listening on {}", socket_path);
 
-    let registry = Arc::new(RwLock::new(
-        SchemaRegistry::new().expect("Failed to initialize SchemaRegistry"),
-    ));
-
-    // Resolve base dir from config
-    let base_dir = PathBuf::from(&CONFIG.engine.data_dir);
-    let wal_dir = PathBuf::from(&CONFIG.wal.dir);
-
-    let shard_manager =
-        Arc::new(ShardManager::new(CONFIG.engine.shard_count, base_dir, wal_dir).await);
+    let registry = Arc::clone(&ctx.registry);
+    let shard_manager = Arc::clone(&ctx.shard_manager);
 
     loop {
         match listener.accept().await {
