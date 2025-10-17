@@ -1,35 +1,23 @@
 use crate::command::dispatcher::dispatch_command;
 use crate::command::parser::parse_command;
-use crate::engine::schema::SchemaRegistry;
-use crate::engine::shard::manager::ShardManager;
+use crate::frontend::context::FrontendContext;
 use crate::shared::config::CONFIG;
 use crate::shared::response::unix::UnixRenderer;
-use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
-use tokio::sync::RwLock;
 use tracing::info;
 
-pub async fn run_tcp_server() -> anyhow::Result<()> {
+pub async fn run_tcp_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
     let addr = &CONFIG.server.tcp_addr;
-    let registry = Arc::new(RwLock::new(
-        SchemaRegistry::new().expect("Failed to initialize SchemaRegistry"),
-    ));
-
-    let base_dir = PathBuf::from(&CONFIG.engine.data_dir);
-    let wal_dir = PathBuf::from(&CONFIG.wal.dir);
-
-    let shard_manager =
-        Arc::new(ShardManager::new(CONFIG.engine.shard_count, base_dir, wal_dir).await);
 
     let listener = TcpListener::bind(addr).await?;
     info!("TCP listener active on {}", addr);
 
     loop {
         let (stream, _) = listener.accept().await?;
-        let shard_manager = shard_manager.clone();
-        let registry = registry.clone();
+        let shard_manager = ctx.shard_manager.clone();
+        let registry = ctx.registry.clone();
 
         tokio::spawn(async move {
             let mut reader = BufReader::new(stream);
