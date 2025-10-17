@@ -1,5 +1,6 @@
 use crate::command::types::CompareOp as CommandCompareOp;
 use crate::command::types::Expr;
+use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 
@@ -31,6 +32,10 @@ pub trait Condition: Send + Sync + Debug {
 
     /// Collects the names of fields that require numeric access for this condition.
     fn collect_numeric_fields(&self, _out: &mut HashSet<String>) {}
+
+    /// Used for downcasting to concrete condition types when needed for
+    /// SIMD fast-paths or specialized handling.
+    fn as_any(&self) -> &dyn Any;
 }
 
 /// Provides indexed access to field values for a candidate zone.
@@ -68,6 +73,97 @@ impl<'a> PreparedAccessor<'a> {
             }
         }
     }
+
+    /// Builds a dense i64 buffer and a parallel validity mask for a field.
+    /// Invalid/missing entries are represented as any value in the buffer and false in validity.
+    pub fn get_i64_buffer_with_validity(
+        &self,
+        field: &str,
+        start: usize,
+        end: usize,
+    ) -> Option<(Vec<i64>, Vec<bool>)> {
+        let column = self.columns.get(field)?;
+        let end = end.min(self.event_count);
+        if start >= end {
+            return Some((Vec::new(), Vec::new()));
+        }
+        let mut values: Vec<i64> = Vec::with_capacity(end - start);
+        let mut valid: Vec<bool> = Vec::with_capacity(end - start);
+        for i in start..end {
+            if let Some(v) = column.get_i64_at(i) {
+                values.push(v);
+                valid.push(true);
+            } else {
+                values.push(0);
+                valid.push(false);
+            }
+        }
+        Some((values, valid))
+    }
+
+    /// Builds a dense u64 buffer and a parallel validity mask for a field.
+    pub fn get_u64_buffer_with_validity(
+        &self,
+        field: &str,
+        start: usize,
+        end: usize,
+    ) -> Option<(Vec<u64>, Vec<bool>)> {
+        let column = self.columns.get(field)?;
+        let end = end.min(self.event_count);
+        if start >= end {
+            return Some((Vec::new(), Vec::new()));
+        }
+        let mut values: Vec<u64> = Vec::with_capacity(end - start);
+        let mut valid: Vec<bool> = Vec::with_capacity(end - start);
+        let mut any_valid = false;
+        for i in start..end {
+            if let Some(v) = column.get_u64_at(i) {
+                values.push(v);
+                valid.push(true);
+                any_valid = true;
+            } else {
+                values.push(0);
+                valid.push(false);
+            }
+        }
+        if any_valid {
+            Some((values, valid))
+        } else {
+            None
+        }
+    }
+
+    /// Builds a dense f64 buffer and a parallel validity mask for a field.
+    pub fn get_f64_buffer_with_validity(
+        &self,
+        field: &str,
+        start: usize,
+        end: usize,
+    ) -> Option<(Vec<f64>, Vec<bool>)> {
+        let column = self.columns.get(field)?;
+        let end = end.min(self.event_count);
+        if start >= end {
+            return Some((Vec::new(), Vec::new()));
+        }
+        let mut values: Vec<f64> = Vec::with_capacity(end - start);
+        let mut valid: Vec<bool> = Vec::with_capacity(end - start);
+        let mut any_valid = false;
+        for i in start..end {
+            if let Some(v) = column.get_f64_at(i) {
+                values.push(v);
+                valid.push(true);
+                any_valid = true;
+            } else {
+                values.push(0.0);
+                valid.push(false);
+            }
+        }
+        if any_valid {
+            Some((values, valid))
+        } else {
+            None
+        }
+    }
 }
 
 impl<'a> FieldAccessor for PreparedAccessor<'a> {
@@ -100,6 +196,41 @@ impl<'a> FieldAccessor for PreparedAccessor<'a> {
     }
 }
 
+impl<'a> PreparedAccessor<'a> {
+    /// Convenience wrapper used by SIMD fast-paths.
+    #[inline]
+    pub fn get_i64_slice_with_validity(
+        &self,
+        field: &str,
+        start: usize,
+        end: usize,
+    ) -> Option<(Vec<i64>, Vec<bool>)> {
+        self.get_i64_buffer_with_validity(field, start, end)
+    }
+
+    /// Convenience wrapper used by SIMD fast-paths.
+    #[inline]
+    pub fn get_u64_slice_with_validity(
+        &self,
+        field: &str,
+        start: usize,
+        end: usize,
+    ) -> Option<(Vec<u64>, Vec<bool>)> {
+        self.get_u64_buffer_with_validity(field, start, end)
+    }
+
+    /// Convenience wrapper used by SIMD fast-paths.
+    #[inline]
+    pub fn get_f64_slice_with_validity(
+        &self,
+        field: &str,
+        start: usize,
+        end: usize,
+    ) -> Option<(Vec<f64>, Vec<bool>)> {
+        self.get_f64_buffer_with_validity(field, start, end)
+    }
+}
+
 /// Numeric comparison condition
 #[derive(Debug)]
 pub struct NumericCondition {
@@ -114,6 +245,33 @@ impl NumericCondition {
             field,
             operation,
             value,
+        }
+    }
+
+    #[inline]
+    pub fn field(&self) -> &str {
+        &self.field
+    }
+
+    #[inline]
+    pub fn op(&self) -> CompareOp {
+        self.operation
+    }
+
+    #[inline]
+    pub fn value(&self) -> i64 {
+        self.value
+    }
+
+    #[inline]
+    pub fn evaluate_scalar(&self, lhs: i64) -> bool {
+        match self.operation {
+            CompareOp::Gt => lhs > self.value,
+            CompareOp::Gte => lhs >= self.value,
+            CompareOp::Lt => lhs < self.value,
+            CompareOp::Lte => lhs <= self.value,
+            CompareOp::Eq => lhs == self.value,
+            CompareOp::Neq => lhs != self.value,
         }
     }
 }
@@ -207,6 +365,10 @@ impl Condition for NumericCondition {
     fn collect_numeric_fields(&self, out: &mut HashSet<String>) {
         out.insert(self.field.clone());
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /// String comparison condition
@@ -262,6 +424,10 @@ impl Condition for StringCondition {
             CompareOp::Neq => val != self.value,
             _ => false,
         }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -329,6 +495,10 @@ impl Condition for LogicalCondition {
         for condition in &self.conditions {
             condition.collect_numeric_fields(out);
         }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
