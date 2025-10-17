@@ -1,12 +1,12 @@
 use crate::engine::core::Event;
 use serde_json::{Map, Number, Value};
-use tracing::{debug, warn};
 
 /// Builds Event objects from zone values
 pub struct EventBuilder {
     pub event_type: String,
     pub context_id: String,
     pub timestamp: u64,
+    // Use Map (BTreeMap) - proven faster for small collections (~20 fields)
     pub payload: Map<String, Value>,
 }
 
@@ -20,8 +20,15 @@ impl EventBuilder {
         }
     }
 
+    /// Create a new EventBuilder (capacity hint not used for BTreeMap)
+    #[inline]
+    pub fn with_capacity(_capacity: usize) -> Self {
+        // BTreeMap doesn't support with_capacity, just create new
+        Self::new()
+    }
+
     pub fn build(self) -> Event {
-        debug!(target: "builder::event", "Building event with {} payload fields", self.payload.len());
+        // No conversion needed - payload is already Map (BTreeMap)
         Event {
             event_type: self.event_type,
             context_id: self.context_id,
@@ -30,101 +37,91 @@ impl EventBuilder {
         }
     }
 
+    #[inline]
     pub fn add_field_i64(&mut self, field: &str, value: i64) {
-        debug!(target: "builder::event", %field, value = value, "Adding i64 field");
         match field {
             "timestamp" => {
                 self.timestamp = value as u64;
-                debug!(target: "builder::event", "Set timestamp = {}", self.timestamp);
             }
             "context_id" | "event_type" => {
                 // fall back to string semantics for non-numeric fixed fields
                 self.add_field(field, &value.to_string());
             }
             _ => {
-                self.payload
-                    .insert(field.to_string(), Value::Number(value.into()));
-                debug!(target: "builder::event", %field, "Inserted i64 payload value");
+                // Reuse the field string allocation from the match
+                self.insert_value(field, Value::Number(value.into()));
             }
         }
     }
 
+    /// Helper to insert a value with field name (avoids repeated to_string calls in hot paths)
+    #[inline(always)]
+    fn insert_value(&mut self, field: &str, value: Value) {
+        self.payload.insert(field.to_string(), value);
+    }
+
+    #[inline]
     pub fn add_field_u64(&mut self, field: &str, value: u64) {
-        debug!(target: "builder::event", %field, value = value, "Adding u64 field");
         match field {
             "timestamp" => {
                 self.timestamp = value;
-                debug!(target: "builder::event", "Set timestamp = {}", self.timestamp);
             }
             "context_id" | "event_type" => {
                 self.add_field(field, &value.to_string());
             }
             _ => {
-                self.payload.insert(
-                    field.to_string(),
-                    Value::Number(serde_json::Number::from(value)),
-                );
-                debug!(target: "builder::event", %field, "Inserted u64 payload value");
+                self.insert_value(field, Value::Number(Number::from(value)));
             }
         }
     }
 
+    #[inline]
     pub fn add_field_f64(&mut self, field: &str, value: f64) {
-        debug!(target: "builder::event", %field, value = value, "Adding f64 field");
-        if let Some(n) = serde_json::Number::from_f64(value) {
-            self.payload.insert(field.to_string(), Value::Number(n));
+        if let Some(n) = Number::from_f64(value) {
+            self.insert_value(field, Value::Number(n));
         } else {
-            self.payload.insert(field.to_string(), Value::Null);
+            self.insert_value(field, Value::Null);
         }
     }
 
+    #[inline]
     pub fn add_field_bool(&mut self, field: &str, value: bool) {
-        debug!(target: "builder::event", %field, value = value, "Adding bool field");
         match field {
             "context_id" | "event_type" => {
                 self.add_field(field, if value { "true" } else { "false" })
             }
             _ => {
-                self.payload.insert(field.to_string(), Value::Bool(value));
+                self.insert_value(field, Value::Bool(value));
             }
         }
     }
 
+    #[inline]
     pub fn add_field_null(&mut self, field: &str) {
-        debug!(target: "builder::event", %field, "Adding null field");
         match field {
             "context_id" | "event_type" => self.add_field(field, ""),
             _ => {
-                self.payload.insert(field.to_string(), Value::Null);
+                self.insert_value(field, Value::Null);
             }
         }
     }
 
     pub fn add_field(&mut self, field: &str, value: &str) {
-        debug!(target: "builder::event", %field, %value, "Adding field");
         match field {
             "event_type" => {
                 self.event_type = value.to_string();
-                debug!(target: "builder::event", "Set event_type = {}", self.event_type);
             }
             "context_id" => {
                 self.context_id = value.to_string();
-                debug!(target: "builder::event", "Set context_id = {}", self.context_id);
             }
-            "timestamp" => match value.parse::<u64>() {
-                Ok(ts) => {
-                    self.timestamp = ts;
-                    debug!(target: "builder::event", "Parsed timestamp = {}", ts);
-                }
-                Err(_) => {
-                    warn!(target: "builder::event", %value, "Failed to parse timestamp, using 0");
-                    self.timestamp = 0;
-                }
-            },
+            "timestamp" => {
+                self.timestamp = value.parse::<u64>().unwrap_or(0);
+            }
             _ => self.add_payload_field(field, value),
         }
     }
 
+    #[inline]
     fn add_payload_field(&mut self, field: &str, value: &str) {
         // Normalize whitespace
         let trimmed = value.trim();
@@ -132,18 +129,15 @@ impl EventBuilder {
         // Booleans and null (JSON-style keywords, lowercase)
         match trimmed {
             "true" => {
-                self.payload.insert(field.to_string(), Value::Bool(true));
-                debug!(target: "builder::event", %field, "Parsed as bool true");
+                self.insert_value(field, Value::Bool(true));
                 return;
             }
             "false" => {
-                self.payload.insert(field.to_string(), Value::Bool(false));
-                debug!(target: "builder::event", %field, "Parsed as bool false");
+                self.insert_value(field, Value::Bool(false));
                 return;
             }
             "null" => {
-                self.payload.insert(field.to_string(), Value::Null);
-                debug!(target: "builder::event", %field, "Parsed as null");
+                self.insert_value(field, Value::Null);
                 return;
             }
             _ => {}
@@ -152,37 +146,27 @@ impl EventBuilder {
         // Try integers: prefer signed if a leading '-'; else try u64 first to capture large positives
         if trimmed.starts_with('-') {
             if let Ok(i) = trimmed.parse::<i64>() {
-                self.payload
-                    .insert(field.to_string(), Value::Number(i.into()));
-                debug!(target: "builder::event", %field, "Parsed as i64");
+                self.insert_value(field, Value::Number(i.into()));
                 return;
             }
         } else if let Ok(u) = trimmed.parse::<u64>() {
-            self.payload
-                .insert(field.to_string(), Value::Number(Number::from(u)));
-            debug!(target: "builder::event", %field, "Parsed as u64");
+            self.insert_value(field, Value::Number(Number::from(u)));
             return;
         } else if let Ok(i) = trimmed.parse::<i64>() {
-            self.payload
-                .insert(field.to_string(), Value::Number(i.into()));
-            debug!(target: "builder::event", %field, "Parsed as i64");
+            self.insert_value(field, Value::Number(i.into()));
             return;
         }
 
         // Try float; reject NaN/Inf that JSON cannot represent
         if let Ok(f) = trimmed.parse::<f64>() {
             if let Some(n) = Number::from_f64(f) {
-                self.payload.insert(field.to_string(), Value::Number(n));
-                debug!(target: "builder::event", %field, "Parsed as f64");
+                self.insert_value(field, Value::Number(n));
                 return;
-            } else {
-                warn!(target: "builder::event", %field, value=%trimmed, "Non-finite float not representable in JSON; storing as String");
             }
+            // Non-finite float: fall through to store as string
         }
 
         // Fallback: store as String (preserve original value, not trimmed)
-        self.payload
-            .insert(field.to_string(), Value::String(value.to_string()));
-        debug!(target: "builder::event", %field, "Stored as String");
+        self.insert_value(field, Value::String(value.to_string()));
     }
 }

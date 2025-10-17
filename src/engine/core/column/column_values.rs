@@ -1,5 +1,6 @@
 use std::sync::{Arc, OnceLock};
 
+use crate::engine::core::column::format::PhysicalType;
 use crate::engine::core::read::cache::DecompressedBlock;
 use std::simd::Simd;
 use std::simd::prelude::*;
@@ -135,6 +136,31 @@ impl ColumnValues {
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.ranges.is_empty()
+    }
+
+    /// Returns the physical type of this column if it's typed
+    #[inline]
+    pub fn physical_type(&self) -> Option<PhysicalType> {
+        if self.typed_i64.is_some() {
+            Some(PhysicalType::I64)
+        } else if self.typed_u64.is_some() {
+            Some(PhysicalType::U64)
+        } else if self.typed_f64.is_some() {
+            Some(PhysicalType::F64)
+        } else if self.typed_bool.is_some() {
+            Some(PhysicalType::Bool)
+        } else {
+            None // VarBytes or untyped
+        }
+    }
+
+    /// Check if this column has a known type (faster access path)
+    #[inline]
+    pub fn is_typed(&self) -> bool {
+        self.typed_i64.is_some()
+            || self.typed_u64.is_some()
+            || self.typed_f64.is_some()
+            || self.typed_bool.is_some()
     }
 
     #[inline]

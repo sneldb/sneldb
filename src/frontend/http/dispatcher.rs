@@ -91,7 +91,7 @@ pub async fn handle_json_command(
     let body = req.collect().await.unwrap().to_bytes();
     let renderer: Arc<dyn Renderer + Send + Sync> = Arc::new(JsonRenderer);
 
-    match serde_json::from_slice::<JsonCommand>(&body) {
+    match sonic_rs::from_slice::<JsonCommand>(&body) {
         Ok(json_cmd) => {
             let cmd: Command = json_cmd.into();
             info!("Received JSON command: {:?}", cmd);

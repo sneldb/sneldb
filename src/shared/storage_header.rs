@@ -47,24 +47,16 @@ impl BinaryHeader {
     }
 
     pub fn read_from<R: Read>(mut r: R) -> std::io::Result<Self> {
-        let mut magic = [0u8; 8];
-        r.read_exact(&mut magic)?;
+        // Read entire header in a single syscall (20 bytes)
+        let mut buf = [0u8; Self::TOTAL_LEN];
+        r.read_exact(&mut buf)?;
 
-        let mut v = [0u8; 2];
-        r.read_exact(&mut v)?;
-        let version = u16::from_le_bytes(v);
-
-        let mut f = [0u8; 2];
-        r.read_exact(&mut f)?;
-        let flags = u16::from_le_bytes(f);
-
-        let mut res = [0u8; 4];
-        r.read_exact(&mut res)?;
-        let reserved = u32::from_le_bytes(res);
-
-        let mut c = [0u8; 4];
-        r.read_exact(&mut c)?;
-        let header_crc32 = u32::from_le_bytes(c);
+        // Parse fields from buffer
+        let magic: [u8; 8] = buf[0..8].try_into().unwrap();
+        let version = u16::from_le_bytes([buf[8], buf[9]]);
+        let flags = u16::from_le_bytes([buf[10], buf[11]]);
+        let reserved = u32::from_le_bytes([buf[12], buf[13], buf[14], buf[15]]);
+        let header_crc32 = u32::from_le_bytes([buf[16], buf[17], buf[18], buf[19]]);
 
         let hdr = Self {
             magic,
@@ -73,6 +65,8 @@ impl BinaryHeader {
             reserved,
             header_crc32,
         };
+
+        // Validate CRC
         let expected = hdr.compute_crc32();
         if expected != header_crc32 {
             return Err(std::io::Error::new(
