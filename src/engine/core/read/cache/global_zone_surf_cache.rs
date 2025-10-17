@@ -39,10 +39,18 @@ pub struct GlobalZoneSurfCache {
 }
 
 impl GlobalZoneSurfCache {
+    #[inline]
+    fn compute_item_cap(capacity_bytes: usize) -> usize {
+        // Rough average entry size ~380 KB; ensure a sane minimum
+        let avg_entry_bytes: usize = 380_000;
+        let by_bytes = capacity_bytes.saturating_div(avg_entry_bytes);
+        by_bytes.max(1000)
+    }
+
     fn new(capacity_bytes: usize) -> Self {
         Self {
             inner: Mutex::new(LruCache::new(
-                NonZeroUsize::new(1000).unwrap(), // Max items - will be limited by byte capacity
+                NonZeroUsize::new(Self::compute_item_cap(capacity_bytes)).unwrap(),
             )),
             inflight: Mutex::new(std::collections::HashMap::new()),
             hits: AtomicU64::new(0),
@@ -84,6 +92,11 @@ impl GlobalZoneSurfCache {
     pub fn resize_bytes(&self, new_capacity_bytes: usize) {
         self.capacity_bytes
             .store(new_capacity_bytes, Ordering::Relaxed);
+        // Resize item cap to align with byte capacity
+        if let Ok(mut guard) = self.inner.lock() {
+            let new_items = Self::compute_item_cap(new_capacity_bytes);
+            guard.resize(NonZeroUsize::new(new_items).unwrap());
+        }
         // Evict entries if we're over the new capacity
         self.evict_until_within_cap();
     }
@@ -91,7 +104,9 @@ impl GlobalZoneSurfCache {
     fn evict_until_within_cap(&self) {
         if let Ok(mut guard) = self.inner.lock() {
             let cap = self.capacity_bytes.load(Ordering::Relaxed);
-            while self.current_bytes.load(Ordering::Relaxed) > cap {
+            // Hysteresis: when over capacity, evict down to 80% to create headroom
+            let low_watermark = cap.saturating_mul(80).saturating_div(100);
+            while self.current_bytes.load(Ordering::Relaxed) > low_watermark {
                 if let Some((_k, v)) = guard.pop_lru() {
                     let evicted_size = v.estimated_size();
                     self.current_bytes
@@ -156,38 +171,62 @@ impl GlobalZoneSurfCache {
         // Insert and manage eviction
         let outcome = if let Ok(mut guard) = self.inner.lock() {
             let estimated_size = entry_arc.estimated_size();
-            let current_bytes = self.current_bytes.load(Ordering::Relaxed);
             let capacity_bytes = self.capacity_bytes.load(Ordering::Relaxed);
+            let mut prospective = self.current_bytes.load(Ordering::Relaxed);
 
-            // Evict items if we would exceed capacity
-            while current_bytes + estimated_size > capacity_bytes && !guard.is_empty() {
-                if let Some((_, evicted_entry)) = guard.pop_lru() {
-                    let evicted_size = evicted_entry.estimated_size();
-                    self.current_bytes
-                        .fetch_sub(evicted_size, Ordering::Relaxed);
-                    self.evictions.fetch_add(1, Ordering::Relaxed);
-                } else {
-                    break;
-                }
-            }
-
-            // Only insert if we have space
-            if current_bytes + estimated_size <= capacity_bytes {
-                guard.put(key.clone(), Arc::clone(&entry_arc));
-                self.current_bytes
-                    .fetch_add(estimated_size, Ordering::Relaxed);
+            // Fast path: entry larger than total capacity, never insert
+            if estimated_size > capacity_bytes {
                 self.misses.fetch_add(1, Ordering::Relaxed);
-                if tracing::enabled!(tracing::Level::INFO) {
-                    tracing::info!(target: "cache::zone_surf", shard_id = key.shard_id, segment_id = key.segment_id, uid_id = key.uid_id, field_id = key.field_id, size_bytes = estimated_size, current_bytes = current_bytes + estimated_size, capacity_bytes = capacity_bytes, "ZoneSuRF cache MISS -> inserted entry");
+                if tracing::enabled!(tracing::Level::WARN) {
+                    tracing::warn!(target: "cache::zone_surf", shard_id = key.shard_id, segment_id = key.segment_id, uid_id = key.uid_id, field_id = key.field_id, size_bytes = estimated_size, capacity_bytes = capacity_bytes, "ZoneSuRF entry larger than capacity; skipping insert");
                 }
                 CacheOutcome::Miss
             } else {
-                // No space available, but we still loaded it
-                self.misses.fetch_add(1, Ordering::Relaxed);
-                if tracing::enabled!(tracing::Level::WARN) {
-                    tracing::warn!(target: "cache::zone_surf", shard_id = key.shard_id, segment_id = key.segment_id, uid_id = key.uid_id, field_id = key.field_id, size_bytes = estimated_size, current_bytes = current_bytes, capacity_bytes = capacity_bytes, "ZoneSuRF cache MISS but not inserted (over capacity)");
+                // Evict until we can fit the new entry
+                while prospective + estimated_size > capacity_bytes && !guard.is_empty() {
+                    if let Some((_, evicted_entry)) = guard.pop_lru() {
+                        let evicted_size = evicted_entry.estimated_size();
+                        prospective = prospective.saturating_sub(evicted_size);
+                        self.current_bytes
+                            .fetch_sub(evicted_size, Ordering::Relaxed);
+                        self.evictions.fetch_add(1, Ordering::Relaxed);
+                    } else {
+                        break;
+                    }
                 }
-                CacheOutcome::Miss
+                // Apply hysteresis to reduce thrash when we had to evict
+                if prospective + estimated_size > capacity_bytes {
+                    let low_watermark = capacity_bytes.saturating_mul(80).saturating_div(100);
+                    while prospective > low_watermark && !guard.is_empty() {
+                        if let Some((_, evicted_entry)) = guard.pop_lru() {
+                            let evicted_size = evicted_entry.estimated_size();
+                            prospective = prospective.saturating_sub(evicted_size);
+                            self.current_bytes
+                                .fetch_sub(evicted_size, Ordering::Relaxed);
+                            self.evictions.fetch_add(1, Ordering::Relaxed);
+                        } else {
+                            break;
+                        }
+                    }
+                }
+
+                if prospective + estimated_size <= capacity_bytes {
+                    guard.put(key.clone(), Arc::clone(&entry_arc));
+                    self.current_bytes
+                        .fetch_add(estimated_size, Ordering::Relaxed);
+                    self.misses.fetch_add(1, Ordering::Relaxed);
+                    if tracing::enabled!(tracing::Level::INFO) {
+                        tracing::info!(target: "cache::zone_surf", shard_id = key.shard_id, segment_id = key.segment_id, uid_id = key.uid_id, field_id = key.field_id, size_bytes = estimated_size, current_bytes = prospective + estimated_size, capacity_bytes = capacity_bytes, "ZoneSuRF cache MISS -> inserted entry");
+                    }
+                    CacheOutcome::Miss
+                } else {
+                    // No space available after eviction; skip insert
+                    self.misses.fetch_add(1, Ordering::Relaxed);
+                    if tracing::enabled!(tracing::Level::WARN) {
+                        tracing::warn!(target: "cache::zone_surf", shard_id = key.shard_id, segment_id = key.segment_id, uid_id = key.uid_id, field_id = key.field_id, size_bytes = estimated_size, current_bytes = prospective, capacity_bytes = capacity_bytes, "ZoneSuRF cache MISS but not inserted (over capacity)");
+                    }
+                    CacheOutcome::Miss
+                }
             }
         } else {
             self.misses.fetch_add(1, Ordering::Relaxed);

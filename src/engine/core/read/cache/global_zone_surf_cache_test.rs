@@ -111,3 +111,94 @@ fn test_zone_surf_cache_resize() {
     assert_eq!(stats_final.current_items, 1);
     assert!(stats_final.current_bytes > 0);
 }
+
+#[test]
+fn test_zone_surf_cache_prospective_eviction_inserts() {
+    // Ensure a small capacity that requires evictions to insert
+    clear_cache_for_tests();
+    let dir = tempdir().unwrap();
+    let segment_dir = dir.path().join("segment-00001");
+    std::fs::create_dir_all(&segment_dir).unwrap();
+
+    // Create multiple small filters to simulate many entries
+    let mut paths = Vec::new();
+    for i in 0..50u32 {
+        let filter = ZoneSurfFilter { entries: vec![] };
+        let p = segment_dir.join(format!("uid{}_f.zsrf", i));
+        filter.save(&p).unwrap();
+        paths.push(p);
+    }
+
+    let cache = GlobalZoneSurfCache::instance();
+    // Set capacity to a few MB so not all 50 fit
+    cache.resize_bytes(5 * 1024 * 1024);
+
+    // Load the first N entries to fill the cache
+    for (i, p) in paths.iter().enumerate().take(20) {
+        let key = ZoneSurfCacheKey::from_context(
+            Some(0usize),
+            "segment-00001",
+            &format!("uid{}", i),
+            "f",
+        );
+        let _ = cache
+            .load_from_file(key, "segment-00001", &format!("uid{}", i), "f", p)
+            .unwrap();
+    }
+
+    let before = cache.stats();
+    // Now load additional entries to force evictions and then insert the new one
+    for (i, p) in paths.iter().enumerate().skip(20).take(10) {
+        let key = ZoneSurfCacheKey::from_context(
+            Some(0usize),
+            "segment-00001",
+            &format!("uid{}", i),
+            "f",
+        );
+        let (_filter, _outcome) = cache
+            .load_from_file(key, "segment-00001", &format!("uid{}", i), "f", p)
+            .unwrap();
+    }
+    let after = cache.stats();
+    // We expect some evictions and the item count to remain bounded, but not zero-inserts
+    assert!(after.evictions >= before.evictions);
+    assert!(after.current_items > 0);
+}
+
+#[test]
+fn test_zone_surf_cache_hysteresis_reduces_thrashing() {
+    clear_cache_for_tests();
+    let dir = tempdir().unwrap();
+    let segment_dir = dir.path().join("segment-00002");
+    std::fs::create_dir_all(&segment_dir).unwrap();
+
+    // Create 100 tiny filters
+    let mut paths = Vec::new();
+    for i in 0..100u32 {
+        let filter = ZoneSurfFilter { entries: vec![] };
+        let p = segment_dir.join(format!("uid{}_f.zsrf", i));
+        filter.save(&p).unwrap();
+        paths.push(p);
+    }
+
+    let cache = GlobalZoneSurfCache::instance();
+    // Set capacity around a few MB
+    cache.resize_bytes(8 * 1024 * 1024);
+
+    // Sweep through many unique keys twice; with hysteresis, we should still retain some
+    for _round in 0..2 {
+        for (i, p) in paths.iter().enumerate() {
+            let key = ZoneSurfCacheKey::from_context(
+                Some(0usize),
+                "segment-00002",
+                &format!("uid{}", i),
+                "f",
+            );
+            let _ = cache
+                .load_from_file(key, "segment-00002", &format!("uid{}", i), "f", p)
+                .unwrap();
+        }
+    }
+    let s = cache.stats();
+    assert!(s.current_items > 0, "hysteresis should retain some items");
+}

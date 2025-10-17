@@ -549,12 +549,14 @@ impl<'a> SurfQuery<'a> {
             if !slice.is_empty() {
                 if let Some(off) = Self::simd_first_ge(slice, tb) {
                     let idx = s + off;
-                    first_ge_idx = Some(idx);
-                    if self.trie.labels[idx] == tb {
-                        equal_idx = Some(idx);
+                    if idx < e && idx < self.trie.labels.len() {
+                        first_ge_idx = Some(idx);
+                        if self.trie.labels[idx] == tb {
+                            equal_idx = Some(idx);
+                        }
+                        // Approximate accounting: one probe per SIMD chunk
+                        stats.edges_examined += (slice.len() + 15) / 16;
                     }
-                    // Approximate accounting: one probe per SIMD chunk
-                    stats.edges_examined += (slice.len() + 15) / 16;
                 }
             }
 
@@ -644,12 +646,14 @@ impl<'a> SurfQuery<'a> {
             if !slice.is_empty() {
                 if let Some(off) = Self::simd_last_le(slice, tb) {
                     let idx = s + off;
-                    last_le_idx = Some(idx);
-                    if self.trie.labels[idx] == tb {
-                        equal_idx = Some(idx);
+                    if idx < e && idx < self.trie.labels.len() {
+                        last_le_idx = Some(idx);
+                        if self.trie.labels[idx] == tb {
+                            equal_idx = Some(idx);
+                        }
+                        // Approximate accounting: one probe per SIMD chunk
+                        stats.edges_examined += (slice.len() + 15) / 16;
                     }
-                    // Approximate accounting: one probe per SIMD chunk
-                    stats.edges_examined += (slice.len() + 15) / 16;
                 }
             }
 
