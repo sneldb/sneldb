@@ -1,3 +1,4 @@
+#![feature(portable_simd)]
 use snel_db::engine::core::read::cache::{
     GlobalColumnBlockCache, GlobalZoneIndexCache, GlobalZoneSurfCache,
 };

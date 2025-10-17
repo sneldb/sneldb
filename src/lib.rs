@@ -1,3 +1,4 @@
+#![feature(portable_simd)]
 pub mod command;
 pub mod engine;
 pub mod frontend;
