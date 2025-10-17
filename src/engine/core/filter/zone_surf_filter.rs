@@ -458,7 +458,7 @@ impl<'a> SurfQuery<'a> {
                     .expect("slice to array of LANES"),
             );
             let m = v.simd_ge(Simd::splat(tb));
-            let bits = m.to_bitmask();
+            let bits = m.to_bitmask() as u16;
             if bits != 0 {
                 let j = bits.trailing_zeros() as usize;
                 return Some(i + j);
@@ -485,7 +485,7 @@ impl<'a> SurfQuery<'a> {
                 slice[start..i].try_into().expect("slice to array of LANES"),
             );
             let m = v.simd_le(Simd::splat(tb));
-            let bits = m.to_bitmask();
+            let bits = m.to_bitmask() as u16;
             if bits != 0 {
                 let j = (LANES - 1) - (bits.leading_zeros() as usize);
                 return Some(start + j);
@@ -624,7 +624,7 @@ impl<'a> SurfQuery<'a> {
         loop {
             stats.nodes_visited += 1;
             let (s, e) = self.child_range(node);
-            if depth == target.len() {
+            if depth >= target.len() {
                 // We have matched full target; prefer the rightmost under current node
                 if let Some(k) = descend_rightmost(node, path.clone()) {
                     return Some(k);

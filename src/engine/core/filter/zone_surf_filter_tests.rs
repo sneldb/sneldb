@@ -537,3 +537,62 @@ fn zonesurf_truncated_compressed_file_errors() {
         msg
     );
 }
+
+#[test]
+fn zonesurf_no_panic_le_on_exact_length_equal() {
+    use crate::engine::core::filter::surf_trie::SurfTrie;
+    use crate::engine::core::filter::zone_surf_filter::ZoneSurfEntry;
+
+    // Build a trie with keys where one key equals the bound exactly
+    let keys = vec![
+        encode_value(&json!("a")).unwrap(),
+        encode_value(&json!("ab")).unwrap(),
+        encode_value(&json!("ac")).unwrap(),
+    ];
+    let trie = SurfTrie::build_from_sorted(&keys);
+    let zsf = ZoneSurfFilter {
+        entries: vec![ZoneSurfEntry { zone_id: 7, trie }],
+    };
+
+    // Upper bound equals "a"; exclusive (< a) should not panic and returns empty
+    let upper = encode_value(&json!("a")).unwrap();
+    let seg = "segNP";
+    let out = zsf.zones_overlapping_le(&upper, false, seg);
+    assert!(out.is_empty());
+
+    // Inclusive (<= a) should include the zone (since key "a" exists)
+    let out2 = zsf
+        .zones_overlapping_le(&upper, true, seg)
+        .into_iter()
+        .map(|z| z.zone_id)
+        .collect::<Vec<_>>();
+    assert_eq!(out2, vec![7u32]);
+}
+
+#[test]
+fn zonesurf_no_panic_ge_simd_tail_alignment() {
+    use crate::engine::core::filter::surf_trie::SurfTrie;
+    use crate::engine::core::filter::zone_surf_filter::ZoneSurfEntry;
+
+    // Build >16 distinct single-byte keys to exercise SIMD chunk + tail path
+    let mut keys: Vec<Vec<u8>> = (0u8..=20u8).map(|b| vec![b]).collect();
+    // Ensure ascending and unique as required by builder
+    keys.sort();
+    keys.dedup();
+
+    let trie = SurfTrie::build_from_sorted(&keys);
+    let zsf = ZoneSurfFilter {
+        entries: vec![ZoneSurfEntry { zone_id: 3, trie }],
+    };
+
+    // lower = 9 (just before a SIMD lane boundary), exclusive, should not panic
+    let lower = vec![9u8];
+    let seg = "segTail";
+    let out = zsf
+        .zones_overlapping_ge(&lower, false, seg)
+        .into_iter()
+        .map(|z| z.zone_id)
+        .collect::<Vec<_>>();
+    // We have keys up to 20, so should include the zone
+    assert_eq!(out, vec![3u32]);
+}
