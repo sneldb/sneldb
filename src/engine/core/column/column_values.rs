@@ -1,6 +1,8 @@
 use std::sync::{Arc, OnceLock};
 
 use crate::engine::core::read::cache::DecompressedBlock;
+use std::simd::Simd;
+use std::simd::prelude::*;
 
 /// Zero-copy view over values stored inside a decompressed column block.
 #[derive(Clone, Debug)]
@@ -150,10 +152,40 @@ impl ColumnValues {
     /// Validates the entire column contains valid UTF-8; caches the result.
     pub fn validate_utf8(&self) -> bool {
         *self.utf8_validated.get_or_init(|| {
+            // SIMD ASCII fast-path: many values are ASCII only; validate quickly
+            const LANES: usize = 32;
             for (start, len) in &self.ranges {
                 let bytes = &self.block.bytes[*start..*start + *len];
-                if std::str::from_utf8(bytes).is_err() {
-                    return false;
+                let mut i = 0;
+                let blen = bytes.len();
+                // Check ASCII with SIMD (highest bit must be 0)
+                while i + LANES <= blen {
+                    let v = Simd::<u8, LANES>::from_array(
+                        bytes[i..i + LANES]
+                            .try_into()
+                            .expect("slice to array of LANES"),
+                    );
+                    let m = v & Simd::splat(0x80);
+                    let nz = m.simd_ne(Simd::splat(0));
+                    if nz.to_bitmask() != 0 {
+                        // Non-ASCII present; fall back to full utf8 check
+                        if std::str::from_utf8(bytes).is_err() {
+                            return false;
+                        } else {
+                            break; // this string ok
+                        }
+                    }
+                    i += LANES;
+                }
+                // Scalar tail (already ASCII-only chunked); tail also ASCII-only check
+                while i < blen {
+                    if bytes[i] & 0x80 != 0 {
+                        if std::str::from_utf8(bytes).is_err() {
+                            return false;
+                        }
+                        break;
+                    }
+                    i += 1;
                 }
             }
             true
@@ -189,7 +221,7 @@ impl ColumnValues {
         let cache = self.numeric_cache.get_or_init(|| {
             let mut parsed: Vec<Option<i64>> = Vec::with_capacity(self.ranges.len());
             for i in 0..self.ranges.len() {
-                let v = self.get_str_at(i).and_then(|s| s.parse::<i64>().ok());
+                let v = self.get_str_at(i).and_then(|s| fast_parse_i64(s));
                 parsed.push(v);
             }
             Arc::new(parsed)
@@ -263,12 +295,73 @@ impl ColumnValues {
         let _ = self.numeric_cache.get_or_init(|| {
             let mut parsed: Vec<Option<i64>> = Vec::with_capacity(self.ranges.len());
             for i in 0..self.ranges.len() {
-                let v = self.get_str_at(i).and_then(|s| s.parse::<i64>().ok());
+                let v = self.get_str_at(i).and_then(|s| fast_parse_i64(s));
                 parsed.push(v);
             }
             Arc::new(parsed)
         });
     }
+}
+
+#[inline]
+fn fast_parse_i64(s: &str) -> Option<i64> {
+    // Trim spaces quickly
+    let bytes = s.as_bytes();
+    if bytes.is_empty() {
+        return None;
+    }
+    let mut neg = false;
+    let mut start = 0;
+    if bytes[0] == b'-' {
+        neg = true;
+        start = 1;
+        if start == bytes.len() {
+            return None;
+        }
+    }
+
+    // SIMD digit precheck: ensure all remaining bytes are '0'..'9'
+    const LANES: usize = 32;
+    let mut i = start;
+    while i + LANES <= bytes.len() {
+        let v = Simd::<u8, LANES>::from_array(
+            bytes[i..i + LANES]
+                .try_into()
+                .expect("slice to array of LANES"),
+        );
+        let ge0 = v.simd_ge(Simd::splat(b'0'));
+        let le9 = v.simd_le(Simd::splat(b'9'));
+        let ok = ge0 & le9;
+        let bits = ok.to_bitmask() as u128;
+        if bits != ((1u128 << LANES) - 1) {
+            // Fallback to standard parse if mixed or non-digit encountered
+            return s.parse::<i64>().ok();
+        }
+        i += LANES;
+    }
+    while i < bytes.len() {
+        let c = bytes[i];
+        if c < b'0' || c > b'9' {
+            return s.parse::<i64>().ok();
+        }
+        i += 1;
+    }
+
+    // All digits: convert
+    let mut value: i128 = 0; // wider to avoid overflow during accumulation
+    for &c in &bytes[start..] {
+        value = value * 10 + (c - b'0') as i128;
+        if value > i64::MAX as i128 + if neg { 1 } else { 0 } {
+            // Overflow: fallback to standard parse (will fail or clamp appropriately)
+            return s.parse::<i64>().ok();
+        }
+    }
+    // Apply sign in i128 to avoid i64::MIN negation overflow
+    let signed: i128 = if neg { -value } else { value };
+    if signed < i64::MIN as i128 || signed > i64::MAX as i128 {
+        return s.parse::<i64>().ok();
+    }
+    Some(signed as i64)
 }
 
 impl PartialEq for ColumnValues {

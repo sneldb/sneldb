@@ -2,6 +2,7 @@
 
 use crate::engine::core::filter::surf_encoding::encode_value;
 use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
+use crate::test_helpers::factories::MiniSchemaFactory;
 use crate::test_helpers::factory::Factory;
 use serde_json::json;
 use tempfile::tempdir;
@@ -170,22 +171,22 @@ fn zone_surf_float_ranges() {
 }
 
 #[test]
-fn zone_surf_bool_ranges() {
-    // z0 has flag=false, z1 has flag=true
+fn zone_surf_flag_numeric_ranges() {
+    // Use numeric 0/1 flags (bools are no longer included by default)
     let z0_events = vec![
         Factory::event()
-            .with("payload", json!({"flag_id": false}))
+            .with("payload", json!({"flag_id": 0}))
             .create(),
         Factory::event()
-            .with("payload", json!({"flag_id": false}))
+            .with("payload", json!({"flag_id": 0}))
             .create(),
     ];
     let z1_events = vec![
         Factory::event()
-            .with("payload", json!({"flag_id": true}))
+            .with("payload", json!({"flag_id": 1}))
             .create(),
         Factory::event()
-            .with("payload", json!({"flag_id": true}))
+            .with("payload", json!({"flag_id": 1}))
             .create(),
     ];
 
@@ -212,22 +213,125 @@ fn zone_surf_bool_ranges() {
     let zsf = ZoneSurfFilter::load(&path).unwrap();
     let seg = "segBool";
 
-    // > false (exclusive) should pick true-zone only
-    let b_false = encode_value(&json!(false)).unwrap();
+    // > 0 selects zone with 1 only
+    let b0 = encode_value(&json!(0)).unwrap();
     let ge = zsf
-        .zones_overlapping_ge(&b_false, false, seg)
+        .zones_overlapping_ge(&b0, false, seg)
         .into_iter()
         .map(|z| z.zone_id)
         .collect::<Vec<_>>();
     assert_eq!(ge, vec![1u32]);
 
-    // <= false (inclusive) should pick false-zone only
+    // <= 0 selects zone with 0 only
     let le = zsf
-        .zones_overlapping_le(&b_false, true, seg)
+        .zones_overlapping_le(&b0, true, seg)
         .into_iter()
         .map(|z| z.zone_id)
         .collect::<Vec<_>>();
     assert_eq!(le, vec![0u32]);
+}
+
+#[test]
+fn zone_surf_schema_time_fields_included() {
+    // Schema with datetime and date fields
+    let schema = MiniSchemaFactory::empty()
+        .with("ts", "datetime")
+        .with("d", "date")
+        .create();
+
+    // Two zones with numeric epoch seconds in payload
+    let z0_events = vec![
+        Factory::event()
+            .with("payload", json!({"ts": 100, "d": 50}))
+            .create(),
+        Factory::event()
+            .with("payload", json!({"ts": 200, "d": 50}))
+            .create(),
+    ];
+    let z1_events = vec![
+        Factory::event()
+            .with("payload", json!({"ts": 300, "d": 150}))
+            .create(),
+    ];
+    let z0 = Factory::zone_plan()
+        .with("id", 0u32)
+        .with("uid", "uidTS")
+        .with("event_type", "evt")
+        .with("segment_id", 1u64)
+        .with("events", json!(z0_events))
+        .with("start_index", 0usize)
+        .with("end_index", 1usize)
+        .create();
+    let z1 = Factory::zone_plan()
+        .with("id", 1u32)
+        .with("uid", "uidTS")
+        .with("event_type", "evt")
+        .with("segment_id", 1u64)
+        .with("events", json!(z1_events))
+        .with("start_index", 0usize)
+        .with("end_index", 0usize)
+        .create();
+
+    let dir = tempdir().unwrap();
+    ZoneSurfFilter::build_all_with_schema(&[z0, z1], dir.path(), &schema).unwrap();
+
+    // ts filter exists
+    let ts_path = dir.path().join("uidTS_ts.zsrf");
+    assert!(ts_path.exists());
+    let ts_filter = ZoneSurfFilter::load(&ts_path).unwrap();
+
+    // >= 200 picks zones with ts >= 200 => both 0 and 1 (z0 has 200, z1 has 300)
+    let seg = "segTS";
+    let b200 = encode_value(&json!(200)).unwrap();
+    let ge = ts_filter
+        .zones_overlapping_ge(&b200, true, seg)
+        .into_iter()
+        .map(|z| z.zone_id)
+        .collect::<Vec<_>>();
+    assert_eq!(ge, vec![0u32, 1u32]);
+
+    // date filter exists
+    let d_path = dir.path().join("uidTS_d.zsrf");
+    assert!(d_path.exists());
+}
+
+#[test]
+fn zone_surf_skips_mixed_numeric_field() {
+    // z0 has numeric, z1 has string for the same field -> should skip
+    let z0 = Factory::zone_plan()
+        .with("id", 0u32)
+        .with("uid", "uidMix")
+        .with("segment_id", 1u64)
+        .with(
+            "events",
+            json!([Factory::event()
+                .with("payload", json!({"mix": 10}))
+                .create()]),
+        )
+        .with("start_index", 0usize)
+        .with("end_index", 0usize)
+        .create();
+    let z1 = Factory::zone_plan()
+        .with("id", 1u32)
+        .with("uid", "uidMix")
+        .with("segment_id", 1u64)
+        .with(
+            "events",
+            json!([Factory::event()
+                .with("payload", json!({"mix": "x"}))
+                .create()]),
+        )
+        .with("start_index", 0usize)
+        .with("end_index", 0usize)
+        .create();
+
+    let dir = tempdir().unwrap();
+    ZoneSurfFilter::build_all(&[z0, z1], dir.path()).unwrap();
+    let mix_path = dir.path().join("uidMix_mix.zsrf");
+    assert!(
+        std::fs::metadata(&mix_path).is_err(),
+        "mixed field should not have SuRF"
+    );
 }
 
 #[test]

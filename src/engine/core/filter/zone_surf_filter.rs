@@ -4,14 +4,19 @@ use crate::engine::core::column::compression::compression_codec::{
 };
 use crate::engine::core::filter::surf_encoding::encode_value;
 use crate::engine::core::filter::surf_trie::SurfTrie;
+use crate::engine::schema::registry::MiniSchema;
+use crate::engine::schema::types::FieldType;
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 use base64::{Engine, engine::general_purpose::STANDARD as B64};
 use memmap2::MmapOptions;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
+use std::simd::Simd;
+use std::simd::prelude::*;
 use tracing::{debug, info, warn};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -19,17 +24,62 @@ pub struct ZoneSurfEntry {
     pub zone_id: u32,
     pub trie: SurfTrie,
 }
+fn is_field_numeric_consistent(zone_plans: &[ZonePlan], key: &str) -> bool {
+    // Determine a stable numeric kind for this key across all events in all zones
+    // Return false if any value is non-numeric or mixes numeric kinds
+    #[derive(Clone, Copy, PartialEq)]
+    enum Kind {
+        I,
+        U,
+        F,
+        Unknown,
+    }
+    let mut kind = Kind::Unknown;
+    for zp in zone_plans {
+        for ev in &zp.events {
+            let Some(v) = ev.payload.get(key) else {
+                continue;
+            };
+            match v {
+                Value::Number(n) => {
+                    let this = if n.as_i64().is_some() {
+                        Kind::I
+                    } else if n.as_u64().is_some() {
+                        Kind::U
+                    } else if n.as_f64().is_some() {
+                        Kind::F
+                    } else {
+                        return false;
+                    };
+                    kind = match (kind, this) {
+                        (Kind::Unknown, k) => k,
+                        (k, t) if k == t => k,
+                        // allow I/U mix by promoting to F only if all integral; to simplify, reject mix here
+                        _ => return false,
+                    };
+                }
+                _ => return false,
+            }
+        }
+    }
+    kind != Kind::Unknown
+}
 
+#[inline]
+fn is_time_field(ft: &FieldType) -> bool {
+    match ft {
+        FieldType::Timestamp | FieldType::Date => true,
+        FieldType::Optional(inner) => matches!(**inner, FieldType::Timestamp | FieldType::Date),
+        _ => false,
+    }
+}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ZoneSurfFilter {
     pub entries: Vec<ZoneSurfEntry>,
 }
 
 impl ZoneSurfFilter {
-    fn is_id_like_field(field: &str) -> bool {
-        let lower = field.to_ascii_lowercase();
-        lower == "id" || lower.ends_with("_id") || field.ends_with("Id") || field.ends_with("ID")
-    }
+    // Removed id-like heuristic; we will filter by numeric-consistency instead
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         let file = OpenOptions::new()
@@ -107,13 +157,15 @@ impl ZoneSurfFilter {
         let mut map: HashMap<(String, String), Vec<(u32, Vec<Vec<u8>>)>> = HashMap::new();
 
         for zp in zone_plans {
-            // fixed fields
+            // fixed fields: include only if numeric
             for field in ["timestamp"] {
                 let mut values: Vec<Vec<u8>> = Vec::new();
                 for ev in &zp.events {
                     if let Some(v) = ev.get_field(field) {
-                        if let Some(bytes) = encode_value(&v) {
-                            values.push(bytes);
+                        if v.is_number() {
+                            if let Some(bytes) = encode_value(&v) {
+                                values.push(bytes);
+                            }
                         }
                     }
                 }
@@ -123,13 +175,13 @@ impl ZoneSurfFilter {
                         .push((zp.id, values));
                 }
             }
-            // dynamic payload
+            // dynamic payload: only numeric-consistent fields (same numeric kind across all events)
             let mut dynamic_keys: Vec<String> = Vec::new();
             if let Some(obj) = zp.events.get(0).and_then(|e| e.payload.as_object()) {
                 dynamic_keys.extend(obj.keys().cloned());
             }
             for key in dynamic_keys {
-                if !Self::is_id_like_field(&key) {
+                if !is_field_numeric_consistent(zone_plans, &key) {
                     continue;
                 }
                 let mut values: Vec<Vec<u8>> = Vec::new();
@@ -162,6 +214,108 @@ impl ZoneSurfFilter {
             info!(target: "sneldb::surf", uid = %uid, field = %field, path = %path.display(), "Writing Zone SuRF");
             if let Err(e) = out.save(&path) {
                 warn!(target: "sneldb::surf", error = %e, "Failed to save Zone SuRF; continuing");
+            }
+        }
+        Ok(())
+    }
+
+    pub fn build_all_with_schema(
+        zone_plans: &[ZonePlan],
+        segment_dir: &Path,
+        schema: &MiniSchema,
+    ) -> std::io::Result<()> {
+        debug!(target: "sneldb::surf", "Building Zone SuRF (schema-aware) for {} zones", zone_plans.len());
+        let mut map: HashMap<(String, String), Vec<(u32, Vec<Vec<u8>>)>> = HashMap::new();
+
+        // Collect schema-defined time fields
+        let mut time_fields: Vec<String> = Vec::new();
+        for (name, ty) in &schema.fields {
+            if is_time_field(ty) {
+                time_fields.push(name.clone());
+            }
+        }
+
+        for zp in zone_plans {
+            // fixed field: timestamp (only if numeric)
+            for field in ["timestamp"] {
+                let mut values: Vec<Vec<u8>> = Vec::new();
+                for ev in &zp.events {
+                    if let Some(v) = ev.get_field(field) {
+                        if v.is_number() {
+                            if let Some(bytes) = encode_value(&v) {
+                                values.push(bytes);
+                            }
+                        }
+                    }
+                }
+                if !values.is_empty() {
+                    map.entry((zp.uid.clone(), field.to_string()))
+                        .or_default()
+                        .push((zp.id, values));
+                }
+            }
+
+            // schema time fields in payload
+            for key in &time_fields {
+                let mut values: Vec<Vec<u8>> = Vec::new();
+                for ev in &zp.events {
+                    if let Some(val) = ev.payload.get(key) {
+                        if val.is_number() {
+                            if let Some(bytes) = encode_value(val) {
+                                values.push(bytes);
+                            }
+                        }
+                    }
+                }
+                if !values.is_empty() {
+                    map.entry((zp.uid.clone(), key.clone()))
+                        .or_default()
+                        .push((zp.id, values));
+                }
+            }
+
+            // Also include numeric-consistent fields beyond time fields
+            let mut dynamic_keys: Vec<String> = Vec::new();
+            if let Some(obj) = zp.events.get(0).and_then(|e| e.payload.as_object()) {
+                dynamic_keys.extend(obj.keys().cloned());
+            }
+            for key in dynamic_keys {
+                if time_fields.contains(&key) {
+                    continue;
+                }
+                if !is_field_numeric_consistent(zone_plans, &key) {
+                    continue;
+                }
+                let mut values: Vec<Vec<u8>> = Vec::new();
+                for ev in &zp.events {
+                    if let Some(val) = ev.payload.get(&key) {
+                        if let Some(bytes) = encode_value(val) {
+                            values.push(bytes);
+                        }
+                    }
+                }
+                if !values.is_empty() {
+                    map.entry((zp.uid.clone(), key))
+                        .or_default()
+                        .push((zp.id, values));
+                }
+            }
+        }
+
+        for ((uid, field), per_zone) in map.into_iter() {
+            let mut entries: Vec<ZoneSurfEntry> = Vec::new();
+            for (zone_id, mut values) in per_zone {
+                values.sort();
+                values.dedup();
+                let trie = SurfTrie::build_from_sorted(&values);
+                entries.push(ZoneSurfEntry { zone_id, trie });
+            }
+            entries.sort_by_key(|e| e.zone_id);
+            let out = ZoneSurfFilter { entries };
+            let path = Self::get_filter_path(&uid, &field, segment_dir);
+            info!(target = "sneldb::surf", uid = %uid, field = %field, path = %path.display(), "Writing Zone SuRF");
+            if let Err(e) = out.save(&path) {
+                warn!(target = "sneldb::surf", error = %e, "Failed to save Zone SuRF; continuing");
             }
         }
         Ok(())
@@ -276,6 +430,62 @@ struct SurfProbeStats {
 }
 
 impl<'a> SurfQuery<'a> {
+    #[inline]
+    fn simd_first_ge(slice: &[u8], tb: u8) -> Option<usize> {
+        const LANES: usize = 16;
+        let mut i = 0;
+        let len = slice.len();
+        while i + LANES <= len {
+            let v = Simd::<u8, LANES>::from_array(
+                slice[i..i + LANES]
+                    .try_into()
+                    .expect("slice to array of LANES"),
+            );
+            let m = v.simd_ge(Simd::splat(tb));
+            let bits = m.to_bitmask();
+            if bits != 0 {
+                let j = bits.trailing_zeros() as usize;
+                return Some(i + j);
+            }
+            i += LANES;
+        }
+        while i < len {
+            if slice[i] >= tb {
+                return Some(i);
+            }
+            i += 1;
+        }
+        None
+    }
+
+    #[inline]
+    fn simd_last_le(slice: &[u8], tb: u8) -> Option<usize> {
+        const LANES: usize = 16;
+        let len = slice.len();
+        let mut i = len;
+        while i >= LANES {
+            let start = i - LANES;
+            let v = Simd::<u8, LANES>::from_array(
+                slice[start..i].try_into().expect("slice to array of LANES"),
+            );
+            let m = v.simd_le(Simd::splat(tb));
+            let bits = m.to_bitmask();
+            if bits != 0 {
+                let j = (LANES - 1) - (bits.leading_zeros() as usize);
+                return Some(start + j);
+            }
+            i -= LANES;
+        }
+        while i > 0 {
+            let idx = i - 1;
+            if slice[idx] <= tb {
+                return Some(idx);
+            }
+            i -= 1;
+        }
+        None
+    }
+
     fn child_range(&self, node_idx: usize) -> (usize, usize) {
         self.trie.child_range(node_idx)
     }
@@ -316,29 +526,19 @@ impl<'a> SurfQuery<'a> {
             }
             let tb = target[depth];
 
-            // Binary search for first child with label >= tb
+            // Vector-accelerated search for first child with label >= tb
             let mut equal_idx: Option<usize> = None;
             let mut first_ge_idx: Option<usize> = None;
             let slice = &self.trie.labels[s..e];
             if !slice.is_empty() {
-                let mut lo = 0usize;
-                let mut hi = slice.len();
-                while lo < hi {
-                    let mid = (lo + hi) / 2;
-                    stats.edges_examined += 1;
-                    let v = slice[mid];
-                    if v < tb {
-                        lo = mid + 1;
-                    } else {
-                        hi = mid;
-                    }
-                }
-                if lo < slice.len() {
-                    let idx = s + lo;
+                if let Some(off) = Self::simd_first_ge(slice, tb) {
+                    let idx = s + off;
                     first_ge_idx = Some(idx);
                     if self.trie.labels[idx] == tb {
                         equal_idx = Some(idx);
                     }
+                    // Approximate accounting: one probe per SIMD chunk
+                    stats.edges_examined += (slice.len() + 15) / 16;
                 }
             }
 
@@ -421,30 +621,19 @@ impl<'a> SurfQuery<'a> {
             }
             let tb = target[depth];
 
-            // Binary search for last child with label <= tb
+            // Vector-accelerated search for last child with label <= tb
             let mut equal_idx: Option<usize> = None;
             let mut last_le_idx: Option<usize> = None;
             let slice = &self.trie.labels[s..e];
             if !slice.is_empty() {
-                // upper_bound: first index with label > tb
-                let mut lo = 0usize;
-                let mut hi = slice.len();
-                while lo < hi {
-                    let mid = (lo + hi) / 2;
-                    stats.edges_examined += 1;
-                    let v = slice[mid];
-                    if v <= tb {
-                        lo = mid + 1;
-                    } else {
-                        hi = mid;
-                    }
-                }
-                if lo > 0 {
-                    let idx = s + (lo - 1);
+                if let Some(off) = Self::simd_last_le(slice, tb) {
+                    let idx = s + off;
                     last_le_idx = Some(idx);
                     if self.trie.labels[idx] == tb {
                         equal_idx = Some(idx);
                     }
+                    // Approximate accounting: one probe per SIMD chunk
+                    stats.edges_examined += (slice.len() + 15) / 16;
                 }
             }
 
