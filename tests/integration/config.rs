@@ -43,6 +43,8 @@ pub struct EngineConfig {
     pub compaction_interval: u64,
     pub sys_io_threshold: usize,
     pub max_inflight_passives: usize,
+    pub level_span: u32,
+    pub segment_id_pad: usize,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -111,6 +113,8 @@ fn default_test_config(paths: &TestPaths) -> TestConfig {
             compaction_interval: 10,
             sys_io_threshold: 10,
             max_inflight_passives: 8,
+            level_span: 10000,
+            segment_id_pad: 5,
         },
         server: ServerConfig {
             socket_path: paths.socket_path.clone(),

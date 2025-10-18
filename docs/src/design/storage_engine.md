@@ -90,7 +90,7 @@ Small example:
 
 ### 4) Flush worker writes a new immutable segment
 
-- **What**: The background worker turns the passive MemTable into an on-disk segment directory (for example, `segment-00042/`).
+- **What**: The background worker turns the passive MemTable into an on-disk segment directory (for example, `00042/`).
 - Inside the segment:
   - **Column files**: One file per field, optimized for sequential appends and later memory-mapped (mmap) access. Naming: `<uid>_<field>.col`. Example: `u01_timestamp.col`, `u01_event_type.col`, `u01_context_id.col`, `u01_plan.col`, `u01_country.col`. Where `<uid>` is defiened per event type.
   - **Zone metadata**: Per-zone min/max timestamps, row ranges, and presence stats for pruning.
@@ -126,7 +126,7 @@ Sizing example:
 3. The event is appended to the WAL for shard 3 (durability).
 4. The event is inserted into shard 3’s active MemTable.
 5. When the MemTable reaches `flush_threshold`, it is swapped and the old one is queued for the background flush.
-6. The flush worker writes `segment-00137/` with column files, 16 zones (if 32,768/2,048), zone metadata, XOR filters, Zone SuRF filters, and offsets/index.
+6. The flush worker writes `00137/` with column files, 16 zones (if 32,768/2,048), zone metadata, XOR filters, Zone SuRF filters, and offsets/index.
 7. Once published, queries immediately see the segment alongside any newer in-memory events.
 8. The WAL up to (and including) the flushed range is now safe to compact or rotate.
 

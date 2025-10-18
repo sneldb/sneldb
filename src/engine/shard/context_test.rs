@@ -13,9 +13,9 @@ async fn test_shard_context_initialization_with_existing_segments() {
     create_dir_all(&base_dir).unwrap();
 
     // Create dummy segment files
-    File::create(base_dir.join("segment-00001")).unwrap();
-    File::create(base_dir.join("segment-00003")).unwrap();
-    File::create(base_dir.join("segment-00002")).unwrap();
+    File::create(base_dir.join("00001")).unwrap();
+    File::create(base_dir.join("00003")).unwrap();
+    File::create(base_dir.join("00002")).unwrap();
     File::create(base_dir.join("random-file.txt")).unwrap(); // ignored
 
     let (tx, _rx) = mpsc::channel(1);
@@ -34,9 +34,9 @@ async fn test_shard_context_initialization_with_existing_segments() {
     assert_eq!(
         *ids,
         vec![
-            "segment-00001".to_string(),
-            "segment-00002".to_string(),
-            "segment-00003".to_string()
+            "00001".to_string(),
+            "00002".to_string(),
+            "00003".to_string()
         ]
     );
 }

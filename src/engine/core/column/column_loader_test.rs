@@ -41,7 +41,7 @@ fn make_varbytes_block(values: &[&str]) -> Vec<u8> {
 fn column_loader_loads_columns_for_zone() {
     let tmp = tempdir().unwrap();
     let base_dir = tmp.path().to_path_buf();
-    let segment_id = "segment-00000";
+    let segment_id = "00000";
     let uid = "uid_u";
     let field = "f";
     let seg_dir = base_dir.join(segment_id);
@@ -96,7 +96,7 @@ fn column_loader_loads_columns_for_zone() {
 fn column_loader_returns_empty_on_missing_files() {
     let tmp = tempdir().unwrap();
     let base_dir: PathBuf = tmp.path().to_path_buf();
-    let segment_id = "segment-missing";
+    let segment_id = "missing";
     let uid = "uid_x";
     let field = "f";
     // do not create segment dir/files

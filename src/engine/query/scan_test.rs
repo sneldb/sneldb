@@ -58,7 +58,7 @@ async fn scan_query_returns_expected_events() {
         .with_event_type("test_event")
         .create();
 
-    let segment_ids = Arc::new(StdRwLock::new(vec!["segment-001".into()]));
+    let segment_ids = Arc::new(StdRwLock::new(vec!["001".into()]));
     let result = scan(
         &command,
         &registry,

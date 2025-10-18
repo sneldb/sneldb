@@ -7,15 +7,13 @@ async fn test_segment_index_e2e() {
     let temp = tempdir().unwrap();
     let shard_dir = temp.path().to_path_buf();
     let uid = "test_event_type".to_string();
-    let label = "segment-L0-00001".to_string();
+    let label = "00001".to_string();
     let counter = 1;
     let level = 0;
 
     // Create dummy SegmentEntry
     let entry = SegmentEntry {
-        level,
-        label: label.clone(),
-        counter,
+        id: counter,
         uids: vec![uid.clone()],
     };
 
@@ -26,7 +24,7 @@ async fn test_segment_index_e2e() {
     // Append and verify
     index.append(entry.clone()).await.unwrap();
     assert_eq!(index.entries.len(), 1);
-    assert_eq!(index.entries[0].label, label);
+    assert_eq!(format!("{:05}", index.entries[0].id), label);
 
     // Reload and verify persistence
     let reloaded = SegmentIndex::load(&shard_dir).await.unwrap();
@@ -36,7 +34,7 @@ async fn test_segment_index_e2e() {
     // Check list_for_uid
     let listed = reloaded.list_for_uid(&uid);
     assert_eq!(listed.len(), 1);
-    assert_eq!(listed[0].label, label);
+    assert_eq!(format!("{:05}", listed[0].id), label);
 
     // Check all_labels
     assert_eq!(reloaded.all_labels(), vec![label.clone()]);
@@ -46,9 +44,7 @@ async fn test_segment_index_e2e() {
 
     for i in 2..=8 {
         let seg = SegmentEntry {
-            level,
-            label: format!("segment-L0-0000{}", i),
-            counter: i,
+            id: i,
             uids: vec![uid.clone()],
         };
         index.append(seg).await.unwrap();

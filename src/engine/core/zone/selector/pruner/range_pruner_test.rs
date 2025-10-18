@@ -21,8 +21,8 @@ async fn surf_ge_and_le_inclusive_boundaries_id_field() {
 
     let tmp = tempdir().unwrap();
     let shard_dir = tmp.path().join("shard-0");
-    let seg1 = shard_dir.join("segment-001");
-    let seg2 = shard_dir.join("segment-002");
+    let seg1 = shard_dir.join("001");
+    let seg2 = shard_dir.join("002");
     std::fs::create_dir_all(&seg1).unwrap();
     std::fs::create_dir_all(&seg2).unwrap();
 
@@ -110,8 +110,8 @@ async fn surf_ge_and_le_inclusive_boundaries_id_field() {
         caches: None,
     };
     let sel1 = ZoneSelectorBuilder::new(ctx1).build();
-    let g1 = sel1.select_for_segment("segment-001");
-    let g2 = sel1.select_for_segment("segment-002");
+    let g1 = sel1.select_for_segment("001");
+    let g2 = sel1.select_for_segment("002");
     assert!(!g1.is_empty());
     assert!(!g2.is_empty());
 
@@ -129,8 +129,8 @@ async fn surf_ge_and_le_inclusive_boundaries_id_field() {
         caches: None,
     };
     let sel2 = ZoneSelectorBuilder::new(ctx2).build();
-    let l1 = sel2.select_for_segment("segment-001");
-    let l2 = sel2.select_for_segment("segment-002");
+    let l1 = sel2.select_for_segment("001");
+    let l2 = sel2.select_for_segment("002");
     assert!(!l1.is_empty());
     assert!(!l2.is_empty());
 }
@@ -142,8 +142,8 @@ async fn surf_gt_and_lt_exclusive_boundaries_id_field() {
 
     let tmp = tempdir().unwrap();
     let shard_dir = tmp.path().join("shard-0");
-    let seg1 = shard_dir.join("segment-001");
-    let seg2 = shard_dir.join("segment-002");
+    let seg1 = shard_dir.join("001");
+    let seg2 = shard_dir.join("002");
     std::fs::create_dir_all(&seg1).unwrap();
     std::fs::create_dir_all(&seg2).unwrap();
 
@@ -221,8 +221,8 @@ async fn surf_gt_and_lt_exclusive_boundaries_id_field() {
         caches: None,
     };
     let sel1 = ZoneSelectorBuilder::new(ctx1).build();
-    let z1 = sel1.select_for_segment("segment-001");
-    let z2 = sel1.select_for_segment("segment-002");
+    let z1 = sel1.select_for_segment("001");
+    let z2 = sel1.select_for_segment("002");
     assert!(!z1.is_empty());
     assert!(z2.is_empty());
 
@@ -240,8 +240,8 @@ async fn surf_gt_and_lt_exclusive_boundaries_id_field() {
         caches: None,
     };
     let sel2 = ZoneSelectorBuilder::new(ctx2).build();
-    let y1 = sel2.select_for_segment("segment-001");
-    let y2 = sel2.select_for_segment("segment-002");
+    let y1 = sel2.select_for_segment("001");
+    let y2 = sel2.select_for_segment("002");
     assert!(y1.is_empty());
     assert!(!y2.is_empty());
 }
@@ -253,7 +253,7 @@ async fn falls_back_to_range_handler_on_non_id_field() {
 
     let tmp = tempdir().unwrap();
     let shard_dir = tmp.path().join("shard-0");
-    let seg1 = shard_dir.join("segment-001");
+    let seg1 = shard_dir.join("001");
     std::fs::create_dir_all(&seg1).unwrap();
 
     let reg_fac = SchemaRegistryFactory::new();
@@ -313,6 +313,6 @@ async fn falls_back_to_range_handler_on_non_id_field() {
         caches: None,
     };
     let sel = ZoneSelectorBuilder::new(ctx).build();
-    let z = sel.select_for_segment("segment-001");
+    let z = sel.select_for_segment("001");
     assert!(!z.is_empty());
 }

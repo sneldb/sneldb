@@ -19,7 +19,7 @@ fn make_u64_column(values: &[u64]) -> ColumnValues {
 #[test]
 fn numeric_condition_prefers_u64_and_matches() {
     // id column contains 1..=20 step 1
-    let mut zone = CandidateZone::new(0, "segment-00000".into());
+    let mut zone = CandidateZone::new(0, "00000".into());
     let mut cols: HashMap<String, ColumnValues> = HashMap::new();
     cols.insert("id".into(), make_u64_column(&[1, 2, 3, 9, 10, 11, 12]));
     zone.set_values(cols);
@@ -32,7 +32,7 @@ fn numeric_condition_prefers_u64_and_matches() {
 
 #[test]
 fn numeric_condition_handles_u64_lt() {
-    let mut zone = CandidateZone::new(0, "segment-00000".into());
+    let mut zone = CandidateZone::new(0, "00000".into());
     let mut cols: HashMap<String, ColumnValues> = HashMap::new();
     cols.insert("id".into(), make_u64_column(&[1, 2, 3, 4, 5]));
     zone.set_values(cols);

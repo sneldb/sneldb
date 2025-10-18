@@ -26,7 +26,7 @@ fn block_cache_hit_then_miss_counters_and_eviction() {
     let fake_path = std::path::Path::new("/tmp/fake.col");
 
     // Insert two blocks that fit
-    let (_b1, o1) = cache
+    let (_b1, _o1) = cache
         .get_or_load(fake_path, 1, make_loader(400))
         .expect("load");
     let (_b2, _o2) = cache

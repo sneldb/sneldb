@@ -36,6 +36,8 @@ pub use zone_surf_cache_entry::ZoneSurfCacheEntry;
 pub use zone_surf_cache_key::ZoneSurfCacheKey;
 
 #[cfg(test)]
+mod column_block_cache_test;
+#[cfg(test)]
 mod column_handle_test;
 #[cfg(test)]
 mod global_zone_index_cache_test;
@@ -43,6 +45,3 @@ mod global_zone_index_cache_test;
 mod global_zone_surf_cache_test;
 #[cfg(test)]
 mod query_caches_test;
-
-#[cfg(test)]
-mod column_block_cache_test;

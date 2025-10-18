@@ -7,7 +7,7 @@ use std::fs::create_dir_all;
 fn open_succeeds_with_minimal_files() {
     let tmp = tempfile::tempdir().unwrap();
     let base = tmp.path();
-    let segment_id = "segment-00000";
+    let segment_id = "00000";
     let uid = "uid_test";
     let field = "field_a";
     let seg_dir = base.join(segment_id);
@@ -29,7 +29,7 @@ fn open_succeeds_with_minimal_files() {
 fn open_fails_on_invalid_col_magic() {
     let tmp = tempfile::tempdir().unwrap();
     let base = tmp.path();
-    let segment_id = "segment-00000";
+    let segment_id = "00000";
     let uid = "uid_test";
     let field = "field_a";
     let seg_dir = base.join(segment_id);

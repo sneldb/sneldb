@@ -50,7 +50,7 @@ fn returns_owned_when_picked_zones_exist() {
             asc: true,
             cutoff: "1000".to_string(),
             k: 10,
-            zones: vec![("segment-1".to_string(), 0)],
+            zones: vec![("00001".to_string(), 0)],
         },
     );
 
@@ -84,7 +84,7 @@ fn returns_owned_with_empty_zones_when_shard_not_in_map() {
             asc: true,
             cutoff: "1000".to_string(),
             k: 10,
-            zones: vec![("segment-1".to_string(), 0)],
+            zones: vec![("00001".to_string(), 0)],
         },
     );
 
@@ -136,7 +136,7 @@ fn preserves_all_query_fields() {
             asc: false,
             cutoff: "0".to_string(),
             k: 150,
-            zones: vec![("segment-1".to_string(), 0)],
+            zones: vec![("00001".to_string(), 0)],
         },
     );
 
@@ -337,7 +337,7 @@ fn multiple_shards_get_different_zones() {
             asc: true,
             cutoff: "1000".to_string(),
             k: 10,
-            zones: vec![("segment-1".to_string(), 0)],
+            zones: vec![("00001".to_string(), 0)],
         },
     );
     map.insert(
@@ -348,7 +348,7 @@ fn multiple_shards_get_different_zones() {
             asc: true,
             cutoff: "1000".to_string(),
             k: 10,
-            zones: vec![("segment-2".to_string(), 0), ("segment-3".to_string(), 1)],
+            zones: vec![("00002".to_string(), 0), ("00003".to_string(), 1)],
         },
     );
 

@@ -81,7 +81,7 @@ impl FlushManager {
                 StoreError::FlushFailed(format!("flush send error: {}", e))
             })?;
 
-        let segment_name = format!("segment-{:05}", segment_id);
+        let segment_name = format!("{:05}", segment_id);
         {
             let mut segs = self.segment_ids.write().unwrap();
             segs.push(segment_name.clone());

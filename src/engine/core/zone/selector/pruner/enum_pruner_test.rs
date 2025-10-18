@@ -19,7 +19,7 @@ async fn enum_pruner_handles_unknown_variant_and_empty_index() {
 
     let tmp = tempdir().unwrap();
     let shard_dir = tmp.path().join("shard-0");
-    let seg1 = shard_dir.join("segment-001");
+    let seg1 = shard_dir.join("001");
     std::fs::create_dir_all(&seg1).unwrap();
 
     let reg_fac = SchemaRegistryFactory::new();
@@ -84,7 +84,7 @@ async fn enum_pruner_handles_unknown_variant_and_empty_index() {
         caches: None,
     };
     let sel = ZoneSelectorBuilder::new(ctx).build();
-    let zones = sel.select_for_segment("segment-001");
+    let zones = sel.select_for_segment("001");
     assert!(zones.is_empty());
 
     // Neq with unknown currently returns None (unknown variant short-circuits) -> empty
@@ -101,7 +101,7 @@ async fn enum_pruner_handles_unknown_variant_and_empty_index() {
         caches: None,
     };
     let sel2 = ZoneSelectorBuilder::new(ctx2).build();
-    let zones2 = sel2.select_for_segment("segment-001");
+    let zones2 = sel2.select_for_segment("001");
     assert!(zones2.is_empty());
 }
 
@@ -112,7 +112,7 @@ async fn enum_pruner_multiple_variants_same_zone_dedupes() {
 
     let tmp = tempdir().unwrap();
     let shard_dir = tmp.path().join("shard-0");
-    let seg1 = shard_dir.join("segment-001");
+    let seg1 = shard_dir.join("001");
     std::fs::create_dir_all(&seg1).unwrap();
 
     let reg_fac = SchemaRegistryFactory::new();
@@ -186,6 +186,6 @@ async fn enum_pruner_multiple_variants_same_zone_dedupes() {
         caches: None,
     };
     let sel = ZoneSelectorBuilder::new(ctx).build();
-    let zones = sel.select_for_segment("segment-001");
+    let zones = sel.select_for_segment("001");
     assert_eq!(zones.len(), 1);
 }

@@ -7,7 +7,7 @@ async fn test_segment_index_builder_adds_segment_entry() {
     // Setup: temp dir to simulate segment directory
     let tmp_dir = tempdir().expect("Failed to create temp dir");
     let shard_dir = tmp_dir.path();
-    let segment_dir = shard_dir.join("segment-00042");
+    let segment_dir = shard_dir.join("00042");
     std::fs::create_dir(&segment_dir).expect("Failed to create segment dir");
 
     // Given: UID list
@@ -41,8 +41,7 @@ async fn test_segment_index_builder_adds_segment_entry() {
     assert_eq!(index.entries.len(), 1, "Expected one entry in SegmentIndex");
 
     let entry = &index.entries[0];
-    assert_eq!(entry.level, 0);
-    assert_eq!(entry.label, "00042");
-    assert_eq!(entry.counter, 42);
+    assert_eq!(entry.id, 42);
+    assert_eq!(format!("{:05}", entry.id), "00042");
     assert_eq!(entry.uids, uids);
 }

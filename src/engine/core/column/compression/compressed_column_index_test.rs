@@ -83,5 +83,5 @@ fn compressed_index_ignores_trailing_partial_record() {
 
     // Should load without panic and include the valid entry; trailing bytes are ignored
     let loaded = CompressedColumnIndex::load_from_path(&path).expect("load zfc failed");
-    let z = loaded.entries.get(&9).expect("missing zone 9");
+    let _z = loaded.entries.get(&9).expect("missing zone 9");
 }

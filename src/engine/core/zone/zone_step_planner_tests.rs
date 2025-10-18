@@ -35,7 +35,7 @@ async fn planner_places_context_first_on_and() {
         .with_command(command)
         .with_registry(Arc::clone(&registry))
         .with_segment_base_dir(std::env::temp_dir())
-        .with_segment_ids(vec!["segment-00001".into()])
+        .with_segment_ids(vec!["00001".into()])
         .create()
         .await;
 
@@ -92,7 +92,7 @@ async fn planner_keeps_order_when_no_context() {
         .with_command(command)
         .with_registry(Arc::clone(&registry))
         .with_segment_base_dir(std::env::temp_dir())
-        .with_segment_ids(vec!["segment-00001".into(), "segment-00002".into()])
+        .with_segment_ids(vec!["00001".into(), "00002".into()])
         .create()
         .await;
 
@@ -159,7 +159,7 @@ async fn planner_keeps_order_on_or_even_with_context() {
         .with_command(command)
         .with_registry(Arc::clone(&registry))
         .with_segment_base_dir(std::env::temp_dir())
-        .with_segment_ids(vec!["segment-00001".into()])
+        .with_segment_ids(vec!["00001".into()])
         .create()
         .await;
 
@@ -222,7 +222,7 @@ async fn planner_keeps_order_on_not() {
         .with_command(command)
         .with_registry(Arc::clone(&registry))
         .with_segment_base_dir(std::env::temp_dir())
-        .with_segment_ids(vec!["segment-00001".into()])
+        .with_segment_ids(vec!["00001".into()])
         .create()
         .await;
 
@@ -259,7 +259,7 @@ async fn planner_returns_empty_for_no_steps() {
         .with_command(command)
         .with_registry(Arc::clone(&registry))
         .with_segment_base_dir(std::env::temp_dir())
-        .with_segment_ids(vec!["segment-00001".into()])
+        .with_segment_ids(vec!["00001".into()])
         .create()
         .await;
 
@@ -297,7 +297,7 @@ async fn planner_preserves_when_context_already_first() {
         .with_command(command)
         .with_registry(Arc::clone(&registry))
         .with_segment_base_dir(std::env::temp_dir())
-        .with_segment_ids(vec!["segment-00001".into()])
+        .with_segment_ids(vec!["00001".into()])
         .create()
         .await;
 

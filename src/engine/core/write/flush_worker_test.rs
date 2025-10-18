@@ -56,7 +56,7 @@ async fn test_flush_worker_processes_memtable() {
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Verify zones file exists and is valid
-    let segment_dir = base_path.join(format!("segment-{:05}", segment_id));
+    let segment_dir = base_path.join(format!("{:05}", segment_id));
     let zones_path = segment_dir.join(format!("{}.zones", uid));
     assert!(
         zones_path.exists(),
@@ -70,5 +70,5 @@ async fn test_flush_worker_processes_memtable() {
     // Verify segment index is updated
     let index = SegmentIndex::load(&base_path).await.expect("Load failed");
     assert_eq!(index.entries.len(), 1, "Expected 1 segment entry");
-    assert_eq!(index.entries[0].label, "00003", "Segment label mismatch");
+    assert_eq!(format!("{:05}", index.entries[0].id), "00003", "Segment label mismatch");
 }

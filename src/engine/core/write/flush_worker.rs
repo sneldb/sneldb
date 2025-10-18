@@ -1,6 +1,7 @@
 use crate::engine::core::Flusher;
 use crate::engine::core::MemTable;
 use crate::engine::core::WalCleaner;
+use crate::engine::core::segment::segment_id::SegmentId;
 use crate::engine::errors::StoreError;
 use crate::engine::schema::registry::SchemaRegistry;
 use std::path::PathBuf;
@@ -40,7 +41,7 @@ impl FlushWorker {
         )>,
     ) -> Result<(), StoreError> {
         while let Some((segment_id, memtable, registry, passive_memtable)) = rx.recv().await {
-            let segment_dir = self.base_dir.join(format!("segment-{:05}", segment_id));
+            let segment_dir = SegmentId::from(segment_id as u32).join_dir(&self.base_dir);
 
             info!(
                 target: "sneldb::flush",

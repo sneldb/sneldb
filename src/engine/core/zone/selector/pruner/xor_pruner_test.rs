@@ -18,8 +18,8 @@ async fn xor_uses_zxf_primary_and_xf_fallback_and_skips_on_miss() {
 
     let tmp = tempdir().unwrap();
     let shard_dir = tmp.path().join("shard-0");
-    let seg1 = shard_dir.join("segment-001");
-    let seg2 = shard_dir.join("segment-002");
+    let seg1 = shard_dir.join("001");
+    let seg2 = shard_dir.join("002");
     std::fs::create_dir_all(&seg1).unwrap();
     std::fs::create_dir_all(&seg2).unwrap();
 
@@ -88,7 +88,7 @@ async fn xor_uses_zxf_primary_and_xf_fallback_and_skips_on_miss() {
         .build()
         .await;
 
-    // 1) Primary: zxf should pick segment-002 for key == "c"
+    // 1) Primary: zxf should pick 002 for key == "c"
     let f_c = FilterPlanFactory::new()
         .with_column("key")
         .with_operation(CompareOp::Eq)
@@ -102,8 +102,8 @@ async fn xor_uses_zxf_primary_and_xf_fallback_and_skips_on_miss() {
         caches: None,
     };
     let sel_c = ZoneSelectorBuilder::new(ctx_c).build();
-    let z1 = sel_c.select_for_segment("segment-001");
-    let z2 = sel_c.select_for_segment("segment-002");
+    let z1 = sel_c.select_for_segment("001");
+    let z2 = sel_c.select_for_segment("002");
     assert!(z1.is_empty());
     assert!(!z2.is_empty());
 
@@ -125,12 +125,12 @@ async fn xor_uses_zxf_primary_and_xf_fallback_and_skips_on_miss() {
         caches: None,
     };
     let sel_a = ZoneSelectorBuilder::new(ctx_a).build();
-    let xa1 = sel_a.select_for_segment("segment-001");
+    let xa1 = sel_a.select_for_segment("001");
     assert_eq!(
         xa1.len(),
         crate::engine::core::zone::candidate_zone::CandidateZone::create_all_zones_for_segment_from_meta(
             &shard_dir,
-            "segment-001",
+            "001",
             &uid
         )
         .len()
@@ -150,8 +150,8 @@ async fn xor_uses_zxf_primary_and_xf_fallback_and_skips_on_miss() {
         caches: None,
     };
     let sel_u = ZoneSelectorBuilder::new(ctx_u).build();
-    let u1 = sel_u.select_for_segment("segment-001");
-    let u2 = sel_u.select_for_segment("segment-002");
+    let u1 = sel_u.select_for_segment("001");
+    let u2 = sel_u.select_for_segment("002");
     assert!(u1.is_empty());
     assert!(u2.is_empty());
 }

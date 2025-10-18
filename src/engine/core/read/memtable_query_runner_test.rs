@@ -149,7 +149,6 @@ async fn respects_limit_without_order_by() {
 /// Tests that LIMIT is deferred when ORDER BY is present
 #[tokio::test]
 async fn returns_all_events_when_order_by_present() {
-    use crate::command::types::OrderSpec;
     use crate::logging::init_for_tests;
     init_for_tests();
 
@@ -210,7 +209,6 @@ async fn returns_all_events_when_order_by_present() {
 /// Tests ORDER BY with descending sort
 #[tokio::test]
 async fn sorts_events_descending_when_order_by_desc() {
-    use crate::command::types::OrderSpec;
     use crate::logging::init_for_tests;
     init_for_tests();
 
@@ -324,7 +322,6 @@ async fn queries_passive_memtables_with_limit() {
 /// Tests ORDER BY across active and passive memtables
 #[tokio::test]
 async fn sorts_across_active_and_passive_memtables() {
-    use crate::command::types::OrderSpec;
     use crate::logging::init_for_tests;
     init_for_tests();
 

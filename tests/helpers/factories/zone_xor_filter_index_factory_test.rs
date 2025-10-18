@@ -27,7 +27,6 @@ fn builds_index_and_checks_membership_per_zone() {
 #[test]
 fn zxf_roundtrip_save_and_load() {
     use crate::engine::core::zone::zone_xor_index::ZoneXorFilterIndex;
-    use std::fs;
     use tempfile::tempdir;
 
     let idx = ZoneXorFilterIndexFactory::new("u01", "fruit")

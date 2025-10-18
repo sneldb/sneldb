@@ -46,8 +46,7 @@ pub async fn insert_and_maybe_flush(
             "MemTable is full; flushing and rotating"
         );
 
-        let current_segment_id = ctx.segment_id;
-        ctx.segment_id += 1;
+        let current_segment_id = ctx.allocator.next_for_level(0) as u64;
 
         let capacity = ctx.memtable.capacity();
 

@@ -3,8 +3,7 @@ use crate::engine::core::CandidateZone;
 /// A type-safe identifier for a zone within a segment.
 ///
 /// This type encapsulates the combination of segment_id and zone_id,
-/// providing normalization logic for segment IDs that may or may not
-/// have the "segment-" prefix.
+/// in the current scheme segment IDs are numeric-only strings.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SegmentZoneId {
     segment_id: String,
@@ -30,16 +29,9 @@ impl SegmentZoneId {
         self.zone_id
     }
 
-    /// Returns a normalized tuple of (segment_id, zone_id).
-    ///
-    /// The segment ID is normalized by stripping the "segment-" prefix if present.
-    /// This is useful for comparisons when segment IDs may or may not have the prefix.
+    /// Returns a tuple of (segment_id, zone_id), as stored.
     pub fn normalized(&self) -> (&str, u32) {
-        let normalized_id = self
-            .segment_id
-            .strip_prefix("segment-")
-            .unwrap_or(&self.segment_id);
-        (normalized_id, self.zone_id)
+        (&self.segment_id, self.zone_id)
     }
 
     /// Creates a SegmentZoneId from a CandidateZone.

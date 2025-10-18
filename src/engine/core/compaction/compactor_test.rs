@@ -61,7 +61,7 @@ async fn test_compactor_merges_segments_successfully() {
 
         let memtable = MemTableFactory::new().with_events(events).create().unwrap();
 
-        let segment_dir = input_dir.join(format!("segment-{:05}", segment_id));
+        let segment_dir = input_dir.join(format!("{:05}", segment_id));
         let flusher = Flusher::new(
             memtable,
             segment_id,

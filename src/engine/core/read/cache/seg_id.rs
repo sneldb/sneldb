@@ -2,25 +2,11 @@ use std::hash::{Hash, Hasher};
 use std::path::Path;
 
 /// Parse a segment identifier string into a u64.
-/// Accepts plain numeric strings or strings containing a trailing numeric component,
-/// otherwise falls back to a stable 64-bit hash of the entire string.
+/// Numeric-only scheme: accepts only plain numeric strings; otherwise falls back
+/// to a stable 64-bit hash of the entire string (for tests using non-numeric ids).
 pub fn parse_segment_id_u64(segment_id: &str) -> u64 {
     if let Ok(n) = segment_id.parse::<u64>() {
         return n;
-    }
-    // Try last numeric run
-    let digits: String = segment_id
-        .chars()
-        .rev()
-        .take_while(|c| c.is_ascii_digit())
-        .collect::<String>()
-        .chars()
-        .rev()
-        .collect();
-    if !digits.is_empty() {
-        if let Ok(n) = digits.parse::<u64>() {
-            return n;
-        }
     }
     // Stable 64-bit hash fallback (SipHasher via DefaultHasher)
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -33,7 +19,7 @@ pub fn compact_shard_id(shard_id: Option<usize>) -> u16 {
     shard_id.map(|s| s as u16).unwrap_or(0)
 }
 
-/// Extract shard id from a base_dir (e.g., .../shard-3/segment-42) if present.
+/// Extract shard id from a base_dir (e.g., .../shard-3/42) if present.
 pub fn parse_shard_id_from_base(base_dir: &Path) -> Option<usize> {
     base_dir
         .file_name()

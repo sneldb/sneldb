@@ -60,7 +60,7 @@ impl ZoneCursorLoader {
         let mut all_cursors = vec![];
 
         for segment_id in &self.segment_ids {
-            let segment_dir = self.base_dir.join(format!("segment-{}", segment_id));
+            let segment_dir = self.base_dir.join(segment_id);
             let zones_path = segment_dir.join(format!("{}.zones", self.uid));
 
             if tracing::enabled!(tracing::Level::DEBUG) {

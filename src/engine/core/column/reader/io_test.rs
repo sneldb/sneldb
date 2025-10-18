@@ -1,12 +1,10 @@
 use std::fs::{File, OpenOptions};
-use std::io::{Seek, SeekFrom, Write};
+use std::io::Write;
 use std::path::PathBuf;
 
-use memmap2::MmapOptions;
 use tempfile::tempdir;
 
 use crate::engine::core::column::compression::ZoneBlockEntry;
-use crate::engine::core::column::compression::compressed_column_index::CompressedColumnIndex;
 use crate::engine::core::column::reader::io::{compressed_range, map_column_file};
 use crate::engine::errors::QueryExecutionError;
 use crate::shared::storage_header::{BinaryHeader, FileKind};

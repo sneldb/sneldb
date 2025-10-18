@@ -23,7 +23,7 @@ impl ZoneIndexCacheKey {
 pub struct ZoneIndexEntry {
     pub zone_index: Arc<ZoneIndex>,
     pub path: PathBuf,
-    pub segment_id: String,
+    pub segment_id: u32,
     pub uid: String,
     pub shard_id: Option<usize>,
     pub ino: u64,
@@ -36,7 +36,7 @@ impl ZoneIndexEntry {
     pub fn new(
         zone_index: Arc<ZoneIndex>,
         path: PathBuf,
-        segment_id: String,
+        segment_id: u32,
         uid: String,
         shard_id: Option<usize>,
         ino: u64,

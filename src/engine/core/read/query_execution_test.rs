@@ -167,7 +167,7 @@ async fn executes_query_with_only_segment_match() {
     // Setup: temp segment dir
     let tmp_dir = tempdir().unwrap();
     let shard_dir = tmp_dir.path().join("shard-0");
-    let segment_dir = shard_dir.join("segment-007");
+    let segment_dir = shard_dir.join("00007");
     std::fs::create_dir_all(&segment_dir).unwrap();
 
     // Setup: schema and registry
@@ -199,7 +199,7 @@ async fn executes_query_with_only_segment_match() {
         .with("payload", json!({"status": "ok"}))
         .create();
 
-    let memtable = crate::test_helpers::factories::MemTableFactory::new()
+    let memtable = MemTableFactory::new()
         .with_events(vec![event1.clone(), event2.clone(), event3.clone()])
         .create()
         .unwrap();
@@ -230,7 +230,7 @@ async fn executes_query_with_only_segment_match() {
         .with_command(query_cmd)
         .with_registry(Arc::clone(&registry))
         .with_segment_base_dir(tmp_dir.path())
-        .with_segment_ids(vec!["shard-0/segment-007".into()])
+        .with_segment_ids(vec!["shard-0/00007".into()])
         .create()
         .await;
 
@@ -299,7 +299,7 @@ async fn executes_query_limit_short_circuits_before_segments_when_memtable_satis
     // Prepare segment directory
     let tmp_dir = tempdir().unwrap();
     let shard_dir = tmp_dir.path().join("shard-0");
-    let segment_dir = shard_dir.join("segment-123");
+    let segment_dir = shard_dir.join("00123");
     std::fs::create_dir_all(&segment_dir).unwrap();
 
     // Schema
@@ -327,10 +327,7 @@ async fn executes_query_limit_short_circuits_before_segments_when_memtable_satis
         .with("context_id", "m-3")
         .with("payload", json!({"status": "ok", "source": "memtable"}))
         .create();
-    let memtable_to_flush = MemTableFactory::new()
-        .with_events(vec![m1.clone(), m2.clone(), m3.clone()])
-        .create()
-        .unwrap();
+    // Note: building active_memtable later; no need to flush this one
 
     // Segment will contain additional matching events with a different source marker
     let s1 = EventFactory::new()
@@ -373,7 +370,7 @@ async fn executes_query_limit_short_circuits_before_segments_when_memtable_satis
         .with_command(query_cmd)
         .with_registry(Arc::clone(&registry))
         .with_segment_base_dir(tmp_dir.path())
-        .with_segment_ids(vec!["shard-0/segment-123".into()])
+        .with_segment_ids(vec!["shard-0/00123".into()])
         .create()
         .await;
 
@@ -399,7 +396,7 @@ async fn executes_query_limit_combines_memtable_and_segments() {
 
     let tmp_dir = tempdir().unwrap();
     let shard_dir = tmp_dir.path().join("shard-0");
-    let segment_dir = shard_dir.join("segment-456");
+    let segment_dir = shard_dir.join("00456");
     std::fs::create_dir_all(&segment_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();
@@ -453,7 +450,7 @@ async fn executes_query_limit_combines_memtable_and_segments() {
         .with_command(query_cmd)
         .with_registry(Arc::clone(&registry))
         .with_segment_base_dir(tmp_dir.path())
-        .with_segment_ids(vec!["shard-0/segment-456".into()])
+        .with_segment_ids(vec!["shard-0/00456".into()])
         .create()
         .await;
 
@@ -513,7 +510,7 @@ async fn executes_query_limit_one_memtable_and_segments_mixed_order() {
 
     let tmp_dir = tempdir().unwrap();
     let shard_dir = tmp_dir.path().join("shard-0");
-    let segment_dir = shard_dir.join("segment-111");
+    let segment_dir = shard_dir.join("00111");
     std::fs::create_dir_all(&segment_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();
@@ -570,7 +567,7 @@ async fn executes_query_limit_one_memtable_and_segments_mixed_order() {
         .with_command(query_cmd)
         .with_registry(Arc::clone(&registry))
         .with_segment_base_dir(tmp_dir.path())
-        .with_segment_ids(vec!["shard-0/segment-111".into()])
+        .with_segment_ids(vec!["shard-0/00111".into()])
         .create()
         .await;
 
@@ -586,7 +583,7 @@ async fn executes_query_limit_exact_boundary_between_memtable_and_segment() {
 
     let tmp_dir = tempdir().unwrap();
     let shard_dir = tmp_dir.path().join("shard-0");
-    let segment_dir = shard_dir.join("segment-222");
+    let segment_dir = shard_dir.join("00222");
     std::fs::create_dir_all(&segment_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();
@@ -646,7 +643,7 @@ async fn executes_query_limit_exact_boundary_between_memtable_and_segment() {
         .with_command(query_cmd)
         .with_registry(Arc::clone(&registry))
         .with_segment_base_dir(tmp_dir.path())
-        .with_segment_ids(vec!["shard-0/segment-222".into()])
+        .with_segment_ids(vec!["shard-0/00222".into()])
         .create()
         .await;
 
@@ -663,7 +660,7 @@ async fn executes_query_limit_larger_than_total_results() {
 
     let tmp_dir = tempdir().unwrap();
     let shard_dir = tmp_dir.path().join("shard-0");
-    let segment_dir = shard_dir.join("segment-789");
+    let segment_dir = shard_dir.join("00789");
     std::fs::create_dir_all(&segment_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();
@@ -724,7 +721,7 @@ async fn executes_query_limit_larger_than_total_results() {
         .with_command(query_cmd)
         .with_registry(Arc::clone(&registry))
         .with_segment_base_dir(tmp_dir.path())
-        .with_segment_ids(vec!["shard-0/segment-789".into()])
+        .with_segment_ids(vec!["shard-0/00789".into()])
         .create()
         .await;
 

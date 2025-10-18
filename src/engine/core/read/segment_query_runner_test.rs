@@ -15,7 +15,7 @@ async fn segment_query_runner_returns_matching_events() {
     // Create temp segment dir
     let tmp_dir = tempdir().unwrap();
     let shard_dir = tmp_dir.path().join("shard-0");
-    let segment_dir = shard_dir.join("segment-007");
+    let segment_dir = shard_dir.join("00007");
     std::fs::create_dir_all(&segment_dir).unwrap();
 
     // Setup schema
@@ -71,7 +71,7 @@ async fn segment_query_runner_returns_matching_events() {
         .with_command(query_cmd)
         .with_registry(Arc::clone(&registry))
         .with_segment_base_dir(tmp_dir.path())
-        .with_segment_ids(vec!["shard-0/segment-007".into()])
+        .with_segment_ids(vec!["shard-0/00007".into()])
         .create()
         .await;
 
@@ -98,7 +98,7 @@ async fn segment_query_runner_respects_limit_across_zones() {
     // Create temp segment dir
     let tmp_dir = tempdir().unwrap();
     let shard_dir = tmp_dir.path().join("shard-0");
-    let segment_dir = shard_dir.join("segment-101");
+    let segment_dir = shard_dir.join("00101");
     std::fs::create_dir_all(&segment_dir).unwrap();
 
     // Schema
@@ -144,7 +144,7 @@ async fn segment_query_runner_respects_limit_across_zones() {
         .with_command(query_cmd)
         .with_registry(Arc::clone(&registry))
         .with_segment_base_dir(tmp_dir.path())
-        .with_segment_ids(vec!["shard-0/segment-101".into()])
+        .with_segment_ids(vec!["shard-0/00101".into()])
         .create()
         .await;
 
@@ -166,7 +166,7 @@ async fn segment_query_runner_limit_zero_returns_empty() {
 
     let tmp_dir = tempdir().unwrap();
     let shard_dir = tmp_dir.path().join("shard-0");
-    let segment_dir = shard_dir.join("segment-102");
+    let segment_dir = shard_dir.join("00102");
     std::fs::create_dir_all(&segment_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();
@@ -213,7 +213,7 @@ async fn segment_query_runner_limit_zero_returns_empty() {
         .with_command(query_cmd)
         .with_registry(Arc::clone(&registry))
         .with_segment_base_dir(tmp_dir.path())
-        .with_segment_ids(vec!["shard-0/segment-102".into()])
+        .with_segment_ids(vec!["shard-0/00102".into()])
         .create()
         .await;
 

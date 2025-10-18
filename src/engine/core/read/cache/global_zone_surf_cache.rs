@@ -266,7 +266,7 @@ impl GlobalZoneSurfCache {
             Ok(ZoneSurfCacheEntry::new(
                 Arc::new(filter),
                 path.to_path_buf(),
-                segment_id.to_string(),
+                segment_id.parse::<u32>().unwrap_or_else(|_| 0),
                 uid.to_string(),
                 field.to_string(),
                 ino,

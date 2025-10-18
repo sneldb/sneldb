@@ -13,7 +13,7 @@ fn prunes_eq_variant() {
         .with_zone_variant_bits(1, 3, &[1]) // zone 1: enterprise at row 1
         .build();
     let pruner = EnumZonePruner {
-        segment_id: "segment-001",
+        segment_id: "001",
         ebm: &index,
     };
 
@@ -21,7 +21,7 @@ fn prunes_eq_variant() {
     let zones = pruner.prune(&CompareOp::Eq, 1);
     assert_eq!(zones.len(), 1);
     assert_eq!(zones[0].zone_id, 0);
-    assert_eq!(zones[0].segment_id, "segment-001");
+    assert_eq!(zones[0].segment_id, "001");
 }
 
 #[test]
@@ -35,7 +35,7 @@ fn prunes_neq_variant() {
         .with_zone_variant_bits(1, 3, &[1])
         .build();
     let pruner = EnumZonePruner {
-        segment_id: "segment-001",
+        segment_id: "001",
         ebm: &index,
     };
 

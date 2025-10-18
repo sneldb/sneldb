@@ -35,7 +35,7 @@ async fn seed_segments_with_field(
 
     // Each segment: write zones_per_segment * zone_size events, with increasing field to create separable ladders
     for s in 0..segments {
-        let segment_dir = shard_dir.join(format!("segment-{:05}", s));
+        let segment_dir = shard_dir.join(format!("{:05}", s));
         std::fs::create_dir_all(&segment_dir).unwrap();
 
         let rows = zones_per_segment * zone_size;
@@ -102,8 +102,8 @@ async fn test_planner_keeps_expected_zones_across_segments() {
     if let Ok(rd) = std::fs::read_dir(&shard_dir) {
         for e in rd.flatten() {
             if let Some(name) = e.file_name().to_str() {
-                if name.starts_with("segment-") {
-                    seg_ids.push(name.trim_start_matches("segment-").to_string());
+                if name.chars().all(|c| c.is_ascii_digit()) {
+                    seg_ids.push(name.to_string());
                 }
             }
         }
@@ -126,8 +126,7 @@ async fn test_planner_keeps_expected_zones_across_segments() {
     // Ensure zones are ordered by rank-1 ascending for ASC
     let mut rank1s = Vec::new();
     for (seg, zid) in &picked.zones {
-        let rlte =
-            RlteIndex::load(&uid, &shard_dir.join(format!("segment-{}", seg))).expect("load RLTE");
+        let rlte = RlteIndex::load(&uid, &shard_dir.join(seg)).expect("load RLTE");
         let ladder = rlte
             .ladders
             .get(field)

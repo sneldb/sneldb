@@ -16,7 +16,7 @@ pub struct ColumnFactory {
 impl ColumnFactory {
     pub fn new() -> Self {
         Self {
-            segment_dir: PathBuf::from("/tmp/segments/segment-00000"),
+            segment_dir: PathBuf::from("/tmp/segments/00000"),
             uid: "uid_test".to_string(),
             field: "field_a".to_string(),
             zfc_factory: CompressedColumnIndexFactory::new(),
