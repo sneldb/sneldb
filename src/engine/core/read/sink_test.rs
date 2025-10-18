@@ -144,7 +144,17 @@ async fn make_plan(event_type: &str, context_id: Option<&str>) -> QueryPlan {
 }
 
 fn month_bucket(ts: u64) -> u64 {
-    (ts / 2_592_000) * 2_592_000
+    use chrono::{DateTime, Datelike, Utc};
+    let dt = DateTime::from_timestamp(ts as i64, 0).unwrap();
+    let month_start = dt
+        .date_naive()
+        .with_day(1)
+        .unwrap()
+        .and_hms_opt(0, 0, 0)
+        .unwrap()
+        .and_local_timezone(Utc)
+        .unwrap();
+    month_start.timestamp() as u64
 }
 
 // EventSink -------------------------------------------------------------

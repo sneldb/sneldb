@@ -355,13 +355,29 @@ impl ResultSink for AggregateSink {
     }
 }
 
+use crate::shared::datetime::time_bucketing::{CalendarTimeBucketer, naive_bucket_of as naive_bucket};
+use crate::shared::datetime::time_bucketing_config::TimeBucketingConfig;
+
+// Global configuration for time bucketing
+// TODO: Make this configurable via application settings
+lazy_static::lazy_static! {
+    static ref TIME_BUCKETING_CONFIG: TimeBucketingConfig = TimeBucketingConfig::default();
+    static ref TIME_BUCKETER: CalendarTimeBucketer = CalendarTimeBucketer::new(TIME_BUCKETING_CONFIG.clone());
+}
+
 fn bucket_of(ts: u64, gran: &TimeGranularity) -> u64 {
-    match gran {
-        TimeGranularity::Hour => (ts / 3600) * 3600,
-        TimeGranularity::Day => (ts / 86_400) * 86_400,
-        TimeGranularity::Week => (ts / 604_800) * 604_800,
-        TimeGranularity::Month => (ts / 2_592_000) * 2_592_000, // naive 30-day month bucket
+    if TIME_BUCKETING_CONFIG.use_calendar_bucketing {
+        // Use calendar-aware bucketing for accurate results
+        TIME_BUCKETER.bucket_of(ts, gran)
+    } else {
+        // Fall back to naive bucketing for performance
+        naive_bucket(ts, gran)
     }
+}
+
+// Keep naive implementation available for performance-critical paths
+fn naive_bucket_of(ts: u64, gran: &TimeGranularity) -> u64 {
+    naive_bucket(ts, gran)
 }
 
 fn compute_group_key(

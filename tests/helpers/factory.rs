@@ -1,7 +1,7 @@
 pub use super::factories::{
     CandidateZoneFactory, CommandFactory, CompareOpFactory, EventFactory, ExprFactory,
-    QueryPlanFactory, ResolverFactory, SchemaRegistryFactory, ZoneCursorFactory, ZoneIndexFactory,
-    ZoneMetaFactory, ZonePlanFactory, ZoneRowFactory, ZoneValueLoaderFactory,
+    QueryPlanFactory, ResolverFactory, SchemaRegistryFactory, TimestampFactory, ZoneCursorFactory,
+    ZoneIndexFactory, ZoneMetaFactory, ZonePlanFactory, ZoneRowFactory, ZoneValueLoaderFactory,
 };
 
 pub struct Factory;
@@ -73,5 +73,9 @@ impl Factory {
 
     pub fn resolver() -> ResolverFactory {
         ResolverFactory::new()
+    }
+
+    pub fn timestamp() -> TimestampFactory {
+        TimestampFactory
     }
 }
