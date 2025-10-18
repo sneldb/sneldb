@@ -40,7 +40,7 @@ impl ShardManager {
             });
 
             // Start background compactor
-            // start_background_compactor(id as u32, shard_base_dir.clone()).await;
+            start_background_compactor(id as u32, shard_base_dir.clone()).await;
 
             shards.push(shard);
         }

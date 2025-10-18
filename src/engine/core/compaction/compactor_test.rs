@@ -73,10 +73,11 @@ async fn test_compactor_merges_segments_successfully() {
     }
 
     // --- Run Compactor ---
+    // Use an L1 output id to exercise per-level zone sizing
     let compactor = Compactor::new(
         uid.clone(),
         vec!["00000".to_string(), "00001".to_string()],
-        42,
+        10_000, // L1 id
         input_dir.clone(),
         output_dir.clone(),
         Arc::clone(&registry),
@@ -88,6 +89,13 @@ async fn test_compactor_merges_segments_successfully() {
     let zones_path = output_dir.join(format!("{}.zones", uid));
     let zone_meta = ZoneMeta::load(&zones_path).expect("Load zone meta failed");
     assert!(!zone_meta.is_empty(), "Zone meta should not be empty");
+    // With test config: fill_factor=3, event_per_zone=1, level=1 => target_rows=6
+    // We wrote 6 merged events, so expect exactly 1 zone
+    assert_eq!(
+        zone_meta.len(),
+        1,
+        "Expected a single zone at L1 target size"
+    );
 
     let col_path = output_dir.join(format!("{}_{}.col", uid, "context_id"));
     assert!(col_path.exists(), ".col file for uid should exist");
@@ -112,4 +120,22 @@ async fn test_compactor_merges_segments_successfully() {
         !matching.is_empty(),
         "Segment index should contain entry for uid"
     );
+
+    // Read back context_id values and verify global sort
+    use crate::engine::core::ColumnReader;
+
+    let mut all_ctx = Vec::new();
+    let zones = ZoneMeta::load(&zones_path).unwrap();
+    let out_seg_label = format!("{:05}", 10_000u32);
+
+    for z in &zones {
+        let ctx_ids =
+            ColumnReader::load_for_zone(&output_dir, &out_seg_label, &uid, "context_id", z.zone_id)
+                .unwrap();
+        all_ctx.extend(ctx_ids);
+    }
+
+    let mut sorted = all_ctx.clone();
+    sorted.sort();
+    assert_eq!(all_ctx, sorted, "context_id values must be globally sorted");
 }

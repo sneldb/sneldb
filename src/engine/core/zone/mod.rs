@@ -5,6 +5,7 @@ pub mod rlte_index;
 pub mod segment_zone_id;
 pub mod selector;
 pub mod zone_artifacts;
+pub mod zone_batch_sizer;
 pub mod zone_collector;
 pub mod zone_combiner;
 pub mod zone_cursor;
@@ -35,6 +36,8 @@ mod enum_zone_pruner_test;
 mod rlte_index_tests;
 #[cfg(test)]
 mod segment_zone_id_test;
+#[cfg(test)]
+mod zone_batch_sizer_test;
 #[cfg(test)]
 mod zone_collector_tests;
 #[cfg(test)]

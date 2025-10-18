@@ -1,9 +1,7 @@
 use super::segment_id::{LEVEL_SPAN, SegmentId};
 use crate::engine::errors::StoreError;
-use crate::shared::config::CONFIG;
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
@@ -99,23 +97,5 @@ impl SegmentIndex {
         level
     }
 
-    /// Determines whether any level exceeds the compaction threshold.
-    pub fn needs_compaction(&self) -> bool {
-        let mut counts: HashMap<u32, usize> = HashMap::new();
-        for entry in &self.entries {
-            *counts.entry(SegmentId::from(entry.id).level()).or_default() += 1;
-        }
-
-        let threshold = CONFIG.engine.compaction_threshold;
-        let needs = counts.iter().any(|(_, &count)| count >= threshold);
-
-        debug!(
-            target: "segment_index::needs_compaction",
-            threshold,
-            ?counts,
-            needs_compaction = needs,
-            "Checked compaction necessity"
-        );
-        needs
-    }
+    // Note: threshold-based compaction removed in favor of policy-based planning
 }

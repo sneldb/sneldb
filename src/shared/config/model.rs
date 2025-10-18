@@ -39,10 +39,13 @@ pub struct EngineConfig {
     pub index_dir: String,
     pub fill_factor: usize,
     pub event_per_zone: usize,
-    pub compaction_threshold: usize,
     pub compaction_interval: u64,
     pub sys_io_threshold: usize,
     pub max_inflight_passives: Option<usize>,
+    /// Number of L0 segments to merge per compaction unit (k-way)
+    pub segments_per_merge: usize,
+    /// Max number of shards compacted concurrently (default 1 for serial across shards)
+    pub compaction_max_shard_concurrency: usize,
 }
 
 #[derive(Debug, Deserialize)]
@@ -80,7 +83,7 @@ use std::env;
 pub fn load_settings() -> Result<Settings, config::ConfigError> {
     let config_path = env::var("SNELDB_CONFIG").unwrap_or_else(|_| "config".to_string());
 
-    let mut settings: Settings = config::Config::builder()
+    let settings: Settings = config::Config::builder()
         .add_source(config::File::with_name(&config_path))
         .build()?
         .try_deserialize()?;
