@@ -6,7 +6,6 @@ use tempfile::tempdir;
 use crate::command::types::CompareOp;
 use crate::engine::core::zone::selector::builder::ZoneSelectorBuilder;
 use crate::engine::core::zone::selector::selection_context::SelectionContext;
-use crate::engine::core::zone::selector::selector_kind::ZoneSelector;
 use crate::engine::schema::{EnumType, FieldType};
 use crate::test_helpers::factories::{
     CommandFactory, EventFactory, FilterPlanFactory, MemTableFactory, QueryPlanFactory,
@@ -20,8 +19,8 @@ async fn xor_eq_uses_zxf_to_narrow_zones() {
 
     let tmp = tempdir().unwrap();
     let shard_dir = tmp.path().join("shard-0");
-    let seg1 = shard_dir.join("segment-001");
-    let seg2 = shard_dir.join("segment-002");
+    let seg1 = shard_dir.join("001");
+    let seg2 = shard_dir.join("002");
     std::fs::create_dir_all(&seg1).unwrap();
     std::fs::create_dir_all(&seg2).unwrap();
 
@@ -80,7 +79,7 @@ async fn xor_eq_uses_zxf_to_narrow_zones() {
         .unwrap();
     }
 
-    // Query key == "b" should favor segment-002 via .zxf
+    // Query key == "b" should favor 002 via .zxf
     let filter = FilterPlanFactory::new()
         .with_column("key")
         .with_operation(CompareOp::Eq)
@@ -102,8 +101,8 @@ async fn xor_eq_uses_zxf_to_narrow_zones() {
     };
     let selector = ZoneSelectorBuilder::new(ctx).build();
 
-    let out1 = selector.select_for_segment("segment-001");
-    let out2 = selector.select_for_segment("segment-002");
+    let out1 = selector.select_for_segment("001");
+    let out2 = selector.select_for_segment("002");
     assert!(out1.is_empty());
     assert!(!out2.is_empty());
 }
@@ -115,8 +114,8 @@ async fn range_pruner_uses_zonesurf_for_gt_and_lte() {
 
     let tmp = tempdir().unwrap();
     let shard_dir = tmp.path().join("shard-0");
-    let seg1 = shard_dir.join("segment-001");
-    let seg2 = shard_dir.join("segment-002");
+    let seg1 = shard_dir.join("001");
+    let seg2 = shard_dir.join("002");
     std::fs::create_dir_all(&seg1).unwrap();
     std::fs::create_dir_all(&seg2).unwrap();
 
@@ -183,7 +182,7 @@ async fn range_pruner_uses_zonesurf_for_gt_and_lte() {
     .await
     .unwrap();
 
-    // id > 10 should select zones from segment-002
+    // id > 10 should select zones from 002
     let filter_gt = FilterPlanFactory::new()
         .with_column("id")
         .with_operation(CompareOp::Gt)
@@ -203,12 +202,12 @@ async fn range_pruner_uses_zonesurf_for_gt_and_lte() {
         caches: None,
     };
     let selector = ZoneSelectorBuilder::new(ctx).build();
-    let out1 = selector.select_for_segment("segment-001");
-    let out2 = selector.select_for_segment("segment-002");
+    let out1 = selector.select_for_segment("001");
+    let out2 = selector.select_for_segment("002");
     assert!(out1.is_empty());
     assert!(!out2.is_empty());
 
-    // id <= 10 should select zones from segment-001
+    // id <= 10 should select zones from 001
     let filter_lte = FilterPlanFactory::new()
         .with_column("id")
         .with_operation(CompareOp::Lte)
@@ -222,8 +221,8 @@ async fn range_pruner_uses_zonesurf_for_gt_and_lte() {
         caches: None,
     };
     let selector2 = ZoneSelectorBuilder::new(ctx2).build();
-    let out1b = selector2.select_for_segment("segment-001");
-    let out2b = selector2.select_for_segment("segment-002");
+    let out1b = selector2.select_for_segment("001");
+    let out2b = selector2.select_for_segment("002");
     assert!(!out1b.is_empty());
     assert!(out2b.is_empty());
 }
@@ -235,8 +234,8 @@ async fn enum_pruner_respects_eq_and_neq() {
 
     let tmp = tempdir().unwrap();
     let shard_dir = tmp.path().join("shard-0");
-    let seg1 = shard_dir.join("segment-001");
-    let seg2 = shard_dir.join("segment-002");
+    let seg1 = shard_dir.join("001");
+    let seg2 = shard_dir.join("002");
     std::fs::create_dir_all(&seg1).unwrap();
     std::fs::create_dir_all(&seg2).unwrap();
 
@@ -313,7 +312,7 @@ async fn enum_pruner_respects_eq_and_neq() {
     .await
     .unwrap();
 
-    // plan == pro -> segment-001 only
+    // plan == pro -> 001 only
     let f_eq = FilterPlanFactory::new()
         .with_column("plan")
         .with_operation(CompareOp::Eq)
@@ -333,8 +332,8 @@ async fn enum_pruner_respects_eq_and_neq() {
         caches: None,
     };
     let sel = ZoneSelectorBuilder::new(ctx).build();
-    let out1 = sel.select_for_segment("segment-001");
-    let out2 = sel.select_for_segment("segment-002");
+    let out1 = sel.select_for_segment("001");
+    let out2 = sel.select_for_segment("002");
     assert!(!out1.is_empty());
     assert!(out2.is_empty());
 
@@ -352,8 +351,8 @@ async fn enum_pruner_respects_eq_and_neq() {
         caches: None,
     };
     let sel2 = ZoneSelectorBuilder::new(ctx2).build();
-    let o1 = sel2.select_for_segment("segment-001");
-    let o2 = sel2.select_for_segment("segment-002");
+    let o1 = sel2.select_for_segment("001");
+    let o2 = sel2.select_for_segment("002");
     assert!(!o1.is_empty());
     assert!(!o2.is_empty());
 }
@@ -365,7 +364,7 @@ async fn returns_all_zones_when_value_missing() {
 
     let tmp = tempdir().unwrap();
     let shard_dir = tmp.path().join("shard-0");
-    let seg1 = shard_dir.join("segment-001");
+    let seg1 = shard_dir.join("001");
     std::fs::create_dir_all(&seg1).unwrap();
 
     let reg_fac = SchemaRegistryFactory::new();
@@ -416,11 +415,11 @@ async fn returns_all_zones_when_value_missing() {
         caches: None,
     };
     let sel = ZoneSelectorBuilder::new(ctx).build();
-    let zones = sel.select_for_segment("segment-001");
+    let zones = sel.select_for_segment("001");
 
     let all =
         crate::engine::core::zone::candidate_zone::CandidateZone::create_all_zones_for_segment(
-            "segment-001",
+            "001",
         );
     assert_eq!(zones.len(), all.len());
 }
@@ -432,7 +431,7 @@ async fn returns_empty_when_uid_missing() {
 
     let tmp = tempdir().unwrap();
     let shard_dir = tmp.path().join("shard-0");
-    let seg1 = shard_dir.join("segment-001");
+    let seg1 = shard_dir.join("001");
     std::fs::create_dir_all(&seg1).unwrap();
 
     let reg_fac = SchemaRegistryFactory::new();
@@ -482,7 +481,7 @@ async fn returns_empty_when_uid_missing() {
         caches: None,
     };
     let sel = ZoneSelectorBuilder::new(ctx).build();
-    let zones = sel.select_for_segment("segment-001");
+    let zones = sel.select_for_segment("001");
     assert!(zones.is_empty());
 }
 
@@ -493,7 +492,7 @@ async fn xor_pruner_skips_on_neq_operation() {
 
     let tmp = tempdir().unwrap();
     let shard_dir = tmp.path().join("shard-0");
-    let seg1 = shard_dir.join("segment-001");
+    let seg1 = shard_dir.join("001");
     std::fs::create_dir_all(&seg1).unwrap();
 
     let reg_fac = SchemaRegistryFactory::new();
@@ -546,7 +545,7 @@ async fn xor_pruner_skips_on_neq_operation() {
         caches: None,
     };
     let sel = ZoneSelectorBuilder::new(ctx).build();
-    let zones = sel.select_for_segment("segment-001");
+    let zones = sel.select_for_segment("001");
     assert!(zones.is_empty());
 }
 
@@ -559,7 +558,7 @@ async fn xor_pruner_falls_back_to_full_field_filter_when_zxf_missing() {
 
     let tmp = tempdir().unwrap();
     let shard_dir = tmp.path().join("shard-0");
-    let seg1 = shard_dir.join("segment-001");
+    let seg1 = shard_dir.join("001");
     std::fs::create_dir_all(&seg1).unwrap();
 
     let reg_fac = SchemaRegistryFactory::new();
@@ -615,10 +614,10 @@ async fn xor_pruner_falls_back_to_full_field_filter_when_zxf_missing() {
         caches: None,
     };
     let sel = ZoneSelectorBuilder::new(ctx).build();
-    let zones = sel.select_for_segment("segment-001");
+    let zones = sel.select_for_segment("001");
     let all = crate::engine::core::zone::candidate_zone::CandidateZone::create_all_zones_for_segment_from_meta(
         &shard_dir,
-        "segment-001",
+        "001",
         &uid,
     );
     assert_eq!(zones.len(), all.len());
@@ -631,8 +630,8 @@ async fn zonesurf_ge_gt_le_lte_cover_boundaries_and_cross_segment() {
 
     let tmp = tempdir().unwrap();
     let shard_dir = tmp.path().join("shard-0");
-    let seg1 = shard_dir.join("segment-001");
-    let seg2 = shard_dir.join("segment-002");
+    let seg1 = shard_dir.join("001");
+    let seg2 = shard_dir.join("002");
     std::fs::create_dir_all(&seg1).unwrap();
     std::fs::create_dir_all(&seg2).unwrap();
 
@@ -720,8 +719,8 @@ async fn zonesurf_ge_gt_le_lte_cover_boundaries_and_cross_segment() {
         caches: None,
     };
     let sel_ge = ZoneSelectorBuilder::new(ctx_ge).build();
-    let ge1 = sel_ge.select_for_segment("segment-001");
-    let ge2 = sel_ge.select_for_segment("segment-002");
+    let ge1 = sel_ge.select_for_segment("001");
+    let ge2 = sel_ge.select_for_segment("002");
     assert!(!ge1.is_empty());
     assert!(!ge2.is_empty());
 
@@ -739,8 +738,8 @@ async fn zonesurf_ge_gt_le_lte_cover_boundaries_and_cross_segment() {
         caches: None,
     };
     let sel_gt = ZoneSelectorBuilder::new(ctx_gt).build();
-    let gt1 = sel_gt.select_for_segment("segment-001");
-    let gt2 = sel_gt.select_for_segment("segment-002");
+    let gt1 = sel_gt.select_for_segment("001");
+    let gt2 = sel_gt.select_for_segment("002");
     assert!(!gt1.is_empty());
     assert!(gt2.is_empty());
 
@@ -758,8 +757,8 @@ async fn zonesurf_ge_gt_le_lte_cover_boundaries_and_cross_segment() {
         caches: None,
     };
     let sel_le = ZoneSelectorBuilder::new(ctx_le).build();
-    let le1 = sel_le.select_for_segment("segment-001");
-    let le2 = sel_le.select_for_segment("segment-002");
+    let le1 = sel_le.select_for_segment("001");
+    let le2 = sel_le.select_for_segment("002");
     assert!(!le1.is_empty());
     assert!(!le2.is_empty());
 
@@ -777,8 +776,8 @@ async fn zonesurf_ge_gt_le_lte_cover_boundaries_and_cross_segment() {
         caches: None,
     };
     let sel_lt = ZoneSelectorBuilder::new(ctx_lt).build();
-    let lt1 = sel_lt.select_for_segment("segment-001");
-    let lt2 = sel_lt.select_for_segment("segment-002");
+    let lt1 = sel_lt.select_for_segment("001");
+    let lt2 = sel_lt.select_for_segment("002");
     assert!(lt1.is_empty());
     assert!(!lt2.is_empty());
 }

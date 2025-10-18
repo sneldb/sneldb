@@ -18,11 +18,11 @@ async fn finds_event_type_zones_with_mock_index() {
     let shard_dir = tmp_dir.path().join("shard-0");
 
     let segment1_id = 1;
-    let segment1_dir = shard_dir.join("segment-001");
+    let segment1_dir = shard_dir.join("001");
     std::fs::create_dir_all(&segment1_dir).unwrap();
 
     let segment2_id = 2;
-    let segment2_dir = shard_dir.join("segment-002");
+    let segment2_dir = shard_dir.join("002");
     std::fs::create_dir_all(&segment2_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();
@@ -120,13 +120,13 @@ async fn finds_event_type_zones_with_mock_index() {
         .build()
         .await;
 
-    let binding = vec!["segment-001".to_string(), "segment-002".to_string()];
+    let binding = vec!["001".to_string(), "002".to_string()];
     let finder = ZoneFinder::new(&filter_plan, &query_plan, &binding, &shard_dir);
     let found = finder.find();
 
     assert_eq!(found.len(), 2);
-    assert_eq!(found[0].segment_id, "segment-001");
-    assert_eq!(found[1].segment_id, "segment-002");
+    assert_eq!(found[0].segment_id, "001");
+    assert_eq!(found[1].segment_id, "002");
 
     // when id is 3 and event_type is user_updated
     let filter_plan = FilterPlanFactory::new()
@@ -171,9 +171,9 @@ async fn finds_event_type_zones_with_mock_index() {
 
     let finder = ZoneFinder::new(&filter_plan, &query_plan, &binding, &shard_dir);
     let found = finder.find();
-    // With per-zone XOR (.zxf), equality pruning should narrow to zones in segment-002 only
+    // With per-zone XOR (.zxf), equality pruning should narrow to zones in 002 only
     assert!(!found.is_empty());
-    assert!(found.iter().all(|z| z.segment_id == "segment-002"));
+    assert!(found.iter().all(|z| z.segment_id == "002"));
 
     // when range query is used
     let filter_plan = FilterPlanFactory::new()
@@ -188,9 +188,9 @@ async fn finds_event_type_zones_with_mock_index() {
 
     assert_eq!(found.len(), 2);
     assert_eq!(found[0].zone_id, 0);
-    assert_eq!(found[0].segment_id, "segment-001");
+    assert_eq!(found[0].segment_id, "001");
     assert_eq!(found[1].zone_id, 0);
-    assert_eq!(found[1].segment_id, "segment-002");
+    assert_eq!(found[1].segment_id, "002");
 
     // when just context_id is used
     let filter_plan = FilterPlanFactory::new()
@@ -215,7 +215,7 @@ async fn finds_event_type_zones_with_mock_index() {
     let found = finder.find();
 
     assert_eq!(found.len(), 1);
-    assert_eq!(found[0].segment_id, "segment-002");
+    assert_eq!(found[0].segment_id, "002");
 
     // when just context_id is used
     let filter_plan = FilterPlanFactory::new()
@@ -240,7 +240,7 @@ async fn finds_event_type_zones_with_mock_index() {
     let found = finder.find();
 
     assert_eq!(found.len(), 1);
-    assert_eq!(found[0].segment_id, "segment-002");
+    assert_eq!(found[0].segment_id, "002");
 }
 
 #[tokio::test]
@@ -252,11 +252,11 @@ async fn ebm_eq_prunes_zones() {
     let shard_dir = tmp_dir.path().join("shard-0");
 
     let segment1_id = 1;
-    let segment1_dir = shard_dir.join("segment-001");
+    let segment1_dir = shard_dir.join("001");
     std::fs::create_dir_all(&segment1_dir).unwrap();
 
     let segment2_id = 2;
-    let segment2_dir = shard_dir.join("segment-002");
+    let segment2_dir = shard_dir.join("002");
     std::fs::create_dir_all(&segment2_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();
@@ -290,7 +290,7 @@ async fn ebm_eq_prunes_zones() {
         .get_uid(event_type)
         .expect("UID not found");
 
-    // segment-001: [free, pro]
+    // 001: [free, pro]
     let e1 = EventFactory::new()
         .with("event_type", event_type)
         .with("context_id", "ctx1")
@@ -315,7 +315,7 @@ async fn ebm_eq_prunes_zones() {
     );
     flusher.flush().await.expect("Flush failed");
 
-    // segment-002: [premium, enterprise]
+    // 002: [premium, enterprise]
     let e3 = EventFactory::new()
         .with("event_type", event_type)
         .with("context_id", "ctx3")
@@ -340,7 +340,7 @@ async fn ebm_eq_prunes_zones() {
     );
     flusher.flush().await.expect("Flush failed");
 
-    // Query: plan == "pro" -> only segment-001 zone 0
+    // Query: plan == "pro" -> only 001 zone 0
     let filter_plan = FilterPlanFactory::new()
         .with_column("plan")
         .with_operation(CompareOp::Eq)
@@ -355,12 +355,12 @@ async fn ebm_eq_prunes_zones() {
         .build()
         .await;
 
-    let binding = vec!["segment-001".to_string(), "segment-002".to_string()];
+    let binding = vec!["001".to_string(), "002".to_string()];
     let finder = ZoneFinder::new(&filter_plan, &query_plan, &binding, &shard_dir);
     let found = finder.find();
 
     assert_eq!(found.len(), 1);
-    assert_eq!(found[0].segment_id, "segment-001");
+    assert_eq!(found[0].segment_id, "001");
     let expected_zone_id = (1usize / crate::shared::config::CONFIG.engine.event_per_zone) as u32;
     assert_eq!(found[0].zone_id, expected_zone_id);
 }
@@ -374,11 +374,11 @@ async fn ebm_neq_prunes_zones() {
     let shard_dir = tmp_dir.path().join("shard-0");
 
     let segment1_id = 1;
-    let segment1_dir = shard_dir.join("segment-001");
+    let segment1_dir = shard_dir.join("001");
     std::fs::create_dir_all(&segment1_dir).unwrap();
 
     let segment2_id = 2;
-    let segment2_dir = shard_dir.join("segment-002");
+    let segment2_dir = shard_dir.join("002");
     std::fs::create_dir_all(&segment2_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();
@@ -412,7 +412,7 @@ async fn ebm_neq_prunes_zones() {
         .get_uid(event_type)
         .expect("UID not found");
 
-    // segment-001: [free, pro]
+    // 001: [free, pro]
     let e1 = EventFactory::new()
         .with("event_type", event_type)
         .with("context_id", "ctx1")
@@ -437,7 +437,7 @@ async fn ebm_neq_prunes_zones() {
     );
     flusher.flush().await.expect("Flush failed");
 
-    // segment-002: [premium, enterprise]
+    // 002: [premium, enterprise]
     let e3 = EventFactory::new()
         .with("event_type", event_type)
         .with("context_id", "ctx3")
@@ -477,22 +477,22 @@ async fn ebm_neq_prunes_zones() {
         .build()
         .await;
 
-    let binding = vec!["segment-001".to_string(), "segment-002".to_string()];
+    let binding = vec!["001".to_string(), "002".to_string()];
     let finder = ZoneFinder::new(&filter_plan, &query_plan, &binding, &shard_dir);
     let found = finder.find();
 
     // With dynamic zone size, the NEQ("pro") matches:
-    // - segment-001: index 0 ("free") => one zone id = 0 / zone_size
-    // - segment-002: indices 0 ("premium"), 1 ("enterprise") => zone ids = {0/zone_size, 1/zone_size}
+    // 001: index 0 ("free") => one zone id = 0 / zone_size
+    // 002: indices 0 ("premium"), 1 ("enterprise") => zone ids = {0/zone_size, 1/zone_size}
     let zone_size = crate::shared::config::CONFIG.engine.event_per_zone;
     let seg1_zone_id = (0usize / zone_size) as u32;
     let mut seg2_zone_ids = vec![(0usize / zone_size) as u32, (1usize / zone_size) as u32];
     seg2_zone_ids.sort_unstable();
     seg2_zone_ids.dedup();
 
-    let mut expected: Vec<(String, u32)> = vec![("segment-001".to_string(), seg1_zone_id)];
+    let mut expected: Vec<(String, u32)> = vec![("001".to_string(), seg1_zone_id)];
     for zid in &seg2_zone_ids {
-        expected.push(("segment-002".to_string(), *zid));
+        expected.push(("002".to_string(), *zid));
     }
 
     // Compare sets ignoring order
@@ -515,11 +515,11 @@ async fn zone_surf_prunes_segments_for_gt() {
     let shard_dir = tmp_dir.path().join("shard-0");
 
     let segment1_id = 1;
-    let segment1_dir = shard_dir.join("segment-001");
+    let segment1_dir = shard_dir.join("001");
     std::fs::create_dir_all(&segment1_dir).unwrap();
 
     let segment2_id = 2;
-    let segment2_dir = shard_dir.join("segment-002");
+    let segment2_dir = shard_dir.join("002");
     std::fs::create_dir_all(&segment2_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();
@@ -537,7 +537,7 @@ async fn zone_surf_prunes_segments_for_gt() {
         .get_uid(event_type)
         .expect("UID not found");
 
-    // segment-001: ids < 10
+    // 001: ids < 10
     let e1 = EventFactory::new()
         .with("event_type", event_type)
         .with("context_id", "ctx1")
@@ -562,7 +562,7 @@ async fn zone_surf_prunes_segments_for_gt() {
     );
     flusher.flush().await.expect("Flush failed");
 
-    // segment-002: ids > 10
+    // 002: ids > 10
     let e3 = EventFactory::new()
         .with("event_type", event_type)
         .with("context_id", "ctx3")
@@ -601,11 +601,11 @@ async fn zone_surf_prunes_segments_for_gt() {
         .build()
         .await;
 
-    let binding = vec!["segment-001".to_string(), "segment-002".to_string()];
+    let binding = vec!["001".to_string(), "002".to_string()];
     let finder = ZoneFinder::new(&filter_plan, &query_plan, &binding, &shard_dir);
     let found = finder.find();
 
-    assert!(found.iter().all(|z| z.segment_id == "segment-002"));
+    assert!(found.iter().all(|z| z.segment_id == "002"));
     assert!(!found.is_empty());
 }
 
@@ -618,11 +618,11 @@ async fn zone_surf_prunes_segments_for_lt() {
     let shard_dir = tmp_dir.path().join("shard-0");
 
     let segment1_id = 1;
-    let segment1_dir = shard_dir.join("segment-001");
+    let segment1_dir = shard_dir.join("001");
     std::fs::create_dir_all(&segment1_dir).unwrap();
 
     let segment2_id = 2;
-    let segment2_dir = shard_dir.join("segment-002");
+    let segment2_dir = shard_dir.join("002");
     std::fs::create_dir_all(&segment2_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();
@@ -640,7 +640,7 @@ async fn zone_surf_prunes_segments_for_lt() {
         .get_uid(event_type)
         .expect("UID not found");
 
-    // segment-001: ids < 10
+    // 001: ids < 10
     let a1 = EventFactory::new()
         .with("event_type", event_type)
         .with("context_id", "ctx1")
@@ -665,7 +665,7 @@ async fn zone_surf_prunes_segments_for_lt() {
     );
     flusher.flush().await.expect("Flush failed");
 
-    // segment-002: ids > 10
+    // 002: ids > 10
     let b1 = EventFactory::new()
         .with("event_type", event_type)
         .with("context_id", "ctx3")
@@ -704,11 +704,11 @@ async fn zone_surf_prunes_segments_for_lt() {
         .build()
         .await;
 
-    let binding = vec!["segment-001".to_string(), "segment-002".to_string()];
+    let binding = vec!["001".to_string(), "002".to_string()];
     let finder = ZoneFinder::new(&filter_plan, &query_plan, &binding, &shard_dir);
     let found = finder.find();
 
-    assert!(found.iter().all(|z| z.segment_id == "segment-001"));
+    assert!(found.iter().all(|z| z.segment_id == "001"));
     assert!(!found.is_empty());
 }
 
@@ -721,11 +721,11 @@ async fn zone_surf_gte_includes_boundary() {
     let shard_dir = tmp_dir.path().join("shard-0");
 
     let segment1_id = 1;
-    let segment1_dir = shard_dir.join("segment-001");
+    let segment1_dir = shard_dir.join("001");
     std::fs::create_dir_all(&segment1_dir).unwrap();
 
     let segment2_id = 2;
-    let segment2_dir = shard_dir.join("segment-002");
+    let segment2_dir = shard_dir.join("002");
     std::fs::create_dir_all(&segment2_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();
@@ -743,7 +743,7 @@ async fn zone_surf_gte_includes_boundary() {
         .get_uid(event_type)
         .expect("UID not found");
 
-    // segment-001: boundary value 10
+    // 001: boundary value 10
     let a = EventFactory::new()
         .with("event_type", event_type)
         .with("context_id", "ctxA")
@@ -765,7 +765,7 @@ async fn zone_surf_gte_includes_boundary() {
     .await
     .unwrap();
 
-    // segment-002: value 11
+    // 002: value 11
     let b = EventFactory::new()
         .with("event_type", event_type)
         .with("context_id", "ctxB")
@@ -801,13 +801,13 @@ async fn zone_surf_gte_includes_boundary() {
         .build()
         .await;
 
-    let binding = vec!["segment-001".to_string(), "segment-002".to_string()];
+    let binding = vec!["001".to_string(), "002".to_string()];
     let finder = ZoneFinder::new(&filter_plan, &query_plan, &binding, &shard_dir);
     let found = finder.find();
 
     assert_eq!(found.len(), 2);
-    assert!(found.iter().any(|z| z.segment_id == "segment-001"));
-    assert!(found.iter().any(|z| z.segment_id == "segment-002"));
+    assert!(found.iter().any(|z| z.segment_id == "001"));
+    assert!(found.iter().any(|z| z.segment_id == "002"));
 }
 
 #[tokio::test]
@@ -819,11 +819,11 @@ async fn zone_surf_lte_includes_boundary() {
     let shard_dir = tmp_dir.path().join("shard-0");
 
     let segment1_id = 1;
-    let segment1_dir = shard_dir.join("segment-001");
+    let segment1_dir = shard_dir.join("001");
     std::fs::create_dir_all(&segment1_dir).unwrap();
 
     let segment2_id = 2;
-    let segment2_dir = shard_dir.join("segment-002");
+    let segment2_dir = shard_dir.join("002");
     std::fs::create_dir_all(&segment2_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();
@@ -841,7 +841,7 @@ async fn zone_surf_lte_includes_boundary() {
         .get_uid(event_type)
         .expect("UID not found");
 
-    // segment-001: value 19
+    // 001: value 19
     let a = EventFactory::new()
         .with("event_type", event_type)
         .with("context_id", "ctxA")
@@ -863,7 +863,7 @@ async fn zone_surf_lte_includes_boundary() {
     .await
     .unwrap();
 
-    // segment-002: boundary value 20
+    // 002: boundary value 20
     let b = EventFactory::new()
         .with("event_type", event_type)
         .with("context_id", "ctxB")
@@ -899,13 +899,13 @@ async fn zone_surf_lte_includes_boundary() {
         .build()
         .await;
 
-    let binding = vec!["segment-001".to_string(), "segment-002".to_string()];
+    let binding = vec!["001".to_string(), "002".to_string()];
     let finder = ZoneFinder::new(&filter_plan, &query_plan, &binding, &shard_dir);
     let found = finder.find();
 
     assert_eq!(found.len(), 2);
-    assert!(found.iter().any(|z| z.segment_id == "segment-001"));
-    assert!(found.iter().any(|z| z.segment_id == "segment-002"));
+    assert!(found.iter().any(|z| z.segment_id == "001"));
+    assert!(found.iter().any(|z| z.segment_id == "002"));
 }
 
 #[tokio::test]
@@ -917,15 +917,15 @@ async fn zone_surf_between_three_segments_and() {
     let shard_dir = tmp_dir.path().join("shard-0");
 
     let s1_id = 1;
-    let s1_dir = shard_dir.join("segment-001");
+    let s1_dir = shard_dir.join("001");
     std::fs::create_dir_all(&s1_dir).unwrap();
 
     let s2_id = 2;
-    let s2_dir = shard_dir.join("segment-002");
+    let s2_dir = shard_dir.join("002");
     std::fs::create_dir_all(&s2_dir).unwrap();
 
     let s3_id = 3;
-    let s3_dir = shard_dir.join("segment-003");
+    let s3_dir = shard_dir.join("003");
     std::fs::create_dir_all(&s3_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();
@@ -943,7 +943,7 @@ async fn zone_surf_between_three_segments_and() {
         .get_uid(event_type)
         .expect("UID not found");
 
-    // segment-001: [5, 12]
+    // 001: [5, 12]
     let e1 = EventFactory::new()
         .with("event_type", event_type)
         .with("context_id", "ctx1")
@@ -970,7 +970,7 @@ async fn zone_surf_between_three_segments_and() {
     .await
     .unwrap();
 
-    // segment-002: [25, 31]
+    // 002: [25, 31]
     let e3 = EventFactory::new()
         .with("event_type", event_type)
         .with("context_id", "ctx3")
@@ -997,7 +997,7 @@ async fn zone_surf_between_three_segments_and() {
     .await
     .unwrap();
 
-    // segment-003: [15, 29]
+    // 003: [15, 29]
     let e5 = EventFactory::new()
         .with("event_type", event_type)
         .with("context_id", "ctx5")
@@ -1031,11 +1031,7 @@ async fn zone_surf_between_three_segments_and() {
         .with_command(command)
         .build()
         .await;
-    let binding = vec![
-        "segment-001".to_string(),
-        "segment-002".to_string(),
-        "segment-003".to_string(),
-    ];
+    let binding = vec!["001".to_string(), "002".to_string(), "003".to_string()];
 
     // id > 10
     let gt_plan = FilterPlanFactory::new()
@@ -1067,8 +1063,8 @@ async fn zone_surf_between_three_segments_and() {
     // Expect segments: 001 (12), 003 (15,29), 002 (25); exclude 5 and 31 via intersection logic
     let segs: std::collections::HashSet<_> =
         combined.iter().map(|z| z.segment_id.as_str()).collect();
-    assert!(segs.contains("segment-001"));
-    assert!(segs.contains("segment-002"));
-    assert!(segs.contains("segment-003"));
+    assert!(segs.contains("001"));
+    assert!(segs.contains("002"));
+    assert!(segs.contains("003"));
     assert!(!combined.is_empty());
 }

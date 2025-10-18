@@ -35,7 +35,7 @@ async fn runner_derives_pruned_segments_when_context_first_and_and() {
         .with_command(command)
         .with_registry(Arc::clone(&registry))
         .with_segment_base_dir(std::env::temp_dir())
-        .with_segment_ids(vec!["segment-00001".into(), "segment-00002".into()])
+        .with_segment_ids(vec!["00001".into(), "00002".into()])
         .create()
         .await;
 
@@ -102,7 +102,7 @@ async fn runner_does_not_prune_under_or() {
         .with_command(command)
         .with_registry(Arc::clone(&registry))
         .with_segment_base_dir(std::env::temp_dir())
-        .with_segment_ids(vec!["segment-00001".into(), "segment-00002".into()])
+        .with_segment_ids(vec!["00001".into(), "00002".into()])
         .create()
         .await;
 
@@ -145,7 +145,7 @@ async fn runner_handles_no_steps() {
         .with_command(command)
         .with_registry(Arc::clone(&registry))
         .with_segment_base_dir(std::env::temp_dir())
-        .with_segment_ids(vec!["segment-00001".into()])
+        .with_segment_ids(vec!["00001".into()])
         .create()
         .await;
 
@@ -186,11 +186,7 @@ async fn runner_respects_explicit_subset_in_plan() {
         .with_command(command)
         .with_registry(Arc::clone(&registry))
         .with_segment_base_dir(std::env::temp_dir())
-        .with_segment_ids(vec![
-            "segment-00001".into(),
-            "segment-00002".into(),
-            "segment-00003".into(),
-        ])
+        .with_segment_ids(vec!["00001".into(), "00002".into(), "00003".into()])
         .create()
         .await;
 
@@ -214,8 +210,8 @@ async fn runner_respects_explicit_subset_in_plan() {
         ExecutionStep::new(fp_id, &plan),
     ];
 
-    // Build an explicit subset that excludes segment-00002
-    let explicit_subset = vec!["segment-00001".into(), "segment-00003".into()];
+    // Build an explicit subset that excludes 00002
+    let explicit_subset = vec!["00001".into(), "00003".into()];
     let order = vec![(0usize, Some(explicit_subset)), (1usize, None)];
 
     let runner = ZoneStepRunner::new(&plan);
@@ -255,7 +251,7 @@ async fn runner_pruned_empty_first_step_still_executes_following_steps() {
         .with_command(command)
         .with_registry(Arc::clone(&registry))
         .with_segment_base_dir(std::env::temp_dir())
-        .with_segment_ids(vec!["segment-00001".into(), "segment-00002".into()])
+        .with_segment_ids(vec!["00001".into(), "00002".into()])
         .create()
         .await;
 

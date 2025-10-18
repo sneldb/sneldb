@@ -53,7 +53,7 @@ fn global_cache_hit_then_miss_counters() {
     let cache = GlobalZoneIndexCache::instance();
     purge_cache(cache, &base_dir);
 
-    let segment_id = "segment-A";
+    let segment_id = "seg-A";
     let uid = "uid1";
     std::fs::create_dir_all(base_dir.join(segment_id)).unwrap();
     let idx_path = base_dir.join(segment_id).join(format!("{}.idx", uid));
@@ -86,7 +86,7 @@ fn global_cache_singleflight_dedupes_concurrent_loads() {
     let cache = GlobalZoneIndexCache::instance();
     purge_cache(cache, &base_dir);
 
-    let segment_id = "segment-SF";
+    let segment_id = "seg-SF";
     let uid = "uid-sf";
     std::fs::create_dir_all(base_dir.join(segment_id)).unwrap();
     let idx_path = base_dir.join(segment_id).join(format!("{}.idx", uid));
@@ -138,7 +138,7 @@ fn global_cache_reload_when_file_changes() {
     let cache = GlobalZoneIndexCache::instance();
     purge_cache(cache, &base_dir);
 
-    let segment_id = "segment-R";
+    let segment_id = "seg-R";
     let uid = "uid-r";
     std::fs::create_dir_all(base_dir.join(segment_id)).unwrap();
     let idx_path = base_dir.join(segment_id).join(format!("{}.idx", uid));
@@ -180,7 +180,7 @@ fn global_cache_evictions_when_exceeding_capacity() {
 
     let uniq = cap + 32; // ensure we exceed capacity deterministically
 
-    let segment_id_prefix = "segment-E";
+    let segment_id_prefix = "seg-E";
     std::fs::create_dir_all(&base_dir).unwrap();
 
     // Capture counters before load
@@ -235,7 +235,7 @@ fn global_cache_returns_error_for_missing_file() {
 
     let tmp = tempfile::tempdir().unwrap();
     let base_dir = tmp.path().to_path_buf();
-    let segment_id = "segment-missing";
+    let segment_id = "seg-missing";
     let uid = "uid-missing";
     std::fs::create_dir_all(base_dir.join(segment_id)).unwrap();
 

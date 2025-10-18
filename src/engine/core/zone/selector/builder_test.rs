@@ -4,7 +4,6 @@ use tempfile::tempdir;
 
 use crate::engine::core::zone::selector::builder::ZoneSelectorBuilder;
 use crate::engine::core::zone::selector::selection_context::SelectionContext;
-use crate::engine::core::zone::selector::selector_kind::ZoneSelector;
 
 use crate::test_helpers::factories::command_factory::CommandFactory;
 use crate::test_helpers::factories::filter_plan_factory::FilterPlanFactory;
@@ -122,6 +121,6 @@ async fn builder_returns_field_selector_for_regular_column() {
 
     let selector = ZoneSelectorBuilder::new(ctx).build();
     let zones = selector.select_for_segment("seg1");
-    // For this test we only assert it doesn't crash and returns some vector (may be empty)
-    assert!(zones.len() >= 0);
+    // For this test we only assert it doesn't crash and returns a Vec
+    assert_eq!(zones.iter().count(), zones.len());
 }

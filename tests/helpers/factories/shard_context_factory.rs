@@ -1,4 +1,5 @@
 use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
+use crate::engine::core::segment::range_allocator::RangeAllocator;
 use crate::engine::core::{FlushManager, MemTable, WalHandle};
 use crate::engine::shard::context::ShardContext;
 use crate::shared::config::CONFIG;
@@ -71,11 +72,19 @@ impl ShardContextFactory {
             Arc::clone(&flush_coordination_lock),
         );
 
+        // Seed allocator from existing ids (if any)
+        let existing: Vec<String> = segment_ids.read().unwrap().clone();
+        let allocator = RangeAllocator::from_existing_ids(existing.iter().map(|s| s.as_str()));
+        let mut allocator_preview = allocator.clone();
+        let next_l0_id = allocator_preview.next_for_level(0);
+
         let ctx = ShardContext {
             id: self.id,
             memtable: MemTable::new(self.capacity),
             flush_sender,
             segment_id: 0,
+            next_l0_id,
+            allocator,
             segment_ids,
             base_dir,
             wal_dir: wal_dir.clone(),

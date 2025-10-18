@@ -7,7 +7,7 @@ use tempfile::tempdir;
 async fn test_flusher_flushes_memtable_to_segment_dir() {
     let tmp_dir = tempdir().expect("Temp dir failed");
     let shard_dir = tmp_dir.path().join("shard-0");
-    let segment_dir = shard_dir.join("segment-007");
+    let segment_dir = shard_dir.join("00007");
     std::fs::create_dir_all(&segment_dir).unwrap();
 
     let segment_id = 7;
@@ -57,7 +57,6 @@ async fn test_flusher_flushes_memtable_to_segment_dir() {
     assert_eq!(segment_index.entries.len(), 1, "Expected one segment entry");
 
     let entry = &segment_index.entries[0];
-    assert_eq!(entry.label, format!("{:05}", segment_id));
-    assert_eq!(entry.counter, segment_id as u32);
+    assert_eq!(format!("{:05}", entry.id), format!("{:05}", segment_id));
     assert_eq!(entry.uids, vec![uid]);
 }

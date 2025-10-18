@@ -9,7 +9,6 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tempfile::tempdir;
-use tracing::info;
 
 async fn make_plan(
     event_type: &str,
@@ -95,7 +94,7 @@ async fn segment_aggregate_runner_count_unique_mixed_missing_and_empty() {
 
     let tmp_dir = tempdir().unwrap();
     let shard_dir = tmp_dir.path().join("shard-0");
-    let seg_dir = shard_dir.join("segment-050");
+    let seg_dir = shard_dir.join("00050");
     std::fs::create_dir_all(&seg_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();
@@ -147,7 +146,7 @@ async fn segment_aggregate_runner_count_unique_mixed_missing_and_empty() {
         "evt5",
         &registry,
         tmp_dir.path(),
-        vec!["shard-0/segment-050".into()],
+        vec!["shard-0/00050".into()],
         vec![AggSpec::Count {
             unique_field: Some("user".into()),
         }],
@@ -186,7 +185,7 @@ async fn segment_aggregate_runner_min_max_numeric_preference() {
 
     let tmp_dir = tempdir().unwrap();
     let shard_dir = tmp_dir.path().join("shard-0");
-    let seg_dir = shard_dir.join("segment-060");
+    let seg_dir = shard_dir.join("00060");
     std::fs::create_dir_all(&seg_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();
@@ -229,7 +228,7 @@ async fn segment_aggregate_runner_min_max_numeric_preference() {
         "evt6",
         &registry,
         tmp_dir.path(),
-        vec!["shard-0/segment-060".into()],
+        vec!["shard-0/00060".into()],
         vec![
             AggSpec::Min {
                 field: "name".into(),
@@ -270,7 +269,7 @@ async fn segment_aggregate_runner_count_field_missing_is_zero() {
 
     let tmp_dir = tempdir().unwrap();
     let shard_dir = tmp_dir.path().join("shard-0");
-    let seg_dir = shard_dir.join("segment-070");
+    let seg_dir = shard_dir.join("00070");
     std::fs::create_dir_all(&seg_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();
@@ -309,7 +308,7 @@ async fn segment_aggregate_runner_count_field_missing_is_zero() {
         "evt7",
         &registry,
         tmp_dir.path(),
-        vec!["shard-0/segment-070".into()],
+        vec!["shard-0/00070".into()],
         vec![AggSpec::CountField {
             field: "visits".into(),
         }],
@@ -344,7 +343,7 @@ async fn segment_aggregate_runner_since_ignored_in_aggregation() {
 
     let tmp_dir = tempdir().unwrap();
     let shard_dir = tmp_dir.path().join("shard-0");
-    let seg_dir = shard_dir.join("segment-080");
+    let seg_dir = shard_dir.join("00080");
     std::fs::create_dir_all(&seg_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();
@@ -385,7 +384,7 @@ async fn segment_aggregate_runner_since_ignored_in_aggregation() {
         "evt8",
         &registry,
         tmp_dir.path(),
-        vec!["shard-0/segment-080".into()],
+        vec!["shard-0/00080".into()],
         vec![AggSpec::Count { unique_field: None }],
         None,
         None,
@@ -421,8 +420,8 @@ async fn segment_aggregate_runner_count_across_segments() {
     // Directories and schema
     let tmp_dir = tempdir().unwrap();
     let shard_dir = tmp_dir.path().join("shard-0");
-    let seg1_dir = shard_dir.join("segment-001");
-    let seg2_dir = shard_dir.join("segment-002");
+    let seg1_dir = shard_dir.join("001");
+    let seg2_dir = shard_dir.join("002");
     std::fs::create_dir_all(&seg1_dir).unwrap();
     std::fs::create_dir_all(&seg2_dir).unwrap();
 
@@ -481,7 +480,7 @@ async fn segment_aggregate_runner_count_across_segments() {
         "evt",
         &registry,
         tmp_dir.path(),
-        vec!["shard-0/segment-001".into(), "shard-0/segment-002".into()],
+        vec!["shard-0/001".into(), "shard-0/002".into()],
         vec![AggSpec::Count { unique_field: None }],
         None,
         None,
@@ -524,7 +523,7 @@ async fn segment_aggregate_runner_respects_where_predicate() {
     // Setup
     let tmp_dir = tempdir().unwrap();
     let shard_dir = tmp_dir.path().join("shard-0");
-    let seg_dir = shard_dir.join("segment-010");
+    let seg_dir = shard_dir.join("00010");
     std::fs::create_dir_all(&seg_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();
@@ -574,7 +573,7 @@ async fn segment_aggregate_runner_respects_where_predicate() {
         "evt2",
         &registry,
         tmp_dir.path(),
-        vec!["shard-0/segment-010".into()],
+        vec!["shard-0/00010".into()],
         vec![AggSpec::Count { unique_field: None }],
         None,
         None,
@@ -607,7 +606,7 @@ async fn segment_aggregate_runner_group_by_and_bucket_total() {
 
     let tmp_dir = tempdir().unwrap();
     let shard_dir = tmp_dir.path().join("shard-0");
-    let seg_dir = shard_dir.join("segment-020");
+    let seg_dir = shard_dir.join("00020");
     std::fs::create_dir_all(&seg_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();
@@ -656,7 +655,7 @@ async fn segment_aggregate_runner_group_by_and_bucket_total() {
         "order",
         &registry,
         tmp_dir.path(),
-        vec!["shard-0/segment-020".into()],
+        vec!["shard-0/00020".into()],
         vec![
             AggSpec::Total {
                 field: "amount".into(),
@@ -713,7 +712,7 @@ async fn segment_aggregate_runner_missing_groupby_field_emits_empty_string() {
 
     let tmp_dir = tempdir().unwrap();
     let shard_dir = tmp_dir.path().join("shard-0");
-    let seg_dir = shard_dir.join("segment-030");
+    let seg_dir = shard_dir.join("00030");
     std::fs::create_dir_all(&seg_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();
@@ -748,7 +747,7 @@ async fn segment_aggregate_runner_missing_groupby_field_emits_empty_string() {
         "evt3",
         &registry,
         tmp_dir.path(),
-        vec!["shard-0/segment-030".into()],
+        vec!["shard-0/00030".into()],
         vec![AggSpec::Count { unique_field: None }],
         Some(vec!["country", "plan"]),
         None,
@@ -784,7 +783,7 @@ async fn segment_aggregate_runner_empty_results_default_zero() {
 
     let tmp_dir = tempdir().unwrap();
     let shard_dir = tmp_dir.path().join("shard-0");
-    let seg_dir = shard_dir.join("segment-040");
+    let seg_dir = shard_dir.join("00040");
     std::fs::create_dir_all(&seg_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();
@@ -800,7 +799,7 @@ async fn segment_aggregate_runner_empty_results_default_zero() {
         "evt4",
         &registry,
         tmp_dir.path(),
-        vec!["shard-0/segment-040".into()],
+        vec!["shard-0/00040".into()],
         vec![AggSpec::Avg {
             field: "amount".into(),
         }],

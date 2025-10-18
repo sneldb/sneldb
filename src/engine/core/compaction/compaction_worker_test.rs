@@ -26,7 +26,7 @@ async fn compacts_l0_segments_into_l1() {
 
     // Step 2: Create and flush events for 2 segments (L0)
     for segment_id in 1..=2 {
-        let segment_dir = shard_dir.join(format!("segment-{:05}", segment_id));
+        let segment_dir = shard_dir.join(format!("{:05}", segment_id));
         std::fs::create_dir_all(&segment_dir).unwrap();
 
         let events = vec![
@@ -61,7 +61,6 @@ async fn compacts_l0_segments_into_l1() {
     let index = SegmentIndex::load(&shard_dir).await.unwrap();
     assert_eq!(index.entries.len(), 1);
     let entry = &index.entries[0];
-    assert_eq!(entry.level, 1);
-    assert!(entry.label.starts_with("segment-L1-"));
+    assert!(entry.id >= 10_000);
     assert_eq!(entry.uids, vec![uid]);
 }

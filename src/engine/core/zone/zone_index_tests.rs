@@ -43,11 +43,11 @@ fn test_find_candidate_zones_with_context_id() {
     index.insert("login", "ctxA", 1);
     index.insert("login", "ctxA", 2);
 
-    let candidates = index.find_candidate_zones("login", Some("ctxA"), "segment-001");
+    let candidates = index.find_candidate_zones("login", Some("ctxA"), "001");
     let mut ids: Vec<u32> = candidates.iter().map(|c| c.zone_id).collect();
     ids.sort_unstable();
     assert_eq!(ids, vec![1, 2]);
-    assert!(candidates.iter().all(|c| c.segment_id == "segment-001"));
+    assert!(candidates.iter().all(|c| c.segment_id == "001"));
 }
 
 #[test]
@@ -59,20 +59,20 @@ fn test_find_candidate_zones_without_context_id() {
     index.insert("signup", "ctxX", 7);
     index.insert("signup", "ctxY", 7);
 
-    let mut result = index.find_candidate_zones("signup", None, "segment-002");
+    let mut result = index.find_candidate_zones("signup", None, "002");
     result.sort_by_key(|c| c.zone_id);
 
     // Expect unique ids only
     assert_eq!(result.len(), 2);
-    assert_eq!(result[0], CandidateZone::new(5, "segment-002".into()));
-    assert_eq!(result[1], CandidateZone::new(7, "segment-002".into()));
+    assert_eq!(result[0], CandidateZone::new(5, "002".into()));
+    assert_eq!(result[1], CandidateZone::new(7, "002".into()));
 }
 
 #[test]
 fn test_find_candidate_zones_with_unknown_event_type() {
     let index = ZoneIndex::default();
 
-    let candidates = index.find_candidate_zones("nonexistent", None, "segment-003");
+    let candidates = index.find_candidate_zones("nonexistent", None, "003");
     assert!(candidates.is_empty());
 }
 
@@ -81,7 +81,7 @@ fn test_find_candidate_zones_with_unknown_context_id() {
     let mut index = ZoneIndex::default();
     index.insert("payment", "known_ctx", 9);
 
-    let candidates = index.find_candidate_zones("payment", Some("unknown_ctx"), "segment-004");
+    let candidates = index.find_candidate_zones("payment", Some("unknown_ctx"), "004");
     assert!(candidates.is_empty());
 }
 
@@ -93,10 +93,10 @@ fn test_find_candidate_zones_skips_empty_zone_lists() {
         BTreeMap::from([("ctx1".into(), vec![]), ("ctx2".into(), vec![11])]),
     );
 
-    let result = index.find_candidate_zones("event", None, "segment-005");
+    let result = index.find_candidate_zones("event", None, "005");
 
     assert_eq!(result.len(), 1);
-    assert_eq!(result[0], CandidateZone::new(11, "segment-005".into()));
+    assert_eq!(result[0], CandidateZone::new(11, "005".into()));
 }
 
 #[test]
@@ -119,45 +119,27 @@ fn test_zone_index_find_candidates_after_roundtrip() {
     let reloaded = ZoneIndex::load_from_path(&path).expect("Load failed");
 
     // Step 4: Check that find_candidate_zones still works
-    let mut signup_candidates = reloaded.find_candidate_zones("signup", None, "segment-01");
+    let mut signup_candidates = reloaded.find_candidate_zones("signup", None, "001");
     signup_candidates.sort_by_key(|c| c.zone_id);
 
     assert_eq!(signup_candidates.len(), 3);
-    assert_eq!(
-        signup_candidates[0],
-        CandidateZone::new(10, "segment-01".into())
-    );
-    assert_eq!(
-        signup_candidates[1],
-        CandidateZone::new(20, "segment-01".into())
-    );
-    assert_eq!(
-        signup_candidates[2],
-        CandidateZone::new(30, "segment-01".into())
-    );
+    assert_eq!(signup_candidates[0], CandidateZone::new(10, "001".into()));
+    assert_eq!(signup_candidates[1], CandidateZone::new(20, "001".into()));
+    assert_eq!(signup_candidates[2], CandidateZone::new(30, "001".into()));
 
-    let mut ctx42_candidates = reloaded.find_candidate_zones("signup", Some("ctx42"), "segment-02");
+    let mut ctx42_candidates = reloaded.find_candidate_zones("signup", Some("ctx42"), "002");
     ctx42_candidates.sort_by_key(|c| c.zone_id);
     assert_eq!(ctx42_candidates.len(), 2);
-    assert_eq!(
-        ctx42_candidates[0],
-        CandidateZone::new(10, "segment-02".into())
-    );
-    assert_eq!(
-        ctx42_candidates[1],
-        CandidateZone::new(20, "segment-02".into())
-    );
+    assert_eq!(ctx42_candidates[0], CandidateZone::new(10, "002".into()));
+    assert_eq!(ctx42_candidates[1], CandidateZone::new(20, "002".into()));
 
-    let login_candidates = reloaded.find_candidate_zones("login", Some("ctxA"), "segment-03");
+    let login_candidates = reloaded.find_candidate_zones("login", Some("ctxA"), "003");
     assert_eq!(login_candidates.len(), 1);
-    assert_eq!(
-        login_candidates[0],
-        CandidateZone::new(42, "segment-03".into())
-    );
+    assert_eq!(login_candidates[0], CandidateZone::new(42, "003".into()));
 
-    let unknown_event = reloaded.find_candidate_zones("not_exists", None, "segment-99");
+    let unknown_event = reloaded.find_candidate_zones("not_exists", None, "099");
     assert!(unknown_event.is_empty());
 
-    let unknown_ctx = reloaded.find_candidate_zones("signup", Some("does_not_exist"), "segment-99");
+    let unknown_ctx = reloaded.find_candidate_zones("signup", Some("does_not_exist"), "099");
     assert!(unknown_ctx.is_empty());
 }

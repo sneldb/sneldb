@@ -1,3 +1,4 @@
+use super::segment_id::{LEVEL_SPAN, SegmentId};
 use crate::engine::errors::StoreError;
 use crate::shared::config::CONFIG;
 use crate::shared::storage_header::{BinaryHeader, FileKind};
@@ -10,9 +11,7 @@ use tracing::{debug, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SegmentEntry {
-    pub level: u32,
-    pub label: String,
-    pub counter: u32,
+    pub id: u32,
     pub uids: Vec<String>,
 }
 
@@ -49,14 +48,7 @@ impl SegmentIndex {
 
     /// Appends a new entry and saves the index.
     pub async fn append(&mut self, entry: SegmentEntry) -> Result<(), StoreError> {
-        debug!(
-            target: "segment_index::append",
-            level = entry.level,
-            label = %entry.label,
-            counter = entry.counter,
-            uids = ?entry.uids,
-            "Appending new segment entry"
-        );
+        debug!(target: "segment_index::append", id = entry.id, level = (entry.id / LEVEL_SPAN), uids = ?entry.uids, "Appending new segment entry");
         self.entries.push(entry);
         self.save(self.path.parent().unwrap()).await
     }
@@ -74,7 +66,11 @@ impl SegmentIndex {
 
     /// Returns all segment labels.
     pub fn all_labels(&self) -> Vec<String> {
-        let labels: Vec<String> = self.entries.iter().map(|e| e.label.clone()).collect();
+        let labels: Vec<String> = self
+            .entries
+            .iter()
+            .map(|e| SegmentId::from(e.id).dir_name())
+            .collect();
         debug!(target: "segment_index::all_labels", count = labels.len(), "Collected all segment labels");
         labels
     }
@@ -93,7 +89,12 @@ impl SegmentIndex {
 
     /// Returns the highest current level (e.g., 0, 1, 2, ...)
     pub fn current_level(&self) -> u32 {
-        let level = self.entries.iter().map(|e| e.level).max().unwrap_or(0);
+        let level = self
+            .entries
+            .iter()
+            .map(|e| SegmentId::from(e.id).level())
+            .max()
+            .unwrap_or(0);
         debug!(target: "segment_index::current_level", current_level = level, "Computed current segment level");
         level
     }
@@ -102,7 +103,7 @@ impl SegmentIndex {
     pub fn needs_compaction(&self) -> bool {
         let mut counts: HashMap<u32, usize> = HashMap::new();
         for entry in &self.entries {
-            *counts.entry(entry.level).or_default() += 1;
+            *counts.entry(SegmentId::from(entry.id).level()).or_default() += 1;
         }
 
         let threshold = CONFIG.engine.compaction_threshold;

@@ -1,4 +1,4 @@
-use super::segment_discovery::{SegmentDiscovery, ShardData};
+use super::segment_discovery::SegmentDiscovery;
 use std::path::PathBuf;
 use tempfile::TempDir;
 
@@ -8,9 +8,9 @@ async fn discovers_segments_from_single_shard() {
     let base_path = temp_dir.path();
 
     // Create some segment directories
-    std::fs::create_dir(base_path.join("segment-001")).unwrap();
-    std::fs::create_dir(base_path.join("segment-002")).unwrap();
-    std::fs::create_dir(base_path.join("segment-003")).unwrap();
+    std::fs::create_dir(base_path.join("001")).unwrap();
+    std::fs::create_dir(base_path.join("002")).unwrap();
+    std::fs::create_dir(base_path.join("003")).unwrap();
     // Create a non-segment directory that should be ignored
     std::fs::create_dir(base_path.join("other-dir")).unwrap();
 
@@ -33,14 +33,14 @@ async fn discovers_segments_from_multiple_shards() {
     let temp_dir3 = TempDir::new().unwrap();
 
     // Create segments in each shard
-    std::fs::create_dir(temp_dir1.path().join("segment-001")).unwrap();
-    std::fs::create_dir(temp_dir1.path().join("segment-002")).unwrap();
+    std::fs::create_dir(temp_dir1.path().join("001")).unwrap();
+    std::fs::create_dir(temp_dir1.path().join("002")).unwrap();
 
-    std::fs::create_dir(temp_dir2.path().join("segment-003")).unwrap();
+    std::fs::create_dir(temp_dir2.path().join("003")).unwrap();
 
-    std::fs::create_dir(temp_dir3.path().join("segment-004")).unwrap();
-    std::fs::create_dir(temp_dir3.path().join("segment-005")).unwrap();
-    std::fs::create_dir(temp_dir3.path().join("segment-006")).unwrap();
+    std::fs::create_dir(temp_dir3.path().join("004")).unwrap();
+    std::fs::create_dir(temp_dir3.path().join("005")).unwrap();
+    std::fs::create_dir(temp_dir3.path().join("006")).unwrap();
 
     let shard_info = vec![
         (0, temp_dir1.path().to_path_buf()),
@@ -94,11 +94,11 @@ async fn segments_are_sorted() {
     let base_path = temp_dir.path();
 
     // Create segments in non-sorted order
-    std::fs::create_dir(base_path.join("segment-005")).unwrap();
-    std::fs::create_dir(base_path.join("segment-001")).unwrap();
-    std::fs::create_dir(base_path.join("segment-003")).unwrap();
-    std::fs::create_dir(base_path.join("segment-002")).unwrap();
-    std::fs::create_dir(base_path.join("segment-004")).unwrap();
+    std::fs::create_dir(base_path.join("005")).unwrap();
+    std::fs::create_dir(base_path.join("001")).unwrap();
+    std::fs::create_dir(base_path.join("003")).unwrap();
+    std::fs::create_dir(base_path.join("002")).unwrap();
+    std::fs::create_dir(base_path.join("004")).unwrap();
 
     let shard_info = vec![(0, base_path.to_path_buf())];
     let result = SegmentDiscovery::discover_all(shard_info).await;
@@ -119,10 +119,10 @@ async fn ignores_non_segment_directories() {
     let temp_dir = TempDir::new().unwrap();
     let base_path = temp_dir.path();
 
-    std::fs::create_dir(base_path.join("segment-001")).unwrap();
+    std::fs::create_dir(base_path.join("001")).unwrap();
     std::fs::create_dir(base_path.join("data")).unwrap();
     std::fs::create_dir(base_path.join("backup")).unwrap();
-    std::fs::create_dir(base_path.join("segment-002")).unwrap();
+    std::fs::create_dir(base_path.join("002")).unwrap();
     std::fs::create_dir(base_path.join("temp")).unwrap();
 
     let shard_info = vec![(0, base_path.to_path_buf())];
@@ -140,17 +140,16 @@ async fn ignores_files_that_match_prefix() {
     let temp_dir = TempDir::new().unwrap();
     let base_path = temp_dir.path();
 
-    std::fs::create_dir(base_path.join("segment-001")).unwrap();
-    // Create a file (not a directory) with segment prefix - file will show as "002.txt"
-    std::fs::File::create(base_path.join("segment-002.txt")).unwrap();
-    std::fs::create_dir(base_path.join("segment-003")).unwrap();
+    std::fs::create_dir(base_path.join("001")).unwrap();
+    // Create a file that looks like a segment but is not a directory
+    std::fs::File::create(base_path.join("002.txt")).unwrap();
+    std::fs::create_dir(base_path.join("003")).unwrap();
 
     let shard_info = vec![(0, base_path.to_path_buf())];
     let result = SegmentDiscovery::discover_all(shard_info).await;
 
     let shard_data = result.get(&0).unwrap();
-    // File will be included as "002.txt" since we strip "segment-" prefix
-    // This is actually fine - the file won't exist as a segment directory anyway
+    // File is not a directory and should be ignored; only numeric dirs are segments
     assert!(shard_data.segments.len() >= 2);
     assert!(shard_data.segments.contains(&"001".to_string()));
     assert!(shard_data.segments.contains(&"003".to_string()));
@@ -161,8 +160,8 @@ async fn extract_segment_map_works() {
     let temp_dir = TempDir::new().unwrap();
     let base_path = temp_dir.path();
 
-    std::fs::create_dir(base_path.join("segment-001")).unwrap();
-    std::fs::create_dir(base_path.join("segment-002")).unwrap();
+    std::fs::create_dir(base_path.join("001")).unwrap();
+    std::fs::create_dir(base_path.join("002")).unwrap();
 
     let shard_info = vec![(0, base_path.to_path_buf())];
     let shard_data = SegmentDiscovery::discover_all(shard_info).await;
@@ -203,7 +202,7 @@ async fn parallel_discovery_is_efficient() {
 
         // Create a few segments in each
         for j in 0..5 {
-            std::fs::create_dir(path.join(format!("segment-{:03}", j))).unwrap();
+            std::fs::create_dir(path.join(format!("{:03}", j))).unwrap();
         }
 
         shard_info.push((i, path));
@@ -230,7 +229,7 @@ async fn preserves_shard_base_dir() {
     let temp_dir = TempDir::new().unwrap();
     let base_path = temp_dir.path();
 
-    std::fs::create_dir(base_path.join("segment-001")).unwrap();
+    std::fs::create_dir(base_path.join("001")).unwrap();
 
     let shard_info = vec![(42, base_path.to_path_buf())];
     let result = SegmentDiscovery::discover_all(shard_info).await;

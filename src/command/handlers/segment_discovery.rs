@@ -83,9 +83,8 @@ impl SegmentDiscovery {
             Ok(entries) => {
                 for entry in entries.flatten() {
                     if let Some(name) = entry.file_name().to_str() {
-                        if name.starts_with("segment-") {
-                            let seg_id = name.trim_start_matches("segment-").to_string();
-                            segments.push(seg_id);
+                        if name.chars().all(|c| c.is_ascii_digit()) {
+                            segments.push(name.to_string());
                         }
                     }
                 }

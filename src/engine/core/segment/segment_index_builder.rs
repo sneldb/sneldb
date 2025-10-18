@@ -19,11 +19,9 @@ impl<'a> SegmentIndexBuilder<'a> {
     /// This method acquires a per-shard lock to serialize index updates,
     /// preventing race conditions when multiple segments flush concurrently.
     pub async fn add_segment_entry(&self, shard_dir: Option<&Path>) -> Result<(), StoreError> {
-        // Build new segment entry
+        // Build new segment entry (numeric id)
         let entry = SegmentEntry {
-            level: 0,
-            label: format!("{:05}", self.segment_id),
-            counter: self.segment_id as u32,
+            id: self.segment_id as u32,
             uids: self.event_type_uids.clone(),
         };
 

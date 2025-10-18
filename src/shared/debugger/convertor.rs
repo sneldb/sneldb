@@ -413,7 +413,7 @@ pub fn main() {
                             for segment_entry in segment_entries.flatten() {
                                 let segment_name =
                                     segment_entry.file_name().to_string_lossy().to_string();
-                                if segment_name.starts_with("segment-") {
+                                if segment_name.chars().all(|c| c.is_ascii_digit()) {
                                     segments.push(segment_name);
                                 }
                             }

@@ -94,9 +94,9 @@ fn creates_from_query_with_picked_zones() {
         cutoff: "1000".to_string(),
         k: 10,
         zones: vec![
-            ("segment-1".to_string(), 0),
-            ("segment-1".to_string(), 1),
-            ("segment-2".to_string(), 0),
+            ("00001".to_string(), 0),
+            ("00001".to_string(), 1),
+            ("00002".to_string(), 0),
         ],
     };
 
@@ -124,9 +124,9 @@ fn creates_from_query_with_picked_zones() {
     assert_eq!(ctx.zone_filter_count(), 3);
 
     let zones = ctx.picked_zones.as_ref().unwrap();
-    assert!(zones.contains(&("segment-1".to_string(), 0)));
-    assert!(zones.contains(&("segment-1".to_string(), 1)));
-    assert!(zones.contains(&("segment-2".to_string(), 0)));
+    assert!(zones.contains(&("00001".to_string(), 0)));
+    assert!(zones.contains(&("00001".to_string(), 1)));
+    assert!(zones.contains(&("00002".to_string(), 0)));
 }
 
 #[test]
@@ -137,7 +137,7 @@ fn creates_from_query_with_both_order_and_zones() {
         asc: false,
         cutoff: "100".to_string(),
         k: 5,
-        zones: vec![("segment-1".to_string(), 0)],
+        zones: vec![("00001".to_string(), 0)],
     };
 
     let cmd = Command::Query {
@@ -300,9 +300,9 @@ fn picked_zones_deduplicates_automatically() {
         cutoff: "0".to_string(),
         k: 10,
         zones: vec![
-            ("segment-1".to_string(), 0),
-            ("segment-1".to_string(), 0), // duplicate
-            ("segment-1".to_string(), 1),
+            ("00001".to_string(), 0),
+            ("00001".to_string(), 0),
+            ("00001".to_string(), 1),
         ],
     };
 

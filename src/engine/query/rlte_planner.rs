@@ -219,7 +219,7 @@ fn load_rlte_for_shard(
 )> {
     let mut out = Vec::new();
     for seg in segment_ids {
-        let seg_dir = base_dir.join(format!("segment-{}", seg));
+        let seg_dir = base_dir.join(seg);
         let path = seg_dir.join(format!("{}.rlte", uid));
         if path.exists() {
             if let Ok(idx) = RlteIndex::load(uid, &seg_dir) {

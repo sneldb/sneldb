@@ -13,7 +13,7 @@ async fn test_zone_cursor_loader_e2e() {
     let tmp_dir = tempdir().expect("tempdir failed");
     let base_dir = tmp_dir.path().join("shard-0");
     let segment_id = "001";
-    let segment_dir = base_dir.join(format!("segment-{}", segment_id));
+    let segment_dir = base_dir.join(segment_id);
     std::fs::create_dir_all(&segment_dir).unwrap();
 
     let schema_factory = SchemaRegistryFactory::new();

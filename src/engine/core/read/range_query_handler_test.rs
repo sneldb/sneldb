@@ -6,7 +6,7 @@ use serde_json::json;
 #[test]
 fn handles_range_queries_and_returns_expected_zones() {
     let filter = FieldXorFilterFactory::new().build();
-    let segment_id = "segment-0001".to_string();
+    let segment_id = "00001".to_string();
     let handler = RangeQueryHandler::new(filter, segment_id.clone());
 
     // Perform GT query

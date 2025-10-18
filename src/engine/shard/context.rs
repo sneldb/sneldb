@@ -1,4 +1,5 @@
 use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
+use crate::engine::core::segment::range_allocator::RangeAllocator;
 use crate::engine::core::{Event, FlushManager, MemTable, SegmentIdLoader, WalHandle, WalRecovery};
 use crate::engine::schema::registry::SchemaRegistry;
 use crate::shared::config::CONFIG;
@@ -23,6 +24,8 @@ pub struct ShardContext {
         Arc<Mutex<MemTable>>,
     )>,
     pub segment_id: u64,
+    pub next_l0_id: u32,
+    pub allocator: RangeAllocator,
     pub segment_ids: Arc<RwLock<Vec<String>>>,
     pub base_dir: PathBuf,
     pub wal_dir: PathBuf,
@@ -64,6 +67,10 @@ impl ShardContext {
         let segment_id_loader = SegmentIdLoader::new(base_dir.clone());
         let segment_ids = Arc::new(RwLock::new(segment_id_loader.load()));
         let segment_id = SegmentIdLoader::next_id(&segment_ids);
+        let existing: Vec<String> = segment_ids.read().unwrap().clone();
+        let allocator = RangeAllocator::from_existing_ids(existing.iter().map(|s| s.as_str()));
+        let mut allocator_preview = allocator.clone();
+        let next_l0_id = allocator_preview.next_for_level(0);
 
         // Step 3: Initialize core components
         let flush_coordination_lock = Arc::new(Mutex::new(()));
@@ -84,6 +91,8 @@ impl ShardContext {
             )),
             flush_sender,
             segment_id,
+            next_l0_id,
+            allocator,
             segment_ids,
             base_dir,
             wal_dir: wal_dir.clone(),

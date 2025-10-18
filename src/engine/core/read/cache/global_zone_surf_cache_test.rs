@@ -13,7 +13,7 @@ fn clear_cache_for_tests() {
 fn test_zone_surf_cache_basic_functionality() {
     // Create a temporary directory
     let dir = tempdir().unwrap();
-    let segment_dir = dir.path().join("segment-00000");
+    let segment_dir = dir.path().join("00000");
     std::fs::create_dir_all(&segment_dir).unwrap();
 
     // Create a test surf filter
@@ -23,7 +23,7 @@ fn test_zone_surf_cache_basic_functionality() {
 
     // Test cache loading
     let cache = GlobalZoneSurfCache::instance();
-    let segment_id = "segment-00000";
+    let segment_id = "00000";
     let uid = "test_uid";
     let field = "test_field";
     let key = ZoneSurfCacheKey::from_context(Some(0usize), segment_id, uid, field);
@@ -66,7 +66,7 @@ fn test_zone_surf_cache_resize() {
     // Create a temporary directory
     clear_cache_for_tests();
     let dir = tempdir().unwrap();
-    let segment_dir = dir.path().join("segment-00000");
+    let segment_dir = dir.path().join("00000");
     std::fs::create_dir_all(&segment_dir).unwrap();
 
     // Create a test surf filter
@@ -75,7 +75,7 @@ fn test_zone_surf_cache_resize() {
     filter.save(&path).unwrap();
 
     let cache = GlobalZoneSurfCache::instance();
-    let segment_id = "segment-00000";
+    let segment_id = "00000";
     let uid = "test_uid";
     let field = "test_field";
     let key = ZoneSurfCacheKey::from_context(Some(0usize), segment_id, uid, field);

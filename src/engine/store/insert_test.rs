@@ -68,7 +68,7 @@ async fn test_insert_and_maybe_flush_e2e() {
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Verify segment directory created
-    let segment_path = ctx.base_dir.join("segment-00000");
+    let segment_path = ctx.base_dir.join("00000");
     assert!(segment_path.exists());
 
     // Verify zones file exists and is valid

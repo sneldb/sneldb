@@ -21,8 +21,8 @@ async fn zone_collector_combines_zones_across_segments() {
 
     let segment1_id = 1;
     let segment2_id = 2;
-    let segment1_dir = shard_dir.join("segment-001");
-    let segment2_dir = shard_dir.join("segment-002");
+    let segment1_dir = shard_dir.join("001");
+    let segment2_dir = shard_dir.join("002");
     std::fs::create_dir_all(&segment1_dir).unwrap();
     std::fs::create_dir_all(&segment2_dir).unwrap();
 
@@ -111,7 +111,7 @@ async fn zone_collector_combines_zones_across_segments() {
         .with_command(command)
         .with_registry(Arc::clone(&registry))
         .with_segment_base_dir(shard_dir)
-        .with_segment_ids(vec!["segment-001".to_string(), "segment-002".to_string()])
+        .with_segment_ids(vec!["001".to_string(), "002".to_string()])
         .create()
         .await;
 
@@ -148,7 +148,7 @@ async fn zone_collector_combines_zones_across_segments() {
     let zone_size = CONFIG.engine.event_per_zone;
     let expected_zone_id = (0usize / zone_size) as u32; // index of id=1 and ctx1 is 0
     assert_eq!(zones.len(), 1);
-    assert_eq!(zones[0].segment_id, "segment-001");
+    assert_eq!(zones[0].segment_id, "001");
     assert_eq!(zones[0].zone_id, expected_zone_id);
 }
 
@@ -163,8 +163,8 @@ async fn zone_collector_reorders_context_first_and_yields_same_result() {
 
     let segment1_id = 1;
     let segment2_id = 2;
-    let segment1_dir = shard_dir.join("segment-001");
-    let segment2_dir = shard_dir.join("segment-002");
+    let segment1_dir = shard_dir.join("001");
+    let segment2_dir = shard_dir.join("002");
     std::fs::create_dir_all(&segment1_dir).unwrap();
     std::fs::create_dir_all(&segment2_dir).unwrap();
 
@@ -237,7 +237,7 @@ async fn zone_collector_reorders_context_first_and_yields_same_result() {
         .with_command(command)
         .with_registry(registry.clone())
         .with_segment_base_dir(shard_dir)
-        .with_segment_ids(vec!["segment-001".to_string(), "segment-002".to_string()])
+        .with_segment_ids(vec!["001".to_string(), "002".to_string()])
         .create()
         .await;
 
@@ -267,7 +267,7 @@ async fn zone_collector_reorders_context_first_and_yields_same_result() {
     let zones = collector.collect_zones();
 
     assert_eq!(zones.len(), 1);
-    assert_eq!(zones[0].segment_id, "segment-001");
+    assert_eq!(zones[0].segment_id, "001");
 }
 
 #[tokio::test]
@@ -278,8 +278,8 @@ async fn zone_collector_or_combines_union_without_pruning() {
 
     let tmp_dir = tempdir().expect("Temp dir failed");
     let shard_dir = tmp_dir.path().join("shard-0");
-    let segment1_dir = shard_dir.join("segment-001");
-    let segment2_dir = shard_dir.join("segment-002");
+    let segment1_dir = shard_dir.join("001");
+    let segment2_dir = shard_dir.join("002");
     std::fs::create_dir_all(&segment1_dir).unwrap();
     std::fs::create_dir_all(&segment2_dir).unwrap();
 
@@ -356,7 +356,7 @@ async fn zone_collector_or_combines_union_without_pruning() {
         .with_command(command)
         .with_registry(registry.clone())
         .with_segment_base_dir(shard_dir)
-        .with_segment_ids(vec!["segment-001".into(), "segment-002".into()])
+        .with_segment_ids(vec!["001".into(), "002".into()])
         .create()
         .await;
 
@@ -387,8 +387,5 @@ async fn zone_collector_or_combines_union_without_pruning() {
 
     // Union should include both segments' zones
     let segs: std::collections::HashSet<_> = zones.iter().map(|z| z.segment_id.as_str()).collect();
-    assert_eq!(
-        segs,
-        std::collections::HashSet::from(["segment-001", "segment-002"])
-    );
+    assert_eq!(segs, std::collections::HashSet::from(["001", "002"]));
 }

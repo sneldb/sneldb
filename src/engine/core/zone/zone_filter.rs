@@ -5,8 +5,8 @@ use tracing::debug;
 /// A filter for candidate zones based on an allowed set of segment/zone combinations.
 ///
 /// This struct encapsulates the logic for filtering candidate zones to only include
-/// those that are in the allowed set. It handles normalization of segment IDs
-/// (with or without "segment-" prefix) to ensure consistent matching.
+/// those that are in the allowed set. Segment IDs are numeric-only in the
+/// current scheme, so no normalization is required.
 pub struct ZoneFilter {
     allowed: HashSet<SegmentZoneId>,
 }
@@ -39,15 +39,8 @@ impl ZoneFilter {
 
     /// Checks if a specific SegmentZoneId is allowed by this filter.
     ///
-    /// This performs normalized comparison, so segment IDs with or without
-    /// the "segment-" prefix will match correctly.
     pub fn allows_id(&self, id: &SegmentZoneId) -> bool {
-        // Build normalized lookup set - this could be cached but for now
-        // we build it fresh each time to keep the API simple
-        let normalized_allowed: HashSet<(&str, u32)> =
-            self.allowed.iter().map(|id| id.normalized()).collect();
-
-        normalized_allowed.contains(&id.normalized())
+        self.allowed.contains(id)
     }
 
     /// Applies the filter to a mutable vector of candidate zones.
@@ -64,15 +57,11 @@ impl ZoneFilter {
             );
         }
 
-        // Build normalized lookup set once to avoid repeated allocations
-        let normalized_allowed: HashSet<(&str, u32)> =
-            self.allowed.iter().map(|id| id.normalized()).collect();
-
         let before_count = candidate_zones.len();
 
         candidate_zones.retain(|z| {
             let id = SegmentZoneId::from_zone(z);
-            normalized_allowed.contains(&id.normalized())
+            self.allowed.contains(&id)
         });
 
         let after_count = candidate_zones.len();

@@ -1,3 +1,5 @@
+use crate::engine::core::segment::range_allocator::RangeAllocator;
+use crate::engine::core::segment::segment_id::SegmentId;
 use crate::engine::core::{Compactor, SegmentEntry, SegmentIndex};
 use crate::engine::errors::CompactorError;
 use crate::engine::schema::SchemaRegistry;
@@ -39,7 +41,7 @@ impl CompactionWorker {
         let l0_segments: Vec<_> = segment_index
             .entries
             .iter()
-            .filter(|e| e.level == 0)
+            .filter(|e| e.id < 10_000)
             .cloned()
             .collect();
         debug!(target: "compaction_worker::run", shard = self.shard_id, segments = ?l0_segments, "Collected L0 segments");
@@ -56,19 +58,15 @@ impl CompactionWorker {
                 uid_to_segments
                     .entry(uid.clone())
                     .or_default()
-                    .push(entry.label.clone());
+                    .push(format!("{:05}", entry.id));
             }
         }
         debug!(target: "compaction_worker::run", shard = self.shard_id, uid_map = ?uid_to_segments, "Mapped UIDs to segments");
 
-        // Step 4: Determine next segment ID
-        let mut new_counter = segment_index
-            .entries
-            .iter()
-            .map(|e| e.counter)
-            .max()
-            .unwrap_or(0)
-            + 1;
+        // Step 4: Seed allocator from existing ids and prepare L1 allocation
+        let existing_labels = segment_index.all_labels();
+        let mut allocator =
+            RangeAllocator::from_existing_ids(existing_labels.iter().map(|s| s.as_str()));
 
         // Step 5: Iterate over UID groups for compaction
         for (uid, segment_ids) in uid_to_segments {
@@ -76,7 +74,8 @@ impl CompactionWorker {
                 continue;
             }
 
-            let label = format!("segment-L1-{:05}", new_counter);
+            let new_id = allocator.next_for_level(1);
+            let label = SegmentId::from(new_id).dir_name();
             let output_dir = self.shard_dir.join(&label);
             info!(target: "compaction_worker::run", shard = self.shard_id, uid = %uid, new_label = %label, "Compacting segments");
 
@@ -84,7 +83,7 @@ impl CompactionWorker {
             let compactor = Compactor::new(
                 uid.clone(),
                 segment_ids.clone(),
-                new_counter as u64,
+                new_id as u64,
                 self.shard_dir.clone(),
                 output_dir.clone(),
                 Arc::clone(&self.registry),
@@ -97,9 +96,7 @@ impl CompactionWorker {
 
             // Add new entry to index
             let new_entry = SegmentEntry {
-                level: 1,
-                label: label.clone(),
-                counter: new_counter,
+                id: new_id as u32,
                 uids: vec![uid.clone()],
             };
             segment_index
@@ -111,11 +108,11 @@ impl CompactionWorker {
             let before_count = segment_index.entries.len();
             segment_index
                 .entries
-                .retain(|e| !segment_ids.contains(&e.label));
+                .retain(|e| !segment_ids.contains(&format!("{:05}", e.id)));
             let after_count = segment_index.entries.len();
             debug!(target: "compaction_worker::run", removed = (before_count - after_count), "Removed old segment entries");
 
-            new_counter += 1;
+            // allocator state already advanced
         }
 
         // Step 6: Save final segment index

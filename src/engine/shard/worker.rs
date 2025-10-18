@@ -1,5 +1,5 @@
+use crate::engine::core::MemTable;
 use crate::engine::core::read::result::QueryResult;
-use crate::engine::core::{FlushManager, MemTable, SegmentIdLoader};
 use crate::engine::query::scan::scan;
 use crate::engine::replay::scan::scan as replay_scan;
 use crate::engine::schema::SchemaRegistry;
@@ -111,7 +111,7 @@ async fn on_flush(
     registry: &Arc<tokio::sync::RwLock<SchemaRegistry>>,
 ) -> Result<(), String> {
     let capacity = ctx.memtable.capacity();
-    let segment_id = SegmentIdLoader::next_id(&ctx.segment_ids);
+    let segment_id = ctx.allocator.next_for_level(0) as u64;
 
     // Move current memtable to a new passive buffer
     let passive = ctx.passive_buffers.add_from(&ctx.memtable).await;

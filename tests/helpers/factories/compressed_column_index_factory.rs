@@ -20,7 +20,7 @@ impl CompressedColumnIndexFactory {
         comp_len: u32,
         uncomp_len: u32,
         num_rows: u32,
-        in_block_offsets: Vec<u32>,
+        _in_block_offsets: Vec<u32>,
     ) -> Self {
         self.entries.insert(
             zone_id,

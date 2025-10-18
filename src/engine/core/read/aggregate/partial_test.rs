@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::engine::core::read::aggregate::ops::{AggOutput, AggregatorImpl};
+use crate::engine::core::read::aggregate::ops::AggregatorImpl;
 use crate::engine::core::read::aggregate::partial::{
     AggPartial, AggState, GroupKey, snapshot_aggregator,
 };

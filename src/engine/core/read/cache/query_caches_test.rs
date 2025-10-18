@@ -14,7 +14,7 @@ use std::sync::Arc;
 fn zone_index_cache_reuses_arc() {
     let tmp = tempfile::tempdir().unwrap();
     let base_dir = tmp.path().to_path_buf();
-    let segment_id = "segment-00000";
+    let segment_id = "00000";
     let uid = "uid_test";
     let seg_dir = base_dir.join(segment_id);
     create_dir_all(&seg_dir).unwrap();
@@ -41,7 +41,7 @@ fn zone_index_cache_reuses_arc() {
 fn zone_index_cache_per_query_counters_miss_hit_reload() {
     let tmp = tempfile::tempdir().unwrap();
     let base_dir = tmp.path().to_path_buf();
-    let segment_id = "segment-reload";
+    let segment_id = "seg-reload";
     let uid = "uid_test";
     let seg_dir = base_dir.join(segment_id);
     create_dir_all(&seg_dir).unwrap();
@@ -85,7 +85,7 @@ fn zone_index_cache_per_query_counters_miss_hit_reload() {
 fn zone_index_cache_shared_global_cache_across_queries() {
     let tmp = tempfile::tempdir().unwrap();
     let base_dir = tmp.path().to_path_buf();
-    let segment_id = "segment-shared";
+    let segment_id = "seg-shared";
     let uid = "uid_test";
     let seg_dir = base_dir.join(segment_id);
     create_dir_all(&seg_dir).unwrap();
@@ -148,7 +148,7 @@ fn zone_index_cache_multiple_segments_counters() {
 fn zone_index_cache_missing_file_error_counters_unchanged() {
     let tmp = tempfile::tempdir().unwrap();
     let base_dir = tmp.path().to_path_buf();
-    let segment_id = "segment-missing";
+    let segment_id = "seg-missing";
     let uid = "uid_test";
     let seg_dir = base_dir.join(segment_id);
     create_dir_all(&seg_dir).unwrap();
@@ -167,7 +167,7 @@ fn zone_index_cache_missing_file_error_counters_unchanged() {
 fn column_handle_cache_reuses_arc() {
     let tmp = tempfile::tempdir().unwrap();
     let base_dir = tmp.path().to_path_buf();
-    let segment_id = "segment-00000";
+    let segment_id = "00000";
     let uid = "uid_test";
     let field = "field_a";
     let seg_dir = base_dir.join(segment_id);
@@ -219,7 +219,7 @@ fn write_typed_varbytes_block(values: &[&str]) -> (Vec<u8>, Vec<u32>) {
 fn per_query_memo_for_decompressed_blocks_reuses_arc() {
     let tmp = tempfile::tempdir().unwrap();
     let base_dir = tmp.path().to_path_buf();
-    let segment_id = "segment-arc";
+    let segment_id = "seg-arc";
     let uid = "uid_z";
     let field = "f";
     let seg_dir = base_dir.join(segment_id);
@@ -280,7 +280,7 @@ fn per_query_memo_for_decompressed_blocks_reuses_arc() {
 fn column_reader_loads_values_using_per_query_memo() {
     let tmp = tempfile::tempdir().unwrap();
     let base_dir = tmp.path().to_path_buf();
-    let segment_id = "segment-read";
+    let segment_id = "seg-read";
     let uid = "uid_r";
     let field = "f";
     let seg_dir = base_dir.join(segment_id);
@@ -355,7 +355,7 @@ fn column_reader_loads_values_using_per_query_memo() {
 fn zone_surf_cache_reuses_arc() {
     let tmp = tempfile::tempdir().unwrap();
     let base_dir = tmp.path().to_path_buf();
-    let segment_id = "segment-00000";
+    let segment_id = "00000";
     let uid = "uid_test";
     let field = "field_test";
     let seg_dir = base_dir.join(segment_id);
@@ -381,7 +381,7 @@ fn zone_surf_cache_reuses_arc() {
 fn zone_surf_cache_shared_global_cache_across_queries() {
     let tmp = tempfile::tempdir().unwrap();
     let base_dir = tmp.path().to_path_buf();
-    let segment_id = "segment-shared";
+    let segment_id = "seg-shared";
     let uid = "uid_test";
     let field = "field_test";
     let seg_dir = base_dir.join(segment_id);
@@ -467,7 +467,7 @@ fn zone_surf_cache_multiple_segments_and_fields() {
 fn zone_surf_cache_missing_file_error() {
     let tmp = tempfile::tempdir().unwrap();
     let base_dir = tmp.path().to_path_buf();
-    let segment_id = "segment-missing";
+    let segment_id = "seg-missing";
     let uid = "uid_test";
     let field = "field_test";
     let seg_dir = base_dir.join(segment_id);
@@ -482,7 +482,7 @@ fn zone_surf_cache_missing_file_error() {
 fn zone_surf_cache_per_query_memoization() {
     let tmp = tempfile::tempdir().unwrap();
     let base_dir = tmp.path().to_path_buf();
-    let segment_id = "segment-memo";
+    let segment_id = "seg-memo";
     let uid = "uid_test";
     let field = "field_test";
     let seg_dir = base_dir.join(segment_id);
@@ -520,7 +520,7 @@ fn zone_surf_cache_per_query_memoization() {
 fn zone_surf_cache_different_fields_same_uid() {
     let tmp = tempfile::tempdir().unwrap();
     let base_dir = tmp.path().to_path_buf();
-    let segment_id = "segment-multi-field";
+    let segment_id = "seg-multi-field";
     let uid = "uid_test";
     let fields = ["field1", "field2", "field3"];
     let seg_dir = base_dir.join(segment_id);

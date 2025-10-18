@@ -7,7 +7,7 @@
 
 ## Core pieces
 
-- Segments — `segment-xxxxx/` directories under each shard.
+- Segments — `xxxxx/` (zero-padded numeric) directories under each shard.
 - Columns — `{uid}_{field}.col` files storing values with length prefixes.
 - Zone Compressed Offsets — `{uid}_{field}.zfc` files listing per-zone compressed block metadata and in-block offsets.
 - Zone Metadata — `{uid}.zones` containing per-zone min/max timestamps and row ranges.
@@ -54,7 +54,7 @@ Compatibility and migration:
 data/
 ├── cols/
 │   ├── shard-0/
-│   │   └── segment-00000/
+│   │   └── 00000/
 │   │       ├── {uid}_{field}.col
 │   │       ├── {uid}_{field}.zfc
 │   │       ├── {uid}.zones
@@ -63,7 +63,7 @@ data/
 │   │       ├── {uid}_{field}.zsrf
 │   │       └── {uid}_{field}.ebm
 │   └── shard-1/
-│       └── segment-00000/
+│       └── 00000/
 ├── logs/
 │   └── sneldb.log.YYYY-MM-DD
 └── schema/
@@ -167,7 +167,7 @@ Snapshots are ad-hoc utility files and can be written anywhere (not tied to the 
 
 ## Operational notes
 
-- Segment directories are named `segment-00000`, `segment-00001`, ...
+- Segment directories are named `00000`, `00001`, ... (zero-padded numeric). Levels derive from id ranges of size 10_000.
 - UIDs are per-event-type identifiers generated at DEFINE; filenames use `{uid}` not the event type.
 - New fields simply create new `.col/.zfc/.xf` files in subsequent segments.
 

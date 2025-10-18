@@ -157,7 +157,7 @@ impl GlobalZoneIndexCache {
         let entry = ZoneIndexEntry::new(
             Arc::clone(&zone_arc),
             abs_path.clone(),
-            segment_id.to_string(),
+            segment_id.parse::<u32>().unwrap_or_else(|_| 0),
             uid.to_string(),
             shard_id,
             ino,

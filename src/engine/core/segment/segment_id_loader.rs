@@ -22,10 +22,11 @@ impl SegmentIdLoader {
             Ok(entries) => {
                 for entry in entries.flatten() {
                     let file_name = entry.file_name();
-                    let file_name_str = file_name.to_string_lossy();
-                    if file_name_str.starts_with("segment-") {
-                        debug!(target: "segment_id_loader::load", ?file_name_str, "Found segment directory");
-                        ids.push(file_name_str.to_string());
+                    if let Some(name) = file_name.to_str() {
+                        if name.chars().all(|c| c.is_ascii_digit()) {
+                            debug!(target: "segment_id_loader::load", name, "Found numeric segment directory");
+                            ids.push(name.to_string());
+                        }
                     }
                 }
             }
@@ -47,12 +48,13 @@ impl SegmentIdLoader {
     /// Determines the next available segment ID (max + 1) based on the given list.
     pub fn next_id(segment_ids: &Arc<RwLock<Vec<String>>>) -> u64 {
         let ids = segment_ids.read().unwrap();
-        let next = ids
+        // Allocate in L0 range only: [0..=9999]
+        let max_l0 = ids
             .iter()
-            .filter_map(|id| id.strip_prefix("segment-"))
-            .filter_map(|num| num.parse::<u64>().ok())
-            .max()
-            .map_or(0, |max| max + 1);
+            .filter_map(|id| id.parse::<u64>().ok())
+            .filter(|&n| n < 10_000)
+            .max();
+        let next = max_l0.map_or(0, |max| max + 1);
 
         debug!(target: "segment_id_loader::next_id", next_id = next, "Calculated next segment ID");
         next

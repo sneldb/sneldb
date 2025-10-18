@@ -9,7 +9,7 @@ use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
 pub struct ZoneSurfCacheEntry {
     pub filter: Arc<ZoneSurfFilter>,
     pub path: PathBuf,
-    pub segment_id: String,
+    pub segment_id: u32,
     pub uid: String,
     pub field: String,
     pub ino: u64,
@@ -22,7 +22,7 @@ impl ZoneSurfCacheEntry {
     pub fn new(
         filter: Arc<ZoneSurfFilter>,
         path: PathBuf,
-        segment_id: String,
+        segment_id: u32,
         uid: String,
         field: String,
         ino: u64,

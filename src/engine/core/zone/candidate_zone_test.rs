@@ -7,15 +7,15 @@ use std::sync::Arc;
 
 #[test]
 fn creates_new_candidate_zone() {
-    let zone = CandidateZone::new(5, "segment-007".to_string());
+    let zone = CandidateZone::new(5, "00007".to_string());
     assert_eq!(zone.zone_id, 5);
-    assert_eq!(zone.segment_id, "segment-007");
+    assert_eq!(zone.segment_id, "00007");
     assert!(zone.values.is_empty());
 }
 
 #[test]
 fn sets_zone_values_correctly() {
-    let mut zone = CandidateZone::new(2, "segment-003".to_string());
+    let mut zone = CandidateZone::new(2, "00003".to_string());
     let mut values = HashMap::new();
     let empty_block = Arc::new(DecompressedBlock::from_bytes(Vec::new()));
     values.insert(
@@ -32,14 +32,14 @@ fn sets_zone_values_correctly() {
 
 #[test]
 fn creates_all_zones_for_segment_according_to_fill_factor() {
-    let zones = CandidateZone::create_all_zones_for_segment("segment-999");
+    let zones = CandidateZone::create_all_zones_for_segment("00999");
     assert_eq!(zones.len(), CONFIG.engine.fill_factor);
     assert_eq!(zones[0].zone_id, 0);
     assert_eq!(
         zones.last().unwrap().zone_id,
         (CONFIG.engine.fill_factor - 1) as u32
     );
-    assert!(zones.iter().all(|z| z.segment_id == "segment-999"));
+    assert!(zones.iter().all(|z| z.segment_id == "00999"));
 }
 
 #[test]
@@ -56,7 +56,7 @@ fn deduplicates_duplicate_zones() {
 
 #[test]
 fn zone_values_access_via_column_values() {
-    let mut zone = CandidateZone::new(3, "segment-vals".to_string());
+    let mut zone = CandidateZone::new(3, "00042".to_string());
     // Build encoded bytes: [u16 len][bytes] per value
     let mut bytes: Vec<u8> = Vec::new();
     let mut ranges: Vec<(usize, usize)> = Vec::new();

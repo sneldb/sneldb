@@ -13,7 +13,7 @@ impl CandidateZoneFactory {
     pub fn new() -> Self {
         let mut params = HashMap::new();
         params.insert("zone_id".into(), json!(0));
-        params.insert("segment_id".into(), json!("segment-0001"));
+        params.insert("segment_id".into(), json!("00001"));
         Self {
             params,
             values: None,
