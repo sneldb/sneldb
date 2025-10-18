@@ -802,8 +802,8 @@
     ],
     "matchers": [
       { "kind": "include", "value": "\"bucket\"" },
-      { "kind": "include_all", "value": ["1734048000","1736640000"] },
-      { "kind": "include_all", "value": ["10","20"] }
+      { "kind": "include_all", "value": ["1735689600","1735689600"] },
+      { "kind": "include_all", "value": ["30"] }
     ]
   }
   ,
@@ -817,7 +817,7 @@
       "QUERY sessions COUNT PER week USING created_at"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["[1734566400,1]","[1735171200,1]"] }
+      { "kind": "include_all", "value": ["[1734912000,2]"] }
     ]
   }
   ,

@@ -34,6 +34,7 @@ pub mod zone_planner_factory;
 pub mod zone_row_factory;
 pub mod zone_value_loader_factory;
 pub mod zone_xor_filter_index_factory;
+pub mod timestamp_factory;
 
 pub use aggregate_result_factory::AggregateResultFactory;
 pub use candidate_zone_factory::CandidateZoneFactory;
@@ -71,6 +72,7 @@ pub use zone_planner_factory::ZonePlannerFactory;
 pub use zone_row_factory::ZoneRowFactory;
 pub use zone_value_loader_factory::ZoneValueLoaderFactory;
 pub use zone_xor_filter_index_factory::ZoneXorFilterIndexFactory;
+pub use timestamp_factory::TimestampFactory;
 
 #[cfg(test)]
 mod aggregate_result_factory_test;
@@ -126,6 +128,8 @@ mod zone_index_factory_test;
 mod zone_meta_factory_test;
 #[cfg(test)]
 mod zone_plan_factory_test;
+#[cfg(test)]
+mod timestamp_factory_test;
 #[cfg(test)]
 mod zone_planner_factory_test;
 #[cfg(test)]
