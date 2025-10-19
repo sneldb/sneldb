@@ -1,6 +1,8 @@
 use crate::command::types::{Command, CompareOp, Expr};
-use crate::engine::schema::registry::SchemaRegistry;
-use serde_json::Value;
+use crate::engine::schema::FieldType;
+use crate::engine::schema::registry::{MiniSchema, SchemaRegistry};
+use crate::shared::time::{TimeKind, TimeParser};
+use serde_json::{Number, Value};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -105,8 +107,18 @@ impl FilterPlan {
             let mut where_clause_fields = HashSet::new();
             if let Some(expr) = where_clause {
                 debug!(target: "query::planner", ?expr, "Processing where clause");
-                Self::extract_fields_from_expr(expr, &mut where_clause_fields);
-                Self::add_where_clause_filters(expr, &event_type_uid, &mut where_filters);
+                // Normalize temporal literals using schema if available
+                let normalized_expr = if let Some(schema) = registry.read().await.get(event_type) {
+                    Self::normalize_temporal_literals(expr, schema)
+                } else {
+                    expr.clone()
+                };
+                Self::extract_fields_from_expr(&normalized_expr, &mut where_clause_fields);
+                Self::add_where_clause_filters(
+                    &normalized_expr,
+                    &event_type_uid,
+                    &mut where_filters,
+                );
             }
 
             if let Some(schema) = registry.read().await.get(event_type) {
@@ -134,6 +146,59 @@ impl FilterPlan {
 
         info!(target: "query::planner", total_filters = filter_plans.len(), "Filter planning complete");
         filter_plans
+    }
+
+    fn normalize_temporal_literals(expr: &Expr, schema: &MiniSchema) -> Expr {
+        match expr {
+            Expr::Compare { field, op, value } => {
+                let is_temporal = schema
+                    .field_type(field)
+                    .map(|ft| match ft {
+                        crate::engine::schema::FieldType::Timestamp
+                        | crate::engine::schema::FieldType::Date => true,
+                        crate::engine::schema::FieldType::Optional(inner) => matches!(
+                            **inner,
+                            crate::engine::schema::FieldType::Timestamp
+                                | crate::engine::schema::FieldType::Date
+                        ),
+                        _ => false,
+                    })
+                    .unwrap_or(false);
+
+                if is_temporal {
+                    if let Value::String(s) = value.clone() {
+                        let kind = match schema.field_type(field) {
+                            Some(FieldType::Date) => TimeKind::Date,
+                            Some(FieldType::Optional(inner)) => {
+                                if matches!(*inner.as_ref(), FieldType::Date) {
+                                    TimeKind::Date
+                                } else {
+                                    TimeKind::DateTime
+                                }
+                            }
+                            _ => TimeKind::DateTime,
+                        };
+                        if let Some(parsed) = TimeParser::parse_str_to_epoch_seconds(&s, kind) {
+                            return Expr::Compare {
+                                field: field.clone(),
+                                op: op.clone(),
+                                value: Value::Number(Number::from(parsed)),
+                            };
+                        }
+                    }
+                }
+                expr.clone()
+            }
+            Expr::And(l, r) => Expr::And(
+                Box::new(Self::normalize_temporal_literals(l, schema)),
+                Box::new(Self::normalize_temporal_literals(r, schema)),
+            ),
+            Expr::Or(l, r) => Expr::Or(
+                Box::new(Self::normalize_temporal_literals(l, schema)),
+                Box::new(Self::normalize_temporal_literals(r, schema)),
+            ),
+            Expr::Not(x) => Expr::Not(Box::new(Self::normalize_temporal_literals(x, schema))),
+        }
     }
 
     fn extract_fields_from_expr(expr: &Expr, fields: &mut HashSet<String>) {
@@ -226,12 +291,20 @@ impl FilterPlan {
                     value = %value,
                     "Adding where clause filter"
                 );
+                // Normalize temporal literals: if value is string and field is temporal, convert to epoch seconds
+                let normalized_value = match value {
+                    Value::String(s) => {
+                        // We don't have registry context here; rely on runtime pruners. Keep as-is.
+                        Value::String(s.clone())
+                    }
+                    _ => value.clone(),
+                };
                 // For where-clause filters, allow multiple entries for the same column
                 // (e.g., plan = "pro" OR plan = "premium") so each branch gets its own step.
                 filter_plans.push(FilterPlan {
                     column: field.clone(),
                     operation: Some(op.clone()),
-                    value: Some(value.clone()),
+                    value: Some(normalized_value),
                     priority,
                     uid: event_type_uid.clone(),
                 });

@@ -17,6 +17,18 @@ impl<'a> XorPruner<'a> {
         value: &serde_json::Value,
         op: &CompareOp,
     ) -> Option<Vec<CandidateZone>> {
+        // Skip temporal fields entirely; handled by temporal pruner
+        if column == "timestamp" {
+            return None;
+        }
+        if let Some(caches) = self.artifacts.caches {
+            if caches
+                .get_or_load_field_calendar(segment_id, uid, column)
+                .is_ok()
+            {
+                return None;
+            }
+        }
         if !matches!(op, CompareOp::Eq) {
             return None;
         }

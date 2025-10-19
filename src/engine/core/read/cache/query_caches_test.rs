@@ -2,7 +2,7 @@ use crate::engine::core::column::column_reader::ColumnReader;
 use crate::engine::core::column::compression::{CompressionCodec, Lz4Codec};
 use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
 use crate::engine::core::read::cache::QueryCaches;
-use crate::engine::core::time::{CalendarDir, ZoneTemporalIndex};
+use crate::engine::core::time::{CalendarDir, TemporalCalendarIndex, ZoneTemporalIndex};
 use crate::shared::storage_header::BinaryHeader;
 use crate::test_helpers::factories::column_factory::ColumnFactory;
 use crate::test_helpers::factories::zone_index_factory::ZoneIndexFactory;
@@ -171,6 +171,63 @@ fn temporal_index_cache_loads_and_is_consistent() {
         "expected same Arc from global temporal index cache"
     );
     assert!(t1.contains_ts(20));
+}
+
+#[test]
+fn field_calendar_cache_loads_and_is_consistent() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base_dir = tmp.path().to_path_buf();
+    let segment_id = "fcal-seg";
+    let uid = "uid_fcal";
+    let field = "created_at";
+    let seg_dir = base_dir.join(segment_id);
+    create_dir_all(&seg_dir).unwrap();
+
+    // Write a per-field calendar with a simple zone range
+    let mut fcal = TemporalCalendarIndex::new(field.to_string());
+    fcal.add_zone_range(3, 1_700_000_000, 1_700_000_359);
+    fcal.save(uid, &seg_dir).expect("save field calendar");
+
+    let caches = QueryCaches::new(base_dir);
+    let c1 = caches
+        .get_or_load_field_calendar(segment_id, uid, field)
+        .unwrap();
+    let c2 = caches
+        .get_or_load_field_calendar(segment_id, uid, field)
+        .unwrap();
+    assert!(
+        std::sync::Arc::ptr_eq(&c1, &c2),
+        "expected same Arc from global field calendar cache"
+    );
+}
+
+#[test]
+fn field_temporal_index_cache_loads_and_is_consistent() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base_dir = tmp.path().to_path_buf();
+    let segment_id = "fidx-seg";
+    let uid = "uid_ftfi";
+    let field = "due_date";
+    let seg_dir = base_dir.join(segment_id);
+    create_dir_all(&seg_dir).unwrap();
+
+    // Write a minimal field-aware temporal index for zone 5
+    let zti = ZoneTemporalIndex::from_timestamps(vec![11, 22, 33], 1, 4);
+    zti.save_for_field(uid, field, 5, &seg_dir)
+        .expect("save field tfi");
+
+    let caches = QueryCaches::new(base_dir);
+    let t1 = caches
+        .get_or_load_field_temporal_index(segment_id, uid, field, 5)
+        .unwrap();
+    let t2 = caches
+        .get_or_load_field_temporal_index(segment_id, uid, field, 5)
+        .unwrap();
+    assert!(
+        std::sync::Arc::ptr_eq(&t1, &t2),
+        "expected same Arc from global field temporal index cache"
+    );
+    assert!(t1.contains_ts(22));
 }
 
 #[test]

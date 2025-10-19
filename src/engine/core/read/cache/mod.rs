@@ -4,10 +4,10 @@ pub mod column_block_cache_stats;
 pub mod column_handle;
 pub mod column_handle_key;
 pub mod decompressed_block;
-pub mod global_column_handle_cache;
-pub mod global_zone_index_cache;
 pub mod global_calendar_cache;
+pub mod global_column_handle_cache;
 pub mod global_temporal_index_cache;
+pub mod global_zone_index_cache;
 pub mod global_zone_surf_cache;
 pub mod ident_intern;
 pub mod providers;
@@ -47,3 +47,8 @@ mod global_zone_index_cache_test;
 mod global_zone_surf_cache_test;
 #[cfg(test)]
 mod query_caches_test;
+
+#[cfg(test)]
+mod global_calendar_cache_test;
+#[cfg(test)]
+mod global_temporal_index_cache_test;

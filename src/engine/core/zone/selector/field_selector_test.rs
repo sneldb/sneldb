@@ -902,3 +902,120 @@ async fn temporal_pruner_routed_by_field_selector() {
     assert!(g1.is_empty(), "seg1 must be excluded for ts>180");
     assert!(!g2.is_empty(), "seg2 must be selected for ts>180");
 }
+
+#[tokio::test]
+async fn temporal_payload_field_routed_by_field_selector() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp = tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let seg1 = shard_dir.join("001");
+    let seg2 = shard_dir.join("002");
+    std::fs::create_dir_all(&seg1).unwrap();
+    std::fs::create_dir_all(&seg2).unwrap();
+
+    let reg_fac = SchemaRegistryFactory::new();
+    let registry = reg_fac.registry();
+    let event_type = "ts_payload_evt";
+    reg_fac
+        .define_with_fields(event_type, &[("context_id", "string"), ("ts", "datetime")])
+        .await
+        .unwrap();
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+
+    // seg1: ts 100, 150
+    let a = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "a")
+        .with("payload", json!({"ts": 100u64}))
+        .create();
+    let b = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "b")
+        .with("payload", json!({"ts": 150u64}))
+        .create();
+    let mem1 = MemTableFactory::new()
+        .with_capacity(2)
+        .with_events(vec![a, b])
+        .create()
+        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem1,
+        1,
+        &seg1,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
+
+    // seg2: ts 200
+    let c = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "c")
+        .with("payload", json!({"ts": 200u64}))
+        .create();
+    let mem2 = MemTableFactory::new()
+        .with_capacity(1)
+        .with_events(vec![c])
+        .create()
+        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem2,
+        2,
+        &seg2,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
+
+    // Build query plan
+    let cmd = CommandFactory::query().with_event_type(event_type).create();
+    let q = QueryPlanFactory::new()
+        .with_registry(Arc::clone(&registry))
+        .with_command(cmd)
+        .build()
+        .await;
+
+    // ts == 150 should select only seg1
+    let f_eq = FilterPlanFactory::new()
+        .with_column("ts")
+        .with_operation(CompareOp::Eq)
+        .with_uid(&uid)
+        .with_value(json!(150u64))
+        .create();
+    let ctx_eq = SelectionContext {
+        plan: &f_eq,
+        query_plan: &q,
+        base_dir: &shard_dir,
+        caches: None,
+    };
+    let sel_eq = ZoneSelectorBuilder::new(ctx_eq).build();
+    let z1 = sel_eq.select_for_segment("001");
+    let z2 = sel_eq.select_for_segment("002");
+    assert!(!z1.is_empty(), "seg1 must be selected for ts==150");
+    assert!(z2.is_empty(), "seg2 must not be selected for ts==150");
+
+    // ts > 180 should select only seg2
+    let f_gt = FilterPlanFactory::new()
+        .with_column("ts")
+        .with_operation(CompareOp::Gt)
+        .with_uid(&uid)
+        .with_value(json!(180u64))
+        .create();
+    let ctx_gt = SelectionContext {
+        plan: &f_gt,
+        query_plan: &q,
+        base_dir: &shard_dir,
+        caches: None,
+    };
+    let sel_gt = ZoneSelectorBuilder::new(ctx_gt).build();
+    let g1 = sel_gt.select_for_segment("001");
+    let g2 = sel_gt.select_for_segment("002");
+    assert!(g1.is_empty(), "seg1 must be excluded for ts>180");
+    assert!(!g2.is_empty(), "seg2 must be selected for ts>180");
+}
