@@ -45,6 +45,8 @@ pub struct EngineConfig {
     pub max_inflight_passives: usize,
     pub level_span: u32,
     pub segment_id_pad: usize,
+    pub segments_per_merge: usize,
+    pub compaction_max_shard_concurrency: usize,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -115,6 +117,8 @@ fn default_test_config(paths: &TestPaths) -> TestConfig {
             max_inflight_passives: 8,
             level_span: 10000,
             segment_id_pad: 5,
+            segments_per_merge: 2,
+            compaction_max_shard_concurrency: 1,
         },
         server: ServerConfig {
             socket_path: paths.socket_path.clone(),

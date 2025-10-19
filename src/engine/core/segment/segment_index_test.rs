@@ -1,3 +1,4 @@
+use crate::engine::core::compaction::policy::{CompactionPolicy, KWayCountPolicy};
 use crate::engine::core::{SegmentEntry, SegmentIndex};
 use tempfile::tempdir;
 
@@ -50,6 +51,9 @@ async fn test_segment_index_e2e() {
         index.append(seg).await.unwrap();
     }
 
-    // Check compaction trigger
-    assert!(index.needs_compaction());
+    // Policy-based planning: with compaction_k=2 in test config and 8 L0 entries,
+    // expect 4 merge plans for the same uid
+    let policy = KWayCountPolicy { k: 2 };
+    let plans = policy.plan(&index);
+    assert_eq!(plans.len(), 4);
 }

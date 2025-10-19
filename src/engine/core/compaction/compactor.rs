@@ -2,13 +2,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use crate::engine::core::segment::segment_id::SegmentId;
+use crate::engine::core::zone::zone_batch_sizer::ZoneBatchSizer;
 use crate::engine::core::{
     SegmentIndexBuilder, ZoneCursorLoader, ZoneMerger, ZonePlan, ZoneWriter,
 };
 use crate::engine::errors::CompactorError;
 use crate::engine::schema::SchemaRegistry;
-use crate::shared::config::CONFIG;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 pub struct Compactor {
     pub uid: String,
@@ -53,11 +54,13 @@ impl Compactor {
             .map_err(|e| CompactorError::ZoneCursorLoad(e.to_string()))?;
         info!(target: "compactor::run", uid = %self.uid, count = cursors.len(), "Loaded zone cursors");
 
-        // Step 2: Merge zones into plans
+        // Step 2: Merge zones into plans, sizing by target level
         let mut merger = ZoneMerger::new(cursors);
         let mut zone_plans = Vec::new();
         let mut zone_id = 0;
-        while let Some(batch) = merger.next_zone(CONFIG.engine.event_per_zone) {
+        let level = SegmentId::from(self.output_segment_id as u32).level();
+        let target_rows = ZoneBatchSizer::target_rows(level);
+        while let Some(batch) = merger.next_zone(target_rows) {
             let plan =
                 ZonePlan::from_rows(batch, self.uid.clone(), self.output_segment_id, zone_id)
                     .map_err(|e| CompactorError::ZoneWriter(e.to_string()))?;

@@ -1,12 +1,18 @@
 use crate::engine::core::{CompactionWorker, IoMonitor, SegmentIndex};
 use crate::engine::schema::SchemaRegistry;
 use crate::shared::config::CONFIG;
+use once_cell::sync::Lazy;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use sysinfo::{Disks, System};
+use tokio::sync::Semaphore;
 use tokio::time::sleep;
 use tracing::{error, warn};
+
+// Global semaphore to limit compaction across shards concurrently
+static GLOBAL_COMPACTION_SEMAPHORE: Lazy<Semaphore> =
+    Lazy::new(|| Semaphore::new(CONFIG.engine.compaction_max_shard_concurrency));
 
 pub async fn start_background_compactor(shard_id: u32, shard_dir: PathBuf) {
     tokio::spawn(async move {
@@ -26,7 +32,14 @@ pub async fn start_background_compactor(shard_id: u32, shard_dir: PathBuf) {
 
             match SegmentIndex::load(&shard_dir).await {
                 Ok(segment_index) => {
-                    if segment_index.needs_compaction() {
+                    warn!(shard_id, "Segment index loaded");
+                    // Policy-based trigger: run only if there are plans
+                    use crate::engine::core::compaction::policy::{
+                        CompactionPolicy, KWayCountPolicy,
+                    };
+                    let policy = KWayCountPolicy::default();
+                    let plans = CompactionPolicy::plan(&policy, &segment_index);
+                    if !plans.is_empty() {
                         warn!(shard_id, "Background compaction triggered");
                         let registry = Arc::new(tokio::sync::RwLock::new(
                             SchemaRegistry::new().expect("Failed to initialize SchemaRegistry"),
@@ -37,6 +50,9 @@ pub async fn start_background_compactor(shard_id: u32, shard_dir: PathBuf) {
                             shard_id,
                             shard_dir.display()
                         );
+
+                        // Acquire global permit to ensure one shard at a time
+                        let permit = GLOBAL_COMPACTION_SEMAPHORE.acquire().await.unwrap();
                         let worker = CompactionWorker::new(
                             shard_id,
                             shard_dir.clone(),
@@ -46,6 +62,7 @@ pub async fn start_background_compactor(shard_id: u32, shard_dir: PathBuf) {
                         if let Err(e) = worker.run().await {
                             error!(shard_id, "Background compaction failed: {}", e);
                         }
+                        drop(permit);
                     } else {
                         warn!(shard_id, "No compaction needed");
                     }

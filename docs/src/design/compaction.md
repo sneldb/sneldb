@@ -12,11 +12,9 @@ Compaction keeps reads predictable as data grows. Instead of editing files in pl
 
 ## How it runs (big picture)
 
-- One background task per shard.
-- Wakes up at a configurable interval.
-- Checks disk/IO pressure; if the system is busy, skips this round.
-- Looks at the shard’s segment index to decide if compaction is needed.
-- When needed, launches a compaction worker to perform the merge and publish new segments atomically.
+- One background task per process coordinates compaction across shards with a global concurrency of 1 (configurable). Shards are compacted one at a time; within a shard, work runs serially.
+- Periodically checks system IO pressure; if the system is busy, it skips.
+- Uses a policy to plan compaction (k-way by uid); if the policy yields plans, a worker runs them and publishes new segments atomically.
 
 ## Shard-local by design
 
@@ -24,8 +22,7 @@ Each shard compacts its own segments. This keeps the work isolated, prevents cro
 
 ## When it triggers
 
-- On a fixed timer (compaction_interval).
-- Only if the segment index reports that thresholds are met (e.g., too many L0s, size/age criteria).
+- Only if the k-way policy finds any merge plans for the shard (no threshold counter anymore).
 - Skips entirely if IO pressure is high to avoid hurting foreground work.
 
 ## Safety & correctness
@@ -43,17 +40,17 @@ Each shard compacts its own segments. This keeps the work isolated, prevents cro
 
 ## What the worker does (conceptually)
 
-- Selects a compaction set (often recent small segments).
-- Merges column files in order, rebuilding zones, filters, and indexes.
-- Emits a new, leveled segment and updates the segment index.
-- Schedules old segments for deletion/GC.
+- For each uid, groups L0 segments into chunks of size `k` (config).
+- For each full chunk, performs a k-way merge of events sorted by `context_id`.
+- Rebuilds zones at a level-aware target size: `events_per_zone * fill_factor * (level+1)`.
+- Emits a new L1 (or higher-level) segment with correct naming, updates the segment index, and removes inputs from the index.
 
 ## Operator knobs
 
-- compaction_interval: how often to check.
-- compaction_threshold: when the segment index should say “yes, compact.”
-- sys_io_threshold (and related IO heuristics): how conservative to be under load.
-- events_per_zone and flush_threshold: influence zone granularity and L0 creation rate (tune together).
+- `segments_per_merge`: number of L0 segments to merge per output.
+- `compaction_max_shard_concurrency`: max shards compacted simultaneously (default 1 = serial across shards).
+- `sys_io_threshold` (and related IO heuristics): how conservative to be under load.
+- `events_per_zone` and `fill_factor`: base and multiplier for zone sizing; higher levels multiply by `(level+1)`.
 
 ## Invariants
 

@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use tracing::{debug, info};
 use xorf::{BinaryFuse8, Filter};
 
-/// A wrapper around the xorf crate's BinaryFuse8 implementation
+/// A wrapper around the xorf BinaryFuse8 implementation
 #[derive(Clone, Debug)]
 pub struct FieldXorFilter {
     inner: BinaryFuse8,

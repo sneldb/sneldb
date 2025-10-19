@@ -17,10 +17,11 @@ data_dir = "../data/cols"
 index_dir = "../data/index/"
 shard_count = 8
 event_per_zone = 8000
-compaction_threshold = 1000
-compaction_interval = 1000
-sys_io_threshold = 1000
+compaction_interval = 40
+sys_io_threshold = 100
 max_inflight_passives = 256
+segments_per_merge = 8
+compaction_max_shard_concurrency = 1
 
 
 [schema]
