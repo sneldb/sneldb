@@ -65,14 +65,6 @@ fn is_field_numeric_consistent(zone_plans: &[ZonePlan], key: &str) -> bool {
     kind != Kind::Unknown
 }
 
-#[inline]
-fn is_time_field(ft: &FieldType) -> bool {
-    match ft {
-        FieldType::Timestamp | FieldType::Date => true,
-        FieldType::Optional(inner) => matches!(**inner, FieldType::Timestamp | FieldType::Date),
-        _ => false,
-    }
-}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ZoneSurfFilter {
     pub entries: Vec<ZoneSurfEntry>,
@@ -159,8 +151,8 @@ impl ZoneSurfFilter {
         let mut map: HashMap<(String, String), Vec<(u32, Vec<Vec<u8>>)>> = HashMap::new();
 
         for zp in zone_plans {
-            // fixed fields: include only if numeric
-            for field in ["timestamp"] {
+            // Skip time fields; handled by TEF-CB
+            for field in [] as [&str; 0] {
                 let mut values: Vec<Vec<u8>> = Vec::new();
                 for ev in &zp.events {
                     if let Some(v) = ev.get_field(field) {
@@ -228,59 +220,30 @@ impl ZoneSurfFilter {
     pub fn build_all_with_schema(
         zone_plans: &[ZonePlan],
         segment_dir: &Path,
-        schema: &MiniSchema,
+        _schema: &MiniSchema,
     ) -> std::io::Result<()> {
         if tracing::enabled!(tracing::Level::DEBUG) {
             debug!(target: "sneldb::surf", "Building Zone SuRF (schema-aware) for {} zones", zone_plans.len());
         }
         let mut map: HashMap<(String, String), Vec<(u32, Vec<Vec<u8>>)>> = HashMap::new();
 
-        // Collect schema-defined time fields
+        // Identify schema-defined time fields to skip entirely; handled by TEF-CB
         let mut time_fields: Vec<String> = Vec::new();
-        for (name, ty) in &schema.fields {
-            if is_time_field(ty) {
+        for (name, ty) in &_schema.fields {
+            let is_time = match ty {
+                FieldType::Timestamp | FieldType::Date => true,
+                FieldType::Optional(inner) => {
+                    matches!(**inner, FieldType::Timestamp | FieldType::Date)
+                }
+                _ => false,
+            };
+            if is_time {
                 time_fields.push(name.clone());
             }
         }
 
         for zp in zone_plans {
-            // fixed field: timestamp (only if numeric)
-            for field in ["timestamp"] {
-                let mut values: Vec<Vec<u8>> = Vec::new();
-                for ev in &zp.events {
-                    if let Some(v) = ev.get_field(field) {
-                        if v.is_number() {
-                            if let Some(bytes) = encode_value(&v) {
-                                values.push(bytes);
-                            }
-                        }
-                    }
-                }
-                if !values.is_empty() {
-                    map.entry((zp.uid.clone(), field.to_string()))
-                        .or_default()
-                        .push((zp.id, values));
-                }
-            }
-
-            // schema time fields in payload
-            for key in &time_fields {
-                let mut values: Vec<Vec<u8>> = Vec::new();
-                for ev in &zp.events {
-                    if let Some(val) = ev.payload.get(key) {
-                        if val.is_number() {
-                            if let Some(bytes) = encode_value(val) {
-                                values.push(bytes);
-                            }
-                        }
-                    }
-                }
-                if !values.is_empty() {
-                    map.entry((zp.uid.clone(), key.clone()))
-                        .or_default()
-                        .push((zp.id, values));
-                }
-            }
+            // Skip fixed timestamp field
 
             // Also include numeric-consistent fields beyond time fields
             let mut dynamic_keys: Vec<String> = Vec::new();
@@ -288,7 +251,8 @@ impl ZoneSurfFilter {
                 dynamic_keys.extend(obj.keys().cloned());
             }
             for key in dynamic_keys {
-                if time_fields.contains(&key) {
+                // Skip fixed timestamp field and any schema time fields in payload
+                if key == "timestamp" || time_fields.contains(&key) {
                     continue;
                 }
                 if !is_field_numeric_consistent(zone_plans, &key) {

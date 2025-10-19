@@ -120,6 +120,8 @@ pub enum FileKind {
     EventSnapshotMeta,
     ZoneSurfFilter,
     ZoneRlte,
+    CalendarDir,
+    TemporalIndex,
 }
 
 impl FileKind {
@@ -139,6 +141,8 @@ impl FileKind {
             FileKind::EventSnapshotMeta => *b"EVDBSMT\0",
             FileKind::ZoneSurfFilter => *b"EVDBZSF\0",
             FileKind::ZoneRlte => *b"EVDBZRT\0",
+            FileKind::CalendarDir => *b"EVDBCAL\0",
+            FileKind::TemporalIndex => *b"EVDBTFI\0",
         }
     }
 }

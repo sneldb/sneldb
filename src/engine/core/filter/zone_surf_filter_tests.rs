@@ -232,7 +232,7 @@ fn zone_surf_flag_numeric_ranges() {
 }
 
 #[test]
-fn zone_surf_schema_time_fields_included() {
+fn zone_surf_schema_time_fields_skipped() {
     // Schema with datetime and date fields
     let schema = MiniSchemaFactory::empty()
         .with("ts", "datetime")
@@ -275,24 +275,55 @@ fn zone_surf_schema_time_fields_included() {
     let dir = tempdir().unwrap();
     ZoneSurfFilter::build_all_with_schema(&[z0, z1], dir.path(), &schema).unwrap();
 
-    // ts filter exists
+    // Time fields are skipped by SuRF builder
     let ts_path = dir.path().join("uidTS_ts.zsrf");
-    assert!(ts_path.exists());
-    let ts_filter = ZoneSurfFilter::load(&ts_path).unwrap();
-
-    // >= 200 picks zones with ts >= 200 => both 0 and 1 (z0 has 200, z1 has 300)
-    let seg = "segTS";
-    let b200 = encode_value(&json!(200)).unwrap();
-    let ge = ts_filter
-        .zones_overlapping_ge(&b200, true, seg)
-        .into_iter()
-        .map(|z| z.zone_id)
-        .collect::<Vec<_>>();
-    assert_eq!(ge, vec![0u32, 1u32]);
-
-    // date filter exists
+    assert!(std::fs::metadata(&ts_path).is_err());
     let d_path = dir.path().join("uidTS_d.zsrf");
-    assert!(d_path.exists());
+    assert!(std::fs::metadata(&d_path).is_err());
+}
+
+#[test]
+fn zone_surf_skips_fixed_timestamp_field() {
+    // Two zones with timestamp values; SuRF should not be built for fixed 'timestamp'
+    let z0_events = vec![
+        Factory::event()
+            .with("timestamp", json!(100))
+            .with("payload", json!({"id": 1}))
+            .create(),
+        Factory::event()
+            .with("timestamp", json!(110))
+            .with("payload", json!({"id": 2}))
+            .create(),
+    ];
+    let z1_events = vec![
+        Factory::event()
+            .with("timestamp", json!(200))
+            .with("payload", json!({"id": 3}))
+            .create(),
+    ];
+
+    let z0 = Factory::zone_plan()
+        .with("id", 0u32)
+        .with("uid", "uidT")
+        .with("segment_id", 2u64)
+        .with("events", json!(z0_events))
+        .with("start_index", 0usize)
+        .with("end_index", 1usize)
+        .create();
+    let z1 = Factory::zone_plan()
+        .with("id", 1u32)
+        .with("uid", "uidT")
+        .with("segment_id", 2u64)
+        .with("events", json!(z1_events))
+        .with("start_index", 0usize)
+        .with("end_index", 0usize)
+        .create();
+
+    let dir = tempdir().unwrap();
+    ZoneSurfFilter::build_all(&[z0, z1], dir.path()).unwrap();
+
+    let ts_path = dir.path().join("uidT_timestamp.zsrf");
+    assert!(std::fs::metadata(&ts_path).is_err());
 }
 
 #[test]

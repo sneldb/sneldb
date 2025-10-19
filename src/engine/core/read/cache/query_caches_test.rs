@@ -2,6 +2,7 @@ use crate::engine::core::column::column_reader::ColumnReader;
 use crate::engine::core::column::compression::{CompressionCodec, Lz4Codec};
 use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
 use crate::engine::core::read::cache::QueryCaches;
+use crate::engine::core::time::{CalendarDir, ZoneTemporalIndex};
 use crate::shared::storage_header::BinaryHeader;
 use crate::test_helpers::factories::column_factory::ColumnFactory;
 use crate::test_helpers::factories::zone_index_factory::ZoneIndexFactory;
@@ -113,6 +114,63 @@ fn zone_index_cache_shared_global_cache_across_queries() {
     let _ = caches2.get_or_load_zone_index(segment_id, uid).unwrap();
     let s2b = caches2.zone_index_summary_line();
     assert!(s2b.contains("hits=2"), "summary: {}", s2b);
+}
+
+#[test]
+fn calendar_cache_loads_and_is_consistent() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base_dir = tmp.path().to_path_buf();
+    let segment_id = "00000";
+    let uid = "uid_cal";
+    let seg_dir = base_dir.join(segment_id);
+    create_dir_all(&seg_dir).unwrap();
+
+    // Write a simple calendar with one zone covering one hour/day
+    let mut cal = CalendarDir::new();
+    cal.add_zone_range(1, 1_700_000_000, 1_700_000_359);
+    cal.save(uid, &seg_dir).expect("save cal");
+
+    let caches = QueryCaches::new(base_dir);
+    let c1 = caches.get_or_load_calendar(segment_id, uid).unwrap();
+    let c2 = caches.get_or_load_calendar(segment_id, uid).unwrap();
+    assert!(
+        std::sync::Arc::ptr_eq(&c1, &c2),
+        "expected same Arc from global calendar cache"
+    );
+
+    // Verify hour bucket contains the zone
+    let hb = c1.zones_for(
+        1_700_000_001,
+        crate::engine::core::time::calendar_dir::GranularityPref::Hour,
+    );
+    assert!(hb.contains(1));
+}
+
+#[test]
+fn temporal_index_cache_loads_and_is_consistent() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base_dir = tmp.path().to_path_buf();
+    let segment_id = "00001";
+    let uid = "uid_tfi";
+    let seg_dir = base_dir.join(segment_id);
+    create_dir_all(&seg_dir).unwrap();
+
+    // Write a minimal temporal index for zone 7
+    let zti = ZoneTemporalIndex::from_timestamps(vec![10, 20, 30], 1, 4);
+    zti.save(uid, 7, &seg_dir).expect("save tfi");
+
+    let caches = QueryCaches::new(base_dir);
+    let t1 = caches
+        .get_or_load_temporal_index(segment_id, uid, 7)
+        .unwrap();
+    let t2 = caches
+        .get_or_load_temporal_index(segment_id, uid, 7)
+        .unwrap();
+    assert!(
+        std::sync::Arc::ptr_eq(&t1, &t2),
+        "expected same Arc from global temporal index cache"
+    );
+    assert!(t1.contains_ts(20));
 }
 
 #[test]
