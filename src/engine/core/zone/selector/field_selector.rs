@@ -24,6 +24,29 @@ impl<'a> FieldSelector<'a> {
             .map(|reg| reg.is_enum_field_by_uid(uid, column))
             .unwrap_or(false)
     }
+
+    #[inline]
+    fn is_temporal_field(&self, uid: &str, column: &str) -> bool {
+        self.qplan
+            .registry
+            .try_read()
+            .ok()
+            .and_then(|reg| {
+                reg.get_schema_by_uid(uid)
+                    .and_then(|s| s.field_type(column).cloned())
+            })
+            .map(|ft| match ft {
+                crate::engine::schema::FieldType::Timestamp
+                | crate::engine::schema::FieldType::Date => true,
+                crate::engine::schema::FieldType::Optional(inner) => matches!(
+                    *inner,
+                    crate::engine::schema::FieldType::Timestamp
+                        | crate::engine::schema::FieldType::Date
+                ),
+                _ => false,
+            })
+            .unwrap_or(false)
+    }
 }
 
 impl<'a> ZoneSelector for FieldSelector<'a> {
@@ -62,8 +85,11 @@ impl<'a> ZoneSelector for FieldSelector<'a> {
                 return z;
             }
         }
-        if let Some(z) = self.xor_pruner.apply(&args) {
-            return z;
+        // Skip XOR for temporal fields; temporal pruner owns them
+        if !self.is_temporal_field(uid, &self.plan.column) {
+            if let Some(z) = self.xor_pruner.apply(&args) {
+                return z;
+            }
         }
 
         Vec::new()

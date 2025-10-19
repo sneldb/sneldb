@@ -1,4 +1,6 @@
 use super::zone_temporal_index::ZoneTemporalIndex;
+use crate::command::types::CompareOp;
+use crate::engine::core::time::temporal_traits::ZoneRangeIndex;
 
 #[test]
 fn zti_contains_and_predecessor_basic() {
@@ -82,4 +84,72 @@ fn zti_stride_membership_edgecases() {
     assert!(zti.contains_ts(base + 25));
     assert!(!zti.contains_ts(base + 24));
     assert!(!zti.contains_ts(base + 26));
+}
+
+#[test]
+fn zti_field_aware_serde_roundtrip() {
+    // Build a ZTI and persist/load using the field-aware API
+    let ts = (0..10)
+        .map(|i| 2_000_000_000i64 + 2 * i)
+        .collect::<Vec<_>>();
+    let zti = ZoneTemporalIndex::from_timestamps(ts.clone(), 2, 5);
+
+    let dir = tempfile::tempdir().expect("tmpdir");
+    zti.save_for_field("uidF", "created_at", 7, dir.path())
+        .expect("save tfi field");
+    let loaded = ZoneTemporalIndex::load_for_field("uidF", "created_at", 7, dir.path())
+        .expect("load tfi field");
+
+    assert_eq!(loaded.min_ts, zti.min_ts);
+    assert_eq!(loaded.max_ts, zti.max_ts);
+    assert_eq!(loaded.stride, zti.stride);
+    assert_eq!(loaded.keys.len(), zti.keys.len());
+    // Membership check
+    assert!(loaded.contains_ts(2_000_000_000));
+    assert!(loaded.contains_ts(2_000_000_018));
+    assert!(!loaded.contains_ts(2_000_000_019));
+}
+
+#[test]
+fn zti_may_match_ops_basic() {
+    // Values: 100, 105, 110
+    let ts = vec![100i64, 105, 110];
+    let zti = ZoneTemporalIndex::from_timestamps(ts, 1, 4);
+
+    // Eq
+    assert!(zti.may_match(CompareOp::Eq, 105));
+    assert!(!zti.may_match(CompareOp::Eq, 104));
+
+    // Neq: multi-value ⇒ always true
+    assert!(zti.may_match(CompareOp::Neq, 105));
+    assert!(zti.may_match(CompareOp::Neq, 999));
+
+    // Greater/greater-equal vs max=110
+    assert!(zti.may_match(CompareOp::Gt, 100));
+    assert!(zti.may_match(CompareOp::Gte, 110));
+    assert!(!zti.may_match(CompareOp::Gt, 110));
+
+    // Less/less-equal vs min=100
+    assert!(zti.may_match(CompareOp::Lt, 110));
+    assert!(zti.may_match(CompareOp::Lte, 100));
+    assert!(!zti.may_match(CompareOp::Lt, 100));
+}
+
+#[test]
+fn zti_may_match_range_overlap() {
+    // Continuous range [200..300]
+    let ts = (0..=10).map(|i| 200i64 + i * 10).collect::<Vec<_>>();
+    let zti = ZoneTemporalIndex::from_timestamps(ts, 1, 6);
+
+    // Overlapping ranges
+    assert!(zti.may_match_range(150, 210)); // overlaps at 200..210
+    assert!(zti.may_match_range(290, 310)); // overlaps at 290..300
+    assert!(zti.may_match_range(200, 300)); // full overlap
+
+    // Non-overlapping ranges
+    assert!(!zti.may_match_range(0, 199));
+    assert!(!zti.may_match_range(301, 1000));
+
+    // Inverted range ⇒ false
+    assert!(!zti.may_match_range(300, 200));
 }

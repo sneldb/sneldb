@@ -4,8 +4,11 @@ use serde_json::json;
 use tempfile::tempdir;
 
 use crate::command::types::CompareOp;
+use crate::engine::core::QueryCaches;
 use crate::engine::core::zone::selector::builder::ZoneSelectorBuilder;
+use crate::engine::core::zone::selector::pruner::range_pruner::RangePruner;
 use crate::engine::core::zone::selector::selection_context::SelectionContext;
+use crate::engine::core::zone::zone_artifacts::ZoneArtifacts;
 use crate::engine::schema::FieldType;
 use crate::test_helpers::factories::{
     CommandFactory, EventFactory, FilterPlanFactory, MemTableFactory, QueryPlanFactory,
@@ -315,4 +318,76 @@ async fn falls_back_to_range_handler_on_non_id_field() {
     let sel = ZoneSelectorBuilder::new(ctx).build();
     let z = sel.select_for_segment("001");
     assert!(!z.is_empty());
+}
+
+#[tokio::test]
+async fn skips_surf_for_payload_temporal_field() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp = tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let seg1 = shard_dir.join("001");
+    std::fs::create_dir_all(&seg1).unwrap();
+
+    let reg_fac = SchemaRegistryFactory::new();
+    let registry = reg_fac.registry();
+    let event_type = "range_temporal";
+    reg_fac
+        .define_with_field_types(
+            event_type,
+            &[
+                ("context_id", FieldType::String),
+                ("ts", FieldType::Timestamp),
+            ],
+        )
+        .await
+        .unwrap();
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+
+    // seg1: ts=100, 200
+    let a = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "a")
+        .with("payload", json!({"ts": 100u64}))
+        .create();
+    let b = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "b")
+        .with("payload", json!({"ts": 200u64}))
+        .create();
+    let mem = MemTableFactory::new()
+        .with_capacity(2)
+        .with_events(vec![a, b])
+        .create()
+        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem,
+        1,
+        &seg1,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
+
+    // Provide caches so RangePruner can detect field calendar and skip SuRF
+    let caches = QueryCaches::new(shard_dir.clone());
+    // Sanity: calendar should exist for the temporal field
+    let cal_path = seg1.join(format!("{}_{}.cal", uid, "ts"));
+    assert!(
+        cal_path.exists(),
+        "expected calendar at {}",
+        cal_path.display()
+    );
+
+    // RangePruner should skip temporal payload field 'ts' and return None
+    let artifacts = ZoneArtifacts::new(&shard_dir, Some(&caches));
+    let pruner = RangePruner { artifacts };
+    let attempt = pruner.attempt("001", &uid, "ts", &json!(150u64), &CompareOp::Gt);
+    assert!(
+        attempt.is_none(),
+        "RangePruner must skip for temporal fields"
+    );
 }

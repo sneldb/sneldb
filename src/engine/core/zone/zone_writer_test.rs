@@ -178,4 +178,21 @@ async fn test_zone_writer_skips_surf_for_datetime_and_builds_for_amount() {
         std::fs::metadata(&ts_surf).is_err(),
         "datetime field ts should not have SuRF"
     );
+
+    // Validate per-field temporal artifacts exist: {uid}_{field}.cal and {uid}_{field}_{zone}.tfi
+    let cal_path = segment_dir.join(format!("{}_{}.cal", uid, "ts"));
+    assert!(
+        cal_path.exists(),
+        "per-field calendar missing for ts: {}",
+        cal_path.display()
+    );
+    for zp in &plans {
+        let tfi_path = segment_dir.join(format!("{}_{}_{}.tfi", uid, "ts", zp.id));
+        assert!(
+            tfi_path.exists(),
+            "per-zone temporal index missing for ts zone {}: {}",
+            zp.id,
+            tfi_path.display()
+        );
+    }
 }

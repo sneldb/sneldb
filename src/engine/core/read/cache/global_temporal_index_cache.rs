@@ -45,4 +45,46 @@ impl GlobalTemporalIndexCache {
 pub static GLOBAL_TEMPORAL_INDEX_CACHE: Lazy<GlobalTemporalIndexCache> =
     Lazy::new(|| GlobalTemporalIndexCache::new(4096));
 
+// Field-aware temporal index cache
+#[derive(Clone, Hash, PartialEq, Eq, Debug)]
+pub struct FieldTemporalIndexKey {
+    pub path: PathBuf,
+}
+
+pub struct GlobalFieldTemporalIndexCache {
+    inner: Mutex<LruCache<FieldTemporalIndexKey, Arc<ZoneTemporalIndex>>>,
+}
+
+impl GlobalFieldTemporalIndexCache {
+    fn new(capacity: usize) -> Self {
+        let cap = NonZeroUsize::new(capacity.max(1)).unwrap();
+        Self { inner: Mutex::new(LruCache::new(cap)) }
+    }
+
+    pub fn instance() -> &'static Self { &GLOBAL_FIELD_TEMPORAL_INDEX_CACHE }
+
+    pub fn get_or_load(
+        &self,
+        base_dir: &std::path::Path,
+        segment_id: &str,
+        uid: &str,
+        field: &str,
+        zone_id: u32,
+    ) -> std::io::Result<Arc<ZoneTemporalIndex>> {
+        let path = base_dir.join(segment_id).join(format!("{}_{}_{}.tfi", uid, field, zone_id));
+        let key = FieldTemporalIndexKey { path: path.clone() };
+        if let Ok(mut guard) = self.inner.lock() {
+            if let Some(v) = guard.get(&key) { return Ok(Arc::clone(v)); }
+        }
+        let dir = path.parent().unwrap();
+        let zti = ZoneTemporalIndex::load_for_field(uid, field, zone_id, dir)?;
+        let arc = Arc::new(zti);
+        if let Ok(mut guard) = self.inner.lock() { guard.put(key, Arc::clone(&arc)); }
+        Ok(arc)
+    }
+}
+
+pub static GLOBAL_FIELD_TEMPORAL_INDEX_CACHE: Lazy<GlobalFieldTemporalIndexCache> =
+    Lazy::new(|| GlobalFieldTemporalIndexCache::new(8192));
+
 

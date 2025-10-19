@@ -2,7 +2,7 @@ use crate::command::types::CompareOp;
 use crate::engine::core::zone::selector::pruner::{PruneArgs, ZonePruner};
 use crate::engine::core::zone::zone_artifacts::ZoneArtifacts;
 use crate::engine::core::{CandidateZone, FieldXorFilter, RangeQueryHandler};
-use tracing::{info, warn};
+use tracing::info;
 
 pub struct RangePruner<'a> {
     pub artifacts: ZoneArtifacts<'a>,
@@ -24,6 +24,18 @@ impl<'a> RangePruner<'a> {
             return None;
         }
 
+        // Skip SuRF for temporal fields: built-in 'timestamp' and any payload datetime/date
+        if column == "timestamp" {
+            return None;
+        }
+        if let Some(caches) = self.artifacts.caches {
+            if caches
+                .get_or_load_field_calendar(segment_id, uid, column)
+                .is_ok()
+            {
+                return None;
+            }
+        }
         if let Ok(zsf) = self.artifacts.load_zone_surf(segment_id, uid, column) {
             if let Some(bytes) =
                 crate::engine::core::filter::surf_encoding::encode_value(value).as_deref()

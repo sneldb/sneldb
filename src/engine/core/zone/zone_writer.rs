@@ -1,7 +1,7 @@
 use crate::engine::core::ColumnWriter;
 use crate::engine::core::FieldXorFilter;
 use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
-use crate::engine::core::time::{CalendarDir, ZoneTemporalIndex};
+use crate::engine::core::time::{CalendarDir, TemporalIndexBuilder, ZoneTemporalIndex};
 use crate::engine::core::zone::enum_bitmap_index::EnumBitmapBuilder;
 use crate::engine::core::zone::rlte_index::RlteIndex;
 use crate::engine::core::zone::zone_metadata_writer::ZoneMetadataWriter;
@@ -75,7 +75,7 @@ impl<'a> ZoneWriter<'a> {
         cal.save(self.uid, self.segment_dir)
             .map_err(|e| StoreError::FlushFailed(format!("Failed to save calendar: {}", e)))?;
 
-        // Build per-zone temporal index from timestamps (seconds)
+        // Build per-zone temporal index from event timestamp (legacy .tfi)
         for zp in zone_plans {
             let mut ts: Vec<i64> = Vec::with_capacity(zp.events.len());
             for ev in &zp.events {
@@ -89,6 +89,18 @@ impl<'a> ZoneWriter<'a> {
                 StoreError::FlushFailed(format!("Failed to save temporal index: {}", e))
             })?;
         }
+
+        // Build per-field temporal artifacts (first-class): {uid}_{field}.cal and {uid}_{field}_{zone}.tfi
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target: "sneldb::flush",
+                uid = self.uid,
+                "Building per-field temporal calendars and indexes"
+            );
+        }
+        TemporalIndexBuilder::new(self.uid, self.segment_dir, self.registry.clone())
+            .build_for_zone_plans(zone_plans)
+            .await?;
 
         // Build XOR filters
         if tracing::enabled!(tracing::Level::DEBUG) {

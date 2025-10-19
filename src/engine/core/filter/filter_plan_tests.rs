@@ -268,6 +268,98 @@ async fn default_without_time_field_uses_timestamp() {
 }
 
 #[tokio::test]
+async fn temporal_where_literal_string_normalized_to_epoch() {
+    let registry = SchemaRegistryFactory::new();
+    registry
+        .define_with_fields(
+            "evt_norm_ts",
+            &[
+                ("context_id", "string"),
+                ("created_at", "datetime"),
+                ("x", "string"),
+            ],
+        )
+        .await
+        .unwrap();
+
+    let cmd = CommandFactory::query()
+        .with_event_type("evt_norm_ts")
+        .with_where_clause(Expr::Compare {
+            field: "created_at".into(),
+            op: CompareOp::Gte,
+            value: json!("2025-01-01T00:00:00Z"),
+        })
+        .create();
+
+    let plans = FilterPlan::build_all(&cmd, &registry.registry()).await;
+    let p = plans.iter().find(|p| p.column == "created_at").unwrap();
+    assert_eq!(p.operation, Some(CompareOp::Gte));
+    let v = p.value.as_ref().unwrap();
+    assert!(v.is_number(), "expected normalized epoch seconds number");
+    assert_eq!(v.as_i64().unwrap(), 1_735_689_600); // 2025-01-01T00:00:00Z
+}
+
+#[tokio::test]
+async fn date_where_literal_string_normalized_to_epoch_midnight() {
+    let registry = SchemaRegistryFactory::new();
+    registry
+        .define_with_fields(
+            "evt_norm_date",
+            &[
+                ("context_id", "string"),
+                ("due_date", "date"),
+                ("y", "string"),
+            ],
+        )
+        .await
+        .unwrap();
+
+    let cmd = CommandFactory::query()
+        .with_event_type("evt_norm_date")
+        .with_where_clause(Expr::Compare {
+            field: "due_date".into(),
+            op: CompareOp::Eq,
+            value: json!("2025-01-02"),
+        })
+        .create();
+
+    let plans = FilterPlan::build_all(&cmd, &registry.registry()).await;
+    let p = plans.iter().find(|p| p.column == "due_date").unwrap();
+    assert_eq!(p.operation, Some(CompareOp::Eq));
+    let v = p.value.as_ref().unwrap();
+    assert!(v.is_number(), "expected normalized epoch seconds number");
+    assert_eq!(v.as_i64().unwrap(), 1_735_776_000); // 2025-01-02T00:00:00Z
+}
+
+#[tokio::test]
+async fn non_temporal_where_literal_kept_as_string() {
+    let registry = SchemaRegistryFactory::new();
+    registry
+        .define_with_fields(
+            "evt_non_temp",
+            &[("context_id", "string"), ("name", "string"), ("x", "i64")],
+        )
+        .await
+        .unwrap();
+
+    let cmd = CommandFactory::query()
+        .with_event_type("evt_non_temp")
+        .with_where_clause(Expr::Compare {
+            field: "name".into(),
+            op: CompareOp::Eq,
+            value: json!("A"),
+        })
+        .create();
+
+    let plans = FilterPlan::build_all(&cmd, &registry.registry()).await;
+    let p = plans.iter().find(|p| p.column == "name").unwrap();
+    assert_eq!(p.operation, Some(CompareOp::Eq));
+    let v = p.value.as_ref().unwrap();
+    assert!(v.is_string());
+    assert_eq!(v.as_str().unwrap(), "A");
+}
+
+#[tokio::test]
 async fn custom_time_field_without_since_keeps_time_filter_over_fallback() {
     let registry = SchemaRegistryFactory::new();
     registry
