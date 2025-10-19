@@ -1,5 +1,6 @@
 use crate::engine::core::zone::selector::pruner::enum_pruner::EnumPruner;
 use crate::engine::core::zone::selector::pruner::range_pruner::RangePruner;
+use crate::engine::core::zone::selector::pruner::temporal_pruner::TemporalPruner;
 use crate::engine::core::zone::selector::pruner::xor_pruner::XorPruner;
 use crate::engine::core::zone::selector::pruner::{PruneArgs, ZonePruner};
 use crate::engine::core::zone::selector::selector_kind::ZoneSelector;
@@ -9,6 +10,7 @@ pub struct FieldSelector<'a> {
     pub plan: &'a FilterPlan,
     pub qplan: &'a QueryPlan,
     pub range_pruner: RangePruner<'a>,
+    pub temporal_pruner: TemporalPruner<'a>,
     pub enum_pruner: EnumPruner<'a>,
     pub xor_pruner: XorPruner<'a>,
 }
@@ -48,6 +50,10 @@ impl<'a> ZoneSelector for FieldSelector<'a> {
             op: self.plan.operation.as_ref(),
         };
 
+        // Time-first pruning
+        if let Some(z) = self.temporal_pruner.apply(&args) {
+            return z;
+        }
         if let Some(z) = self.range_pruner.apply(&args) {
             return z;
         }

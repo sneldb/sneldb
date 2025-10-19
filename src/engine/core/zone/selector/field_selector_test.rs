@@ -781,3 +781,124 @@ async fn zonesurf_ge_gt_le_lte_cover_boundaries_and_cross_segment() {
     assert!(lt1.is_empty());
     assert!(!lt2.is_empty());
 }
+
+#[tokio::test]
+async fn temporal_pruner_routed_by_field_selector() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp = tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let seg1 = shard_dir.join("001");
+    let seg2 = shard_dir.join("002");
+    std::fs::create_dir_all(&seg1).unwrap();
+    std::fs::create_dir_all(&seg2).unwrap();
+
+    let reg_fac = SchemaRegistryFactory::new();
+    let registry = reg_fac.registry();
+    let event_type = "ts_evt";
+    // No need to declare timestamp in schema; it's a fixed field
+    reg_fac
+        .define_with_fields(event_type, &[("context_id", "string"), ("k", "string")])
+        .await
+        .unwrap();
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+
+    // seg1: timestamps 100, 150
+    let a = EventFactory::new()
+        .with("event_type", event_type)
+        .with("timestamp", json!(100u64))
+        .with("context_id", "a")
+        .with("payload", json!({"k":"x"}))
+        .create();
+    let b = EventFactory::new()
+        .with("event_type", event_type)
+        .with("timestamp", json!(150u64))
+        .with("context_id", "b")
+        .with("payload", json!({"k":"y"}))
+        .create();
+    let mem1 = MemTableFactory::new()
+        .with_capacity(2)
+        .with_events(vec![a, b])
+        .create()
+        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem1,
+        1,
+        &seg1,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
+
+    // seg2: timestamp 200
+    let c = EventFactory::new()
+        .with("event_type", event_type)
+        .with("timestamp", json!(200u64))
+        .with("context_id", "c")
+        .with("payload", json!({"k":"z"}))
+        .create();
+    let mem2 = MemTableFactory::new()
+        .with_capacity(1)
+        .with_events(vec![c])
+        .create()
+        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem2,
+        2,
+        &seg2,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
+
+    // Build query plan
+    let cmd = CommandFactory::query().with_event_type(event_type).create();
+    let q = QueryPlanFactory::new()
+        .with_registry(Arc::clone(&registry))
+        .with_command(cmd)
+        .build()
+        .await;
+
+    // timestamp == 150 should select only seg1
+    let f_eq = FilterPlanFactory::new()
+        .with_column("timestamp")
+        .with_operation(CompareOp::Eq)
+        .with_uid(&uid)
+        .with_value(json!(150u64))
+        .create();
+    let ctx_eq = SelectionContext {
+        plan: &f_eq,
+        query_plan: &q,
+        base_dir: &shard_dir,
+        caches: None,
+    };
+    let sel_eq = ZoneSelectorBuilder::new(ctx_eq).build();
+    let z1 = sel_eq.select_for_segment("001");
+    let z2 = sel_eq.select_for_segment("002");
+    assert!(!z1.is_empty(), "seg1 must be selected for ts==150");
+    assert!(z2.is_empty(), "seg2 must not be selected for ts==150");
+
+    // timestamp > 180 should select only seg2
+    let f_gt = FilterPlanFactory::new()
+        .with_column("timestamp")
+        .with_operation(CompareOp::Gt)
+        .with_uid(&uid)
+        .with_value(json!(180u64))
+        .create();
+    let ctx_gt = SelectionContext {
+        plan: &f_gt,
+        query_plan: &q,
+        base_dir: &shard_dir,
+        caches: None,
+    };
+    let sel_gt = ZoneSelectorBuilder::new(ctx_gt).build();
+    let g1 = sel_gt.select_for_segment("001");
+    let g2 = sel_gt.select_for_segment("002");
+    assert!(g1.is_empty(), "seg1 must be excluded for ts>180");
+    assert!(!g2.is_empty(), "seg2 must be selected for ts>180");
+}

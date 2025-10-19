@@ -121,3 +121,61 @@ async fn test_zone_writer_creates_all_outputs_correctly() {
         }
     }
 }
+
+#[tokio::test]
+async fn test_zone_writer_skips_surf_for_datetime_and_builds_for_amount() {
+    // Setup
+    let tmp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let segment_dir = tmp_dir.path();
+
+    let schema_factory = SchemaRegistryFactory::new();
+    let registry = schema_factory.registry();
+
+    let event_type = "orders";
+    schema_factory
+        .define_with_fields(
+            event_type,
+            &[
+                ("context_id", "string"),
+                ("ts", "datetime"),
+                ("amount", "int"),
+            ],
+        )
+        .await
+        .unwrap();
+
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+
+    // Create events with datetime payload and numeric amount
+    let events = vec![
+        EventFactory::new()
+            .with("event_type", event_type)
+            .with("context_id", "c1")
+            .with("payload", json!({"ts": 1_700_000_000u64, "amount": 10}))
+            .create(),
+        EventFactory::new()
+            .with("event_type", event_type)
+            .with("context_id", "c2")
+            .with("payload", json!({"ts": 1_700_000_100u64, "amount": 20}))
+            .create(),
+    ];
+
+    // Write via ZoneWriter
+    let planner = ZonePlanner::new(&uid, 99);
+    let plans = planner.plan(&events).expect("Failed to plan zones");
+    let writer = ZoneWriter::new(&uid, segment_dir, registry.clone());
+    writer.write_all(&plans).await.expect("ZoneWriter failed");
+
+    // Validate SuRF behavior: amount exists; ts (datetime) skipped
+    let amount_surf = segment_dir.join(format!("{}_{}.zsrf", uid, "amount"));
+    assert!(
+        amount_surf.exists(),
+        "amount SuRF missing: {}",
+        amount_surf.display()
+    );
+    let ts_surf = segment_dir.join(format!("{}_{}.zsrf", uid, "ts"));
+    assert!(
+        std::fs::metadata(&ts_surf).is_err(),
+        "datetime field ts should not have SuRF"
+    );
+}

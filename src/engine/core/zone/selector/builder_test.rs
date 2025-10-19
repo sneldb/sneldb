@@ -124,3 +124,89 @@ async fn builder_returns_field_selector_for_regular_column() {
     // For this test we only assert it doesn't crash and returns a Vec
     assert_eq!(zones.iter().count(), zones.len());
 }
+
+#[tokio::test]
+async fn builder_routes_event_type_and_context_to_index_selector() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp = tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let seg_dir = shard_dir.join("001");
+    std::fs::create_dir_all(&seg_dir).unwrap();
+
+    let reg_fac = SchemaRegistryFactory::new();
+    let registry = reg_fac.registry();
+    let event_type = "builder_index_evt";
+    reg_fac
+        .define_with_fields(event_type, &[("context_id", "string"), ("x", "string")])
+        .await
+        .unwrap();
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+
+    // Flush some events so .idx exists
+    let e = crate::test_helpers::factories::EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "c1")
+        .with("payload", serde_json::json!({"x":"v"}))
+        .create();
+    let mem = crate::test_helpers::factories::MemTableFactory::new()
+        .with_capacity(1)
+        .with_events(vec![e])
+        .create()
+        .unwrap();
+    crate::engine::core::Flusher::new(
+        mem,
+        1,
+        &seg_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
+
+    // event_type filter -> IndexZoneSelector with policy AllZonesIfNoContext (index present -> returns zones)
+    let cmd = CommandFactory::query().with_event_type(event_type).create();
+    let plan = QueryPlanFactory::new()
+        .with_command(cmd)
+        .with_registry(Arc::clone(&registry))
+        .with_segment_base_dir(tmp.path())
+        .with_segment_ids(vec!["shard-0/001".into()])
+        .create()
+        .await;
+    let fp = FilterPlanFactory::new()
+        .with_column("event_type")
+        .with_operation(crate::command::types::CompareOp::Eq)
+        .with_value(serde_json::json!(event_type))
+        .with_uid(&uid)
+        .create();
+    let ctx = SelectionContext {
+        plan: &fp,
+        query_plan: &plan,
+        base_dir: &shard_dir,
+        caches: None,
+    };
+    let selector =
+        crate::engine::core::zone::selector::builder::ZoneSelectorBuilder::new(ctx).build();
+    let zones = selector.select_for_segment("001");
+    assert!(!zones.is_empty());
+
+    // context_id filter -> IndexZoneSelector with policy AllZones
+    let fp2 = FilterPlanFactory::new()
+        .with_column("context_id")
+        .with_operation(crate::command::types::CompareOp::Eq)
+        .with_value(serde_json::json!("c1"))
+        .with_uid(&uid)
+        .create();
+    let ctx2 = SelectionContext {
+        plan: &fp2,
+        query_plan: &plan,
+        base_dir: &shard_dir,
+        caches: None,
+    };
+    let selector2 =
+        crate::engine::core::zone::selector::builder::ZoneSelectorBuilder::new(ctx2).build();
+    let zones2 = selector2.select_for_segment("001");
+    assert!(!zones2.is_empty());
+}

@@ -1,6 +1,7 @@
 use crate::engine::core::ColumnWriter;
 use crate::engine::core::FieldXorFilter;
 use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
+use crate::engine::core::time::{CalendarDir, ZoneTemporalIndex};
 use crate::engine::core::zone::enum_bitmap_index::EnumBitmapBuilder;
 use crate::engine::core::zone::rlte_index::RlteIndex;
 use crate::engine::core::zone::zone_metadata_writer::ZoneMetadataWriter;
@@ -54,6 +55,40 @@ impl<'a> ZoneWriter<'a> {
             );
         }
         writer.write_all(zone_plans).await?;
+
+        // Build TEF-CB (calendar + zone temporal index)
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target: "sneldb::flush",
+                uid = self.uid,
+                "Building TEF-CB calendar and temporal indexes"
+            );
+        }
+        // CalendarDir from ZoneMeta ranges
+        let zones_meta_path = self.segment_dir.join(format!("{}.zones", self.uid));
+        let metas = crate::engine::core::zone::zone_meta::ZoneMeta::load(&zones_meta_path)
+            .map_err(|e| StoreError::FlushFailed(format!("Failed to load zone meta: {}", e)))?;
+        let mut cal = CalendarDir::new();
+        for m in &metas {
+            cal.add_zone_range(m.zone_id, m.timestamp_min, m.timestamp_max);
+        }
+        cal.save(self.uid, self.segment_dir)
+            .map_err(|e| StoreError::FlushFailed(format!("Failed to save calendar: {}", e)))?;
+
+        // Build per-zone temporal index from timestamps (seconds)
+        for zp in zone_plans {
+            let mut ts: Vec<i64> = Vec::with_capacity(zp.events.len());
+            for ev in &zp.events {
+                ts.push(ev.timestamp as i64);
+            }
+            if ts.is_empty() {
+                continue;
+            }
+            let zti = ZoneTemporalIndex::from_timestamps(ts, 1, 64);
+            zti.save(self.uid, zp.id, self.segment_dir).map_err(|e| {
+                StoreError::FlushFailed(format!("Failed to save temporal index: {}", e))
+            })?;
+        }
 
         // Build XOR filters
         if tracing::enabled!(tracing::Level::DEBUG) {

@@ -6,6 +6,7 @@ use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
 use crate::engine::core::zone::enum_bitmap_index::EnumBitmapIndex;
 use crate::engine::core::zone::zone_xor_index::ZoneXorFilterIndex;
 use crate::engine::core::{FieldXorFilter, QueryCaches, ZoneIndex};
+use crate::engine::core::time::{CalendarDir, ZoneTemporalIndex};
 
 pub struct ZoneArtifacts<'a> {
     pub base_dir: &'a PathBuf,
@@ -117,5 +118,15 @@ impl<'a> ZoneArtifacts<'a> {
     ) -> Result<FieldXorFilter, String> {
         let path = self.xf_path(segment_id, uid, column);
         FieldXorFilter::load(&path).map_err(|e| format!("{:?}", e))
+    }
+
+    pub fn load_calendar(&self, segment_id: &str, uid: &str) -> Result<CalendarDir, String> {
+        let dir = self.base_dir.join(segment_id);
+        CalendarDir::load(uid, &dir).map_err(|e| format!("{:?}", e))
+    }
+
+    pub fn load_temporal_index(&self, segment_id: &str, uid: &str, zone_id: u32) -> Result<ZoneTemporalIndex, String> {
+        let dir = self.base_dir.join(segment_id);
+        ZoneTemporalIndex::load(uid, zone_id, &dir).map_err(|e| format!("{:?}", e))
     }
 }

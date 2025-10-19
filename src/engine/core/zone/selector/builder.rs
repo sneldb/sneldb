@@ -2,6 +2,7 @@ use crate::engine::core::zone::selector::field_selector::FieldSelector;
 use crate::engine::core::zone::selector::index_selector::{IndexZoneSelector, MissingIndexPolicy};
 use crate::engine::core::zone::selector::pruner::enum_pruner::EnumPruner;
 use crate::engine::core::zone::selector::pruner::range_pruner::RangePruner;
+use crate::engine::core::zone::selector::pruner::temporal_pruner::TemporalPruner;
 use crate::engine::core::zone::selector::pruner::xor_pruner::XorPruner;
 use crate::engine::core::zone::selector::selection_context::SelectionContext;
 use crate::engine::core::zone::selector::selector_kind::ZoneSelector;
@@ -26,6 +27,9 @@ impl<'a> ZoneSelectorBuilder<'a> {
         let range_pruner = RangePruner {
             artifacts: self.make_artifacts(),
         };
+        let temporal_pruner = TemporalPruner {
+            artifacts: self.make_artifacts(),
+        };
         let enum_pruner = EnumPruner {
             artifacts: self.make_artifacts(),
         };
@@ -34,6 +38,7 @@ impl<'a> ZoneSelectorBuilder<'a> {
             plan: self.inputs.plan,
             qplan: self.inputs.query_plan,
             range_pruner,
+            temporal_pruner,
             enum_pruner,
             xor_pruner,
         }

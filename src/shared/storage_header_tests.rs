@@ -1,5 +1,6 @@
 use crate::shared::storage_header::{BinaryHeader, FileKind, MagicFile};
 use std::io::Cursor;
+use tempfile::tempdir;
 
 #[test]
 fn header_roundtrip_ok() {
@@ -69,4 +70,78 @@ fn truncated_header_rejected() {
     let mut cur = Cursor::new(buf);
     let read = BinaryHeader::read_from(&mut cur);
     assert!(read.is_err());
+}
+
+#[test]
+fn filekind_magic_values_include_new_kinds() {
+    assert_eq!(FileKind::CalendarDir.magic(), *b"EVDBCAL\0");
+    assert_eq!(FileKind::TemporalIndex.magic(), *b"EVDBTFI\0");
+}
+
+#[test]
+fn ensure_header_if_new_creates_and_validates() {
+    use crate::shared::storage_header::ensure_header_if_new;
+    use std::io::Write;
+
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("cal.bin");
+
+    // New file gets header created
+    {
+        let f = ensure_header_if_new(&path, FileKind::CalendarDir.magic()).unwrap();
+        drop(f);
+        let len = std::fs::metadata(&path).unwrap().len() as usize;
+        assert_eq!(len, BinaryHeader::TOTAL_LEN);
+    }
+
+    // Reopening appends to end; writing payload then reopening should validate header
+    {
+        let mut f = ensure_header_if_new(&path, FileKind::CalendarDir.magic()).unwrap();
+        // Write one byte payload
+        f.write_all(&[0xAB]).unwrap();
+        drop(f);
+
+        // Reopen again with same magic
+        let _f2 = ensure_header_if_new(&path, FileKind::CalendarDir.magic()).unwrap();
+    }
+
+    // Mismatched magic fails
+    {
+        let err = ensure_header_if_new(&path, FileKind::XorFilter.magic()).unwrap_err();
+        let msg = format!("{}", err);
+        assert!(msg.contains("unexpected magic"));
+    }
+}
+
+#[test]
+fn open_and_header_offset_validates_magic() {
+    use crate::shared::storage_header::open_and_header_offset;
+    use std::fs::OpenOptions;
+    use std::io::Write;
+
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("idx.bin");
+
+    // Write header for ZoneIndex and one byte body
+    {
+        let mut f = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&path)
+            .unwrap();
+        let hdr = BinaryHeader::new(FileKind::ZoneIndex.magic(), 1, 0);
+        hdr.write_to(&mut f).unwrap();
+        f.write_all(&[0x01]).unwrap();
+        f.flush().unwrap();
+    }
+
+    // Correct magic -> Ok and offset equals header length
+    let (_fh, off) = open_and_header_offset(&path, FileKind::ZoneIndex.magic()).unwrap();
+    assert_eq!(off, BinaryHeader::TOTAL_LEN);
+
+    // Wrong magic -> Err
+    let err = open_and_header_offset(&path, FileKind::XorFilter.magic()).unwrap_err();
+    let msg = format!("{}", err);
+    assert!(msg.contains("invalid magic"));
 }

@@ -30,7 +30,7 @@ impl QueryPlan {
     ) -> Option<Self> {
         match &command {
             Command::Query { .. } => {
-                let filter_plans = FilterPlan::build_all(&command, registry).await;
+                let mut filter_plans = FilterPlan::build_all(&command, registry).await;
                 if tracing::enabled!(tracing::Level::INFO) {
                     info!(
                         target: "sneldb::query_plan",
@@ -39,6 +39,16 @@ impl QueryPlan {
                     );
                 }
                 let aggregate_plan = AggregatePlan::from_command(&command);
+                if aggregate_plan.is_some() {
+                    if let Command::Query {
+                        time_field, since, ..
+                    } = &command
+                    {
+                        let tf = time_field.as_deref().unwrap_or("timestamp");
+                        // Remove implicit 'since' time filter for aggregations
+                        FilterPlan::remove_implicit_since(&mut filter_plans, tf, since);
+                    }
+                }
                 Some(Self {
                     command,
                     metadata: HashMap::new(),

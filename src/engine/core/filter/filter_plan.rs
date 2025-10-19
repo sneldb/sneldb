@@ -246,3 +246,26 @@ impl FilterPlan {
         }
     }
 }
+
+impl FilterPlan {
+    pub fn remove_implicit_since(
+        filter_plans: &mut Vec<FilterPlan>,
+        time_field: &str,
+        since: &Option<String>,
+    ) {
+        if since.is_none() {
+            return;
+        }
+        filter_plans.retain(|fp| {
+            if fp.column != time_field {
+                return true;
+            }
+            match (&fp.operation, &fp.value) {
+                (Some(CompareOp::Gte), Some(Value::String(s))) if since.as_deref() == Some(s) => {
+                    false
+                }
+                _ => true,
+            }
+        });
+    }
+}
