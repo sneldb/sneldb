@@ -1,11 +1,14 @@
 use crate::engine::core::ColumnWriter;
 use crate::engine::core::FieldXorFilter;
 use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
-use crate::engine::core::time::{CalendarDir, TemporalIndexBuilder, ZoneTemporalIndex};
+use crate::engine::core::read::catalog::{IndexKind, SegmentIndexCatalog};
+use crate::engine::core::time::{CalendarDir, TemporalIndexBuilder};
 use crate::engine::core::zone::enum_bitmap_index::EnumBitmapBuilder;
+use crate::engine::core::zone::index_build_planner::{BuildPlan, IndexBuildPlanner};
+use crate::engine::core::zone::index_build_policy::IndexBuildPolicy;
 use crate::engine::core::zone::rlte_index::RlteIndex;
 use crate::engine::core::zone::zone_metadata_writer::ZoneMetadataWriter;
-use crate::engine::core::zone::zone_xor_index::build_all_zxf;
+use crate::engine::core::zone::zone_xor_index::build_all_zxf_filtered;
 use crate::engine::core::{ZoneIndex, ZonePlan};
 use crate::engine::errors::StoreError;
 use crate::engine::schema::registry::SchemaRegistry;
@@ -56,6 +59,25 @@ impl<'a> ZoneWriter<'a> {
         }
         writer.write_all(zone_plans).await?;
 
+        // Build plan: decide which indexes to build per field/global
+        let schema = self
+            .registry
+            .read()
+            .await
+            .get(&zone_plans[0].event_type)
+            .cloned();
+        let mut build_plan: Option<BuildPlan> = None;
+        let segment_id_str = zone_plans[0].segment_id.to_string();
+        if let Some(schema_ref) = &schema {
+            let planner = IndexBuildPlanner::new(
+                self.uid,
+                &segment_id_str,
+                schema_ref,
+                IndexBuildPolicy::default(),
+            );
+            build_plan = Some(planner.plan());
+        }
+
         // Build TEF-CB (calendar + zone temporal index)
         if tracing::enabled!(tracing::Level::DEBUG) {
             debug!(
@@ -75,20 +97,7 @@ impl<'a> ZoneWriter<'a> {
         cal.save(self.uid, self.segment_dir)
             .map_err(|e| StoreError::FlushFailed(format!("Failed to save calendar: {}", e)))?;
 
-        // Build per-zone temporal index from event timestamp (legacy .tfi)
-        for zp in zone_plans {
-            let mut ts: Vec<i64> = Vec::with_capacity(zp.events.len());
-            for ev in &zp.events {
-                ts.push(ev.timestamp as i64);
-            }
-            if ts.is_empty() {
-                continue;
-            }
-            let zti = ZoneTemporalIndex::from_timestamps(ts, 1, 64);
-            zti.save(self.uid, zp.id, self.segment_dir).map_err(|e| {
-                StoreError::FlushFailed(format!("Failed to save temporal index: {}", e))
-            })?;
-        }
+        // Removed legacy per-zone event timestamp .tfi build (redundant with per-field temporal indexes)
 
         // Build per-field temporal artifacts (first-class): {uid}_{field}.cal and {uid}_{field}_{zone}.tfi
         if tracing::enabled!(tracing::Level::DEBUG) {
@@ -110,8 +119,23 @@ impl<'a> ZoneWriter<'a> {
                 "Building XOR filters"
             );
         }
-        FieldXorFilter::build_all(zone_plans, self.segment_dir)
-            .map_err(|e| StoreError::FlushFailed(format!("Failed to build XOR filters: {}", e)))?;
+        if let Some(plan) = &build_plan {
+            use std::collections::HashSet;
+            let allowed: HashSet<String> = plan
+                .per_field
+                .iter()
+                .filter_map(|(f, k)| {
+                    if k.contains(IndexKind::XOR_FIELD_FILTER) {
+                        Some(f.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            FieldXorFilter::build_all_filtered(zone_plans, self.segment_dir, &allowed).map_err(
+                |e| StoreError::FlushFailed(format!("Failed to build XOR filters: {}", e)),
+            )?;
+        }
 
         // Build per-zone XOR index (.zxf)
         if tracing::enabled!(tracing::Level::DEBUG) {
@@ -121,9 +145,23 @@ impl<'a> ZoneWriter<'a> {
                 "Building zone XOR filters (.zxf)"
             );
         }
-        if let Err(e) = build_all_zxf(zone_plans, self.segment_dir) {
-            if tracing::enabled!(tracing::Level::DEBUG) {
-                debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping .zxf due to error");
+        if let Some(plan) = &build_plan {
+            use std::collections::HashSet;
+            let allowed: HashSet<String> = plan
+                .per_field
+                .iter()
+                .filter_map(|(f, k)| {
+                    if k.contains(IndexKind::ZONE_XOR_INDEX) {
+                        Some(f.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            if let Err(e) = build_all_zxf_filtered(zone_plans, self.segment_dir, &allowed) {
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping .zxf due to error");
+                }
             }
         }
 
@@ -135,23 +173,27 @@ impl<'a> ZoneWriter<'a> {
                 "Building Zone-level SuRF filters"
             );
         }
-        let schema = self
-            .registry
-            .read()
-            .await
-            .get(&zone_plans[0].event_type)
-            .cloned();
-        if let Some(schema) = schema {
-            if let Err(e) =
-                ZoneSurfFilter::build_all_with_schema(zone_plans, self.segment_dir, &schema)
-            {
-                if tracing::enabled!(tracing::Level::DEBUG) {
-                    debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping Zone SuRF (schema-aware) due to error");
+        if let Some(_schema_val) = schema.clone() {
+            if let Some(plan) = &build_plan {
+                use std::collections::HashSet;
+                let allowed: HashSet<String> = plan
+                    .per_field
+                    .iter()
+                    .filter_map(|(f, k)| {
+                        if k.contains(IndexKind::ZONE_SURF) {
+                            Some(f.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                if let Err(e) =
+                    ZoneSurfFilter::build_all_filtered(zone_plans, self.segment_dir, &allowed)
+                {
+                    if tracing::enabled!(tracing::Level::DEBUG) {
+                        debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping filtered Zone SuRF due to error");
+                    }
                 }
-            }
-        } else if let Err(e) = ZoneSurfFilter::build_all(zone_plans, self.segment_dir) {
-            if tracing::enabled!(tracing::Level::DEBUG) {
-                debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping Zone SuRF due to error");
             }
         }
 
@@ -163,11 +205,27 @@ impl<'a> ZoneWriter<'a> {
                 "Building RLTE index"
             );
         }
-        match std::panic::catch_unwind(|| RlteIndex::build_from_zones(zone_plans)) {
+        let rlte_enabled = build_plan
+            .as_ref()
+            .map(|bp| bp.global.contains(IndexKind::RLTE))
+            .unwrap_or(false);
+        match std::panic::catch_unwind(|| {
+            if rlte_enabled {
+                Some(RlteIndex::build_from_zones(zone_plans))
+            } else {
+                None
+            }
+        }) {
             Ok(rlte) => {
-                if let Err(e) = rlte.save(self.uid, self.segment_dir) {
+                if let Some(rlte) = rlte {
+                    if let Err(e) = rlte.save(self.uid, self.segment_dir) {
+                        if tracing::enabled!(tracing::Level::DEBUG) {
+                            debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping RLTE due to IO error");
+                        }
+                    }
+                } else {
                     if tracing::enabled!(tracing::Level::DEBUG) {
-                        debug!(target: "sneldb::flush", uid = self.uid, error = %e, "Skipping RLTE due to IO error");
+                        debug!(target: "sneldb::flush", uid = self.uid, "RLTE disabled by policy");
                     }
                 }
             }
@@ -219,6 +277,25 @@ impl<'a> ZoneWriter<'a> {
             );
         }
         index.write_to_path(index_path)?;
+
+        // Write index catalog (.icx) if plan exists
+        if let Some(plan) = build_plan.clone() {
+            if let Some(schema_ref) = schema.as_ref() {
+                let planner = IndexBuildPlanner::new(
+                    self.uid,
+                    &segment_id_str,
+                    schema_ref,
+                    IndexBuildPolicy::default(),
+                );
+                let catalog: SegmentIndexCatalog = planner.to_catalog(&plan);
+                let icx_path = self.segment_dir.join(format!("{}.icx", self.uid));
+                if let Err(e) = catalog.save(&icx_path) {
+                    if tracing::enabled!(tracing::Level::DEBUG) {
+                        debug!(target: "sneldb::flush", uid = self.uid, error = %e, path = %icx_path.display(), "Failed to save index catalog");
+                    }
+                }
+            }
+        }
 
         if tracing::enabled!(tracing::Level::INFO) {
             info!(

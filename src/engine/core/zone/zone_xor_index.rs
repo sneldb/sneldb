@@ -209,16 +209,16 @@ fn value_to_string(value: &Value) -> Option<String> {
 
 // Removed local hasher; use crate::shared::hash::stable_hash64
 
-/// Builds and writes one .zxf per field for the given zone plans
-pub fn build_all_zxf(zone_plans: &[ZonePlan], segment_dir: &Path) -> std::io::Result<()> {
-    // Collect per-field per-zone values: iterate fields by scanning events in each zone
-    // To limit cost, we build an index per (uid, field) across all zones
+/// Builds .zxf only for fields present in `allowed_fields`.
+pub fn build_all_zxf_filtered(
+    zone_plans: &[ZonePlan],
+    segment_dir: &Path,
+    allowed_fields: &std::collections::HashSet<String>,
+) -> std::io::Result<()> {
     if zone_plans.is_empty() {
         return Ok(());
     }
     let uid = zone_plans[0].uid.clone();
-
-    // Discover fields from events
     let mut all_fields: Vec<String> = Vec::new();
     for z in zone_plans {
         for e in &z.events {
@@ -229,8 +229,10 @@ pub fn build_all_zxf(zone_plans: &[ZonePlan], segment_dir: &Path) -> std::io::Re
             }
         }
     }
-
     for field in all_fields {
+        if !allowed_fields.contains(&field) {
+            continue;
+        }
         if let Some(index) = ZoneXorFilterIndex::build_for_field(&uid, &field, zone_plans) {
             let path = ZoneXorFilterIndex::file_path(segment_dir, &uid, &field);
             index.save(&path)?;
@@ -239,6 +241,5 @@ pub fn build_all_zxf(zone_plans: &[ZonePlan], segment_dir: &Path) -> std::io::Re
             }
         }
     }
-
     Ok(())
 }

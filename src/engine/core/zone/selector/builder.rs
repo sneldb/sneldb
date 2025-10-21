@@ -60,6 +60,7 @@ impl<'a> ZoneSelectorBuilder<'a> {
                     .query_plan
                     .context_id_plan()
                     .and_then(|p| p.value.as_ref().and_then(|v| v.as_str()));
+                // If no catalog for this segment, disable index usage to avoid fs probing; use AllZones policy
                 Box::new(IndexZoneSelector {
                     plan: self.inputs.query_plan,
                     caches: self.inputs.caches,

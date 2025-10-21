@@ -1,4 +1,5 @@
 use crate::command::types::{Command, CompareOp, Expr};
+use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::engine::schema::FieldType;
 use crate::engine::schema::registry::{MiniSchema, SchemaRegistry};
 use crate::shared::time::{TimeKind, TimeParser};
@@ -15,6 +16,7 @@ pub struct FilterPlan {
     pub value: Option<Value>,
     pub priority: u32,
     pub uid: Option<String>,
+    pub index_strategy: Option<IndexStrategy>,
 }
 
 /// A set-like collection for unique-by-column filter plans, replacing entries based on precedence
@@ -134,6 +136,7 @@ impl FilterPlan {
                             value: None,
                             priority: 3,
                             uid: event_type_uid.clone(),
+                            index_strategy: None,
                         };
                         unique_filters.insert_with_precedence(plan);
                     }
@@ -236,6 +239,7 @@ impl FilterPlan {
             value: Some(Value::String(event_type.to_string())),
             priority: 0,
             uid: event_type_uid.clone(),
+            index_strategy: None,
         };
         filter_plans.insert_with_precedence(plan);
     }
@@ -253,6 +257,7 @@ impl FilterPlan {
             value,
             priority: 0,
             uid: event_type_uid.clone(),
+            index_strategy: None,
         };
         filter_plans.insert_with_precedence(plan);
     }
@@ -272,6 +277,7 @@ impl FilterPlan {
             value: since.as_ref().map(|s| Value::String(s.clone())),
             priority: 1,
             uid: event_type_uid.clone(),
+            index_strategy: None,
         };
         filter_plans.insert_with_precedence(plan);
     }
@@ -307,6 +313,7 @@ impl FilterPlan {
                     value: Some(normalized_value),
                     priority,
                     uid: event_type_uid.clone(),
+                    index_strategy: None,
                 });
             }
             Expr::And(left, right) | Expr::Or(left, right) => {

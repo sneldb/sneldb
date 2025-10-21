@@ -55,7 +55,10 @@ async fn builds_all_creates_filters_on_disk() {
         .with_segment_id(42)
         .plan();
 
-    FieldXorFilter::build_all(&zones, segment_dir).unwrap();
+    use std::collections::HashSet;
+    let mut allowed: HashSet<String> = HashSet::new();
+    allowed.insert("event_type".to_string());
+    FieldXorFilter::build_all_filtered(&zones, segment_dir, &allowed).unwrap();
 
     let filter_file = segment_dir.join("uid123_event_type.xf");
     assert!(filter_file.exists());

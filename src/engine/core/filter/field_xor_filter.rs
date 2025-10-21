@@ -1,6 +1,7 @@
 use crate::engine::core::ZonePlan;
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 use serde_json::Value;
+use std::collections::HashSet;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -131,45 +132,27 @@ impl FieldXorFilter {
         segment_dir.join(format!("{}_{}.xf", uid, field))
     }
 
-    pub fn build_all(zone_plans: &[ZonePlan], segment_dir: &Path) -> std::io::Result<()> {
+    /// Build XOR filters only for fields present in `allowed_fields`.
+    pub fn build_all_filtered(
+        zone_plans: &[ZonePlan],
+        segment_dir: &Path,
+        allowed_fields: &HashSet<String>,
+    ) -> std::io::Result<()> {
         debug!(
             target: "sneldb::xorfilter",
-            "Building XOR filters for {} zone plans",
-            zone_plans.len()
+            allowed = allowed_fields.len(),
+            "Building filtered XOR filters"
         );
-
         let field_values = ZonePlan::collect_field_values(zone_plans);
-        info!(
-            target: "sneldb::xorfilter",
-            "Collected {} field groups across all zones",
-            field_values.len()
-        );
-
         for ((uid, field), values) in field_values {
+            if !allowed_fields.contains(&field) {
+                continue;
+            }
             let values_vec: Vec<String> = values.into_iter().collect();
             let filter = Self::new(&values_vec);
             let path = Self::get_filter_path(&uid, &field, segment_dir);
-
-            info!(
-                target: "sneldb::xorfilter",
-                "Building XOR filter for {}.{} ({} unique values)",
-                uid,
-                field,
-                values_vec.len()
-            );
-
             filter.save(&path)?;
-            debug!(
-                target: "sneldb::xorfilter",
-                "Filter saved for {}.{} -> {:?}",
-                uid, field, path
-            );
         }
-
-        info!(
-            target: "sneldb::xorfilter",
-            "Successfully built and saved all XOR filters"
-        );
         Ok(())
     }
 }

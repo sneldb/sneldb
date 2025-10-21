@@ -1,4 +1,5 @@
 use crate::command::types::CompareOp;
+use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::engine::core::{Flusher, ZoneFinder};
 use crate::engine::schema::{EnumType, FieldType};
 use crate::test_helpers::factories::{
@@ -103,12 +104,15 @@ async fn finds_event_type_zones_with_mock_index() {
     flusher.flush().await.expect("Flush failed");
 
     // when event_type is user_created
-    let filter_plan = FilterPlanFactory::new()
+    let mut filter_plan = FilterPlanFactory::new()
         .with_column("event_type")
         .with_operation(CompareOp::Eq)
         .with_uid(&uid1)
         .with_value(json!(event_type1))
         .create();
+    filter_plan.index_strategy = Some(IndexStrategy::ZoneXorIndex {
+        field: "event_type".to_string(),
+    });
 
     let command = CommandFactory::query()
         .with_event_type(event_type1)
@@ -129,12 +133,15 @@ async fn finds_event_type_zones_with_mock_index() {
     assert_eq!(found[1].segment_id, "002");
 
     // when id is 3 and event_type is user_updated
-    let filter_plan = FilterPlanFactory::new()
+    let mut filter_plan = FilterPlanFactory::new()
         .with_column("id")
         .with_operation(CompareOp::Eq)
         .with_uid(&uid2)
         .with_value(json!(3))
         .create();
+    filter_plan.index_strategy = Some(IndexStrategy::ZoneXorIndex {
+        field: "id".to_string(),
+    });
 
     let command = CommandFactory::query()
         .with_event_type(event_type2)
@@ -152,12 +159,15 @@ async fn finds_event_type_zones_with_mock_index() {
     assert_eq!(found.len(), 0);
 
     // when id is 3 and event_type is user_created
-    let filter_plan = FilterPlanFactory::new()
+    let mut filter_plan = FilterPlanFactory::new()
         .with_column("id")
         .with_operation(CompareOp::Eq)
         .with_uid(&uid1)
         .with_value(json!(3))
         .create();
+    filter_plan.index_strategy = Some(IndexStrategy::ZoneXorIndex {
+        field: "id".to_string(),
+    });
 
     let command = CommandFactory::query()
         .with_event_type(event_type1)
@@ -176,12 +186,15 @@ async fn finds_event_type_zones_with_mock_index() {
     assert!(found.iter().all(|z| z.segment_id == "002"));
 
     // when range query is used
-    let filter_plan = FilterPlanFactory::new()
+    let mut filter_plan = FilterPlanFactory::new()
         .with_column("id")
         .with_operation(CompareOp::Gt)
         .with_uid(&uid1)
         .with_value(json!(0))
         .create();
+    filter_plan.index_strategy = Some(IndexStrategy::ZoneSuRF {
+        field: "id".to_string(),
+    });
 
     let finder = ZoneFinder::new(&filter_plan, &query_plan, &binding, &shard_dir);
     let found = finder.find();
@@ -193,12 +206,15 @@ async fn finds_event_type_zones_with_mock_index() {
     assert_eq!(found[1].segment_id, "002");
 
     // when just context_id is used
-    let filter_plan = FilterPlanFactory::new()
+    let mut filter_plan = FilterPlanFactory::new()
         .with_column("context_id")
         .with_operation(CompareOp::Eq)
         .with_uid(&uid1)
         .with_value(json!("ctx3"))
         .create();
+    filter_plan.index_strategy = Some(IndexStrategy::ZoneXorIndex {
+        field: "context_id".to_string(),
+    });
 
     let command = CommandFactory::query()
         .with_context_id("ctx3")
@@ -218,12 +234,15 @@ async fn finds_event_type_zones_with_mock_index() {
     assert_eq!(found[0].segment_id, "002");
 
     // when just context_id is used
-    let filter_plan = FilterPlanFactory::new()
+    let mut filter_plan = FilterPlanFactory::new()
         .with_column("context_id")
         .with_operation(CompareOp::Eq)
         .with_uid(&uid1)
         .with_value(json!("ctx3"))
         .create();
+    filter_plan.index_strategy = Some(IndexStrategy::ZoneXorIndex {
+        field: "context_id".to_string(),
+    });
 
     let command = CommandFactory::query()
         .with_context_id("ctx3")
@@ -341,12 +360,15 @@ async fn ebm_eq_prunes_zones() {
     flusher.flush().await.expect("Flush failed");
 
     // Query: plan == "pro" -> only 001 zone 0
-    let filter_plan = FilterPlanFactory::new()
+    let mut filter_plan = FilterPlanFactory::new()
         .with_column("plan")
         .with_operation(CompareOp::Eq)
         .with_uid(&uid)
         .with_value(json!("pro"))
         .create();
+    filter_plan.index_strategy = Some(IndexStrategy::EnumBitmap {
+        field: "plan".to_string(),
+    });
 
     let command = CommandFactory::query().with_event_type(event_type).create();
     let query_plan = QueryPlanFactory::new()
@@ -463,12 +485,15 @@ async fn ebm_neq_prunes_zones() {
     flusher.flush().await.expect("Flush failed");
 
     // Query: plan != "pro" -> both segment zones included
-    let filter_plan = FilterPlanFactory::new()
+    let mut filter_plan = FilterPlanFactory::new()
         .with_column("plan")
         .with_operation(CompareOp::Neq)
         .with_uid(&uid)
         .with_value(json!("pro"))
         .create();
+    filter_plan.index_strategy = Some(IndexStrategy::EnumBitmap {
+        field: "plan".to_string(),
+    });
 
     let command = CommandFactory::query().with_event_type(event_type).create();
     let query_plan = QueryPlanFactory::new()
@@ -587,12 +612,15 @@ async fn zone_surf_prunes_segments_for_gt() {
     );
     flusher.flush().await.expect("Flush failed");
 
-    let filter_plan = FilterPlanFactory::new()
+    let mut filter_plan = FilterPlanFactory::new()
         .with_column("id")
         .with_operation(CompareOp::Gt)
         .with_uid(&uid)
         .with_value(json!(10))
         .create();
+    filter_plan.index_strategy = Some(IndexStrategy::ZoneSuRF {
+        field: "id".to_string(),
+    });
 
     let command = CommandFactory::query().with_event_type(event_type).create();
     let query_plan = QueryPlanFactory::new()
@@ -690,12 +718,15 @@ async fn zone_surf_prunes_segments_for_lt() {
     );
     flusher.flush().await.expect("Flush failed");
 
-    let filter_plan = FilterPlanFactory::new()
+    let mut filter_plan = FilterPlanFactory::new()
         .with_column("id")
         .with_operation(CompareOp::Lt)
         .with_uid(&uid)
         .with_value(json!(10))
         .create();
+    filter_plan.index_strategy = Some(IndexStrategy::ZoneSuRF {
+        field: "id".to_string(),
+    });
 
     let command = CommandFactory::query().with_event_type(event_type).create();
     let query_plan = QueryPlanFactory::new()
@@ -787,12 +818,15 @@ async fn zone_surf_gte_includes_boundary() {
     .await
     .unwrap();
 
-    let filter_plan = FilterPlanFactory::new()
+    let mut filter_plan = FilterPlanFactory::new()
         .with_column("id")
         .with_operation(CompareOp::Gte)
         .with_uid(&uid)
         .with_value(json!(10))
         .create();
+    filter_plan.index_strategy = Some(IndexStrategy::ZoneSuRF {
+        field: "id".to_string(),
+    });
 
     let command = CommandFactory::query().with_event_type(event_type).create();
     let query_plan = QueryPlanFactory::new()
@@ -885,12 +919,15 @@ async fn zone_surf_lte_includes_boundary() {
     .await
     .unwrap();
 
-    let filter_plan = FilterPlanFactory::new()
+    let mut filter_plan = FilterPlanFactory::new()
         .with_column("id")
         .with_operation(CompareOp::Lte)
         .with_uid(&uid)
         .with_value(json!(20))
         .create();
+    filter_plan.index_strategy = Some(IndexStrategy::ZoneSuRF {
+        field: "id".to_string(),
+    });
 
     let command = CommandFactory::query().with_event_type(event_type).create();
     let query_plan = QueryPlanFactory::new()
@@ -1034,22 +1071,28 @@ async fn zone_surf_between_three_segments_and() {
     let binding = vec!["001".to_string(), "002".to_string(), "003".to_string()];
 
     // id > 10
-    let gt_plan = FilterPlanFactory::new()
+    let mut gt_plan = FilterPlanFactory::new()
         .with_column("id")
         .with_operation(CompareOp::Gt)
         .with_uid(&uid)
         .with_value(json!(10))
         .create();
+    gt_plan.index_strategy = Some(IndexStrategy::ZoneSuRF {
+        field: "id".to_string(),
+    });
     let gt_finder = ZoneFinder::new(&gt_plan, &query_plan, &binding, &shard_dir);
     let zones_gt = gt_finder.find();
 
     // id < 30
-    let lt_plan = FilterPlanFactory::new()
+    let mut lt_plan = FilterPlanFactory::new()
         .with_column("id")
         .with_operation(CompareOp::Lt)
         .with_uid(&uid)
         .with_value(json!(30))
         .create();
+    lt_plan.index_strategy = Some(IndexStrategy::ZoneSuRF {
+        field: "id".to_string(),
+    });
     let lt_finder = ZoneFinder::new(&lt_plan, &query_plan, &binding, &shard_dir);
     let zones_lt = lt_finder.find();
 

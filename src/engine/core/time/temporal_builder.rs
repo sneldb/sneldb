@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::engine::core::time::{TemporalCalendarIndex, ZoneTemporalIndex};
 use crate::engine::core::zone::zone_plan::ZonePlan;
@@ -51,37 +51,64 @@ impl<'a> TemporalIndexBuilder<'a> {
             })
             .map(|s| s.to_string())
             .collect();
+        let temporal_field_set: HashSet<String> = temporal_fields.iter().cloned().collect();
 
-        if temporal_fields.is_empty() {
-            return Ok(());
-        }
+        // Accumulate per-field slab entries across all zones
+        let mut field_entries: HashMap<String, Vec<(u32, ZoneTemporalIndex)>> = HashMap::new();
 
         for zp in zone_plans {
-            for field in &temporal_fields {
-                let mut ts_vals: Vec<i64> = Vec::new();
-                for ev in &zp.events {
-                    if let Some(v) = ev.payload.get(field) {
+            // Precompute per-field timestamps by scanning events once
+            let mut ts_per_field: HashMap<String, Vec<i64>> = HashMap::new();
+            for ev in &zp.events {
+                // Iterate over payload object once; push relevant temporal fields
+                if let Some(obj) = ev.payload.as_object() {
+                    for (k, v) in obj.iter() {
+                        if !temporal_field_set.contains(k.as_str()) {
+                            continue;
+                        }
                         if let Some(i) = v.as_i64() {
-                            ts_vals.push(i);
+                            ts_per_field.entry(k.clone()).or_default().push(i);
                         } else if let Some(u) = v.as_u64() {
-                            ts_vals.push(u as i64);
+                            ts_per_field.entry(k.clone()).or_default().push(u as i64);
                         }
                     }
                 }
+            }
+
+            // Always include the fixed event timestamp field as a temporal field
+            if !zp.events.is_empty() {
+                let mut ts_vals_ts: Vec<i64> = Vec::with_capacity(zp.events.len());
+                for ev in &zp.events {
+                    ts_vals_ts.push(ev.timestamp as i64);
+                }
+                // Build ZTI and calendar range for fixed timestamp
+                let zti = ZoneTemporalIndex::from_timestamps(ts_vals_ts.clone(), 1, 64);
+                field_entries
+                    .entry("timestamp".to_string())
+                    .or_default()
+                    .push((zp.id, zti));
+
+                let min_ts = *ts_vals_ts.iter().min().unwrap_or(&0);
+                let max_ts = *ts_vals_ts.iter().max().unwrap_or(&0);
+                if min_ts >= 0 && max_ts >= 0 {
+                    let entry = calendars
+                        .entry("timestamp".to_string())
+                        .or_insert_with(|| TemporalCalendarIndex::new("timestamp"));
+                    entry.add_zone_range(zp.id, min_ts as u64, max_ts as u64);
+                }
+            }
+
+            // Build ZTI for each field present in this zone and update calendars
+            for (field, ts_vals) in ts_per_field.into_iter() {
                 if ts_vals.is_empty() {
                     continue;
                 }
-                // Build and save ZTI per zone/field
                 let zti = ZoneTemporalIndex::from_timestamps(ts_vals.clone(), 1, 64);
-                zti.save_for_field(self.uid, field, zp.id, self.segment_dir)
-                    .map_err(|e| {
-                        StoreError::FlushFailed(format!(
-                            "Failed to save field temporal index: {}",
-                            e
-                        ))
-                    })?;
+                field_entries
+                    .entry(field.clone())
+                    .or_default()
+                    .push((zp.id, zti));
 
-                // Update calendar with min/max per zone
                 let min_ts = *ts_vals.iter().min().unwrap_or(&0);
                 let max_ts = *ts_vals.iter().max().unwrap_or(&0);
                 if min_ts >= 0 && max_ts >= 0 {
@@ -91,6 +118,18 @@ impl<'a> TemporalIndexBuilder<'a> {
                     entry.add_zone_range(zp.id, min_ts as u64, max_ts as u64);
                 }
             }
+        }
+
+        // Persist per-field slab files
+        for (field, entries) in field_entries.iter() {
+            // Build slice of references for slab writer
+            let mut refs: Vec<(u32, &ZoneTemporalIndex)> = Vec::with_capacity(entries.len());
+            for (zid, zti) in entries.iter() {
+                refs.push((*zid, zti));
+            }
+            ZoneTemporalIndex::save_field_slab(self.uid, field, self.segment_dir, &refs).map_err(
+                |e| StoreError::FlushFailed(format!("Failed to save field temporal slab: {}", e)),
+            )?;
         }
 
         // Persist per-field calendars

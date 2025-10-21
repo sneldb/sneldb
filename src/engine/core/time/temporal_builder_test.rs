@@ -1,10 +1,11 @@
 use super::temporal_builder::TemporalIndexBuilder;
+use crate::engine::core::time::ZoneTemporalIndex;
 use crate::engine::core::zone::zone_planner::ZonePlanner;
 use crate::test_helpers::factories::{EventFactory, SchemaRegistryFactory};
 use serde_json::json;
 
 #[tokio::test]
-async fn temporal_builder_writes_cal_and_tfi_for_datetime_field() {
+async fn temporal_builder_writes_cal_and_slab_tfi_for_datetime_field() {
     let tmp_dir = tempfile::tempdir().expect("tmpdir");
     let segment_dir = tmp_dir.path();
 
@@ -58,52 +59,50 @@ async fn temporal_builder_writes_cal_and_tfi_for_datetime_field() {
         "missing calendar: {}",
         cal_path.display()
     );
-
-    // Validate per-zone temporal index per field exists
-    for zp in &plans {
-        let tfi_path = segment_dir.join(format!("{}_{}_{}.tfi", uid, "created_at", zp.id));
-        assert!(tfi_path.exists(), "missing tfi: {}", tfi_path.display());
-    }
-}
-
-#[tokio::test]
-async fn temporal_builder_skips_when_no_temporal_fields() {
-    let tmp_dir = tempfile::tempdir().expect("tmpdir");
-    let segment_dir = tmp_dir.path();
-
-    let schema_factory = SchemaRegistryFactory::new();
-    let registry = schema_factory.registry();
-    let event_type = "evt_no_time";
-    schema_factory
-        .define_with_fields(event_type, &[("context_id", "string"), ("name", "string")])
-        .await
-        .unwrap();
-    let uid = registry.read().await.get_uid(event_type).unwrap();
-
-    let events = vec![
-        EventFactory::new()
-            .with("event_type", event_type)
-            .with("context_id", "x")
-            .with("payload", json!({"name": "alice"}))
-            .create(),
-    ];
-
-    let planner = ZonePlanner::new(&uid, 1);
-    let plans = planner.plan(&events).expect("plan");
-
-    TemporalIndexBuilder::new(&uid, segment_dir, registry.clone())
-        .build_for_zone_plans(&plans)
-        .await
-        .expect("build temporal");
-
-    // No calendars/tfi should be present
-    let cal_glob = glob::glob(segment_dir.join(format!("{}_*.cal", uid)).to_str().unwrap())
-        .unwrap()
-        .count();
-    assert_eq!(
-        cal_glob, 0,
-        "should not write calendars for non-temporal schema"
+    // Timestamp (fixed field) calendar exists
+    let ts_cal_path = segment_dir.join(format!("{}_{}.cal", uid, "timestamp"));
+    assert!(
+        ts_cal_path.exists(),
+        "missing timestamp calendar: {}",
+        ts_cal_path.display()
     );
+
+    // Validate per-field slab temporal index exists once
+    let slab_path = segment_dir.join(format!("{}_{}.tfi", uid, "created_at"));
+    assert!(
+        slab_path.exists(),
+        "missing slab tfi: {}",
+        slab_path.display()
+    );
+    // Timestamp (fixed field) slab exists
+    let ts_slab_path = segment_dir.join(format!("{}_{}.tfi", uid, "timestamp"));
+    assert!(
+        ts_slab_path.exists(),
+        "missing timestamp slab tfi: {}",
+        ts_slab_path.display()
+    );
+
+    // Validate we can load per-zone index from the slab and it contains a known ts
+    for zp in &plans {
+        let zti = ZoneTemporalIndex::load_for_field(&uid, "created_at", zp.id, segment_dir)
+            .expect("load zti from slab");
+        // Pick a timestamp from this zone's events (if present) and assert it exists in zti
+        if let Some(ev) = zp.events.get(0) {
+            if let Some(ts) = ev
+                .payload
+                .as_object()
+                .and_then(|o| o.get("created_at"))
+                .and_then(|v| v.as_u64())
+            {
+                assert!(zti.contains_ts(ts as i64));
+            }
+        }
+        // Also validate fixed timestamp slab loads and covers the event timestamp
+        let zti_ts = ZoneTemporalIndex::load_for_field(&uid, "timestamp", zp.id, segment_dir)
+            .expect("load zti for timestamp from slab");
+        let ev_ts = zp.events[0].timestamp as i64;
+        assert!(zti_ts.contains_ts(ev_ts));
+    }
 }
 
 #[tokio::test]
@@ -163,8 +162,8 @@ async fn temporal_builder_handles_multiple_temporal_fields() {
         .await
         .expect("build temporal");
 
-    // Calendars for all temporal fields
-    for field in ["created_at", "updated_at", "due_date"] {
+    // Calendars for all temporal fields and timestamp; slab per field
+    for field in ["created_at", "updated_at", "due_date", "timestamp"] {
         let cal = segment_dir.join(format!("{}_{}.cal", uid, field));
         assert!(
             cal.exists(),
@@ -172,15 +171,40 @@ async fn temporal_builder_handles_multiple_temporal_fields() {
             field,
             cal.display()
         );
+        let slab = segment_dir.join(format!("{}_{}.tfi", uid, field));
+        assert!(
+            slab.exists(),
+            "missing slab tfi for {}: {}",
+            field,
+            slab.display()
+        );
+
+        // Ensure each zone can be loaded from the slab and includes one of its timestamps
         for zp in &plans {
-            let tfi = segment_dir.join(format!("{}_{}_{}.tfi", uid, field, zp.id));
-            assert!(
-                tfi.exists(),
-                "missing tfi for {} zone {}: {}",
-                field,
-                zp.id,
-                tfi.display()
-            );
+            let zti = ZoneTemporalIndex::load_for_field(&uid, field, zp.id, segment_dir)
+                .expect("load zti from slab");
+            // find a timestamp for this field within the zone, if present
+            if field == "timestamp" {
+                let ts = zp.events[0].timestamp;
+                assert!(zti.contains_ts(ts as i64));
+            } else if let Some(ts) = zp
+                .events
+                .iter()
+                .filter_map(|ev| {
+                    ev.payload
+                        .as_object()
+                        .and_then(|o| o.get(field))
+                        .and_then(|v| v.as_u64())
+                })
+                .next()
+            {
+                assert!(
+                    zti.contains_ts(ts as i64),
+                    "loaded zti must contain known timestamp for field {} in zone {}",
+                    field,
+                    zp.id
+                );
+            }
         }
     }
 }

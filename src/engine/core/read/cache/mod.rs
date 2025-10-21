@@ -6,6 +6,7 @@ pub mod column_handle_key;
 pub mod decompressed_block;
 pub mod global_calendar_cache;
 pub mod global_column_handle_cache;
+pub mod global_index_catalog_cache;
 pub mod global_temporal_index_cache;
 pub mod global_zone_index_cache;
 pub mod global_zone_surf_cache;
@@ -25,6 +26,9 @@ pub use column_handle::ColumnHandle;
 pub use column_handle_key::ColumnHandleKey;
 pub use decompressed_block::DecompressedBlock;
 pub use global_column_handle_cache::GlobalColumnHandleCache;
+pub use global_index_catalog_cache::{
+    CacheOutcome as IndexCatalogCacheOutcome, GlobalIndexCatalogCache, IndexCatalogCacheStats,
+};
 pub use global_zone_index_cache::{CacheOutcome, GlobalZoneIndexCache, ZoneIndexCacheStats};
 pub use global_zone_surf_cache::{
     CacheOutcome as SurfCacheOutcome, GlobalZoneSurfCache, ZoneSurfCacheStats,

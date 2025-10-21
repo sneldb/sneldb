@@ -1,3 +1,4 @@
+use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::engine::core::zone::selector::pruner::enum_pruner::EnumPruner;
 use crate::engine::core::zone::selector::pruner::range_pruner::RangePruner;
 use crate::engine::core::zone::selector::pruner::temporal_pruner::TemporalPruner;
@@ -15,39 +16,7 @@ pub struct FieldSelector<'a> {
     pub xor_pruner: XorPruner<'a>,
 }
 
-impl<'a> FieldSelector<'a> {
-    #[inline]
-    fn is_enum_field(&self, uid: &str, column: &str) -> bool {
-        self.qplan
-            .registry
-            .try_read()
-            .map(|reg| reg.is_enum_field_by_uid(uid, column))
-            .unwrap_or(false)
-    }
-
-    #[inline]
-    fn is_temporal_field(&self, uid: &str, column: &str) -> bool {
-        self.qplan
-            .registry
-            .try_read()
-            .ok()
-            .and_then(|reg| {
-                reg.get_schema_by_uid(uid)
-                    .and_then(|s| s.field_type(column).cloned())
-            })
-            .map(|ft| match ft {
-                crate::engine::schema::FieldType::Timestamp
-                | crate::engine::schema::FieldType::Date => true,
-                crate::engine::schema::FieldType::Optional(inner) => matches!(
-                    *inner,
-                    crate::engine::schema::FieldType::Timestamp
-                        | crate::engine::schema::FieldType::Date
-                ),
-                _ => false,
-            })
-            .unwrap_or(false)
-    }
-}
+impl<'a> FieldSelector<'a> {}
 
 impl<'a> ZoneSelector for FieldSelector<'a> {
     fn select_for_segment(&self, segment_id: &str) -> Vec<CandidateZone> {
@@ -73,25 +42,41 @@ impl<'a> ZoneSelector for FieldSelector<'a> {
             op: self.plan.operation.as_ref(),
         };
 
-        // Time-first pruning
-        if let Some(z) = self.temporal_pruner.apply(&args) {
-            return z;
-        }
-        if let Some(z) = self.range_pruner.apply(&args) {
-            return z;
-        }
-        if self.is_enum_field(uid, &self.plan.column) {
-            if let Some(z) = self.enum_pruner.apply(&args) {
-                return z;
+        // If a strategy is assigned, dispatch directly to the corresponding executor
+        if let Some(strategy) = &self.plan.index_strategy {
+            match strategy {
+                IndexStrategy::TemporalEq { .. } | IndexStrategy::TemporalRange { .. } => {
+                    if let Some(z) = self.temporal_pruner.apply_temporal_only(&args) {
+                        return z;
+                    }
+                }
+                IndexStrategy::EnumBitmap { .. } => {
+                    if let Some(z) = self.enum_pruner.apply(&args) {
+                        return z;
+                    }
+                }
+                IndexStrategy::ZoneSuRF { .. } => {
+                    if let Some(z) = self.range_pruner.apply_surf_only(&args) {
+                        return z;
+                    }
+                }
+                IndexStrategy::ZoneXorIndex { .. } => {
+                    if let Some(z) = self.xor_pruner.apply_zone_index_only(&args) {
+                        return z;
+                    }
+                }
+                IndexStrategy::XorPresence { .. } => {
+                    if let Some(z) = self.xor_pruner.apply_presence_only(&args) {
+                        return z;
+                    }
+                }
+                IndexStrategy::FullScan => {}
             }
-        }
-        // Skip XOR for temporal fields; temporal pruner owns them
-        if !self.is_temporal_field(uid, &self.plan.column) {
-            if let Some(z) = self.xor_pruner.apply(&args) {
-                return z;
-            }
+            // If the chosen index failed to produce candidates, fall through to empty (or optional fallback path below)
+            return Vec::new();
         }
 
+        // No legacy path: if no explicit strategy, return empty
         Vec::new()
     }
 }

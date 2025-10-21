@@ -1,9 +1,10 @@
-use crate::engine::core::zone::zone_xor_index::{ZoneXorFilterIndex, build_all_zxf};
+use crate::engine::core::zone::zone_xor_index::{ZoneXorFilterIndex, build_all_zxf_filtered};
 use crate::test_helpers::factories::{EventFactory, ZonePlanFactory};
 use serde_json::json;
+use std::collections::HashSet;
 
 #[test]
-fn build_all_zxf_writes_file_and_filters_work() {
+fn build_all_zxf_filtered_writes_file_and_filters_work() {
     // Build two zones with distinct fruit distributions
     let e1 = EventFactory::new()
         .with("payload", json!({"fruit":"apple"}))
@@ -27,7 +28,9 @@ fn build_all_zxf_writes_file_and_filters_work() {
         .create();
 
     let dir = tempfile::tempdir().unwrap();
-    build_all_zxf(&[z0, z1], dir.path()).unwrap();
+    let mut allowed: HashSet<String> = HashSet::new();
+    allowed.insert("fruit".to_string());
+    build_all_zxf_filtered(&[z0, z1], dir.path(), &allowed).unwrap();
 
     let path = dir.path().join("u01_fruit.zxf");
     let idx = ZoneXorFilterIndex::load(&path).unwrap();
@@ -39,7 +42,7 @@ fn build_all_zxf_writes_file_and_filters_work() {
 }
 
 #[test]
-fn zxf_handles_numeric_and_bool_values() {
+fn zxf_filtered_handles_numeric_and_bool_values() {
     use tempfile::tempdir;
 
     // Build zones with numeric and boolean payloads
@@ -62,7 +65,10 @@ fn zxf_handles_numeric_and_bool_values() {
         .create();
 
     let dir = tempdir().unwrap();
-    build_all_zxf(&[z0, z1], dir.path()).unwrap();
+    let mut allowed: HashSet<String> = HashSet::new();
+    allowed.insert("n".to_string());
+    allowed.insert("b".to_string());
+    build_all_zxf_filtered(&[z0, z1], dir.path(), &allowed).unwrap();
 
     let path_n = dir.path().join("u02_n.zxf");
     let idx_n = ZoneXorFilterIndex::load(&path_n).unwrap();
@@ -103,7 +109,9 @@ fn zxf_zones_maybe_containing_multiple_zones() {
         .create();
 
     let dir = tempdir().unwrap();
-    build_all_zxf(&[z0, z1], dir.path()).unwrap();
+    let mut allowed: HashSet<String> = HashSet::new();
+    allowed.insert("v".to_string());
+    build_all_zxf_filtered(&[z0, z1], dir.path(), &allowed).unwrap();
     let path = dir.path().join("u03_v.zxf");
     let idx = ZoneXorFilterIndex::load(&path).unwrap();
     let zones = idx.zones_maybe_containing(&json!("X"));
@@ -129,6 +137,31 @@ fn zxf_build_for_field_returns_none_when_no_values() {
 
     let res = ZoneXorFilterIndex::build_for_field("u04", "missing", &[z0, z1]);
     assert!(res.is_none());
+}
+
+#[test]
+fn zxf_filtered_skips_unallowed_fields() {
+    use tempfile::tempdir;
+
+    let e0 = EventFactory::new()
+        .with("payload", json!({"keep":"x", "skip":"y"}))
+        .create();
+    let z0 = ZonePlanFactory::new()
+        .with("id", 0)
+        .with("uid", "u05")
+        .with("events", json!([e0]))
+        .create();
+
+    let dir = tempdir().unwrap();
+    let mut allowed: HashSet<String> = HashSet::new();
+    allowed.insert("keep".to_string());
+
+    build_all_zxf_filtered(&[z0], dir.path(), &allowed).unwrap();
+
+    // Allowed field exists
+    assert!(dir.path().join("u05_keep.zxf").exists());
+    // Not allowed field should not exist
+    assert!(!dir.path().join("u05_skip.zxf").exists());
 }
 
 #[test]

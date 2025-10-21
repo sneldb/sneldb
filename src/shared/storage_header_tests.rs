@@ -76,6 +76,7 @@ fn truncated_header_rejected() {
 fn filekind_magic_values_include_new_kinds() {
     assert_eq!(FileKind::CalendarDir.magic(), *b"EVDBCAL\0");
     assert_eq!(FileKind::TemporalIndex.magic(), *b"EVDBTFI\0");
+    assert_eq!(FileKind::IndexCatalog.magic(), *b"EVDBICX\0");
 }
 
 #[test]

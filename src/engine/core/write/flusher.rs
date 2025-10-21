@@ -73,6 +73,9 @@ impl Flusher {
         );
 
         for (event_type, events) in by_event_type.iter() {
+            if events.is_empty() {
+                continue;
+            }
             debug!(
                 target: "sneldb::flush",
                 segment_id = segment_id,
@@ -90,21 +93,25 @@ impl Flusher {
             .await?;
         }
 
-        let uids = Self::resolve_uids_with(&registry, by_event_type.keys()).await?;
-        SegmentIndexBuilder {
-            segment_id,
-            segment_dir: &segment_dir,
-            event_type_uids: uids,
-            flush_coordination_lock: Arc::clone(&self.flush_coordination_lock),
+        // Only append SegmentIndex entry if at least one event type had non-empty events
+        let non_empty_event_types: Vec<&String> = by_event_type
+            .iter()
+            .filter_map(|(et, evs)| if evs.is_empty() { None } else { Some(et) })
+            .collect();
+        if !non_empty_event_types.is_empty() {
+            let uids =
+                Self::resolve_uids_with(&registry, non_empty_event_types.into_iter()).await?;
+            SegmentIndexBuilder {
+                segment_id,
+                segment_dir: &segment_dir,
+                event_type_uids: uids,
+                flush_coordination_lock: Arc::clone(&self.flush_coordination_lock),
+            }
+            .add_segment_entry(None)
+            .await?;
         }
-        .add_segment_entry(None)
-        .await?;
 
-        info!(
-            target: "sneldb::flush",
-            segment_id = segment_id,
-            "Flush completed successfully"
-        );
+        info!(target: "sneldb::flush", segment_id = segment_id, "Flush completed successfully");
         Ok(())
     }
 
@@ -116,6 +123,9 @@ impl Flusher {
         event_type: &str,
         events: &[Event],
     ) -> Result<(), StoreError> {
+        if events.is_empty() {
+            return Ok(());
+        }
         let uid = registry
             .read()
             .await

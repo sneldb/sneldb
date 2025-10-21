@@ -4,6 +4,7 @@ use serde_json::json;
 use tempfile::tempdir;
 
 use crate::command::types::CompareOp;
+use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::engine::core::zone::selector::builder::ZoneSelectorBuilder;
 use crate::engine::core::zone::selector::selection_context::SelectionContext;
 use crate::engine::schema::{EnumType, FieldType};
@@ -65,12 +66,15 @@ async fn enum_pruner_handles_unknown_variant_and_empty_index() {
     .unwrap();
 
     // Unknown variant should return None -> FieldSelector drops to xor/range (none) -> empty
-    let f_unknown = FilterPlanFactory::new()
+    let mut f_unknown = FilterPlanFactory::new()
         .with_column("plan")
         .with_operation(CompareOp::Eq)
         .with_uid(&uid)
         .with_value(json!("enterprise"))
         .create();
+    f_unknown.index_strategy = Some(IndexStrategy::EnumBitmap {
+        field: "plan".to_string(),
+    });
     let cmd = CommandFactory::query().with_event_type(event_type).create();
     let q = QueryPlanFactory::new()
         .with_registry(Arc::clone(&registry))
@@ -88,12 +92,15 @@ async fn enum_pruner_handles_unknown_variant_and_empty_index() {
     assert!(zones.is_empty());
 
     // Neq with unknown currently returns None (unknown variant short-circuits) -> empty
-    let f_neq_unknown = FilterPlanFactory::new()
+    let mut f_neq_unknown = FilterPlanFactory::new()
         .with_column("plan")
         .with_operation(CompareOp::Neq)
         .with_uid(&uid)
         .with_value(json!("enterprise"))
         .create();
+    f_neq_unknown.index_strategy = Some(IndexStrategy::EnumBitmap {
+        field: "plan".to_string(),
+    });
     let ctx2 = SelectionContext {
         plan: &f_neq_unknown,
         query_plan: &q,
@@ -167,12 +174,15 @@ async fn enum_pruner_multiple_variants_same_zone_dedupes() {
     .unwrap();
 
     // Eq pro -> exactly one zone should be returned
-    let f_eq = FilterPlanFactory::new()
+    let mut f_eq = FilterPlanFactory::new()
         .with_column("plan")
         .with_operation(CompareOp::Eq)
         .with_uid(&uid)
         .with_value(json!("pro"))
         .create();
+    f_eq.index_strategy = Some(IndexStrategy::EnumBitmap {
+        field: "plan".to_string(),
+    });
     let cmd = CommandFactory::query().with_event_type(event_type).create();
     let q = QueryPlanFactory::new()
         .with_registry(Arc::clone(&registry))

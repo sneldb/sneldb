@@ -54,6 +54,7 @@ impl FilterPlanFactory {
             value: self.value,
             priority: self.priority,
             uid: self.uid,
+            index_strategy: None,
         }
     }
 }

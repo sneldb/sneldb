@@ -4,8 +4,7 @@ use crate::engine::core::column::compression::compression_codec::{
 };
 use crate::engine::core::filter::surf_encoding::encode_value;
 use crate::engine::core::filter::surf_trie::SurfTrie;
-use crate::engine::schema::registry::MiniSchema;
-use crate::engine::schema::types::FieldType;
+// removed schema-aware builder; these imports remain only if reintroduced
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 use base64::{Engine, engine::general_purpose::STANDARD as B64};
 use memmap2::MmapOptions;
@@ -144,115 +143,24 @@ impl ZoneSurfFilter {
         segment_dir.join(format!("{}_{}.zsrf", uid, field))
     }
 
-    pub fn build_all(zone_plans: &[ZonePlan], segment_dir: &Path) -> std::io::Result<()> {
-        if tracing::enabled!(tracing::Level::DEBUG) {
-            debug!(target: "sneldb::surf", "Building Zone SuRF for {} zones", zone_plans.len());
-        }
-        let mut map: HashMap<(String, String), Vec<(u32, Vec<Vec<u8>>)>> = HashMap::new();
-
-        for zp in zone_plans {
-            // Skip time fields; handled by TEF-CB
-            for field in [] as [&str; 0] {
-                let mut values: Vec<Vec<u8>> = Vec::new();
-                for ev in &zp.events {
-                    if let Some(v) = ev.get_field(field) {
-                        if v.is_number() {
-                            if let Some(bytes) = encode_value(&v) {
-                                values.push(bytes);
-                            }
-                        }
-                    }
-                }
-                if !values.is_empty() {
-                    map.entry((zp.uid.clone(), field.to_string()))
-                        .or_default()
-                        .push((zp.id, values));
-                }
-            }
-            // dynamic payload: only numeric-consistent fields (same numeric kind across all events)
-            let mut dynamic_keys: Vec<String> = Vec::new();
-            if let Some(obj) = zp.events.get(0).and_then(|e| e.payload.as_object()) {
-                dynamic_keys.extend(obj.keys().cloned());
-            }
-            for key in dynamic_keys {
-                if !is_field_numeric_consistent(zone_plans, &key) {
-                    continue;
-                }
-                let mut values: Vec<Vec<u8>> = Vec::new();
-                for ev in &zp.events {
-                    if let Some(val) = ev.payload.get(&key) {
-                        if let Some(bytes) = encode_value(val) {
-                            values.push(bytes);
-                        }
-                    }
-                }
-                if !values.is_empty() {
-                    map.entry((zp.uid.clone(), key))
-                        .or_default()
-                        .push((zp.id, values));
-                }
-            }
-        }
-
-        for ((uid, field), per_zone) in map.into_iter() {
-            let mut entries: Vec<ZoneSurfEntry> = Vec::new();
-            for (zone_id, mut values) in per_zone {
-                values.sort();
-                values.dedup();
-                let trie = SurfTrie::build_from_sorted(&values);
-                entries.push(ZoneSurfEntry { zone_id, trie });
-            }
-            entries.sort_by_key(|e| e.zone_id);
-            let out = ZoneSurfFilter { entries };
-            let path = Self::get_filter_path(&uid, &field, segment_dir);
-            if tracing::enabled!(tracing::Level::INFO) {
-                info!(target: "sneldb::surf", uid = %uid, field = %field, path = %path.display(), "Writing Zone SuRF");
-            }
-            if let Err(e) = out.save(&path) {
-                if tracing::enabled!(tracing::Level::WARN) {
-                    warn!(target: "sneldb::surf", error = %e, "Failed to save Zone SuRF; continuing");
-                }
-            }
-        }
-        Ok(())
-    }
-
-    pub fn build_all_with_schema(
+    /// Build SuRF only for fields present in `allowed_fields` (and non-temporal, numeric-consistent).
+    pub fn build_all_filtered(
         zone_plans: &[ZonePlan],
         segment_dir: &Path,
-        _schema: &MiniSchema,
+        allowed_fields: &std::collections::HashSet<String>,
     ) -> std::io::Result<()> {
         if tracing::enabled!(tracing::Level::DEBUG) {
-            debug!(target: "sneldb::surf", "Building Zone SuRF (schema-aware) for {} zones", zone_plans.len());
+            debug!(target: "sneldb::surf", "Building filtered Zone SuRF for {} zones", zone_plans.len());
         }
         let mut map: HashMap<(String, String), Vec<(u32, Vec<Vec<u8>>)>> = HashMap::new();
 
-        // Identify schema-defined time fields to skip entirely; handled by TEF-CB
-        let mut time_fields: Vec<String> = Vec::new();
-        for (name, ty) in &_schema.fields {
-            let is_time = match ty {
-                FieldType::Timestamp | FieldType::Date => true,
-                FieldType::Optional(inner) => {
-                    matches!(**inner, FieldType::Timestamp | FieldType::Date)
-                }
-                _ => false,
-            };
-            if is_time {
-                time_fields.push(name.clone());
-            }
-        }
-
         for zp in zone_plans {
-            // Skip fixed timestamp field
-
-            // Also include numeric-consistent fields beyond time fields
             let mut dynamic_keys: Vec<String> = Vec::new();
             if let Some(obj) = zp.events.get(0).and_then(|e| e.payload.as_object()) {
                 dynamic_keys.extend(obj.keys().cloned());
             }
             for key in dynamic_keys {
-                // Skip fixed timestamp field and any schema time fields in payload
-                if key == "timestamp" || time_fields.contains(&key) {
+                if !allowed_fields.contains(&key) {
                     continue;
                 }
                 if !is_field_numeric_consistent(zone_plans, &key) {
@@ -286,11 +194,11 @@ impl ZoneSurfFilter {
             let out = ZoneSurfFilter { entries };
             let path = Self::get_filter_path(&uid, &field, segment_dir);
             if tracing::enabled!(tracing::Level::INFO) {
-                info!(target = "sneldb::surf", uid = %uid, field = %field, path = %path.display(), "Writing Zone SuRF");
+                info!(target = "sneldb::surf", uid = %uid, field = %field, path = %path.display(), "Writing filtered Zone SuRF");
             }
             if let Err(e) = out.save(&path) {
                 if tracing::enabled!(tracing::Level::WARN) {
-                    warn!(target = "sneldb::surf", error = %e, "Failed to save Zone SuRF; continuing");
+                    warn!(target = "sneldb::surf", error = %e, "Failed to save filtered Zone SuRF; continuing");
                 }
             }
         }

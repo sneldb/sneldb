@@ -29,6 +29,7 @@ General-purpose databases and queues struggle with large, evolving event logs. S
 - Append-only storage (perfect audit trails; predictable recovery)
 - Simple, human‑readable commands (JSON‑native)
 - Fast queries at scale (shards, zones, compaction)
+- Modern temporal indexing (per-field calendars and slabbed temporal indexes)
 - Replay built in (time‑travel debugging, sequence modeling)
 - Flexible schemas (strict validation; optional fields)
 - Lightweight & safe (Rust; embeddable; no GC)

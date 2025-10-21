@@ -22,7 +22,7 @@ FLUSH
 - **WHERE operators**: `=`, `!=`, `>`, `>=`, `<`, `<=`, `AND`, `OR`, `NOT`.
 - **Precedence**: `NOT` > `AND` > `OR`. Use parentheses sparingly by structuring conditions; (parentheses not required in current grammar).
 - **LIMIT**: positive integer; caps returned rows.
-- **SINCE**: ISO-8601 timestamp string (e.g., `2025-08-01T00:00:00Z`) or numeric epoch (s/ms/µs/ns). Parsed and normalized to epoch seconds.
+- **SINCE**: ISO-8601 timestamp string (e.g., `2025-08-01T00:00:00Z`) or numeric epoch (s/ms/µs/ns). Parsed and normalized to epoch seconds (fractional parts truncated to whole seconds).
 - **USING**: Selects the time field used by SINCE and bucketing; defaults to core `timestamp`. Common choices: a schema field like `created_at` declared as `"datetime"`.
 
 ### Mini-grammar (informal)
