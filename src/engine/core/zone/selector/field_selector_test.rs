@@ -4,6 +4,7 @@ use serde_json::json;
 use tempfile::tempdir;
 
 use crate::command::types::CompareOp;
+use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::engine::core::zone::selector::builder::ZoneSelectorBuilder;
 use crate::engine::core::zone::selector::selection_context::SelectionContext;
 use crate::engine::schema::{EnumType, FieldType};
@@ -31,7 +32,6 @@ async fn xor_eq_uses_zxf_to_narrow_zones() {
         .define_with_fields(event_type, &[("context_id", "string"), ("key", "string")])
         .await
         .unwrap();
-    let uid = registry.read().await.get_uid(event_type).unwrap();
 
     // seg1 zone 0 has key = "a", seg2 zone 0 has key = "b"
     {
@@ -80,12 +80,15 @@ async fn xor_eq_uses_zxf_to_narrow_zones() {
     }
 
     // Query key == "b" should favor 002 via .zxf
-    let filter = FilterPlanFactory::new()
+    let mut filter = FilterPlanFactory::new()
         .with_column("key")
         .with_operation(CompareOp::Eq)
-        .with_uid(&uid)
+        .with_uid(&registry.read().await.get_uid(event_type).unwrap())
         .with_value(json!("b"))
         .create();
+    filter.index_strategy = Some(IndexStrategy::ZoneXorIndex {
+        field: "key".to_string(),
+    });
     let command = CommandFactory::query().with_event_type(event_type).create();
     let qplan = QueryPlanFactory::new()
         .with_registry(Arc::clone(&registry))
@@ -105,6 +108,24 @@ async fn xor_eq_uses_zxf_to_narrow_zones() {
     let out2 = selector.select_for_segment("002");
     assert!(out1.is_empty());
     assert!(!out2.is_empty());
+
+    // For segment without the .zxf, fall back to FullScan to avoid probing
+    let mut filter_fs = FilterPlanFactory::new()
+        .with_column("key")
+        .with_operation(CompareOp::Eq)
+        .with_uid(&registry.read().await.get_uid(event_type).unwrap())
+        .with_value(json!("b"))
+        .create();
+    filter_fs.index_strategy = Some(IndexStrategy::FullScan);
+    let ctx_fs = SelectionContext {
+        plan: &filter_fs,
+        query_plan: &qplan,
+        base_dir: &shard_dir,
+        caches: None,
+    };
+    let selector_fs = ZoneSelectorBuilder::new(ctx_fs).build();
+    let out1_fs = selector_fs.select_for_segment("001");
+    assert!(out1_fs.is_empty());
 }
 
 #[tokio::test]
@@ -126,7 +147,6 @@ async fn range_pruner_uses_zonesurf_for_gt_and_lte() {
         .define_with_fields(event_type, &[("context_id", "string"), ("id", "int")])
         .await
         .unwrap();
-    let uid = registry.read().await.get_uid(event_type).unwrap();
 
     // seg1: ids 1, 9
     let e1 = EventFactory::new()
@@ -155,6 +175,20 @@ async fn range_pruner_uses_zonesurf_for_gt_and_lte() {
     .await
     .unwrap();
 
+    // Verify per-field timestamp artifacts exist in seg1
+    let ts_cal = seg1.join(format!(
+        "{}_{}.cal",
+        registry.read().await.get_uid(event_type).unwrap(),
+        "timestamp"
+    ));
+    assert!(ts_cal.exists(), "missing timestamp calendar in seg1");
+    let ts_slab = seg1.join(format!(
+        "{}_{}.tfi",
+        registry.read().await.get_uid(event_type).unwrap(),
+        "timestamp"
+    ));
+    assert!(ts_slab.exists(), "missing timestamp slab in seg1");
+
     // seg2: ids 15, 20
     let e3 = EventFactory::new()
         .with("event_type", event_type)
@@ -182,13 +216,30 @@ async fn range_pruner_uses_zonesurf_for_gt_and_lte() {
     .await
     .unwrap();
 
+    // Verify per-field timestamp artifacts exist in seg2
+    let ts_cal2 = seg2.join(format!(
+        "{}_{}.cal",
+        registry.read().await.get_uid(event_type).unwrap(),
+        "timestamp"
+    ));
+    assert!(ts_cal2.exists(), "missing timestamp calendar in seg2");
+    let ts_slab2 = seg2.join(format!(
+        "{}_{}.tfi",
+        registry.read().await.get_uid(event_type).unwrap(),
+        "timestamp"
+    ));
+    assert!(ts_slab2.exists(), "missing timestamp slab in seg2");
+
     // id > 10 should select zones from 002
-    let filter_gt = FilterPlanFactory::new()
+    let mut filter_gt = FilterPlanFactory::new()
         .with_column("id")
         .with_operation(CompareOp::Gt)
-        .with_uid(&uid)
+        .with_uid(&registry.read().await.get_uid(event_type).unwrap())
         .with_value(json!(10))
         .create();
+    filter_gt.index_strategy = Some(IndexStrategy::ZoneSuRF {
+        field: "id".to_string(),
+    });
     let cmd = CommandFactory::query().with_event_type(event_type).create();
     let qplan = QueryPlanFactory::new()
         .with_registry(Arc::clone(&registry))
@@ -208,12 +259,15 @@ async fn range_pruner_uses_zonesurf_for_gt_and_lte() {
     assert!(!out2.is_empty());
 
     // id <= 10 should select zones from 001
-    let filter_lte = FilterPlanFactory::new()
+    let mut filter_lte = FilterPlanFactory::new()
         .with_column("id")
         .with_operation(CompareOp::Lte)
-        .with_uid(&uid)
+        .with_uid(&registry.read().await.get_uid(event_type).unwrap())
         .with_value(json!(10))
         .create();
+    filter_lte.index_strategy = Some(IndexStrategy::ZoneSuRF {
+        field: "id".to_string(),
+    });
     let ctx2 = SelectionContext {
         plan: &filter_lte,
         query_plan: &qplan,
@@ -261,7 +315,6 @@ async fn enum_pruner_respects_eq_and_neq() {
         )
         .await
         .unwrap();
-    let uid = registry.read().await.get_uid(event_type).unwrap();
 
     // seg1: free, pro
     let a = EventFactory::new()
@@ -313,12 +366,15 @@ async fn enum_pruner_respects_eq_and_neq() {
     .unwrap();
 
     // plan == pro -> 001 only
-    let f_eq = FilterPlanFactory::new()
+    let mut f_eq = FilterPlanFactory::new()
         .with_column("plan")
         .with_operation(CompareOp::Eq)
-        .with_uid(&uid)
+        .with_uid(&registry.read().await.get_uid(event_type).unwrap())
         .with_value(json!("pro"))
         .create();
+    f_eq.index_strategy = Some(IndexStrategy::EnumBitmap {
+        field: "plan".to_string(),
+    });
     let cmd = CommandFactory::query().with_event_type(event_type).create();
     let q = QueryPlanFactory::new()
         .with_registry(Arc::clone(&registry))
@@ -338,12 +394,15 @@ async fn enum_pruner_respects_eq_and_neq() {
     assert!(out2.is_empty());
 
     // plan != pro -> both segments
-    let f_neq = FilterPlanFactory::new()
+    let mut f_neq = FilterPlanFactory::new()
         .with_column("plan")
         .with_operation(CompareOp::Neq)
-        .with_uid(&uid)
+        .with_uid(&registry.read().await.get_uid(event_type).unwrap())
         .with_value(json!("pro"))
         .create();
+    f_neq.index_strategy = Some(IndexStrategy::EnumBitmap {
+        field: "plan".to_string(),
+    });
     let ctx2 = SelectionContext {
         plan: &f_neq,
         query_plan: &q,
@@ -374,7 +433,6 @@ async fn returns_all_zones_when_value_missing() {
         .define_with_fields(event_type, &[("context_id", "string"), ("key", "string")])
         .await
         .unwrap();
-    let uid = registry.read().await.get_uid(event_type).unwrap();
 
     let e = EventFactory::new()
         .with("event_type", event_type)
@@ -400,7 +458,7 @@ async fn returns_all_zones_when_value_missing() {
     // No value provided in FilterPlan
     let filter = FilterPlanFactory::new()
         .with_column("key")
-        .with_uid(&uid)
+        .with_uid(&registry.read().await.get_uid(event_type).unwrap())
         .create();
     let cmd = CommandFactory::query().with_event_type(event_type).create();
     let q = QueryPlanFactory::new()
@@ -502,7 +560,6 @@ async fn xor_pruner_skips_on_neq_operation() {
         .define_with_fields(event_type, &[("context_id", "string"), ("key", "string")])
         .await
         .unwrap();
-    let uid = registry.read().await.get_uid(event_type).unwrap();
 
     let e = EventFactory::new()
         .with("event_type", event_type)
@@ -529,7 +586,7 @@ async fn xor_pruner_skips_on_neq_operation() {
     let filter = FilterPlanFactory::new()
         .with_column("key")
         .with_operation(CompareOp::Neq)
-        .with_uid(&uid)
+        .with_uid(&registry.read().await.get_uid(event_type).unwrap())
         .with_value(json!("x"))
         .create();
     let cmd = CommandFactory::query().with_event_type(event_type).create();
@@ -547,80 +604,6 @@ async fn xor_pruner_skips_on_neq_operation() {
     let sel = ZoneSelectorBuilder::new(ctx).build();
     let zones = sel.select_for_segment("001");
     assert!(zones.is_empty());
-}
-
-#[tokio::test]
-async fn xor_pruner_falls_back_to_full_field_filter_when_zxf_missing() {
-    use crate::logging::init_for_tests;
-    init_for_tests();
-
-    use crate::engine::core::zone::zone_xor_index::ZoneXorFilterIndex;
-
-    let tmp = tempdir().unwrap();
-    let shard_dir = tmp.path().join("shard-0");
-    let seg1 = shard_dir.join("001");
-    std::fs::create_dir_all(&seg1).unwrap();
-
-    let reg_fac = SchemaRegistryFactory::new();
-    let registry = reg_fac.registry();
-    let event_type = "fallback_xf_evt";
-    reg_fac
-        .define_with_fields(event_type, &[("context_id", "string"), ("key", "string")])
-        .await
-        .unwrap();
-    let uid = registry.read().await.get_uid(event_type).unwrap();
-
-    let e = EventFactory::new()
-        .with("event_type", event_type)
-        .with("context_id", "c1")
-        .with("payload", json!({"key": "x"}))
-        .create();
-    let mem = MemTableFactory::new()
-        .with_capacity(1)
-        .with_events(vec![e])
-        .create()
-        .unwrap();
-    crate::engine::core::Flusher::new(
-        mem,
-        1,
-        &seg1,
-        registry.clone(),
-        Arc::new(tokio::sync::Mutex::new(())),
-    )
-    .flush()
-    .await
-    .unwrap();
-
-    // Remove .zxf to force fallback to .xf
-    let zxf_path = ZoneXorFilterIndex::file_path(&seg1, &uid, "key");
-    let _ = std::fs::remove_file(&zxf_path);
-
-    let filter = FilterPlanFactory::new()
-        .with_column("key")
-        .with_operation(CompareOp::Eq)
-        .with_uid(&uid)
-        .with_value(json!("x"))
-        .create();
-    let cmd = CommandFactory::query().with_event_type(event_type).create();
-    let q = QueryPlanFactory::new()
-        .with_registry(Arc::clone(&registry))
-        .with_command(cmd)
-        .build()
-        .await;
-    let ctx = SelectionContext {
-        plan: &filter,
-        query_plan: &q,
-        base_dir: &shard_dir,
-        caches: None,
-    };
-    let sel = ZoneSelectorBuilder::new(ctx).build();
-    let zones = sel.select_for_segment("001");
-    let all = crate::engine::core::zone::candidate_zone::CandidateZone::create_all_zones_for_segment_from_meta(
-        &shard_dir,
-        "001",
-        &uid,
-    );
-    assert_eq!(zones.len(), all.len());
 }
 
 #[tokio::test]
@@ -642,7 +625,6 @@ async fn zonesurf_ge_gt_le_lte_cover_boundaries_and_cross_segment() {
         .define_with_fields(event_type, &[("context_id", "string"), ("user_id", "int")])
         .await
         .unwrap();
-    let uid = registry.read().await.get_uid(event_type).unwrap();
 
     // seg1: user_id 10 (boundary), 12
     let a = EventFactory::new()
@@ -706,12 +688,15 @@ async fn zonesurf_ge_gt_le_lte_cover_boundaries_and_cross_segment() {
         .await;
 
     // GE boundary (>= 10) should include both segments
-    let f_ge = FilterPlanFactory::new()
+    let mut f_ge = FilterPlanFactory::new()
         .with_column("user_id")
         .with_operation(CompareOp::Gte)
-        .with_uid(&uid)
+        .with_uid(&registry.read().await.get_uid(event_type).unwrap())
         .with_value(json!(10))
         .create();
+    f_ge.index_strategy = Some(IndexStrategy::ZoneSuRF {
+        field: "user_id".to_string(),
+    });
     let ctx_ge = SelectionContext {
         plan: &f_ge,
         query_plan: &q,
@@ -725,12 +710,15 @@ async fn zonesurf_ge_gt_le_lte_cover_boundaries_and_cross_segment() {
     assert!(!ge2.is_empty());
 
     // GT boundary (> 10) should include seg1 only (12), exclude seg2 (10 not > 10)
-    let f_gt = FilterPlanFactory::new()
+    let mut f_gt = FilterPlanFactory::new()
         .with_column("user_id")
         .with_operation(CompareOp::Gt)
-        .with_uid(&uid)
+        .with_uid(&registry.read().await.get_uid(event_type).unwrap())
         .with_value(json!(10))
         .create();
+    f_gt.index_strategy = Some(IndexStrategy::ZoneSuRF {
+        field: "user_id".to_string(),
+    });
     let ctx_gt = SelectionContext {
         plan: &f_gt,
         query_plan: &q,
@@ -744,12 +732,15 @@ async fn zonesurf_ge_gt_le_lte_cover_boundaries_and_cross_segment() {
     assert!(gt2.is_empty());
 
     // LE boundary (<= 10) should include seg2 (8,10), include seg1 (10)
-    let f_le = FilterPlanFactory::new()
+    let mut f_le = FilterPlanFactory::new()
         .with_column("user_id")
         .with_operation(CompareOp::Lte)
-        .with_uid(&uid)
+        .with_uid(&registry.read().await.get_uid(event_type).unwrap())
         .with_value(json!(10))
         .create();
+    f_le.index_strategy = Some(IndexStrategy::ZoneSuRF {
+        field: "user_id".to_string(),
+    });
     let ctx_le = SelectionContext {
         plan: &f_le,
         query_plan: &q,
@@ -763,12 +754,15 @@ async fn zonesurf_ge_gt_le_lte_cover_boundaries_and_cross_segment() {
     assert!(!le2.is_empty());
 
     // LT boundary (< 10) should include seg2 only (8)
-    let f_lt = FilterPlanFactory::new()
+    let mut f_lt = FilterPlanFactory::new()
         .with_column("user_id")
         .with_operation(CompareOp::Lt)
-        .with_uid(&uid)
+        .with_uid(&registry.read().await.get_uid(event_type).unwrap())
         .with_value(json!(10))
         .create();
+    f_lt.index_strategy = Some(IndexStrategy::ZoneSuRF {
+        field: "user_id".to_string(),
+    });
     let ctx_lt = SelectionContext {
         plan: &f_lt,
         query_plan: &q,
@@ -802,7 +796,6 @@ async fn temporal_pruner_routed_by_field_selector() {
         .define_with_fields(event_type, &[("context_id", "string"), ("k", "string")])
         .await
         .unwrap();
-    let uid = registry.read().await.get_uid(event_type).unwrap();
 
     // seg1: timestamps 100, 150
     let a = EventFactory::new()
@@ -865,12 +858,15 @@ async fn temporal_pruner_routed_by_field_selector() {
         .await;
 
     // timestamp == 150 should select only seg1
-    let f_eq = FilterPlanFactory::new()
+    let mut f_eq = FilterPlanFactory::new()
         .with_column("timestamp")
         .with_operation(CompareOp::Eq)
-        .with_uid(&uid)
+        .with_uid(&registry.read().await.get_uid(event_type).unwrap())
         .with_value(json!(150u64))
         .create();
+    f_eq.index_strategy = Some(IndexStrategy::TemporalEq {
+        field: "timestamp".to_string(),
+    });
     let ctx_eq = SelectionContext {
         plan: &f_eq,
         query_plan: &q,
@@ -884,12 +880,15 @@ async fn temporal_pruner_routed_by_field_selector() {
     assert!(z2.is_empty(), "seg2 must not be selected for ts==150");
 
     // timestamp > 180 should select only seg2
-    let f_gt = FilterPlanFactory::new()
+    let mut f_gt = FilterPlanFactory::new()
         .with_column("timestamp")
         .with_operation(CompareOp::Gt)
-        .with_uid(&uid)
+        .with_uid(&registry.read().await.get_uid(event_type).unwrap())
         .with_value(json!(180u64))
         .create();
+    f_gt.index_strategy = Some(IndexStrategy::TemporalRange {
+        field: "timestamp".to_string(),
+    });
     let ctx_gt = SelectionContext {
         plan: &f_gt,
         query_plan: &q,
@@ -922,7 +921,6 @@ async fn temporal_payload_field_routed_by_field_selector() {
         .define_with_fields(event_type, &[("context_id", "string"), ("ts", "datetime")])
         .await
         .unwrap();
-    let uid = registry.read().await.get_uid(event_type).unwrap();
 
     // seg1: ts 100, 150
     let a = EventFactory::new()
@@ -982,12 +980,15 @@ async fn temporal_payload_field_routed_by_field_selector() {
         .await;
 
     // ts == 150 should select only seg1
-    let f_eq = FilterPlanFactory::new()
+    let mut f_eq = FilterPlanFactory::new()
         .with_column("ts")
         .with_operation(CompareOp::Eq)
-        .with_uid(&uid)
+        .with_uid(&registry.read().await.get_uid(event_type).unwrap())
         .with_value(json!(150u64))
         .create();
+    f_eq.index_strategy = Some(IndexStrategy::TemporalEq {
+        field: "ts".to_string(),
+    });
     let ctx_eq = SelectionContext {
         plan: &f_eq,
         query_plan: &q,
@@ -1001,12 +1002,15 @@ async fn temporal_payload_field_routed_by_field_selector() {
     assert!(z2.is_empty(), "seg2 must not be selected for ts==150");
 
     // ts > 180 should select only seg2
-    let f_gt = FilterPlanFactory::new()
+    let mut f_gt = FilterPlanFactory::new()
         .with_column("ts")
         .with_operation(CompareOp::Gt)
-        .with_uid(&uid)
+        .with_uid(&registry.read().await.get_uid(event_type).unwrap())
         .with_value(json!(180u64))
         .create();
+    f_gt.index_strategy = Some(IndexStrategy::TemporalRange {
+        field: "ts".to_string(),
+    });
     let ctx_gt = SelectionContext {
         plan: &f_gt,
         query_plan: &q,

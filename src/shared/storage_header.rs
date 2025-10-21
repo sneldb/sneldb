@@ -122,6 +122,7 @@ pub enum FileKind {
     ZoneRlte,
     CalendarDir,
     TemporalIndex,
+    IndexCatalog,
 }
 
 impl FileKind {
@@ -143,6 +144,7 @@ impl FileKind {
             FileKind::ZoneRlte => *b"EVDBZRT\0",
             FileKind::CalendarDir => *b"EVDBCAL\0",
             FileKind::TemporalIndex => *b"EVDBTFI\0",
+            FileKind::IndexCatalog => *b"EVDBICX\0",
         }
     }
 }

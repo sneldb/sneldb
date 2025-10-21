@@ -1568,6 +1568,54 @@
   }
   ,
   {
+    "name": "query_created_at_eq_iso8601",
+    "input_commands": [
+      "DEFINE evt_q1 FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE evt_q1 FOR ctx1 PAYLOAD {\"id\":1,\"created_at\":\"2025-01-01T00:00:00Z\"}",
+      "STORE evt_q1 FOR ctx2 PAYLOAD {\"id\":2,\"created_at\":\"2025-01-01T00:00:01Z\"}",
+      "FLUSH",
+      "SLEEP 500",
+      "QUERY evt_q1 WHERE created_at=\"2025-01-01T00:00:01Z\""
+    ],
+    "matcher": { "kind": "include_all", "value": ["ctx2"] }
+  }
+  ,
+  {
+    "name": "query_created_at_gt_seconds",
+    "input_commands": [
+      "DEFINE evt_q2 FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE evt_q2 FOR cta PAYLOAD {\"id\":1,\"created_at\":1735689600}",
+      "STORE evt_q2 FOR ctb PAYLOAD {\"id\":2,\"created_at\":1735689601}",
+      "FLUSH",
+      "QUERY evt_q2 WHERE created_at > 1735689600"
+    ],
+    "matcher": { "kind": "include_all", "value": ["ctb"] }
+  }
+  ,
+  {
+    "name": "query_created_at_invalid_string_no_results",
+    "input_commands": [
+      "DEFINE evt_q3 FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE evt_q3 FOR cix PAYLOAD {\"id\":1,\"created_at\":\"2025-01-01T00:00:00Z\"}",
+      "FLUSH",
+      "QUERY evt_q3 WHERE created_at=\"not-a-time\""
+    ],
+    "matcher": { "kind": "include", "value": "No matching events found" }
+  }
+  ,
+  {
+    "name": "query_date_field_eq_midnight",
+    "input_commands": [
+      "DEFINE people_q FIELDS { \"id\": \"int\", \"on\": \"date\" }",
+      "STORE people_q FOR pqa PAYLOAD {\"id\":1,\"on\":\"2025-09-06\"}",
+      "STORE people_q FOR pqb PAYLOAD {\"id\":2,\"on\":\"2025-09-07\"}",
+      "FLUSH",
+      "QUERY people_q WHERE on=\"2025-09-06T00:00:00Z\""
+    ],
+    "matcher": { "kind": "include_all", "value": ["pqa"] }
+  }
+  ,
+  {
     "name": "query_order_by_with_offset_and_limit",
     "input_commands": [
       "DEFINE price FIELDS { \"val\": \"int\" }",
@@ -1702,5 +1750,106 @@
       { "kind": "include_all", "value": ["\"val\":5", "\"val\":6"] },
       { "kind": "include_none", "value": ["\"val\":1", "\"val\":2", "\"val\":3", "\"val\":4"] }
     ]
+  }
+  ,
+  {
+    "name": "created_at_between_inclusive_and_exclusive",
+    "input_commands": [
+      "DEFINE evt_between_1 FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE evt_between_1 FOR ba PAYLOAD {\"id\":1,\"created_at\":\"2025-01-01T00:00:00Z\"}",
+      "STORE evt_between_1 FOR bb PAYLOAD {\"id\":2,\"created_at\":\"2025-01-01T00:00:01Z\"}",
+      "FLUSH",
+      "QUERY evt_between_1 WHERE created_at >= \"2025-01-01T00:00:00Z\" AND created_at < \"2025-01-01T00:00:01Z\"",
+      "QUERY evt_between_1 WHERE created_at > \"2025-01-01T00:00:00Z\" AND created_at <= \"2025-01-01T00:00:01Z\""
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["ba"] },
+      { "kind": "include_all", "value": ["bb"] }
+    ]
+  }
+  ,
+  {
+    "name": "created_at_seconds_range",
+    "input_commands": [
+      "DEFINE evt_frac FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE evt_frac FOR f1 PAYLOAD {\"id\":1,\"created_at\":\"2025-01-01T00:00:00Z\"}",
+      "STORE evt_frac FOR f2 PAYLOAD {\"id\":2,\"created_at\":\"2025-01-01T00:00:01Z\"}",
+      "FLUSH",
+      "QUERY evt_frac WHERE created_at >= \"2025-01-01T00:00:01Z\" AND created_at < \"2025-01-01T00:00:02Z\""
+    ],
+    "matcher": { "kind": "include_all", "value": ["f2"] }
+  }
+  ,
+  {
+    "name": "created_at_tz_plus00_equivalent_to_z",
+    "input_commands": [
+      "DEFINE evt_tz_eq FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE evt_tz_eq FOR tzZ PAYLOAD {\"id\":1,\"created_at\":\"2025-01-01T00:00:00+00:00\"}",
+      "FLUSH",
+      "QUERY evt_tz_eq WHERE created_at=\"2025-01-01T00:00:00Z\""
+    ],
+    "matcher": { "kind": "include_all", "value": ["tzZ"] }
+  }
+  ,
+  {
+    "name": "date_field_leap_day_eq",
+    "input_commands": [
+      "DEFINE birthdays_lp FIELDS { \"id\": \"int\", \"on\": \"date\" }",
+      "STORE birthdays_lp FOR lp1 PAYLOAD {\"id\":1,\"on\":\"2024-02-29\"}",
+      "FLUSH",
+      "QUERY birthdays_lp WHERE on=\"2024-02-29T00:00:00Z\""
+    ],
+    "matcher": { "kind": "include_all", "value": ["lp1"] }
+  }
+  ,
+  {
+    "name": "since_using_created_at_us_input_inclusive",
+    "input_commands": [
+      "DEFINE evt_us FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE evt_us FOR us1 PAYLOAD {\"id\":1,\"created_at\":\"2025-01-01T00:00:00Z\"}",
+      "STORE evt_us FOR us2 PAYLOAD {\"id\":2,\"created_at\":\"2025-01-01T00:00:01Z\"}",
+      "FLUSH",
+      "QUERY evt_us FOR us1 SINCE \"1735689600000000\" USING created_at"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"id\":1" },
+      { "kind": "include_none", "value": ["\"id\":2"] }
+    ]
+  }
+  ,
+  {
+    "name": "created_at_less_than_boundary_excludes_equal",
+    "input_commands": [
+      "DEFINE evt_lt FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE evt_lt FOR l1 PAYLOAD {\"id\":1,\"created_at\":\"2025-01-01T00:00:00Z\"}",
+      "STORE evt_lt FOR l2 PAYLOAD {\"id\":2,\"created_at\":\"2025-01-01T00:00:01Z\"}",
+      "FLUSH",
+      "QUERY evt_lt WHERE created_at < \"2025-01-01T00:00:01Z\""
+    ],
+    "matcher": { "kind": "include_all", "value": ["l1"] }
+  }
+  ,
+  {
+    "name": "created_at_or_two_values",
+    "input_commands": [
+      "DEFINE evt_or FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
+      "STORE evt_or FOR o1 PAYLOAD {\"id\":1,\"created_at\":\"2025-01-01T00:00:00Z\"}",
+      "STORE evt_or FOR o2 PAYLOAD {\"id\":2,\"created_at\":\"2025-01-01T00:00:01Z\"}",
+      "FLUSH",
+      "QUERY evt_or WHERE created_at=\"2025-01-01T00:00:00Z\" OR created_at=\"2025-01-01T00:00:01Z\""
+    ],
+    "matcher": { "kind": "include_all", "value": ["o1","o2"] }
+  }
+  ,
+  {
+    "name": "since_on_date_field_and_where_on_datetime",
+    "input_commands": [
+      "DEFINE evt_mixed_time FIELDS { \"id\": \"int\", \"on\": \"date\", \"created_at\": \"datetime\" }",
+      "STORE evt_mixed_time FOR mx1 PAYLOAD {\"id\":1,\"on\":\"2025-01-01\",\"created_at\":\"2025-01-01T00:00:00Z\"}",
+      "STORE evt_mixed_time FOR mx2 PAYLOAD {\"id\":2,\"on\":\"2025-01-02\",\"created_at\":\"2025-01-02T00:00:01Z\"}",
+      "FLUSH",
+      "QUERY evt_mixed_time SINCE \"2025-01-02T00:00:00Z\" USING on WHERE created_at=\"2025-01-02T00:00:01Z\""
+    ],
+    "matcher": { "kind": "include_all", "value": ["mx2"] }
   }
 ]

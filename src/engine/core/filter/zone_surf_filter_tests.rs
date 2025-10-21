@@ -2,9 +2,9 @@
 
 use crate::engine::core::filter::surf_encoding::encode_value;
 use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
-use crate::test_helpers::factories::MiniSchemaFactory;
 use crate::test_helpers::factory::Factory;
 use serde_json::json;
+use std::collections::HashSet;
 use tempfile::tempdir;
 
 fn zone_with_events(
@@ -33,7 +33,9 @@ fn zone_surf_numeric_selection() {
     let z1 = zone_with_events("uid123", 1, &[15, 20]);
 
     let dir = tempdir().unwrap();
-    ZoneSurfFilter::build_all(&[z0.clone(), z1.clone()], dir.path()).unwrap();
+    let mut allowed: HashSet<String> = HashSet::new();
+    allowed.insert("id".to_string());
+    ZoneSurfFilter::build_all_filtered(&[z0.clone(), z1.clone()], dir.path(), &allowed).unwrap();
 
     let path = dir.path().join("uid123_id.zsrf");
     assert!(path.exists());
@@ -67,7 +69,9 @@ fn zone_surf_boundary_inclusive_exclusive() {
     let z1 = zone_with_events("uidB", 1, &[30]);
 
     let dir = tempdir().unwrap();
-    ZoneSurfFilter::build_all(&[z0, z1], dir.path()).unwrap();
+    let mut allowed: HashSet<String> = HashSet::new();
+    allowed.insert("id".to_string());
+    ZoneSurfFilter::build_all_filtered(&[z0, z1], dir.path(), &allowed).unwrap();
 
     let path = dir.path().join("uidB_id.zsrf");
     let zsf = ZoneSurfFilter::load(&path).unwrap();
@@ -146,7 +150,9 @@ fn zone_surf_float_ranges() {
         .create();
 
     let dir = tempdir().unwrap();
-    ZoneSurfFilter::build_all(&[z0, z1], dir.path()).unwrap();
+    let mut allowed: HashSet<String> = HashSet::new();
+    allowed.insert("scoreID".to_string());
+    ZoneSurfFilter::build_all_filtered(&[z0, z1], dir.path(), &allowed).unwrap();
     let path = dir.path().join("uidF_scoreID.zsrf");
     let zsf = ZoneSurfFilter::load(&path).unwrap();
     let seg = "segF";
@@ -208,7 +214,9 @@ fn zone_surf_flag_numeric_ranges() {
         .create();
 
     let dir = tempdir().unwrap();
-    ZoneSurfFilter::build_all(&[z0, z1], dir.path()).unwrap();
+    let mut allowed: HashSet<String> = HashSet::new();
+    allowed.insert("flag_id".to_string());
+    ZoneSurfFilter::build_all_filtered(&[z0, z1], dir.path(), &allowed).unwrap();
     let path = dir.path().join("uidBool_flag_id.zsrf");
     let zsf = ZoneSurfFilter::load(&path).unwrap();
     let seg = "segBool";
@@ -233,12 +241,6 @@ fn zone_surf_flag_numeric_ranges() {
 
 #[test]
 fn zone_surf_schema_time_fields_skipped() {
-    // Schema with datetime and date fields
-    let schema = MiniSchemaFactory::empty()
-        .with("ts", "datetime")
-        .with("d", "date")
-        .create();
-
     // Two zones with numeric epoch seconds in payload
     let z0_events = vec![
         Factory::event()
@@ -273,7 +275,9 @@ fn zone_surf_schema_time_fields_skipped() {
         .create();
 
     let dir = tempdir().unwrap();
-    ZoneSurfFilter::build_all_with_schema(&[z0, z1], dir.path(), &schema).unwrap();
+    let mut allowed: HashSet<String> = HashSet::new();
+    allowed.insert("a".to_string());
+    ZoneSurfFilter::build_all_filtered(&[z0, z1], dir.path(), &allowed).unwrap();
 
     // Time fields are skipped by SuRF builder
     let ts_path = dir.path().join("uidTS_ts.zsrf");
@@ -320,7 +324,9 @@ fn zone_surf_skips_fixed_timestamp_field() {
         .create();
 
     let dir = tempdir().unwrap();
-    ZoneSurfFilter::build_all(&[z0, z1], dir.path()).unwrap();
+    let mut allowed: HashSet<String> = HashSet::new();
+    allowed.insert("id".to_string());
+    ZoneSurfFilter::build_all_filtered(&[z0, z1], dir.path(), &allowed).unwrap();
 
     let ts_path = dir.path().join("uidT_timestamp.zsrf");
     assert!(std::fs::metadata(&ts_path).is_err());
@@ -357,7 +363,9 @@ fn zone_surf_skips_mixed_numeric_field() {
         .create();
 
     let dir = tempdir().unwrap();
-    ZoneSurfFilter::build_all(&[z0, z1], dir.path()).unwrap();
+    let mut allowed: HashSet<String> = HashSet::new();
+    allowed.insert("id".to_string());
+    ZoneSurfFilter::build_all_filtered(&[z0, z1], dir.path(), &allowed).unwrap();
     let mix_path = dir.path().join("uidMix_mix.zsrf");
     assert!(
         std::fs::metadata(&mix_path).is_err(),
@@ -375,7 +383,9 @@ fn zone_surf_gt_boundary_byte_carry() {
     let z1 = zone_with_events("uidCarry", 1, &[65535, 65536]);
 
     let dir = tempdir().unwrap();
-    ZoneSurfFilter::build_all(&[z0, z1], dir.path()).unwrap();
+    let mut allowed: HashSet<String> = HashSet::new();
+    allowed.insert("id".to_string());
+    ZoneSurfFilter::build_all_filtered(&[z0, z1], dir.path(), &allowed).unwrap();
     let path = dir.path().join("uidCarry_id.zsrf");
     let zsf = ZoneSurfFilter::load(&path).unwrap();
 
@@ -406,7 +416,9 @@ fn zone_surf_gt_prefix_terminal_has_greater_descendants() {
     let z0 = zone_with_events("uidPref", 0, &[10, 1000, 1001]);
 
     let dir = tempdir().unwrap();
-    ZoneSurfFilter::build_all(&[z0], dir.path()).unwrap();
+    let mut allowed: HashSet<String> = HashSet::new();
+    allowed.insert("id".to_string());
+    ZoneSurfFilter::build_all_filtered(&[z0], dir.path(), &allowed).unwrap();
     let path = dir.path().join("uidPref_id.zsrf");
     let zsf = ZoneSurfFilter::load(&path).unwrap();
 
@@ -429,7 +441,9 @@ fn zone_surf_gt_many_bounds_monotonic() {
     let z0 = zone_with_events("uidMono", 0, &values);
 
     let dir = tempdir().unwrap();
-    ZoneSurfFilter::build_all(&[z0], dir.path()).unwrap();
+    let mut allowed: HashSet<String> = HashSet::new();
+    allowed.insert("id".to_string());
+    ZoneSurfFilter::build_all_filtered(&[z0], dir.path(), &allowed).unwrap();
     let path = dir.path().join("uidMono_id.zsrf");
     let zsf = ZoneSurfFilter::load(&path).unwrap();
     let seg = "segM";

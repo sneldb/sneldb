@@ -383,3 +383,221 @@ async fn build_from_plan_skips_special_fields_for_aggregation() {
 
     assert!(!evaluator.evaluate_event(&should_fail));
 }
+
+#[tokio::test]
+async fn where_temporal_literal_eq_iso8601_matches_created_at_seconds() {
+    let registry_factory = SchemaRegistryFactory::new();
+    registry_factory
+        .define_with_fields("evt_time2", &[("id", "int"), ("created_at", "datetime")])
+        .await
+        .unwrap();
+    let registry = registry_factory.registry();
+
+    // WHERE created_at = "2025-01-01T00:00:01Z"
+    let expr = Expr::Compare {
+        field: "created_at".into(),
+        op: CompareOp::Eq,
+        value: json!("2025-01-01T00:00:01Z"),
+    };
+
+    let command = CommandFactory::query()
+        .with_event_type("evt_time2")
+        .with_context_id("ctxA")
+        .with_where_clause(expr)
+        .create();
+
+    let plan = QueryPlanFactory::new()
+        .with_command(command)
+        .with_registry(registry.clone())
+        .create()
+        .await;
+
+    let mut builder = ConditionEvaluatorBuilder::new();
+    if let Some(expr) = plan.where_clause() {
+        builder.add_where_clause(expr);
+    }
+    let evaluator = builder.into_evaluator();
+
+    let ts_eq = chrono::DateTime::parse_from_rfc3339("2025-01-01T00:00:01Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc)
+        .timestamp();
+    let ts_other = ts_eq - 1;
+
+    let pass = EventFactory::new()
+        .with("event_type", "evt_time2")
+        .with("context_id", "ctxA")
+        .with("timestamp", 0)
+        .with("payload", json!({"id": 1, "created_at": ts_eq}))
+        .create();
+    let fail = EventFactory::new()
+        .with("event_type", "evt_time2")
+        .with("context_id", "ctxA")
+        .with("timestamp", 0)
+        .with("payload", json!({"id": 2, "created_at": ts_other}))
+        .create();
+
+    assert!(evaluator.evaluate_event(&pass));
+    assert!(!evaluator.evaluate_event(&fail));
+}
+
+#[tokio::test]
+async fn where_date_literal_eq_midnight_matches_date_field() {
+    let registry_factory = SchemaRegistryFactory::new();
+    registry_factory
+        .define_with_fields("evt_date", &[("id", "int"), ("on", "date")])
+        .await
+        .unwrap();
+    let registry = registry_factory.registry();
+
+    // WHERE on = "2025-09-06"
+    let expr = Expr::Compare {
+        field: "on".into(),
+        op: CompareOp::Eq,
+        value: json!("2025-09-06"),
+    };
+
+    let command = CommandFactory::query()
+        .with_event_type("evt_date")
+        .with_context_id("ctxD")
+        .with_where_clause(expr)
+        .create();
+
+    let plan = QueryPlanFactory::new()
+        .with_command(command)
+        .with_registry(registry.clone())
+        .create()
+        .await;
+
+    let mut builder = ConditionEvaluatorBuilder::new();
+    if let Some(expr) = plan.where_clause() {
+        builder.add_where_clause(expr);
+    }
+    let evaluator = builder.into_evaluator();
+
+    let date_midnight = chrono::NaiveDate::parse_from_str("2025-09-06", "%Y-%m-%d")
+        .unwrap()
+        .and_hms_opt(0, 0, 0)
+        .unwrap();
+    let ts_midnight = date_midnight.and_utc().timestamp();
+    let ts_other = ts_midnight + 86_400;
+
+    let pass = EventFactory::new()
+        .with("event_type", "evt_date")
+        .with("context_id", "ctxD")
+        .with("timestamp", 0)
+        .with("payload", json!({"id": 1, "on": ts_midnight}))
+        .create();
+    let fail = EventFactory::new()
+        .with("event_type", "evt_date")
+        .with("context_id", "ctxD")
+        .with("timestamp", 0)
+        .with("payload", json!({"id": 2, "on": ts_other}))
+        .create();
+
+    assert!(evaluator.evaluate_event(&pass));
+    assert!(!evaluator.evaluate_event(&fail));
+}
+
+#[tokio::test]
+async fn where_fractional_second_range_collapses_to_empty() {
+    let registry_factory = SchemaRegistryFactory::new();
+    registry_factory
+        .define_with_fields(
+            "evt_frac_eval",
+            &[("id", "int"), ("created_at", "datetime")],
+        )
+        .await
+        .unwrap();
+    let registry = registry_factory.registry();
+
+    // WHERE created_at >= 00:00:00.600Z AND created_at < 00:00:00.800Z
+    let expr = Expr::And(
+        Box::new(Expr::Compare {
+            field: "created_at".into(),
+            op: CompareOp::Gte,
+            value: json!("2025-01-01T00:00:00.600Z"),
+        }),
+        Box::new(Expr::Compare {
+            field: "created_at".into(),
+            op: CompareOp::Lt,
+            value: json!("2025-01-01T00:00:00.800Z"),
+        }),
+    );
+
+    let command = CommandFactory::query()
+        .with_event_type("evt_frac_eval")
+        .with_context_id("ctxF")
+        .with_where_clause(expr)
+        .create();
+
+    let plan = QueryPlanFactory::new()
+        .with_command(command)
+        .with_registry(registry.clone())
+        .create()
+        .await;
+
+    let mut builder = ConditionEvaluatorBuilder::new();
+    if let Some(expr) = plan.where_clause() {
+        builder.add_where_clause(expr);
+    }
+    let evaluator = builder.into_evaluator();
+
+    let base_sec = chrono::DateTime::parse_from_rfc3339("2025-01-01T00:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc)
+        .timestamp();
+
+    let event = EventFactory::new()
+        .with("event_type", "evt_frac_eval")
+        .with("context_id", "ctxF")
+        .with("timestamp", 0)
+        .with("payload", json!({"id": 1, "created_at": base_sec}))
+        .create();
+
+    assert!(!evaluator.evaluate_event(&event));
+}
+
+#[tokio::test]
+async fn since_microseconds_string_normalizes_to_seconds_inclusive() {
+    let registry_factory = SchemaRegistryFactory::new();
+    registry_factory
+        .define_with_fields("evt_us_eval", &[("id", "int"), ("created_at", "datetime")])
+        .await
+        .unwrap();
+    let registry = registry_factory.registry();
+
+    // SINCE "1735689600000000" USING created_at
+    let command = CommandFactory::query()
+        .with_event_type("evt_us_eval")
+        .with_context_id("ctxU")
+        .with_since("1735689600000000")
+        .with_time_field("created_at")
+        .create();
+
+    let plan = QueryPlanFactory::new()
+        .with_command(command)
+        .with_registry(registry.clone())
+        .create()
+        .await;
+
+    let evaluator = ConditionEvaluatorBuilder::build_from_plan(&plan);
+
+    let since_sec = 1_735_689_600i64; // 2025-01-01T00:00:00Z
+
+    let before = EventFactory::new()
+        .with("event_type", "evt_us_eval")
+        .with("context_id", "ctxU")
+        .with("timestamp", 0)
+        .with("payload", json!({"id": 1, "created_at": since_sec - 1}))
+        .create();
+    let at = EventFactory::new()
+        .with("event_type", "evt_us_eval")
+        .with("context_id", "ctxU")
+        .with("timestamp", 0)
+        .with("payload", json!({"id": 2, "created_at": since_sec}))
+        .create();
+
+    assert!(!evaluator.evaluate_event(&before));
+    assert!(evaluator.evaluate_event(&at));
+}

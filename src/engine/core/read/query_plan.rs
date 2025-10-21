@@ -1,6 +1,9 @@
 use crate::command::types::{Command, Expr};
 use crate::engine::core::FilterPlan;
 use crate::engine::core::read::aggregate::plan::AggregatePlan;
+use crate::engine::core::read::cache::GlobalIndexCatalogCache;
+use crate::engine::core::read::catalog::IndexRegistry;
+use crate::engine::core::read::index_planner::IndexPlanner;
 use crate::engine::schema::registry::SchemaRegistry;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -18,6 +21,7 @@ pub struct QueryPlan {
     pub segment_base_dir: PathBuf,
     pub segment_ids: Arc<std::sync::RwLock<Vec<String>>>,
     pub aggregate_plan: Option<AggregatePlan>,
+    pub index_registry: IndexRegistry,
 }
 
 impl QueryPlan {
@@ -49,7 +53,7 @@ impl QueryPlan {
                         FilterPlan::remove_implicit_since(&mut filter_plans, tf, since);
                     }
                 }
-                Some(Self {
+                let mut plan = Self {
                     command,
                     metadata: HashMap::new(),
                     filter_plans,
@@ -57,7 +61,37 @@ impl QueryPlan {
                     segment_base_dir: segment_base_dir.to_path_buf(),
                     segment_ids: Arc::clone(segment_ids),
                     aggregate_plan,
-                })
+                    index_registry: IndexRegistry::new(),
+                };
+                // Preload catalogs for discovered segments (best-effort)
+                if let Some(uid) = plan.event_type_uid().await {
+                    let segs = plan
+                        .segment_ids
+                        .read()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .clone();
+                    let _ = GlobalIndexCatalogCache::instance();
+                    plan.index_registry
+                        .load_for_segments(&plan.segment_base_dir, &segs, &uid);
+                    // Assign index strategies using a segment that has a loaded catalog as representative
+                    // Prefer a segment that has a catalog entry
+                    let rep_seg = segs
+                        .iter()
+                        .find(|s| plan.index_registry.available_global(s).bits() != 0)
+                        .or_else(|| segs.first());
+                    if let Some(rep) = rep_seg {
+                        let planner = IndexPlanner::new(
+                            &plan.registry,
+                            &plan.index_registry,
+                            Some(uid.clone()),
+                        );
+                        for fp in &mut plan.filter_plans {
+                            let strat = planner.choose(fp, rep).await;
+                            fp.index_strategy = Some(strat);
+                        }
+                    }
+                }
+                Some(plan)
             }
             _ => {
                 error!(target: "sneldb::query_plan", "Expected a Query command, got something else");
@@ -167,6 +201,7 @@ impl QueryPlan {
             segment_base_dir: PathBuf::new(),
             segment_ids: Arc::new(std::sync::RwLock::new(Vec::new())),
             aggregate_plan,
+            index_registry: IndexRegistry::new(),
         }
     }
 }

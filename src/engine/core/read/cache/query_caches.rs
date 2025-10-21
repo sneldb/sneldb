@@ -9,14 +9,14 @@ use crate::engine::core::zone::zone_index::ZoneIndex;
 
 use super::column_handle::ColumnHandle;
 use super::column_handle_key::ColumnHandleKey;
+use super::global_calendar_cache::GlobalFieldCalendarCache;
 use super::global_column_handle_cache::GlobalColumnHandleCache;
+use super::global_temporal_index_cache::GlobalFieldTemporalIndexCache;
 use super::global_zone_index_cache::{CacheOutcome, GlobalZoneIndexCache};
 use super::global_zone_surf_cache::GlobalZoneSurfCache;
-use super::global_calendar_cache::{GlobalCalendarCache, GlobalFieldCalendarCache};
-use super::global_temporal_index_cache::{GlobalTemporalIndexCache, GlobalFieldTemporalIndexCache};
-use crate::engine::core::time::{CalendarDir, TemporalCalendarIndex, ZoneTemporalIndex};
 use super::zone_surf_cache_key::ZoneSurfCacheKey;
 use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
+use crate::engine::core::time::{TemporalCalendarIndex, ZoneTemporalIndex};
 use crate::shared::path::absolutize;
 
 #[derive(Debug)]
@@ -37,7 +37,8 @@ pub struct QueryCaches {
     zone_surf_by_key: Mutex<HashMap<ZoneSurfCacheKey, Arc<ZoneSurfFilter>>>,
     // Per-query memoization for field-aware calendars and temporal indexes
     field_calendar_by_key: Mutex<HashMap<(String, String, String), Arc<TemporalCalendarIndex>>>,
-    field_temporal_index_by_key: Mutex<HashMap<(String, String, String, u32), Arc<ZoneTemporalIndex>>>,
+    field_temporal_index_by_key:
+        Mutex<HashMap<(String, String, String, u32), Arc<ZoneTemporalIndex>>>,
 }
 
 impl QueryCaches {
@@ -277,20 +278,7 @@ impl QueryCaches {
         format!("zone_index_cache: hits={} misses={} reloads={}", h, m, r)
     }
 
-    pub fn get_or_load_calendar(&self, segment_id: &str, uid: &str) -> Result<Arc<CalendarDir>, std::io::Error> {
-        GlobalCalendarCache::instance()
-            .get_or_load(&self.base_dir, segment_id, uid)
-    }
-
-    pub fn get_or_load_temporal_index(
-        &self,
-        segment_id: &str,
-        uid: &str,
-        zone_id: u32,
-    ) -> Result<Arc<ZoneTemporalIndex>, std::io::Error> {
-        GlobalTemporalIndexCache::instance()
-            .get_or_load(&self.base_dir, segment_id, uid, zone_id)
-    }
+    // Removed legacy calendar and temporal index getters
 
     pub fn get_or_load_field_calendar(
         &self,
@@ -308,8 +296,12 @@ impl QueryCaches {
         {
             return Ok(v);
         }
-        let arc = GlobalFieldCalendarCache::instance()
-            .get_or_load(&self.base_dir, segment_id, uid, field)?;
+        let arc = GlobalFieldCalendarCache::instance().get_or_load(
+            &self.base_dir,
+            segment_id,
+            uid,
+            field,
+        )?;
         let mut map = self
             .field_calendar_by_key
             .lock()
@@ -340,8 +332,13 @@ impl QueryCaches {
         {
             return Ok(v);
         }
-        let arc = GlobalFieldTemporalIndexCache::instance()
-            .get_or_load(&self.base_dir, segment_id, uid, field, zone_id)?;
+        let arc = GlobalFieldTemporalIndexCache::instance().get_or_load(
+            &self.base_dir,
+            segment_id,
+            uid,
+            field,
+            zone_id,
+        )?;
         let mut map = self
             .field_temporal_index_by_key
             .lock()

@@ -42,6 +42,7 @@ xorf = { version = "0.11.0", features = ["serde"] }
 rayon = "1.8"
 sysinfo = "0.35"
 roaring = "0.10"
+bitflags = { version = "2.5", features = ["serde"] }
 hyper = { version = "1.0", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"

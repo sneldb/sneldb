@@ -1,6 +1,7 @@
 use super::TemporalCalendarIndex;
 use crate::command::types::CompareOp;
 use crate::engine::core::time::temporal_traits::FieldIndex;
+use crate::shared::storage_header::{BinaryHeader, FileKind};
 use roaring::RoaringBitmap;
 
 fn bm(ids: &[u32]) -> RoaringBitmap {
@@ -141,4 +142,68 @@ fn save_and_load_roundtrip() {
     // Check basic integrity: a known Eq hits same zone
     let eq = loaded.zones_intersecting(CompareOp::Eq, base as i64);
     assert!(eq.contains(5));
+}
+
+#[test]
+fn header_version_is_v2_after_save() {
+    let mut cal = TemporalCalendarIndex::new("ts");
+    let base = 1_700_100_000u64;
+    cal.add_zone_range(42, base, base + 3600);
+
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    cal.save("UID999", dir).expect("save");
+
+    let path = dir.join("UID999_ts.cal");
+    let mut f = std::fs::File::open(&path).expect("open cal");
+    let hdr = BinaryHeader::read_from(&mut f).expect("header");
+    assert_eq!(hdr.magic, FileKind::CalendarDir.magic());
+    assert_eq!(hdr.version, 2);
+}
+
+#[test]
+fn save_and_load_empty_calendar() {
+    let cal = TemporalCalendarIndex::new("empty_field");
+
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    cal.save("UIDEMPTY", dir).expect("save empty");
+
+    let loaded = TemporalCalendarIndex::load("UIDEMPTY", "empty_field", dir).expect("load");
+    // Queries should be empty
+    assert!(loaded.zones_intersecting(CompareOp::Eq, 0).is_empty());
+    assert!(loaded.zones_intersecting_range(0, 1_000).is_empty());
+}
+
+#[test]
+fn save_and_load_multi_zone_multi_bucket() {
+    let mut cal = TemporalCalendarIndex::new("multi");
+    // Two non-overlapping ranges far apart (different days)
+    let day0 = 1_700_200_000u64; // arbitrary stable epoch
+    let day3 = day0 + 3 * 86_400; // +3 days
+
+    // Zone 1: spans 2 hours on day0
+    cal.add_zone_range(1, day0 + 3600, day0 + 3 * 3600);
+    // Zone 2: spans 1 hour on day3
+    cal.add_zone_range(2, day3 + 2 * 3600, day3 + 3 * 3600);
+
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    cal.save("UIDM", dir).expect("save multi");
+
+    let loaded = TemporalCalendarIndex::load("UIDM", "multi", dir).expect("load multi");
+
+    // Timestamps inside each range should yield the corresponding zone
+    let z1 = loaded.zones_intersecting(CompareOp::Eq, (day0 + 2 * 3600) as i64);
+    assert!(z1.contains(1));
+    assert!(!z1.contains(2));
+
+    let z2 = loaded.zones_intersecting(CompareOp::Eq, (day3 + 2 * 3600 + 1800) as i64);
+    assert!(z2.contains(2));
+    assert!(!z2.contains(1));
+
+    // A range spanning both days should include both zones
+    let zr = loaded.zones_intersecting_range(day0 as i64, (day3 + 3 * 3600) as i64);
+    assert!(zr.contains(1));
+    assert!(zr.contains(2));
 }

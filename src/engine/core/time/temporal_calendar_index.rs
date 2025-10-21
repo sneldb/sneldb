@@ -6,7 +6,7 @@ use crate::command::types::{CompareOp, TimeGranularity};
 use crate::engine::core::time::temporal_traits::FieldIndex;
 use crate::shared::datetime::time_bucketing::naive_bucket_of;
 use crate::shared::storage_header::{BinaryHeader, FileKind};
-use std::io::{Read, Write};
+use std::io::{BufWriter, Read, Write};
 use std::path::Path;
 
 /// Per-field temporal calendar index mapping time buckets to candidate zone ids.
@@ -154,9 +154,10 @@ impl FieldIndex<i64> for TemporalCalendarIndex {
 impl TemporalCalendarIndex {
     pub fn save(&self, uid: &str, segment_dir: &Path) -> std::io::Result<()> {
         let path = segment_dir.join(format!("{}_{}.cal", uid, self.field));
-        let mut file = std::fs::File::create(&path)?;
-        let header = BinaryHeader::new(FileKind::CalendarDir.magic(), 1, 0);
-        header.write_to(&mut file)?;
+        let file = std::fs::File::create(&path)?;
+        let mut w = BufWriter::with_capacity(256 * 1024, file);
+        let header = BinaryHeader::new(FileKind::CalendarDir.magic(), 2, 0);
+        header.write_to(&mut w)?;
 
         fn write_map<W: Write>(
             w: &mut W,
@@ -165,25 +166,26 @@ impl TemporalCalendarIndex {
             w.write_all(&(map.len() as u32).to_le_bytes())?;
             for (bucket, bm) in map.iter() {
                 w.write_all(&bucket.to_le_bytes())?;
-                let count = bm.len() as u32;
-                w.write_all(&count.to_le_bytes())?;
-                for id in bm.iter() {
-                    let id_u32: u32 = id.try_into().unwrap_or(u32::MAX);
-                    w.write_all(&id_u32.to_le_bytes())?;
-                }
+                // Serialize roaring bitmap directly with a length prefix
+                // Collect to an in-memory buffer once to get length
+                let mut buf = Vec::new();
+                bm.serialize_into(&mut buf)?;
+                let len = buf.len() as u32;
+                w.write_all(&len.to_le_bytes())?;
+                w.write_all(&buf)?;
             }
             Ok(())
         }
 
-        write_map(&mut file, &self.hour)?;
-        write_map(&mut file, &self.day)?;
-        Ok(())
+        write_map(&mut w, &self.hour)?;
+        write_map(&mut w, &self.day)?;
+        w.flush()
     }
 
     pub fn load(uid: &str, field: &str, segment_dir: &Path) -> std::io::Result<Self> {
         let path = segment_dir.join(format!("{}_{}.cal", uid, field));
         let mut file = std::fs::File::open(&path)?;
-        let _ = BinaryHeader::read_from(&mut file)?;
+        let _hdr = BinaryHeader::read_from(&mut file)?;
 
         fn read_map<R: Read>(r: &mut R) -> std::io::Result<HashMap<u32, RoaringBitmap>> {
             let mut u32buf = [0u8; 4];
@@ -194,13 +196,11 @@ impl TemporalCalendarIndex {
                 r.read_exact(&mut u32buf)?;
                 let bucket = u32::from_le_bytes(u32buf);
                 r.read_exact(&mut u32buf)?;
-                let zcount = u32::from_le_bytes(u32buf) as usize;
-                let mut bm = RoaringBitmap::new();
-                for _ in 0..zcount {
-                    r.read_exact(&mut u32buf)?;
-                    let id = u32::from_le_bytes(u32buf);
-                    bm.insert(id as u32);
-                }
+                let len = u32::from_le_bytes(u32buf) as usize;
+                let mut buf = vec![0u8; len];
+                r.read_exact(&mut buf)?;
+                let mut cursor = std::io::Cursor::new(buf);
+                let bm = RoaringBitmap::deserialize_from(&mut cursor)?;
                 out.insert(bucket, bm);
             }
             Ok(out)

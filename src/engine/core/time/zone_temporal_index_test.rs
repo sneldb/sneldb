@@ -153,3 +153,49 @@ fn zti_may_match_range_overlap() {
     // Inverted range ⇒ false
     assert!(!zti.may_match_range(300, 200));
 }
+
+#[test]
+fn zti_field_slab_multiple_zones_roundtrip() {
+    // Prepare three distinct zone indexes with different strides and ranges
+    let zti_a = ZoneTemporalIndex::from_timestamps(vec![1_000i64, 1_002, 1_004, 1_006], 2, 4);
+    let zti_b = ZoneTemporalIndex::from_timestamps(vec![2_000i64, 2_001, 2_002, 2_003], 1, 4);
+    let zti_c = ZoneTemporalIndex::from_timestamps(vec![3_000i64, 3_010, 3_020], 10, 4);
+
+    let dir = tempfile::tempdir().expect("tmpdir");
+    let entries = vec![(3u32, &zti_a), (5u32, &zti_b), (9u32, &zti_c)];
+
+    // Save all zones into a single per-field slab file
+    ZoneTemporalIndex::save_field_slab("uidS", "created_at", dir.path(), &entries)
+        .expect("save field slab");
+
+    // Load each zone independently and validate contents
+    let la = ZoneTemporalIndex::load_for_field("uidS", "created_at", 3, dir.path())
+        .expect("load zone 3");
+    assert_eq!(la.stride, 2);
+    assert_eq!(la.min_ts, zti_a.min_ts);
+    assert_eq!(la.max_ts, zti_a.max_ts);
+    assert!(la.contains_ts(1_002));
+    assert!(!la.contains_ts(1_003));
+
+    let lb = ZoneTemporalIndex::load_for_field("uidS", "created_at", 5, dir.path())
+        .expect("load zone 5");
+    assert_eq!(lb.stride, 1);
+    assert_eq!(lb.min_ts, zti_b.min_ts);
+    assert_eq!(lb.max_ts, zti_b.max_ts);
+    assert!(lb.contains_ts(2_003));
+    assert!(!lb.contains_ts(1_002)); // cross-zone value should not appear
+
+    let lc = ZoneTemporalIndex::load_for_field("uidS", "created_at", 9, dir.path())
+        .expect("load zone 9");
+    assert_eq!(lc.stride, 10);
+    assert_eq!(lc.min_ts, zti_c.min_ts);
+    assert_eq!(lc.max_ts, zti_c.max_ts);
+    assert!(lc.contains_ts(3_010));
+    assert!(!lc.contains_ts(3_011));
+
+    // Loading a non-existent zone id should return NotFound
+    let err = ZoneTemporalIndex::load_for_field("uidS", "created_at", 999, dir.path())
+        .err()
+        .expect("expected error");
+    assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+}

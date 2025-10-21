@@ -1,3 +1,4 @@
+use crate::engine::core::time::ZoneTemporalIndex;
 use crate::engine::core::zone::rlte_index::RlteIndex;
 use crate::engine::core::zone::zone_xor_index::ZoneXorFilterIndex;
 use crate::engine::core::{FieldXorFilter, ZoneIndex, ZoneMeta, ZonePlanner, ZoneWriter};
@@ -179,20 +180,33 @@ async fn test_zone_writer_skips_surf_for_datetime_and_builds_for_amount() {
         "datetime field ts should not have SuRF"
     );
 
-    // Validate per-field temporal artifacts exist: {uid}_{field}.cal and {uid}_{field}_{zone}.tfi
+    // Validate per-field temporal artifacts exist: {uid}_{field}.cal and slab {uid}_{field}.tfi
     let cal_path = segment_dir.join(format!("{}_{}.cal", uid, "ts"));
     assert!(
         cal_path.exists(),
         "per-field calendar missing for ts: {}",
         cal_path.display()
     );
+    let slab_path = segment_dir.join(format!("{}_{}.tfi", uid, "ts"));
+    assert!(
+        slab_path.exists(),
+        "per-field slab tfi missing for ts: {}",
+        slab_path.display()
+    );
+
+    // Ensure each zone index can be loaded from the slab and recognizes one of its timestamps
     for zp in &plans {
-        let tfi_path = segment_dir.join(format!("{}_{}_{}.tfi", uid, "ts", zp.id));
-        assert!(
-            tfi_path.exists(),
-            "per-zone temporal index missing for ts zone {}: {}",
-            zp.id,
-            tfi_path.display()
-        );
+        let zti = ZoneTemporalIndex::load_for_field(&uid, "ts", zp.id, segment_dir)
+            .expect("load zti from slab");
+        if let Some(ev) = zp.events.get(0) {
+            if let Some(ts) = ev
+                .payload
+                .as_object()
+                .and_then(|o| o.get("ts"))
+                .and_then(|v| v.as_u64())
+            {
+                assert!(zti.contains_ts(ts as i64));
+            }
+        }
     }
 }

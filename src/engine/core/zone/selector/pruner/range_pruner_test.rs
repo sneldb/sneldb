@@ -5,6 +5,7 @@ use tempfile::tempdir;
 
 use crate::command::types::CompareOp;
 use crate::engine::core::QueryCaches;
+use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::engine::core::zone::selector::builder::ZoneSelectorBuilder;
 use crate::engine::core::zone::selector::pruner::range_pruner::RangePruner;
 use crate::engine::core::zone::selector::selection_context::SelectionContext;
@@ -100,12 +101,15 @@ async fn surf_ge_and_le_inclusive_boundaries_id_field() {
         .await;
 
     // Gte 100 should include both segments
-    let f_gte = FilterPlanFactory::new()
+    let mut f_gte = FilterPlanFactory::new()
         .with_column("order_id")
         .with_operation(CompareOp::Gte)
         .with_uid(&uid)
         .with_value(json!(100))
         .create();
+    f_gte.index_strategy = Some(IndexStrategy::ZoneSuRF {
+        field: "order_id".to_string(),
+    });
     let ctx1 = SelectionContext {
         plan: &f_gte,
         query_plan: &q,
@@ -119,12 +123,15 @@ async fn surf_ge_and_le_inclusive_boundaries_id_field() {
     assert!(!g2.is_empty());
 
     // Lte 100 should include both segments
-    let f_lte = FilterPlanFactory::new()
+    let mut f_lte = FilterPlanFactory::new()
         .with_column("order_id")
         .with_operation(CompareOp::Lte)
         .with_uid(&uid)
         .with_value(json!(100))
         .create();
+    f_lte.index_strategy = Some(IndexStrategy::ZoneSuRF {
+        field: "order_id".to_string(),
+    });
     let ctx2 = SelectionContext {
         plan: &f_lte,
         query_plan: &q,
@@ -211,12 +218,15 @@ async fn surf_gt_and_lt_exclusive_boundaries_id_field() {
         .await;
 
     // Gt 10 -> seg1 only
-    let f_gt = FilterPlanFactory::new()
+    let mut f_gt = FilterPlanFactory::new()
         .with_column("user_id")
         .with_operation(CompareOp::Gt)
         .with_uid(&uid)
         .with_value(json!(10))
         .create();
+    f_gt.index_strategy = Some(IndexStrategy::ZoneSuRF {
+        field: "user_id".to_string(),
+    });
     let ctx1 = SelectionContext {
         plan: &f_gt,
         query_plan: &q,
@@ -230,12 +240,15 @@ async fn surf_gt_and_lt_exclusive_boundaries_id_field() {
     assert!(z2.is_empty());
 
     // Lt 10 -> seg2 only
-    let f_lt = FilterPlanFactory::new()
+    let mut f_lt = FilterPlanFactory::new()
         .with_column("user_id")
         .with_operation(CompareOp::Lt)
         .with_uid(&uid)
         .with_value(json!(10))
         .create();
+    f_lt.index_strategy = Some(IndexStrategy::ZoneSuRF {
+        field: "user_id".to_string(),
+    });
     let ctx2 = SelectionContext {
         plan: &f_lt,
         query_plan: &q,
@@ -247,77 +260,6 @@ async fn surf_gt_and_lt_exclusive_boundaries_id_field() {
     let y2 = sel2.select_for_segment("002");
     assert!(y1.is_empty());
     assert!(!y2.is_empty());
-}
-
-#[tokio::test]
-async fn falls_back_to_range_handler_on_non_id_field() {
-    use crate::logging::init_for_tests;
-    init_for_tests();
-
-    let tmp = tempdir().unwrap();
-    let shard_dir = tmp.path().join("shard-0");
-    let seg1 = shard_dir.join("001");
-    std::fs::create_dir_all(&seg1).unwrap();
-
-    let reg_fac = SchemaRegistryFactory::new();
-    let registry = reg_fac.registry();
-    let event_type = "range_fallback";
-    reg_fac
-        .define_with_field_types(
-            event_type,
-            &[
-                ("context_id", FieldType::String),
-                ("amount", FieldType::I64),
-            ],
-        )
-        .await
-        .unwrap();
-    let uid = registry.read().await.get_uid(event_type).unwrap();
-
-    let a = EventFactory::new()
-        .with("event_type", event_type)
-        .with("context_id", "a")
-        .with("payload", json!({"amount": 5}))
-        .create();
-    let mem = MemTableFactory::new()
-        .with_capacity(1)
-        .with_events(vec![a])
-        .create()
-        .unwrap();
-    crate::engine::core::Flusher::new(
-        mem,
-        1,
-        &seg1,
-        registry.clone(),
-        Arc::new(tokio::sync::Mutex::new(())),
-    )
-    .flush()
-    .await
-    .unwrap();
-
-    let cmd = CommandFactory::query().with_event_type(event_type).create();
-    let q = QueryPlanFactory::new()
-        .with_registry(Arc::clone(&registry))
-        .with_command(cmd)
-        .build()
-        .await;
-
-    // Even though field is non-id-like, fallback handler returns all zones ⇒ not empty
-    let f_gt = FilterPlanFactory::new()
-        .with_column("amount")
-        .with_operation(CompareOp::Gt)
-        .with_uid(&uid)
-        .with_value(json!(1))
-        .create();
-    let ctx = SelectionContext {
-        plan: &f_gt,
-        query_plan: &q,
-        base_dir: &shard_dir,
-        caches: None,
-    };
-    let sel = ZoneSelectorBuilder::new(ctx).build();
-    let z = sel.select_for_segment("001");
-    assert!(!z.is_empty());
 }
 
 #[tokio::test]
@@ -385,7 +327,14 @@ async fn skips_surf_for_payload_temporal_field() {
     // RangePruner should skip temporal payload field 'ts' and return None
     let artifacts = ZoneArtifacts::new(&shard_dir, Some(&caches));
     let pruner = RangePruner { artifacts };
-    let attempt = pruner.attempt("001", &uid, "ts", &json!(150u64), &CompareOp::Gt);
+    let args = super::PruneArgs {
+        segment_id: "001",
+        uid: &uid,
+        column: "ts",
+        value: Some(&json!(150u64)),
+        op: Some(&CompareOp::Gt),
+    };
+    let attempt = pruner.apply_surf_only(&args);
     assert!(
         attempt.is_none(),
         "RangePruner must skip for temporal fields"

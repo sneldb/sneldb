@@ -9,7 +9,7 @@ The storage engine turns incoming events into durable, immutable data you can qu
 - **WAL (write-ahead log)**: Per-shard durability log. Every accepted event is appended here first.
 - **MemTable**: In-memory buffer for recent events. Fast inserts; swapped out when full.
 - **Flush worker**: Converts a full MemTable into an immutable on-disk segment in the background.
-- **Segments**: On-disk building blocks (columns, zone metadata, filters, lightweight indexes).
+- **Segments**: On-disk building blocks (columns, zone metadata, filters, lightweight indexes, index catalogs).
 - **Snapshots**: Optional utility files (`.snp` events, `.smt` metadata) for export/replay and range bookkeeping.
 - **Compactor** (covered later): Merges small segments into larger ones to keep reads predictable.
 
@@ -94,10 +94,20 @@ Small example:
 - Inside the segment:
   - **Column files**: One file per field, optimized for sequential appends and later memory-mapped (mmap) access. Naming: `<uid>_<field>.col`. Example: `u01_timestamp.col`, `u01_event_type.col`, `u01_context_id.col`, `u01_plan.col`, `u01_country.col`. Where `<uid>` is defiened per event type.
   - **Zone metadata**: Per-zone min/max timestamps, row ranges, and presence stats for pruning.
-  - **Filters**: Compact structures for pre-read pruning:
+  - **Filters/Indexes** (policy-driven):
     - XOR: `<uid>_<field>.xf` (approximate membership)
     - Enum Bitmap (EBM): `<uid>_<field>.ebm` (eq/neq for enums)
     - Zone SuRF: `<uid>_<field>.zsrf` (succinct range filter for `>`, `>=`, `<`, `<=`)
+    - Zone XOR Index: `<uid>_<field>.zxf` (per-zone XOR index for equality pruning)
+    - Temporal Calendar: `<uid>_<field>.cal` (per-field day/hour → zone ids)
+    - Temporal Index (slab): `<uid>_<field>.tfi` (per-field slab of per-zone temporal indexes)
+  - **Index Catalog**: `{uid}.icx` describing which `IndexKind`s exist per field and globally for this segment.
+  - **Filters/Indexes** (policy-driven):
+    - XOR: `<uid>_<field>.xf`
+    - Enum Bitmap (EBM): `<uid>_<field>.ebm`
+    - Zone SuRF: `<uid>_<field>.zsrf`
+    - Zone XOR Index: `<uid>_<field>.zxf`
+  - **Index Catalog**: `{uid}.icx` (binary header + bincode `SegmentIndexCatalog`) recording available `IndexKind`s per field and globally for the segment.
   - **Offsets/Index**: Per-zone compressed offsets (`.zfc` files) describing compressed block ranges and in-block offsets.
 - - **Snapshots** (optional):
 - - Event Snapshots (`.snp`): portable arrays of events with a binary header + length‑prefixed JSON entries.
@@ -126,7 +136,7 @@ Sizing example:
 3. The event is appended to the WAL for shard 3 (durability).
 4. The event is inserted into shard 3’s active MemTable.
 5. When the MemTable reaches `flush_threshold`, it is swapped and the old one is queued for the background flush.
-6. The flush worker writes `00137/` with column files, 16 zones (if 32,768/2,048), zone metadata, XOR filters, Zone SuRF filters, and offsets/index.
+6. The flush worker writes `00137/` with column files, 16 zones (if 32,768/2,048), zone metadata, policy-selected filters/indexes (XF/EBM/ZSf/ZXF), an Index Catalog `{uid}.icx`, and offsets/index.
 7. Once published, queries immediately see the segment alongside any newer in-memory events.
 8. The WAL up to (and including) the flushed range is now safe to compact or rotate.
 
@@ -153,6 +163,19 @@ Sizing example:
 - **Async workers** (flush and compaction) are throttled so foreground writes and reads stay responsive.
 
 This is the spine of the engine: durable append, fast memory, immutable segments with rich metadata, and just enough background work to keep reads snappy as data grows.
+
+## Policy-driven index build (write-time)
+
+- Index builds are determined by an `IndexBuildPolicy` and an `IndexBuildPlanner` that produce a per-field `BuildPlan` of `IndexKind` bitflags and global kinds.
+- `ZoneWriter` consumes the plan to build only the requested artifacts; legacy catch‑all builders were removed in favor of filtered builders (e.g., `build_all_filtered`).
+- RLTE (if enabled) is included via the policy and emitted best‑effort.
+
+## Read-time catalogs and planning
+
+- Each segment’s `{uid}.icx` is loaded (and cached) into a `SegmentIndexCatalog`.
+- `IndexRegistry` aggregates catalogs across segments; `IndexPlanner` chooses an explicit `IndexStrategy` per filter based on available kinds and the schema.
+- Strategy selection uses a representative segment that actually has a catalog; if no catalog/kinds exist for a field/segment, the planner chooses `FullScan` to avoid filesystem probing.
+  - Temporal strategies are field-aware: `TemporalEq { field }` and `TemporalRange { field }` use the per-field calendar and slabbed temporal index for both the fixed `timestamp` and payload `datetime` fields (e.g., `created_at`).
 
 ## Read-time Projection & Column Pruning
 

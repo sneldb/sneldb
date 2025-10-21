@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::command::types::PickedZones;
+use crate::engine::core::read::cache::GlobalIndexCatalogCache;
+use crate::engine::core::read::catalog::IndexKind;
 use crate::engine::core::read::query_plan::QueryPlan;
 use crate::engine::core::zone::rlte_index::RlteIndex;
 use tracing::debug;
@@ -219,9 +221,14 @@ fn load_rlte_for_shard(
 )> {
     let mut out = Vec::new();
     for seg in segment_ids {
-        let seg_dir = base_dir.join(seg);
-        let path = seg_dir.join(format!("{}.rlte", uid));
-        if path.exists() {
+        // Check catalog whether RLTE is present for this segment/uid
+        if let Ok((catalog, _)) =
+            GlobalIndexCatalogCache::instance().get_or_load(base_dir, seg, uid)
+        {
+            if !catalog.global_kinds.contains(IndexKind::RLTE) {
+                continue;
+            }
+            let seg_dir = base_dir.join(seg);
             if let Ok(idx) = RlteIndex::load(uid, &seg_dir) {
                 for (f, m) in idx.ladders.into_iter() {
                     out.push((f, seg.clone(), m));

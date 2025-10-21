@@ -125,9 +125,6 @@ async fn test_insert_and_maybe_flush_e2e() {
     let xf_path = segment_path.join(format!("{}_{}.xf", uid, "event_type"));
     assert!(xf_path.exists(), ".xf file should exist at {:?}", xf_path);
 
-    let xf_path = segment_path.join(format!("{}_{}.xf", uid, "timestamp"));
-    assert!(xf_path.exists(), ".xf file should exist at {:?}", xf_path);
-
     let xf_path = segment_path.join(format!("{}_{}.xf", uid, "context_id"));
     assert!(xf_path.exists(), ".xf file should exist at {:?}", xf_path);
 

@@ -15,7 +15,11 @@
 - XOR Filters — `{uid}_{field}.xf` per-field filters for fast membership tests.
 - Enum Bitmap Indexes — `{uid}_{field}.ebm` per-enum-field bitmaps for zone pruning.
 - Zone SuRF Filters — `{uid}_{field}.zsrf` per-field per-zone succinct range filters for range pruning.
+- Zone XOR Index — `{uid}_{field}.zxf` per-field per-zone XOR index for equality pruning.
+- Temporal Calendar Index — `{uid}_{field}.cal` per-field day/hour buckets → zone ids for temporal pruning.
+- Temporal Index (slab) — `{uid}_{field}.tfi` per-field file containing all per‑zone temporal indexes for that field.
 - Schemas — `schema/schemas.bin` append-only records of event type schemas and UIDs.
+- Index Catalog — `{uid}.icx` per-segment catalog of available index kinds (per-field and global).
 
 ## Binary headers
 
@@ -36,8 +40,10 @@ Magic strings per file kind:
 - Zone Index (`.idx` per-UID/context): `EVDBUID\0`
 - XOR Filters (`.xf`): `EVDBXRF\0`
 - Zone SuRF Filters (`.zsrf`): `EVDBZSF\0`
+- Zone XOR Index (`.zxf`): `EVDBZXF\0`
 - Shard Segment Index (`segments.idx`): `EVDBSIX\0`
 - Schemas (`schemas.bin`): `EVDBSCH\0`
+- Index Catalog (`.icx`): `EVDBICX\0`
 - Enum Bitmap Index (`.ebm`): `EVDBEBM\0`
 - Event Snapshots (`.snp`): `EVDBSNP\0`
 - Snapshot Metadata (`.smt`): `EVDBSMT\0`
@@ -59,6 +65,10 @@ data/
 │   │       ├── {uid}_{field}.zfc
 │   │       ├── {uid}.zones
 │   │       ├── {uid}.idx
+│   │       ├── {uid}_timestamp.cal
+│   │       ├── {uid}_timestamp.tfi
+│   │       ├── {uid}_{datetime_field}.cal
+│   │       ├── {uid}_{datetime_field}.tfi
 │   │       ├── {uid}_{field}.xf
 │   │       ├── {uid}_{field}.zsrf
 │   │       └── {uid}_{field}.ebm
@@ -123,7 +133,7 @@ Snapshots are ad-hoc utility files and can be written anywhere (not tied to the 
 - Contents:
   - `entries: Vec<ZoneSurfEntry>` where each entry is `{ zone_id: u32, trie: SurfTrie }`.
   - `SurfTrie` stores compact arrays of degrees, child offsets, labels, and terminal flags.
-- Built during flush/compaction by `ZoneWriter::write_all`.
+- Built during flush/compaction by `ZoneWriter::write_all` when enabled by the build plan.
 - Used by `ZoneFinder` for `Gt/Gte/Lt/Lte` operations before falling back to XOR/EBM.
 - Naming mirrors `.xf`/`.ebm`: per `uid` and `field`.
 
@@ -145,6 +155,21 @@ Snapshots are ad-hoc utility files and can be written anywhere (not tied to the 
       - `[bytes] packed_bitmap` (LSB-first within a byte; bit i set ⇒ row i has this variant)
 - Usage: on a filter `plan = "pro"`, prune zones where the `pro` bitmap is all zeros; similarly for `!=` by checking any non-target variant has a bit set.
 - Observability: use `convertor ebm <segment_dir> <uid> <field>` to dump a JSON view of per-zone row positions per variant.
+
+## Zone XOR index: `{uid}_{field}.zxf`
+
+- Per-zone `BinaryFuse8` filters over unique field values; used to quickly prune zones on equality.
+- File begins with a binary header (MAGIC `EVDBZXF\0`). Each entry: `[u32 zone_id][u32 blob_len][bytes serialized BinaryFuse8]`.
+- Built by `ZoneWriter::write_all` when `ZONE_XOR_INDEX` is present in the build plan for the field.
+
+## Index Catalog: `{uid}.icx`
+
+- Binary header (MAGIC `EVDBICX\0`) followed by a bincode-encoded `SegmentIndexCatalog`:
+  - `uid: String`
+  - `segment_id: String`
+  - `field_kinds: HashMap<String, IndexKind>`
+  - `global_kinds: IndexKind`
+- Writers emit an `.icx` per segment reflecting exactly the indexes built; readers use it to avoid probing for missing files and to select `IndexStrategy`.
 
 ## Schemas: `schema/schemas.bin`
 
@@ -191,6 +216,41 @@ Snapshots are ad-hoc utility files and can be written anywhere (not tied to the 
   - Readers stop gracefully on truncated data (warn and return successfully with the parsed prefix).
 
 ## Snapshot metadata: `*.smt`
+
+## Temporal calendar index: `{uid}_{field}.cal`
+
+- Per-field calendar over day/hour buckets mapping to candidate zone ids.
+- File begins with a binary header (MAGIC `EVDBCAL\0`, version 2).
+- Binary layout after header:
+  - Hour map, then day map; each map encoded as:
+    - `[u32] entry_count`
+    - Repeated `entry_count` times:
+      - `[u32] bucket_id`
+      - `[u32] roaring_len_bytes`
+      - `[bytes] roaring_bitmap` serialized via RoaringBitmap serialization
+- Purpose: fast, coarse temporal pruning to pick zones for a specific field (`timestamp` or a payload `datetime` field like `created_at`).
+
+## Temporal index (slab): `{uid}_{field}.tfi`
+
+- Per-field slab file containing all per-zone temporal indexes for that field.
+- File begins with a binary header (MAGIC `EVDBTFI\0`, version 2 for slab format).
+- Directory section:
+  - `[u32] zone_count`
+  - Repeated `zone_count` times:
+    - `[u32] zone_id`
+    - `[u64] offset_bytes` to the zone body
+    - `[u32] len_bytes` length of the zone body
+- Zone body (per zone), repeated back-to-back:
+  - `[i64] min_ts`
+  - `[i64] max_ts`
+  - `[i64] stride`
+  - `[u32] key_len` then `key_len` times `[u64] key`
+  - `[u32] fence_len` then `fence_len` times `{ [i64] sample_ts, [u32] approx_row }`
+- Purpose: precise temporal membership checks within a zone for Eq and boundary checks for ranges.
+- Notes:
+
+  - The legacy per-zone `{uid}_{zone}.tfi` files are replaced by the per-field slab. Writers emit only slab files; readers load specific zones via the slab directory.
+  - The fixed `timestamp` field also uses `{uid}_timestamp.cal` and `{uid}_timestamp.tfi`.
 
 - Purpose: describes snapshot ranges per `(uid, context_id)` with min/max timestamps.
 - File begins with a binary header (MAGIC `EVDBSMT\0`).

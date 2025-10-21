@@ -1,6 +1,6 @@
 use crate::command::types::{Command, CompareOp, Expr};
 use crate::engine::core::{ConditionEvaluator, LogicalCondition, LogicalOp, QueryPlan};
-use crate::engine::schema::FieldType;
+// use crate::engine::schema::FieldType; // no longer needed
 use crate::shared::time::{TimeKind, TimeParser};
 use tracing::info;
 
@@ -20,29 +20,16 @@ impl ConditionEvaluatorBuilder {
     pub fn add_where_clause(&mut self, where_clause: &Expr) {
         match where_clause {
             Expr::Compare { field, op, value } => {
-                // If field is temporal in schema, normalize string literal to epoch seconds
-                let maybe_temporal = None::<FieldType>;
-                let normalized_numeric = match (maybe_temporal, value) {
-                    (Some(FieldType::Timestamp), serde_json::Value::String(s)) => {
+                // Best-effort: try to parse any string temporal literal to epoch seconds
+                let parsed_temporal = match value {
+                    serde_json::Value::String(s) => {
                         TimeParser::parse_str_to_epoch_seconds(s, TimeKind::DateTime)
-                    }
-                    (Some(FieldType::Date), serde_json::Value::String(s)) => {
-                        TimeParser::parse_str_to_epoch_seconds(s, TimeKind::Date)
-                    }
-                    (Some(FieldType::Optional(inner)), serde_json::Value::String(s))
-                        if matches!(*inner, FieldType::Timestamp) =>
-                    {
-                        TimeParser::parse_str_to_epoch_seconds(s, TimeKind::DateTime)
-                    }
-                    (Some(FieldType::Optional(inner)), serde_json::Value::String(s))
-                        if matches!(*inner, FieldType::Date) =>
-                    {
-                        TimeParser::parse_str_to_epoch_seconds(s, TimeKind::Date)
+                            .or_else(|| TimeParser::parse_str_to_epoch_seconds(s, TimeKind::Date))
                     }
                     _ => None,
                 };
 
-                if let Some(parsed) = normalized_numeric {
+                if let Some(parsed) = parsed_temporal {
                     self.evaluator
                         .add_numeric_condition(field.clone(), op.clone().into(), parsed);
                 } else if let Some(num_value) = value.as_f64().map(|n| n as i64) {

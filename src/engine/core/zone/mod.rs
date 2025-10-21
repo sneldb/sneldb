@@ -1,6 +1,8 @@
 pub mod candidate_zone;
 pub mod enum_bitmap_index;
 pub mod enum_zone_pruner;
+pub mod index_build_planner;
+pub mod index_build_policy;
 pub mod rlte_index;
 pub mod segment_zone_id;
 pub mod selector;
@@ -32,6 +34,10 @@ mod candidate_zone_test;
 mod enum_bitmap_index_test;
 #[cfg(test)]
 mod enum_zone_pruner_test;
+#[cfg(test)]
+mod index_build_planner_test;
+#[cfg(test)]
+mod index_build_policy_test;
 #[cfg(test)]
 mod rlte_index_tests;
 #[cfg(test)]

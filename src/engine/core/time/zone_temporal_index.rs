@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 use crate::command::types::CompareOp;
@@ -90,26 +90,28 @@ impl ZoneTemporalIndex {
 
     pub fn save(&self, uid: &str, zone_id: u32, dir: &Path) -> std::io::Result<()> {
         let path = dir.join(format!("{}_{}.tfi", uid, zone_id));
-        let mut file = std::fs::File::create(&path)?;
+        let file = std::fs::File::create(&path)?;
+        let mut w = BufWriter::with_capacity(256 * 1024, file);
         let header = BinaryHeader::new(FileKind::TemporalIndex.magic(), 1, 0);
-        header.write_to(&mut file)?;
+        header.write_to(&mut w)?;
 
-        file.write_all(&self.min_ts.to_le_bytes())?;
-        file.write_all(&self.max_ts.to_le_bytes())?;
-        file.write_all(&self.stride.to_le_bytes())?;
+        w.write_all(&self.min_ts.to_le_bytes())?;
+        w.write_all(&self.max_ts.to_le_bytes())?;
+        w.write_all(&self.stride.to_le_bytes())?;
 
-        file.write_all(&(self.keys.len() as u32).to_le_bytes())?;
+        w.write_all(&(self.keys.len() as u32).to_le_bytes())?;
+        // Write keys in a single contiguous buffer when possible
         for k in &self.keys {
-            file.write_all(&k.to_le_bytes())?;
+            w.write_all(&k.to_le_bytes())?;
         }
 
-        file.write_all(&(self.fences.len() as u32).to_le_bytes())?;
+        w.write_all(&(self.fences.len() as u32).to_le_bytes())?;
         for (ts, row) in &self.fences {
-            file.write_all(&ts.to_le_bytes())?;
-            file.write_all(&row.to_le_bytes())?;
+            w.write_all(&ts.to_le_bytes())?;
+            w.write_all(&row.to_le_bytes())?;
         }
 
-        Ok(())
+        w.flush()
     }
 
     pub fn load(uid: &str, zone_id: u32, dir: &Path) -> std::io::Result<Self> {
@@ -168,67 +170,97 @@ impl ZoneTemporalIndex {
         zone_id: u32,
         dir: &Path,
     ) -> std::io::Result<()> {
-        let path = dir.join(format!("{}_{}_{}.tfi", uid, field, zone_id));
-        let mut file = std::fs::File::create(&path)?;
-        let header = BinaryHeader::new(FileKind::TemporalIndex.magic(), 1, 0);
-        header.write_to(&mut file)?;
-
-        file.write_all(&self.min_ts.to_le_bytes())?;
-        file.write_all(&self.max_ts.to_le_bytes())?;
-        file.write_all(&self.stride.to_le_bytes())?;
-
-        file.write_all(&(self.keys.len() as u32).to_le_bytes())?;
-        for k in &self.keys {
-            file.write_all(&k.to_le_bytes())?;
-        }
-
-        file.write_all(&(self.fences.len() as u32).to_le_bytes())?;
-        for (ts, row) in &self.fences {
-            file.write_all(&ts.to_le_bytes())?;
-            file.write_all(&row.to_le_bytes())?;
-        }
-        Ok(())
+        // Deprecated: per-zone per-field files replaced by slab file. Use save_field_slab instead.
+        let entries: Vec<(u32, &ZoneTemporalIndex)> = vec![(zone_id, self)];
+        Self::save_field_slab(uid, field, dir, &entries)
     }
 
+    /// Load a specific zone's temporal index for a given field from the per-field slab file.
     pub fn load_for_field(
         uid: &str,
         field: &str,
         zone_id: u32,
         dir: &Path,
     ) -> std::io::Result<Self> {
-        let path = dir.join(format!("{}_{}_{}.tfi", uid, field, zone_id));
+        let path = dir.join(format!("{}_{}.tfi", uid, field));
         let mut file = std::fs::File::open(&path)?;
-        let _ = BinaryHeader::read_from(&mut file)?;
+        let _ = BinaryHeader::read_from(&mut file)?; // version 2 (slab)
 
-        fn read_i64<R: Read>(r: &mut R) -> std::io::Result<i64> {
+        // Directory
+        let mut u32buf = [0u8; 4];
+        let mut u64buf = [0u8; 8];
+        file.read_exact(&mut u32buf)?;
+        let count = u32::from_le_bytes(u32buf) as usize;
+        let mut found: Option<(u64, u32)> = None; // (offset, len)
+        for _ in 0..count {
+            file.read_exact(&mut u32buf)?;
+            let zid = u32::from_le_bytes(u32buf);
+            file.read_exact(&mut u64buf)?;
+            let offset = u64::from_le_bytes(u64buf);
+            file.read_exact(&mut u32buf)?;
+            let len = u32::from_le_bytes(u32buf);
+            if zid == zone_id {
+                found = Some((offset, len));
+            }
+        }
+        let (offset, _len) = found.ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "zone id not found in temporal slab",
+            )
+        })?;
+        file.seek(SeekFrom::Start(offset))?;
+        Self::read_body(&mut file)
+    }
+
+    fn write_body<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
+        w.write_all(&self.min_ts.to_le_bytes())?;
+        w.write_all(&self.max_ts.to_le_bytes())?;
+        w.write_all(&self.stride.to_le_bytes())?;
+
+        w.write_all(&(self.keys.len() as u32).to_le_bytes())?;
+        for k in &self.keys {
+            w.write_all(&k.to_le_bytes())?;
+        }
+
+        w.write_all(&(self.fences.len() as u32).to_le_bytes())?;
+        for (ts, row) in &self.fences {
+            w.write_all(&ts.to_le_bytes())?;
+            w.write_all(&row.to_le_bytes())?;
+        }
+        Ok(())
+    }
+
+    fn read_body<R: Read>(r: &mut R) -> std::io::Result<Self> {
+        fn read_i64<RR: Read>(r: &mut RR) -> std::io::Result<i64> {
             let mut b = [0u8; 8];
             r.read_exact(&mut b)?;
             Ok(i64::from_le_bytes(b))
         }
-        fn read_u64<R: Read>(r: &mut R) -> std::io::Result<u64> {
+        fn read_u64<RR: Read>(r: &mut RR) -> std::io::Result<u64> {
             let mut b = [0u8; 8];
             r.read_exact(&mut b)?;
             Ok(u64::from_le_bytes(b))
         }
-        fn read_u32<R: Read>(r: &mut R) -> std::io::Result<u32> {
+        fn read_u32<RR: Read>(r: &mut RR) -> std::io::Result<u32> {
             let mut b = [0u8; 4];
             r.read_exact(&mut b)?;
             Ok(u32::from_le_bytes(b))
         }
 
-        let min_ts = read_i64(&mut file)?;
-        let max_ts = read_i64(&mut file)?;
-        let stride = read_i64(&mut file)?;
-        let key_len = read_u32(&mut file)? as usize;
+        let min_ts = read_i64(r)?;
+        let max_ts = read_i64(r)?;
+        let stride = read_i64(r)?;
+        let key_len = read_u32(r)? as usize;
         let mut keys = Vec::with_capacity(key_len);
         for _ in 0..key_len {
-            keys.push(read_u64(&mut file)?);
+            keys.push(read_u64(r)?);
         }
-        let fence_len = read_u32(&mut file)? as usize;
+        let fence_len = read_u32(r)? as usize;
         let mut fences = Vec::with_capacity(fence_len);
         for _ in 0..fence_len {
-            let ts = read_i64(&mut file)?;
-            let row = read_u32(&mut file)?;
+            let ts = read_i64(r)?;
+            let row = read_u32(r)?;
             fences.push((ts, row));
         }
         Ok(Self {
@@ -238,6 +270,50 @@ impl ZoneTemporalIndex {
             keys,
             fences,
         })
+    }
+
+    /// Save a per-field slab file that contains all zone temporal indexes for the field.
+    pub fn save_field_slab(
+        uid: &str,
+        field: &str,
+        dir: &Path,
+        entries: &[(u32, &ZoneTemporalIndex)],
+    ) -> std::io::Result<()> {
+        let path = dir.join(format!("{}_{}.tfi", uid, field));
+        let file = std::fs::File::create(&path)?;
+        let mut w = BufWriter::with_capacity(256 * 1024, file);
+
+        // Header: TemporalIndex magic, version 2 for slab format
+        let header = BinaryHeader::new(FileKind::TemporalIndex.magic(), 2, 0);
+        header.write_to(&mut w)?;
+
+        // Pre-serialize bodies to compute offsets
+        let mut bodies: Vec<(u32, Vec<u8>)> = Vec::with_capacity(entries.len());
+        for (zid, zti) in entries.iter() {
+            let mut buf = Vec::with_capacity(64 + zti.keys.len() * 8 + zti.fences.len() * 12);
+            zti.write_body(&mut buf)?;
+            bodies.push((*zid, buf));
+        }
+
+        // Write directory
+        let count = bodies.len() as u32;
+        w.write_all(&count.to_le_bytes())?;
+        let dir_start = BinaryHeader::TOTAL_LEN as u64 + 4 + (count as u64) * (4 + 8 + 4);
+        let mut offset = dir_start;
+        for (zid, buf) in &bodies {
+            w.write_all(&zid.to_le_bytes())?;
+            w.write_all(&offset.to_le_bytes())?;
+            let len_u32 = buf.len() as u32;
+            w.write_all(&len_u32.to_le_bytes())?;
+            offset += len_u32 as u64;
+        }
+
+        // Write bodies
+        for (_zid, buf) in &bodies {
+            w.write_all(buf)?;
+        }
+
+        w.flush()
     }
 }
 
