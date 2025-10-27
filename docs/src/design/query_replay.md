@@ -62,7 +62,16 @@ More examples: [Query](../commands/query.md) and [Replay](../commands/replay.md)
 4. Prune zones by time and per‑field filters; read only needed columns.
    - Range predicates (`>`, `>=`, `<`, `<=`) are pruned using Zone SuRF (`{uid}_{field}.zsrf`) when present, falling back to XOR/EBM only if unavailable. SuRF is an order‑preserving trie using succinct arrays for fast range overlap checks.
 5. Evaluate predicates and apply `WHERE` condition.
-6. Merge shard results; apply global `LIMIT` if set.
+6. If aggregations are present:
+
+   - Build an aggregation plan (ops, optional group_by, optional time bucket and selected time field).
+   - In each shard, update aggregators from both MemTable (row path) and segments (columnar path). Segment scans project only needed columns (filters, group_by, time field, agg inputs).
+   - Group keys combine optional time bucket with `group_by` values; a fast prehash accelerates hashmap grouping.
+   - Merge partial aggregation states across shards; finalize into a table (bucket? + group columns + metric columns). `LIMIT` caps distinct groups.
+
+   Otherwise (selection path):
+
+   - Merge rows; apply global `LIMIT` if set.
 
 ### REPLAY (step‑by‑step)
 
