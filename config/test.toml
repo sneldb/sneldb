@@ -51,3 +51,8 @@ zone_index_cache_max_entries = 256
 column_block_cache_max_bytes = 67108864
 # Default capacity for process-wide ZoneSurf LRU cache (10MB for tests)
 zone_surf_cache_max_bytes = 10485760
+
+[time]
+timezone = "UTC"
+week_start = "Mon"
+use_calendar_bucketing = true

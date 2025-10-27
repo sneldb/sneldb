@@ -9,6 +9,7 @@ pub struct Settings {
     pub schema: SchemaConfig,
     pub playground: PlaygroundConfig,
     pub query: Option<QueryConfig>,
+    pub time: Option<crate::shared::datetime::time::TimeConfig>,
 }
 
 #[derive(Debug, Deserialize)]

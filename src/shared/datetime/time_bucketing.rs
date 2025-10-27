@@ -1,14 +1,14 @@
-use super::time_bucketing_config::TimeBucketingConfig;
+use super::time::TimeConfig;
 use crate::command::types::TimeGranularity;
 use chrono::{DateTime, Datelike, TimeZone, Timelike, Utc};
 
 /// Calendar-aware time bucketing implementation
 pub struct CalendarTimeBucketer {
-    config: TimeBucketingConfig,
+    config: TimeConfig,
 }
 
 impl CalendarTimeBucketer {
-    pub fn new(config: TimeBucketingConfig) -> Self {
+    pub fn new(config: TimeConfig) -> Self {
         Self { config }
     }
 
@@ -99,7 +99,7 @@ mod tests {
 
     #[test]
     fn test_calendar_month_bucketing() {
-        let config = TimeBucketingConfig::default();
+        let config = TimeConfig::default();
         let bucketer = CalendarTimeBucketer::new(config);
 
         // Test February 15, 2024 (leap year)
@@ -113,7 +113,7 @@ mod tests {
 
     #[test]
     fn test_calendar_week_bucketing() {
-        let config = TimeBucketingConfig {
+        let config = TimeConfig {
             timezone: None,
             week_start: Weekday::Mon,
             use_calendar_bucketing: true,
@@ -131,7 +131,7 @@ mod tests {
 
     #[test]
     fn test_timezone_aware_bucketing() {
-        let config = TimeBucketingConfig {
+        let config = TimeConfig {
             timezone: Some("US/Eastern".to_string()),
             week_start: Weekday::Mon,
             use_calendar_bucketing: true,

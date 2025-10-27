@@ -10,11 +10,19 @@ pub struct TestConfig {
     pub logging: LoggingConfig,
     pub schema: SchemaConfig,
     pub playground: PlaygroundConfig,
+    pub time: TimeConfig,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct SchemaConfig {
     pub def_dir: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct TimeConfig {
+    pub timezone: String,
+    pub week_start: String,
+    pub use_calendar_bucketing: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -92,6 +100,11 @@ fn derive_paths(name: &str) -> TestPaths {
 /// Construct the default test configuration for a scenario, derived from its paths.
 fn default_test_config(paths: &TestPaths) -> TestConfig {
     TestConfig {
+        time: TimeConfig {
+            timezone: "UTC".to_string(),
+            week_start: "Mon".to_string(),
+            use_calendar_bucketing: true,
+        },
         wal: WalConfig {
             enabled: true,
             fsync: false,

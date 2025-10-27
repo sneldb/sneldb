@@ -1,5 +1,5 @@
 use super::time_bucketing::{CalendarTimeBucketer, naive_bucket_of};
-use super::time_bucketing_config::TimeBucketingConfig;
+use super::time::TimeConfig;
 use crate::command::types::TimeGranularity;
 use crate::test_helpers::factories::TimestampFactory;
 use chrono::Weekday;
@@ -10,7 +10,7 @@ fn create_bucketer(
     week_start: Weekday,
     use_calendar: bool,
 ) -> CalendarTimeBucketer {
-    let config = TimeBucketingConfig {
+    let config = TimeConfig {
         timezone: timezone.map(|s| s.to_string()),
         week_start,
         use_calendar_bucketing: use_calendar,
@@ -24,7 +24,7 @@ fn create_bucketer(
 
 #[test]
 fn calendar_bucketer_constructor() {
-    let config = TimeBucketingConfig::default();
+    let config = TimeConfig::default();
     let bucketer = CalendarTimeBucketer::new(config);
     // Just ensure it doesn't panic
     assert!(true);
@@ -373,7 +373,7 @@ fn calendar_bucketing_future_timestamp() {
 
 #[test]
 fn calendar_bucketing_invalid_timezone_falls_back_to_utc() {
-    let config = TimeBucketingConfig {
+    let config = TimeConfig {
         timezone: Some("Invalid/Timezone".to_string()),
         week_start: Weekday::Mon,
         use_calendar_bucketing: true,
