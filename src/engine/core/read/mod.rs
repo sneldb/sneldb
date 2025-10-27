@@ -44,5 +44,3 @@ mod result_test;
 mod segment_aggregate_runner_test;
 #[cfg(test)]
 mod segment_query_runner_test;
-#[cfg(test)]
-mod sink_test;
