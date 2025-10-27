@@ -1,10 +1,11 @@
+use crate::shared::config::CONFIG;
 use chrono::Weekday;
 use chrono_tz::Tz;
 use serde::{Deserialize, Serialize};
 
-/// Configuration for time bucketing behavior
+/// Global time configuration
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct TimeBucketingConfig {
+pub struct TimeConfig {
     /// Timezone for calendar-based calculations (None = UTC)
     pub timezone: Option<String>,
     /// Week start day (Monday = 1, Sunday = 0)
@@ -13,7 +14,7 @@ pub struct TimeBucketingConfig {
     pub use_calendar_bucketing: bool,
 }
 
-impl Default for TimeBucketingConfig {
+impl Default for TimeConfig {
     fn default() -> Self {
         Self {
             timezone: None,               // UTC by default
@@ -23,7 +24,7 @@ impl Default for TimeBucketingConfig {
     }
 }
 
-impl TimeBucketingConfig {
+impl TimeConfig {
     /// Parse timezone string to chrono_tz::Tz
     pub fn parse_timezone(&self) -> Option<Tz> {
         self.timezone
@@ -33,7 +34,6 @@ impl TimeBucketingConfig {
 
     /// Create from application configuration
     pub fn from_app_config() -> Self {
-        // TODO: Read from actual config when available
-        Self::default()
+        CONFIG.time.clone().unwrap_or_else(|| Self::default())
     }
 }
