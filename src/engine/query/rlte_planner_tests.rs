@@ -138,3 +138,231 @@ async fn test_planner_keeps_expected_zones_across_segments() {
     sorted.sort();
     assert_eq!(rank1s, sorted, "expected zones ordered by rank-1 (ASC)");
 }
+
+#[tokio::test]
+async fn test_planner_asc_frontier_uses_min() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp = tempfile::tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let event_type = "evt_frontier";
+    let field = "score";
+
+    // Write enough zones so k = (limit+offset)*10 can be satisfied
+    // With event_per_zone=1 in tests and LIMIT=1 → k=10, so create >=10 zones
+    let (registry, _uid) = seed_segments_with_field(&shard_dir, event_type, field, 1, 20).await;
+
+    // ORDER BY ASC LIMIT small value forces planner to anchor at min frontier
+    let cmd = CommandFactory::query()
+        .with_event_type(event_type)
+        .with_order_by(field, false)
+        .with_limit(1)
+        .create();
+    let plan = QueryPlan::build(&cmd, Arc::clone(&registry)).await;
+
+    // Shard maps
+    let mut bases = HashMap::new();
+    bases.insert(0usize, shard_dir.clone());
+    let mut segs = HashMap::new();
+    let mut seg_ids = Vec::new();
+    if let Ok(rd) = std::fs::read_dir(&shard_dir) {
+        for e in rd.flatten() {
+            if let Some(name) = e.file_name().to_str() {
+                if name.chars().all(|c| c.is_ascii_digit()) {
+                    seg_ids.push(name.to_string());
+                }
+            }
+        }
+    }
+    seg_ids.sort();
+    segs.insert(0usize, seg_ids);
+
+    let out = plan_with_rlte(&plan, &bases, &segs)
+        .await
+        .expect("planner output");
+    let picked = out.per_shard.get(&0).expect("shard 0 plan");
+
+    // With event_per_zone small and LIMIT 1, planner should keep at least one zone (the one containing the global min)
+    assert!(picked.zones.len() >= 1);
+}
+
+#[tokio::test]
+async fn test_planner_where_lt_small_skips_rlte() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp = tempfile::tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let event_type = "evt_rlte_skip";
+    let field = "score";
+
+    // Seed segments with large score ranges so that WHERE score < 10 prunes all zones
+    let (registry, _uid) = seed_segments_with_field(&shard_dir, event_type, field, 2, 5).await;
+
+    // Build command: WHERE score < 10, ORDER BY score ASC LIMIT 2
+    let where_expr = crate::command::types::Expr::Compare {
+        field: field.to_string(),
+        op: crate::command::types::CompareOp::Lt,
+        value: serde_json::json!(10),
+    };
+    let cmd = CommandFactory::query()
+        .with_event_type(event_type)
+        .with_where_clause(where_expr)
+        .with_order_by(field, false)
+        .with_limit(2)
+        .create();
+
+    let plan = QueryPlan::build(&cmd, Arc::clone(&registry)).await;
+
+    // Shard maps
+    let mut bases = HashMap::new();
+    bases.insert(0usize, shard_dir.clone());
+    let mut segs = HashMap::new();
+    let mut seg_ids = Vec::new();
+    if let Ok(rd) = std::fs::read_dir(&shard_dir) {
+        for e in rd.flatten() {
+            if let Some(name) = e.file_name().to_str() {
+                if name.chars().all(|c| c.is_ascii_digit()) {
+                    seg_ids.push(name.to_string());
+                }
+            }
+        }
+    }
+    seg_ids.sort();
+    segs.insert(0usize, seg_ids);
+
+    // RLTE should be skipped (None) because no zones satisfy score < 10
+    let out = plan_with_rlte(&plan, &bases, &segs).await;
+    assert!(
+        out.is_none(),
+        "Expected RLTE planner to skip when WHERE prunes all zones"
+    );
+}
+
+#[tokio::test]
+async fn test_planner_desc_where_gt_small_limit() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp = tempfile::tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let event_type = "evt_desc_gt";
+    let field = "score";
+
+    // Seed with multiple zones; values increase per zone.
+    let (registry, _uid) = seed_segments_with_field(&shard_dir, event_type, field, 1, 20).await;
+
+    // WHERE score > modest threshold should keep many zones; with small LIMIT, RLTE should plan
+    let where_expr = crate::command::types::Expr::Compare {
+        field: field.to_string(),
+        op: crate::command::types::CompareOp::Gt,
+        value: serde_json::json!(100_000),
+    };
+    let cmd = CommandFactory::query()
+        .with_event_type(event_type)
+        .with_where_clause(where_expr)
+        .with_order_by(field, true)
+        .with_limit(1)
+        .create();
+    let plan = QueryPlan::build(&cmd, Arc::clone(&registry)).await;
+
+    // Shard maps
+    let mut bases = HashMap::new();
+    bases.insert(0usize, shard_dir.clone());
+    let mut segs = HashMap::new();
+    let mut seg_ids = Vec::new();
+    if let Ok(rd) = std::fs::read_dir(&shard_dir) {
+        for e in rd.flatten() {
+            if let Some(name) = e.file_name().to_str() {
+                if name.chars().all(|c| c.is_ascii_digit()) {
+                    seg_ids.push(name.to_string());
+                }
+            }
+        }
+    }
+    seg_ids.sort();
+    segs.insert(0usize, seg_ids);
+
+    // RLTE should produce some zones for DESC case
+    let out = plan_with_rlte(&plan, &bases, &segs)
+        .await
+        .expect("planner output");
+    let picked = out.per_shard.get(&0).expect("shard 0 plan");
+    assert!(picked.zones.len() >= 1, "expected at least one zone kept");
+}
+
+#[tokio::test]
+async fn test_planner_where_on_other_field_does_not_refine() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp = tempfile::tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let event_type = "evt_other_field";
+    let order_field = "score";
+    let other_field = "rank";
+
+    // Define both fields; seed zones with increasing score and fixed rank
+    let (registry, _uid) = {
+        use crate::engine::core::{ZonePlanner, ZoneWriter};
+        std::fs::create_dir_all(&shard_dir).unwrap();
+        let factory = SchemaRegistryFactory::new();
+        let registry = factory.registry();
+        factory
+            .define_with_fields(event_type, &[(order_field, "int"), (other_field, "int")])
+            .await
+            .unwrap();
+        let uid = registry.read().await.get_uid(event_type).unwrap();
+
+        let segment_dir = shard_dir.join("00000");
+        std::fs::create_dir_all(&segment_dir).unwrap();
+        let mut events = Vec::new();
+        for z in 0..20 {
+            for i in 0..crate::shared::config::CONFIG.engine.event_per_zone {
+                let score = (z * 100_000 + i) as i64;
+                let payload = serde_json::json!({ order_field: score, other_field: 1 });
+                events.push(
+                    EventFactory::new()
+                        .with("event_type", event_type)
+                        .with("context_id", format!("ctx-z{}-i{}", z, i))
+                        .with("payload", payload)
+                        .create(),
+                );
+            }
+        }
+        let plans = ZonePlanner::new(&uid, 0).plan(&events).expect("plan zones");
+        let writer = ZoneWriter::new(&uid, &segment_dir, Arc::clone(&registry));
+        writer.write_all(&plans).await.expect("zone write");
+        (registry, uid)
+    };
+
+    // WHERE on different field should not prune RLTE candidates for score
+    let where_expr = crate::command::types::Expr::Compare {
+        field: other_field.to_string(),
+        op: crate::command::types::CompareOp::Gt,
+        value: serde_json::json!(0),
+    };
+    let cmd = CommandFactory::query()
+        .with_event_type(event_type)
+        .with_where_clause(where_expr)
+        .with_order_by(order_field, false)
+        .with_limit(1)
+        .create();
+    let plan = QueryPlan::build(&cmd, Arc::clone(&registry)).await;
+
+    // Shard maps
+    let mut bases = HashMap::new();
+    bases.insert(0usize, shard_dir.clone());
+    let mut segs = HashMap::new();
+    segs.insert(0usize, vec!["00000".to_string()]);
+
+    let out = plan_with_rlte(&plan, &bases, &segs)
+        .await
+        .expect("planner output");
+    let picked = out.per_shard.get(&0).expect("shard 0 plan");
+    assert!(
+        picked.zones.len() >= 1,
+        "expected zones not pruned by unrelated WHERE"
+    );
+}

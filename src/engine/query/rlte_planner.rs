@@ -203,6 +203,14 @@ impl RlteCatalog {
         }
         out
     }
+
+    /// Returns the ladder for a given (field, zone) if present.
+    fn get_ladder_for_zone(&self, field: &str, zk: &ZoneKey) -> Option<&Vec<String>> {
+        self.fields
+            .get(field)
+            .and_then(|cf| cf.ladders.iter().find(|(k, _)| k == zk))
+            .map(|(_, ladder)| ladder)
+    }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -300,9 +308,11 @@ fn greedy_cutoff_numeric(
     let mut cum_ub = 0usize;
     let mut picked: Vec<(ZoneKey, u64 /*min*/, u64 /*max*/, Vec<String>)> = Vec::new();
 
-    for (i, (zk, min, max, ladder)) in envs.iter().enumerate() {
-        let t_new = if asc { *max } else { *min }; // t at frontier for this zone
-        let (lb, ub) = RlteCatalog::lb_ub_one_numeric(ladder, t_new, asc, zone_size);
+    for (_i, (zk, min, max, ladder)) in envs.iter().enumerate() {
+        // For ASC, frontier should be at the zone's min (smallest values first);
+        // For DESC, frontier is at the zone's max (largest values first).
+        let t_new = if asc { *min } else { *max }; // t at frontier for this zone
+        let (_lb, ub) = RlteCatalog::lb_ub_one_numeric(ladder, t_new, asc, zone_size);
 
         debug!(target: "rlte::planner",
             "greedy_step({}): add zone shard={} seg={} zone={} max={:?} min={:?} -> t_new={} cum_ub_before={} cum_ub_after={} K={}",
@@ -333,7 +343,7 @@ fn greedy_cutoff_numeric(
             );
 
             // Now compute actual per-zone bounds at t_star and keep ub>0 zones
-            let mut bounds_all = catalog.per_zone_bounds_numeric(field, t_star, asc, zone_size);
+            let bounds_all = catalog.per_zone_bounds_numeric(field, t_star, asc, zone_size);
             let total_zones = bounds_all.len();
             let mut candidates = bounds_all
                 .into_iter()
@@ -449,9 +459,9 @@ fn greedy_cutoff_string(
     let mut cum_ub = 0usize;
     let mut picked: Vec<(ZoneKey, String, String, Vec<String>)> = Vec::new();
 
-    for (i, (zk, min, max, ladder)) in envs.iter().enumerate() {
+    for (_i, (zk, min, max, ladder)) in envs.iter().enumerate() {
         let t_new = if asc { max } else { min };
-        let (lb, ub) = RlteCatalog::lb_ub_one_string(ladder, t_new, asc, zone_size);
+        let (_lb, ub) = RlteCatalog::lb_ub_one_string(ladder, t_new, asc, zone_size);
 
         debug!(target: "rlte::planner",
             "greedy_step(str, {}): add zone shard={} seg={} zone={} max='{}' min='{}' -> t_new='{}' cum_ub_before={} cum_ub_after={} K={}",
@@ -465,7 +475,7 @@ fn greedy_cutoff_string(
             let t_star = t_new.clone();
 
             // Convert to final per-zone bounds @ t_star
-            let mut bounds_all = catalog.per_zone_bounds_string(field, &t_star, asc, zone_size);
+            let bounds_all = catalog.per_zone_bounds_string(field, &t_star, asc, zone_size);
             let total_zones = bounds_all.len();
             let mut candidates = bounds_all
                 .into_iter()
@@ -561,7 +571,7 @@ pub async fn plan_with_rlte(
 
     // Try numeric greedy first
     let plan_numeric = greedy_cutoff_numeric(&catalog, &field, asc, k, zone_size);
-    let (candidates, t_star_str, used_numeric) = if let Some((_t, candidates, t_star)) =
+    let (mut candidates, t_star_str, used_numeric) = if let Some((_t, candidates, t_star)) =
         plan_numeric
     {
         debug!(target: "rlte::planner",
@@ -578,6 +588,22 @@ pub async fn plan_with_rlte(
         );
         (candidates, t_star, false)
     };
+
+    // Optional: refine candidates using a simple numeric WHERE bound on the same field
+    if let Some(bound) = WhereBound::from_plan_field(plan, &field) {
+        candidates.retain(|(zk, _bounds, _rank1)| {
+            if let Some(ladder) = catalog.get_ladder_for_zone(&field, zk) {
+                if let Some((min, max)) = RlteCatalog::min_max_numeric(ladder) {
+                    return bound.keep_zone(min, max);
+                }
+            }
+            true
+        });
+        if candidates.is_empty() {
+            // No viable zones remain after applying WHERE → skip RLTE
+            return None;
+        }
+    }
 
     // Partition by shard → PickedZones (what the worker will honor)
     let mut per_shard: HashMap<usize, PickedZones> = HashMap::new();
@@ -605,4 +631,56 @@ pub async fn plan_with_rlte(
     );
 
     Some(PlannerOutput { per_shard })
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// WHERE clause helpers (OO-style: encapsulated extractor + predicate)
+// ──────────────────────────────────────────────────────────────────────────────
+
+#[derive(Copy, Clone)]
+enum NumericBoundKind {
+    Lt,
+    Lte,
+    Gt,
+    Gte,
+}
+
+struct WhereBound {
+    kind: NumericBoundKind,
+    value: u64,
+}
+
+impl WhereBound {
+    fn from_plan_field(plan: &QueryPlan, field: &str) -> Option<Self> {
+        use crate::command::types::{CompareOp, Expr};
+        let expr = plan.where_clause()?;
+        match expr {
+            Expr::Compare {
+                field: f,
+                op,
+                value,
+            } if f == field => {
+                let v = value.as_u64()?;
+                let kind = match op {
+                    CompareOp::Lt => NumericBoundKind::Lt,
+                    CompareOp::Lte => NumericBoundKind::Lte,
+                    CompareOp::Gt => NumericBoundKind::Gt,
+                    CompareOp::Gte => NumericBoundKind::Gte,
+                    _ => return None,
+                };
+                Some(Self { kind, value: v })
+            }
+            _ => None,
+        }
+    }
+
+    #[inline]
+    fn keep_zone(&self, min: u64, max: u64) -> bool {
+        match self.kind {
+            NumericBoundKind::Lt => min < self.value,
+            NumericBoundKind::Lte => min <= self.value,
+            NumericBoundKind::Gt => max > self.value,
+            NumericBoundKind::Gte => max >= self.value,
+        }
+    }
 }

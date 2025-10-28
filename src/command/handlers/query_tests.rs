@@ -662,6 +662,61 @@ async fn test_query_selection_limit_truncates() {
 }
 
 #[tokio::test]
+async fn test_query_order_by_with_lt_filter_returns_rows() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("lt_evt", &[("id", "int")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Insert ids 0..=9
+    for i in 0..10 {
+        let store_cmd = crate::test_helpers::factories::CommandFactory::store()
+            .with_event_type("lt_evt")
+            .with_context_id(&format!("ctx{}", i))
+            .with_payload(serde_json::json!({ "id": i }))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+
+    // Allow flush (mem or segment) depending on config
+    sleep(Duration::from_millis(300)).await;
+
+    // ORDER BY id ASC LIMIT 2 with WHERE id < 10 must return 2 rows, not empty
+    let cmd_str = "QUERY lt_evt WHERE id < 10 ORDER BY id ASC LIMIT 2";
+    let cmd = parse(cmd_str).expect("parse lt filter with order+limit");
+    let (mut reader, mut writer) = duplex(4096);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+    assert!(
+        body.contains("\"rows\":[") && !body.contains("No matching events found"),
+        "Expected non-empty rows, got: {}",
+        body
+    );
+}
+
+#[tokio::test]
 async fn test_query_aggregation_limit_truncates_and_sorts_groups() {
     init_for_tests();
 

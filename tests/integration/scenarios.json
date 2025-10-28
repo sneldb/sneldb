@@ -1532,6 +1532,48 @@
   }
   ,
   {
+    "name": "order_by_with_lt_small_limit",
+    "input_commands": [
+      "DEFINE small_lt FIELDS { \"id\": \"int\" }",
+      "STORE small_lt FOR a PAYLOAD {\"id\":0}",
+      "STORE small_lt FOR b PAYLOAD {\"id\":1}",
+      "STORE small_lt FOR c PAYLOAD {\"id\":2}",
+      "FLUSH",
+      "QUERY small_lt WHERE id < 10 ORDER BY id ASC LIMIT 2"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["\"id\":0", "\"id\":1"] },
+      { "kind": "include_none", "value": ["\"id\":2"] }
+    ]
+  },
+  {
+    "name": "order_by_desc_with_gt_bound",
+    "input_commands": [
+      "DEFINE big_gt FIELDS { \"v\": \"int\" }",
+      "STORE big_gt FOR g1 PAYLOAD {\"v\":100}",
+      "STORE big_gt FOR g2 PAYLOAD {\"v\":200}",
+      "STORE big_gt FOR g3 PAYLOAD {\"v\":300}",
+      "FLUSH",
+      "QUERY big_gt WHERE v > 150 ORDER BY v DESC LIMIT 2"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["\"v\":300", "\"v\":200"] },
+      { "kind": "include_none", "value": ["\"v\":100"] }
+    ]
+  },
+  {
+    "name": "order_by_asc_frontier_min",
+    "input_commands": [
+      "DEFINE frontier FIELDS { \"score\": \"int\" }",
+      "STORE frontier FOR x1 PAYLOAD {\"score\":100000}",
+      "STORE frontier FOR x2 PAYLOAD {\"score\":200000}",
+      "STORE frontier FOR x3 PAYLOAD {\"score\":300000}",
+      "FLUSH",
+      "QUERY frontier ORDER BY score ASC LIMIT 1"
+    ],
+    "matcher": { "kind": "include", "value": "\"score\":100000" }
+  },
+  {
     "name": "query_order_by_asc_with_limit",
     "input_commands": [
       "DEFINE score FIELDS { \"val\": \"int\" }",
