@@ -62,15 +62,23 @@ impl RlteCoordinator {
         match plan_with_rlte(&plan, shard_bases, shard_segments).await {
             Some(output) => {
                 let total_zones: usize = output.per_shard.values().map(|pz| pz.zones.len()).sum();
-                debug!(
-                    target: "sneldb::rlte_coordinator",
-                    shard_count = output.per_shard.len(),
-                    total_zones = total_zones,
-                    "RLTE planning completed successfully"
-                );
-                Some(RltePlanOutput {
-                    per_shard: output.per_shard,
-                })
+                if total_zones == 0 {
+                    debug!(
+                        target: "sneldb::rlte_coordinator",
+                        "RLTE planning produced zero zones; falling back to full-scan path"
+                    );
+                    None
+                } else {
+                    debug!(
+                        target: "sneldb::rlte_coordinator",
+                        shard_count = output.per_shard.len(),
+                        total_zones = total_zones,
+                        "RLTE planning completed successfully"
+                    );
+                    Some(RltePlanOutput {
+                        per_shard: output.per_shard,
+                    })
+                }
             }
             None => {
                 debug!(
