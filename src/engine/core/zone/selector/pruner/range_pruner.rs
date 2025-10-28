@@ -1,7 +1,7 @@
 use crate::command::types::CompareOp;
+use crate::engine::core::CandidateZone;
 use crate::engine::core::zone::selector::pruner::PruneArgs;
 use crate::engine::core::zone::zone_artifacts::ZoneArtifacts;
-use crate::engine::core::CandidateZone;
 
 pub struct RangePruner<'a> {
     pub artifacts: ZoneArtifacts<'a>,

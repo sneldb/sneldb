@@ -24,6 +24,7 @@ pub mod selection_result_factory;
 pub mod shard_context_factory;
 pub mod shard_message_factory;
 pub mod snapshot_meta_factory;
+pub mod timestamp_factory;
 pub mod wal_entry_factory;
 pub mod write_job_factory;
 pub mod zone_cursor_factory;
@@ -34,7 +35,6 @@ pub mod zone_planner_factory;
 pub mod zone_row_factory;
 pub mod zone_value_loader_factory;
 pub mod zone_xor_filter_index_factory;
-pub mod timestamp_factory;
 
 pub use aggregate_result_factory::AggregateResultFactory;
 pub use candidate_zone_factory::CandidateZoneFactory;
@@ -62,6 +62,7 @@ pub use selection_result_factory::SelectionResultFactory;
 pub use shard_context_factory::ShardContextFactory;
 pub use shard_message_factory::ShardMessageFactory;
 pub use snapshot_meta_factory::SnapshotMetaFactory;
+pub use timestamp_factory::TimestampFactory;
 pub use wal_entry_factory::WalEntryFactory;
 pub use write_job_factory::WriteJobFactory;
 pub use zone_cursor_factory::ZoneCursorFactory;
@@ -72,7 +73,6 @@ pub use zone_planner_factory::ZonePlannerFactory;
 pub use zone_row_factory::ZoneRowFactory;
 pub use zone_value_loader_factory::ZoneValueLoaderFactory;
 pub use zone_xor_filter_index_factory::ZoneXorFilterIndexFactory;
-pub use timestamp_factory::TimestampFactory;
 
 #[cfg(test)]
 mod aggregate_result_factory_test;
@@ -117,6 +117,8 @@ mod selection_result_factory_test;
 #[cfg(test)]
 mod shard_message_factory_test;
 #[cfg(test)]
+mod timestamp_factory_test;
+#[cfg(test)]
 mod wal_entry_factory_test;
 #[cfg(test)]
 mod write_job_factory_test;
@@ -128,8 +130,6 @@ mod zone_index_factory_test;
 mod zone_meta_factory_test;
 #[cfg(test)]
 mod zone_plan_factory_test;
-#[cfg(test)]
-mod timestamp_factory_test;
 #[cfg(test)]
 mod zone_planner_factory_test;
 #[cfg(test)]

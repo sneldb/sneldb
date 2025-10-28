@@ -17,10 +17,14 @@ pub struct GlobalCalendarCache {
 impl GlobalCalendarCache {
     fn new(capacity: usize) -> Self {
         let cap = NonZeroUsize::new(capacity.max(1)).unwrap();
-        Self { inner: Mutex::new(LruCache::new(cap)) }
+        Self {
+            inner: Mutex::new(LruCache::new(cap)),
+        }
     }
 
-    pub fn instance() -> &'static Self { &GLOBAL_CALENDAR_CACHE }
+    pub fn instance() -> &'static Self {
+        &GLOBAL_CALENDAR_CACHE
+    }
 
     pub fn get_or_load(
         &self,
@@ -31,11 +35,15 @@ impl GlobalCalendarCache {
         let path = base_dir.join(segment_id).join(format!("{}.cal", uid));
         let key = CalendarCacheKey { path: path.clone() };
         if let Ok(mut guard) = self.inner.lock() {
-            if let Some(v) = guard.get(&key) { return Ok(Arc::clone(v)); }
+            if let Some(v) = guard.get(&key) {
+                return Ok(Arc::clone(v));
+            }
         }
         let dir = CalendarDir::load(uid, &path.parent().unwrap())?;
         let arc = Arc::new(dir);
-        if let Ok(mut guard) = self.inner.lock() { guard.put(key, Arc::clone(&arc)); }
+        if let Ok(mut guard) = self.inner.lock() {
+            guard.put(key, Arc::clone(&arc));
+        }
         Ok(arc)
     }
 }
@@ -56,10 +64,14 @@ pub struct GlobalFieldCalendarCache {
 impl GlobalFieldCalendarCache {
     fn new(capacity: usize) -> Self {
         let cap = NonZeroUsize::new(capacity.max(1)).unwrap();
-        Self { inner: Mutex::new(LruCache::new(cap)) }
+        Self {
+            inner: Mutex::new(LruCache::new(cap)),
+        }
     }
 
-    pub fn instance() -> &'static Self { &GLOBAL_FIELD_CALENDAR_CACHE }
+    pub fn instance() -> &'static Self {
+        &GLOBAL_FIELD_CALENDAR_CACHE
+    }
 
     pub fn get_or_load(
         &self,
@@ -68,20 +80,24 @@ impl GlobalFieldCalendarCache {
         uid: &str,
         field: &str,
     ) -> std::io::Result<Arc<TemporalCalendarIndex>> {
-        let path = base_dir.join(segment_id).join(format!("{}_{}.cal", uid, field));
+        let path = base_dir
+            .join(segment_id)
+            .join(format!("{}_{}.cal", uid, field));
         let key = FieldCalendarCacheKey { path: path.clone() };
         if let Ok(mut guard) = self.inner.lock() {
-            if let Some(v) = guard.get(&key) { return Ok(Arc::clone(v)); }
+            if let Some(v) = guard.get(&key) {
+                return Ok(Arc::clone(v));
+            }
         }
         let dir = path.parent().unwrap();
         let cal = TemporalCalendarIndex::load(uid, field, dir)?;
         let arc = Arc::new(cal);
-        if let Ok(mut guard) = self.inner.lock() { guard.put(key, Arc::clone(&arc)); }
+        if let Ok(mut guard) = self.inner.lock() {
+            guard.put(key, Arc::clone(&arc));
+        }
         Ok(arc)
     }
 }
 
 pub static GLOBAL_FIELD_CALENDAR_CACHE: Lazy<GlobalFieldCalendarCache> =
     Lazy::new(|| GlobalFieldCalendarCache::new(4096));
-
-

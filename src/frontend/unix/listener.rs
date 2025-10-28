@@ -3,6 +3,7 @@ use tokio::io::{BufReader, split};
 use tokio::net::UnixListener;
 use tokio::task;
 
+use crate::frontend::context::FrontendContext;
 use crate::frontend::unix::connection::Connection;
 use crate::shared::config::CONFIG;
 use crate::shared::response::json::JsonRenderer;
@@ -11,7 +12,6 @@ use crate::shared::response::unix::UnixRenderer;
 use anyhow::Context;
 use std::sync::Arc;
 use tokio::io::{ReadHalf, WriteHalf};
-use crate::frontend::context::FrontendContext;
 
 pub async fn run_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
     let socket_path = &CONFIG.server.socket_path;

@@ -22,4 +22,3 @@ pub fn decompress_block(
             .map_err(|e| QueryExecutionError::ColRead(format!("decompress: {e}")))
     })
 }
-

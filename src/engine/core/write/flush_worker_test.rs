@@ -70,5 +70,9 @@ async fn test_flush_worker_processes_memtable() {
     // Verify segment index is updated
     let index = SegmentIndex::load(&base_path).await.expect("Load failed");
     assert_eq!(index.entries.len(), 1, "Expected 1 segment entry");
-    assert_eq!(format!("{:05}", index.entries[0].id), "00003", "Segment label mismatch");
+    assert_eq!(
+        format!("{:05}", index.entries[0].id),
+        "00003",
+        "Segment label mismatch"
+    );
 }
