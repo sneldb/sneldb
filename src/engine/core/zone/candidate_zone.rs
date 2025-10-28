@@ -4,6 +4,7 @@ use tracing::info;
 
 use crate::engine::core::ZoneMeta;
 use crate::engine::core::column::column_values::ColumnValues;
+use crate::engine::core::read::cache::QueryCaches;
 use crate::shared::config::CONFIG;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -56,6 +57,25 @@ impl CandidateZone {
                 .collect(),
             Err(_) => Self::create_all_zones_for_segment(segment_id),
         }
+    }
+
+    /// Cached variant: consult per-query caches to avoid repeated .zones disk loads.
+    pub fn create_all_zones_for_segment_from_meta_cached(
+        segment_base_dir: &Path,
+        segment_id: &str,
+        uid: &str,
+        caches: Option<&QueryCaches>,
+    ) -> Vec<Self> {
+        if let Some(c) = caches {
+            if let Ok(metas_arc) = c.get_or_load_zone_meta(segment_id, uid) {
+                let count = metas_arc.len();
+                return (0..count)
+                    .map(|z| Self::new(z as u32, segment_id.to_string()))
+                    .collect();
+            }
+        }
+        // Fallback to direct load or fill_factor path
+        Self::create_all_zones_for_segment_from_meta(segment_base_dir, segment_id, uid)
     }
 
     pub fn uniq(zones: Vec<Self>) -> Vec<Self> {

@@ -28,17 +28,19 @@ impl<'a> ZoneSelector for IndexZoneSelector<'a> {
                 match self.policy {
                     MissingIndexPolicy::AllZonesIfNoContext => match self.context_id {
                         Some(_) => vec![],
-                        None => CandidateZone::create_all_zones_for_segment_from_meta(
+                        None => CandidateZone::create_all_zones_for_segment_from_meta_cached(
                             &self.plan.segment_base_dir,
                             segment_id,
                             self.uid,
+                            self.caches,
                         ),
                     },
                     MissingIndexPolicy::AllZones => {
-                        CandidateZone::create_all_zones_for_segment_from_meta(
+                        CandidateZone::create_all_zones_for_segment_from_meta_cached(
                             &self.plan.segment_base_dir,
                             segment_id,
                             self.uid,
+                            self.caches,
                         )
                     }
                     MissingIndexPolicy::Empty => Vec::new(),
