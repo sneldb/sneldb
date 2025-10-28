@@ -170,33 +170,43 @@ impl ZoneIndex {
             debug!(target: "sneldb::index", event_type, ?context_id, segment_id, "Looking up candidate zones");
         }
 
-        if let Some(context_map) = self.index.get(event_type) {
-            match context_id {
-                Some(ctx_id) => {
-                    if let Some(row_ids) = context_map.get(ctx_id) {
-                        zone_ids.reserve(row_ids.len());
-                        zone_ids.extend(row_ids.iter().copied());
-                    }
+        let Some(context_map) = self.index.get(event_type) else {
+            return Vec::new();
+        };
+
+        match context_id {
+            Some(ctx_id) => {
+                // Fast short-circuit: if the specific context_id has no entries, return immediately
+                let Some(row_ids) = context_map.get(ctx_id) else {
+                    return Vec::new();
+                };
+                zone_ids.reserve(row_ids.len());
+                zone_ids.extend_from_slice(row_ids.as_slice());
+            }
+            None => {
+                // Reserve once using a conservative estimate to reduce reallocations
+                let est: usize = context_map.values().map(|v| v.len()).sum();
+                if est == 0 {
+                    return Vec::new();
                 }
-                None => {
-                    // Reserve once using a conservative estimate to reduce reallocations
-                    let est: usize = context_map.values().map(|v| v.len()).sum();
-                    zone_ids.reserve(est);
-                    for (_, row_ids) in context_map {
-                        zone_ids.extend(row_ids.iter().copied());
-                    }
+                zone_ids.reserve(est);
+                for row_ids in context_map.values() {
+                    zone_ids.extend_from_slice(row_ids.as_slice());
                 }
             }
         }
 
-        // Sort and dedup in-place
-        zone_ids.sort_unstable();
-        zone_ids.dedup();
+        // Sort and dedup in-place only if necessary
+        if zone_ids.len() > 1 {
+            zone_ids.sort_unstable();
+            zone_ids.dedup();
+        }
 
         // Construct CandidateZone instances only for unique zone ids
         let mut out = Vec::with_capacity(zone_ids.len());
+        let seg = segment_id.to_string();
         for zone_id in zone_ids {
-            out.push(CandidateZone::new(zone_id, segment_id.to_string()));
+            out.push(CandidateZone::new(zone_id, seg.clone()));
         }
 
         if tracing::enabled!(tracing::Level::DEBUG) {
