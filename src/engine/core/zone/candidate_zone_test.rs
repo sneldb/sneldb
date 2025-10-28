@@ -1,9 +1,14 @@
 use crate::engine::core::CandidateZone;
 use crate::engine::core::ColumnValues;
+use crate::engine::core::ZoneMeta;
 use crate::engine::core::read::cache::DecompressedBlock;
+use crate::engine::core::read::cache::QueryCaches;
 use crate::shared::config::CONFIG;
+use crate::test_helpers::factories::zone_meta_factory::ZoneMetaFactory;
 use std::collections::HashMap;
+use std::fs::create_dir_all;
 use std::sync::Arc;
+use std::time::Duration;
 
 #[test]
 fn creates_new_candidate_zone() {
@@ -78,4 +83,82 @@ fn zone_values_access_via_column_values() {
     assert_eq!(region.len(), 2);
     assert_eq!(region.get_str_at(0), Some("east"));
     assert_eq!(region.get_str_at(1), Some("west"));
+}
+
+#[test]
+fn create_all_zones_from_meta_cached_uses_per_query_cache() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base_dir = tmp.path().to_path_buf();
+    let segment_id = "00011";
+    let uid = "uid_cached";
+    let seg_dir = base_dir.join(segment_id);
+    create_dir_all(&seg_dir).unwrap();
+
+    // Write .zones with two metas (zone ids implied by length)
+    let m1 = ZoneMetaFactory::new()
+        .with("zone_id", 0)
+        .with("uid", uid)
+        .with("segment_id", 1u64)
+        .create();
+    let m2 = ZoneMetaFactory::new()
+        .with("zone_id", 1)
+        .with("uid", uid)
+        .with("segment_id", 1u64)
+        .create();
+    ZoneMeta::save(uid, &[m1.clone(), m2.clone()], &seg_dir).unwrap();
+
+    let caches = QueryCaches::new(base_dir.clone());
+
+    let zones1 = CandidateZone::create_all_zones_for_segment_from_meta_cached(
+        &base_dir,
+        segment_id,
+        uid,
+        Some(&caches),
+    );
+    assert_eq!(zones1.len(), 2);
+
+    // Rewrite .zones with a third meta; per-query memoization should still return 2
+    std::thread::sleep(Duration::from_millis(20));
+    let m3 = ZoneMetaFactory::new()
+        .with("zone_id", 2)
+        .with("uid", uid)
+        .with("segment_id", 1u64)
+        .create();
+    ZoneMeta::save(uid, &[m1, m2, m3], &seg_dir).unwrap();
+
+    let zones2 = CandidateZone::create_all_zones_for_segment_from_meta_cached(
+        &base_dir,
+        segment_id,
+        uid,
+        Some(&caches),
+    );
+    assert_eq!(zones2.len(), 2, "expected cached length within same query");
+
+    // New query caches should observe the new length (3)
+    let caches2 = QueryCaches::new(base_dir.clone());
+    let zones3 = CandidateZone::create_all_zones_for_segment_from_meta_cached(
+        &base_dir,
+        segment_id,
+        uid,
+        Some(&caches2),
+    );
+    assert_eq!(zones3.len(), 3);
+}
+
+#[test]
+fn create_all_zones_from_meta_cached_falls_back_to_fill_factor_when_missing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base_dir = tmp.path().to_path_buf();
+    let segment_id = "00998";
+    let uid = "uid_missing";
+
+    // No .zones file present; expect fill_factor fallback regardless of caches
+    let caches = QueryCaches::new(base_dir.clone());
+    let zones = CandidateZone::create_all_zones_for_segment_from_meta_cached(
+        &base_dir,
+        segment_id,
+        uid,
+        Some(&caches),
+    );
+    assert_eq!(zones.len(), CONFIG.engine.fill_factor);
 }

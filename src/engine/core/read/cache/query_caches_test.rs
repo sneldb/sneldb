@@ -1,3 +1,4 @@
+use crate::engine::core::ZoneMeta;
 use crate::engine::core::column::column_reader::ColumnReader;
 use crate::engine::core::column::compression::{CompressionCodec, Lz4Codec};
 use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
@@ -6,10 +7,98 @@ use crate::engine::core::time::{TemporalCalendarIndex, ZoneTemporalIndex};
 use crate::shared::storage_header::BinaryHeader;
 use crate::test_helpers::factories::column_factory::ColumnFactory;
 use crate::test_helpers::factories::zone_index_factory::ZoneIndexFactory;
+use crate::test_helpers::factories::zone_meta_factory::ZoneMetaFactory;
 use std::fs::OpenOptions;
 use std::fs::create_dir_all;
 use std::io::{Seek, SeekFrom, Write};
 use std::sync::Arc;
+use std::time::Duration;
+
+#[test]
+fn zone_meta_cache_reuses_arc_and_reads_from_disk_once() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base_dir = tmp.path().to_path_buf();
+    let segment_id = "seg-meta";
+    let uid = "uid_meta";
+    let seg_dir = base_dir.join(segment_id);
+    create_dir_all(&seg_dir).unwrap();
+
+    // Write a small .zones file with two metas
+    let m1 = ZoneMetaFactory::new()
+        .with("zone_id", 0)
+        .with("uid", uid)
+        .with("segment_id", 7u64)
+        .create();
+    let m2 = ZoneMetaFactory::new()
+        .with("zone_id", 1)
+        .with("uid", uid)
+        .with("segment_id", 7u64)
+        .create();
+    ZoneMeta::save(uid, &[m1.clone(), m2.clone()], &seg_dir).unwrap();
+
+    let caches = QueryCaches::new(base_dir.clone());
+
+    // First load (reads from disk)
+    let a1 = caches
+        .get_or_load_zone_meta(segment_id, uid)
+        .expect("zone meta load");
+    assert_eq!(a1.len(), 2);
+
+    // Second load (per-query memoization)
+    let a2 = caches
+        .get_or_load_zone_meta(segment_id, uid)
+        .expect("zone meta load 2");
+    assert!(
+        Arc::ptr_eq(&a1, &a2),
+        "expected same Arc from per-query memo"
+    );
+
+    // Modify file; per-query memoization should still return same Arc
+    std::thread::sleep(Duration::from_millis(20));
+    let m3 = ZoneMetaFactory::new()
+        .with("zone_id", 2)
+        .with("uid", uid)
+        .with("segment_id", 7u64)
+        .create();
+    crate::engine::core::ZoneMeta::save(uid, &[m1, m2, m3], &seg_dir).unwrap();
+
+    let a3 = caches
+        .get_or_load_zone_meta(segment_id, uid)
+        .expect("zone meta load 3");
+    assert!(
+        Arc::ptr_eq(&a2, &a3),
+        "expected per-query memoization to hold"
+    );
+}
+
+#[test]
+fn zone_meta_cache_isolated_per_query_instances() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base_dir = tmp.path().to_path_buf();
+    let segment_id = "seg-meta2";
+    let uid = "uid_meta2";
+    let seg_dir = base_dir.join(segment_id);
+    create_dir_all(&seg_dir).unwrap();
+
+    // Write a .zones file with one meta
+    let m1 = crate::test_helpers::factories::zone_meta_factory::ZoneMetaFactory::new()
+        .with("zone_id", 5)
+        .with("uid", uid)
+        .with("segment_id", 9u64)
+        .create();
+    crate::engine::core::ZoneMeta::save(uid, &[m1], &seg_dir).unwrap();
+
+    // Two separate query contexts should yield separate Arcs (per-query memo only)
+    let caches1 = QueryCaches::new(base_dir.clone());
+    let caches2 = QueryCaches::new(base_dir.clone());
+    let z1 = caches1.get_or_load_zone_meta(segment_id, uid).expect("z1");
+    let z2 = caches2.get_or_load_zone_meta(segment_id, uid).expect("z2");
+    assert!(z1.len() == 1 && z2.len() == 1);
+    assert!(
+        !Arc::ptr_eq(&z1, &z2),
+        "expected different Arcs across queries (per-query memo only)"
+    );
+}
 
 #[test]
 fn zone_index_cache_reuses_arc() {

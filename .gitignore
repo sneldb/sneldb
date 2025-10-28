@@ -13,3 +13,4 @@
 /docs/book
 .DS_Store
 flamegraph*
+/scripts/*

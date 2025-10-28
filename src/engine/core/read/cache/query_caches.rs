@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use crate::engine::core::ZoneMeta;
 use crate::engine::core::column::compression::compressed_column_index::ZoneBlockEntry;
 use crate::engine::core::read::cache::{DecompressedBlock, GlobalColumnBlockCache};
 use crate::engine::core::zone::zone_index::ZoneIndex;
@@ -39,6 +40,8 @@ pub struct QueryCaches {
     field_calendar_by_key: Mutex<HashMap<(String, String, String), Arc<TemporalCalendarIndex>>>,
     field_temporal_index_by_key:
         Mutex<HashMap<(String, String, String, u32), Arc<ZoneTemporalIndex>>>,
+    // Per-query memoization for zone metadata (segment, uid) -> Vec<ZoneMeta>
+    zone_meta_by_key: Mutex<HashMap<(String, String), Arc<Vec<ZoneMeta>>>>,
 }
 
 impl QueryCaches {
@@ -63,6 +66,7 @@ impl QueryCaches {
             zone_surf_by_key: Mutex::new(HashMap::new()),
             field_calendar_by_key: Mutex::new(HashMap::new()),
             field_temporal_index_by_key: Mutex::new(HashMap::new()),
+            zone_meta_by_key: Mutex::new(HashMap::new()),
         }
     }
 
@@ -132,6 +136,39 @@ impl QueryCaches {
             .lock()
             .unwrap_or_else(|p| p.into_inner());
         map.entry(key).or_insert_with(|| arc.clone());
+        Ok(arc)
+    }
+
+    /// Get or load `.zones` metadata for a given (segment, uid) with per-query memoization
+    pub fn get_or_load_zone_meta(
+        &self,
+        segment_id: &str,
+        uid: &str,
+    ) -> Result<Arc<Vec<ZoneMeta>>, std::io::Error> {
+        let key = (segment_id.to_string(), uid.to_string());
+        // Fast path: per-query memoization
+        if let Some(v) = self
+            .zone_meta_by_key
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(&key)
+            .cloned()
+        {
+            return Ok(v);
+        }
+
+        // Load from disk
+        let path = self.segment_dir(segment_id).join(format!("{}.zones", uid));
+        let metas =
+            ZoneMeta::load(&path).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let arc = Arc::new(metas);
+
+        // Memoize
+        let mut map = self
+            .zone_meta_by_key
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        map.entry(key).or_insert_with(|| Arc::clone(&arc));
         Ok(arc)
     }
 

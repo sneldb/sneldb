@@ -37,6 +37,7 @@ impl<'a> ZoneSelectorBuilder<'a> {
         FieldSelector {
             plan: self.inputs.plan,
             qplan: self.inputs.query_plan,
+            caches: self.inputs.caches,
             range_pruner,
             temporal_pruner,
             enum_pruner,
