@@ -22,7 +22,10 @@ fn group_key_builder_builds_consistently_for_rows() {
         "timestamp".to_string(),
     );
     let ts = 3_000_000u64;
-    let cols = make_columns(&[("timestamp", vec![&ts.to_string()]), ("country", vec!["US"])]);
+    let cols = make_columns(&[
+        ("timestamp", vec![&ts.to_string()]),
+        ("country", vec!["US"]),
+    ]);
     let k1 = builder.build_from_row(&cols, 0);
     let k2 = builder.build_from_row(&cols, 0);
     assert_eq!(k1.bucket, k2.bucket);
@@ -45,5 +48,3 @@ fn group_key_builder_builds_from_event_with_same_params() {
     assert_eq!(k.groups, vec!["US"]);
     assert_eq!(k.bucket, Some(86_400));
 }
-
-

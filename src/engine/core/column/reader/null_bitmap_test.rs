@@ -16,5 +16,3 @@ fn null_bitmap_none_always_false() {
         assert_eq!(nb.is_null(i), false);
     }
 }
-
-

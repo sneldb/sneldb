@@ -9,5 +9,3 @@ fn decompress_block_reads_size_prefix() {
     let out = decompress_block(&comp, data.len()).expect("decompress");
     assert_eq!(out, data);
 }
-
-

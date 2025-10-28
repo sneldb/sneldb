@@ -1,5 +1,5 @@
-use super::time_bucketing::{CalendarTimeBucketer, naive_bucket_of};
 use super::time::TimeConfig;
+use super::time_bucketing::{CalendarTimeBucketer, naive_bucket_of};
 use crate::command::types::TimeGranularity;
 use crate::test_helpers::factories::TimestampFactory;
 use chrono::Weekday;

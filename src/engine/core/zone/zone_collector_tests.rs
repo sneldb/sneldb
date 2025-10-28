@@ -1,7 +1,7 @@
 use crate::command::types::{CompareOp, Expr};
+use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::engine::core::{Flusher, ZoneCollector};
 use crate::shared::config::CONFIG;
-use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::test_helpers::factories::{
     CommandFactory, EventFactory, ExecutionStepFactory, FilterPlanFactory, MemTableFactory,
     QueryPlanFactory, SchemaRegistryFactory,
@@ -122,7 +122,9 @@ async fn zone_collector_combines_zones_across_segments() {
         .with_value(json!(1))
         .with_uid(&uid)
         .create();
-    filter_id.index_strategy = Some(IndexStrategy::ZoneXorIndex { field: "id".to_string() });
+    filter_id.index_strategy = Some(IndexStrategy::ZoneXorIndex {
+        field: "id".to_string(),
+    });
 
     let mut filter_context_id = FilterPlanFactory::new()
         .with_column("context_id")
@@ -130,7 +132,9 @@ async fn zone_collector_combines_zones_across_segments() {
         .with_value(json!("ctx1"))
         .with_uid(&uid)
         .create();
-    filter_context_id.index_strategy = Some(IndexStrategy::ZoneXorIndex { field: "context_id".to_string() });
+    filter_context_id.index_strategy = Some(IndexStrategy::ZoneXorIndex {
+        field: "context_id".to_string(),
+    });
 
     let step_id = ExecutionStepFactory::new()
         .with_filter(filter_id)
@@ -251,14 +255,18 @@ async fn zone_collector_reorders_context_first_and_yields_same_result() {
         .with_value(json!(2))
         .with_uid(&uid)
         .create();
-    filter_id.index_strategy = Some(IndexStrategy::ZoneXorIndex { field: "id".to_string() });
+    filter_id.index_strategy = Some(IndexStrategy::ZoneXorIndex {
+        field: "id".to_string(),
+    });
     let mut filter_context = FilterPlanFactory::new()
         .with_column("context_id")
         .with_operation(CompareOp::Eq)
         .with_value(json!("ctx2"))
         .with_uid(&uid)
         .create();
-    filter_context.index_strategy = Some(IndexStrategy::ZoneXorIndex { field: "context_id".to_string() });
+    filter_context.index_strategy = Some(IndexStrategy::ZoneXorIndex {
+        field: "context_id".to_string(),
+    });
     let step_id = ExecutionStepFactory::new()
         .with_filter(filter_id)
         .with_plan(&plan)
@@ -372,14 +380,18 @@ async fn zone_collector_or_combines_union_without_pruning() {
         .with_value(json!(1))
         .with_uid(&uid)
         .create();
-    fp1.index_strategy = Some(IndexStrategy::ZoneXorIndex { field: "id".to_string() });
+    fp1.index_strategy = Some(IndexStrategy::ZoneXorIndex {
+        field: "id".to_string(),
+    });
     let mut fp3 = FilterPlanFactory::new()
         .with_column("id")
         .with_operation(CompareOp::Eq)
         .with_value(json!(3))
         .with_uid(&uid)
         .create();
-    fp3.index_strategy = Some(IndexStrategy::ZoneXorIndex { field: "id".to_string() });
+    fp3.index_strategy = Some(IndexStrategy::ZoneXorIndex {
+        field: "id".to_string(),
+    });
     let s1 = ExecutionStepFactory::new()
         .with_filter(fp1)
         .with_plan(&plan)

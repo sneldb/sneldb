@@ -11,5 +11,3 @@ pub struct MergePlan {
     /// Output numeric segment id to allocate/write
     pub output_segment_id: u32,
 }
-
-
