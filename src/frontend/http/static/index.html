@@ -56,6 +56,23 @@
       <section class="output-section">
         <div class="section-header">
           <h2>Results</h2>
+          <div class="pagination-controls" id="paginationControls" style="display: none;">
+            <div class="pagination-info" id="paginationInfo"></div>
+            <div class="pagination-buttons">
+              <button id="paginationPrev" class="btn btn-secondary btn-sm">Previous</button>
+              <button id="paginationNext" class="btn btn-secondary btn-sm">Next</button>
+              <label class="pagination-label">
+                Page size:
+                <select id="paginationPageSize" class="pagination-select">
+                  <option value="50">50</option>
+                  <option value="100" selected>100</option>
+                  <option value="250">250</option>
+                  <option value="500">500</option>
+                  <option value="1000">1000</option>
+                </select>
+              </label>
+            </div>
+          </div>
           <div class="view-controls" id="viewControls" style="display: none;">
             <button class="view-btn active" data-view="chart" id="chartViewBtn">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
