@@ -1,3 +1,6 @@
+use crate::engine::core::ColumnReader;
+use crate::engine::core::column::format::PhysicalType;
+use crate::engine::core::column::type_catalog::ColumnTypeCatalog;
 use crate::engine::core::time::ZoneTemporalIndex;
 use crate::engine::core::zone::rlte_index::RlteIndex;
 use crate::engine::core::zone::zone_xor_index::ZoneXorFilterIndex;
@@ -209,4 +212,125 @@ async fn test_zone_writer_skips_surf_for_datetime_and_builds_for_amount() {
             }
         }
     }
+}
+
+#[tokio::test]
+async fn test_zone_writer_applies_type_catalog_hints() {
+    let tmp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let segment_dir = tmp_dir.path();
+
+    let schema_factory = SchemaRegistryFactory::new();
+    let registry = schema_factory.registry();
+
+    let event_type = "analytics";
+    schema_factory
+        .define_with_fields(
+            event_type,
+            &[
+                ("context_id", "string"),
+                ("metric", "string"), // schema says string => VarBytes without hints
+            ],
+        )
+        .await
+        .unwrap();
+
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+
+    let events = vec![
+        EventFactory::new()
+            .with("event_type", event_type)
+            .with("context_id", "a1")
+            .with("payload", json!({"metric": 100 }))
+            .create(),
+        EventFactory::new()
+            .with("event_type", event_type)
+            .with("context_id", "a2")
+            .with("payload", json!({"metric": 200 }))
+            .create(),
+    ];
+
+    let planner = ZonePlanner::new(&uid, 7);
+    let plans = planner.plan(&events).expect("plan zones");
+
+    let mut catalog = ColumnTypeCatalog::new();
+    catalog.record(
+        (event_type.to_string(), "metric".to_string()),
+        PhysicalType::I64,
+    );
+
+    let writer = ZoneWriter::new(&uid, segment_dir, registry.clone()).with_type_catalog(catalog);
+    writer.write_all(&plans).await.expect("ZoneWriter failed");
+
+    // Load the written column and ensure the type hint produced an i64 block
+    let mut all_strings = Vec::new();
+    for plan in &plans {
+        let snapshot = ColumnReader::load_for_zone_snapshot(
+            segment_dir,
+            &plan.segment_id.to_string(),
+            &uid,
+            "metric",
+            plan.id,
+            None,
+        )
+        .expect("snapshot");
+        assert_eq!(snapshot.physical_type(), PhysicalType::I64);
+        all_strings.extend(snapshot.to_strings());
+    }
+    all_strings.sort();
+    assert_eq!(all_strings, vec!["100", "200"]);
+}
+
+#[tokio::test]
+async fn test_zone_writer_type_catalog_does_not_override_schema_types() {
+    let tmp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let segment_dir = tmp_dir.path();
+
+    let schema_factory = SchemaRegistryFactory::new();
+    let registry = schema_factory.registry();
+
+    let event_type = "flags";
+    schema_factory
+        .define_with_fields(event_type, &[("context_id", "string"), ("success", "bool")])
+        .await
+        .unwrap();
+
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+
+    let events = vec![
+        EventFactory::new()
+            .with("event_type", event_type)
+            .with("context_id", "c1")
+            .with("payload", json!({"success": true }))
+            .create(),
+        EventFactory::new()
+            .with("event_type", event_type)
+            .with("context_id", "c2")
+            .with("payload", json!({"success": false }))
+            .create(),
+    ];
+
+    let planner = ZonePlanner::new(&uid, 11);
+    let plans = planner.plan(&events).expect("plan zones");
+
+    let mut catalog = ColumnTypeCatalog::new();
+    // Attempt to override schema type with VarBytes hint
+    catalog.record(
+        (event_type.to_string(), "success".to_string()),
+        PhysicalType::VarBytes,
+    );
+
+    let writer = ZoneWriter::new(&uid, segment_dir, registry.clone()).with_type_catalog(catalog);
+    writer.write_all(&plans).await.expect("ZoneWriter failed");
+
+    let snapshot = ColumnReader::load_for_zone_snapshot(
+        segment_dir,
+        &plans[0].segment_id.to_string(),
+        &uid,
+        "success",
+        plans[0].id,
+        None,
+    )
+    .expect("snapshot");
+    // schema wins: still Bool
+    assert_eq!(snapshot.physical_type(), PhysicalType::Bool);
 }

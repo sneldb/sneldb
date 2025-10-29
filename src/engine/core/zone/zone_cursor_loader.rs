@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::engine::core::{ColumnReader, ZoneCursor, ZoneMeta};
+use crate::engine::core::column::type_catalog::ColumnTypeCatalog;
+use crate::engine::core::{ColumnKey, ColumnReader, ZoneCursor, ZoneMeta};
 use crate::engine::errors::{QueryExecutionError, ZoneMetaError};
 use crate::engine::schema::SchemaRegistry;
 use tokio::sync::RwLock;
@@ -14,6 +15,12 @@ pub struct ZoneCursorLoader {
     segment_ids: Vec<String>,
     registry: Arc<RwLock<SchemaRegistry>>,
     base_dir: PathBuf,
+}
+
+#[derive(Debug)]
+pub struct LoadedZoneCursors {
+    pub cursors: Vec<ZoneCursor>,
+    pub type_catalog: ColumnTypeCatalog,
 }
 
 impl ZoneCursorLoader {
@@ -31,33 +38,45 @@ impl ZoneCursorLoader {
         }
     }
 
-    pub async fn load_all(&self) -> Result<Vec<ZoneCursor>, QueryExecutionError> {
-        let schema = {
+    pub async fn load_all(&self) -> Result<LoadedZoneCursors, QueryExecutionError> {
+        let (schema, event_type_name) = {
             let reg = self.registry.read().await;
-            reg.get_schema_by_uid(&self.uid)
-                .ok_or_else(|| {
-                    if tracing::enabled!(tracing::Level::ERROR) {
-                        error!(
-                            target: "sneldb::cursor_loader",
-                            uid = self.uid,
-                            "Schema not found"
-                        );
-                    }
-                    QueryExecutionError::SchemaNotFound(format!("No schema for UID {}", self.uid))
-                })?
-                .clone()
+            let schema_ref = reg.get_schema_by_uid(&self.uid).ok_or_else(|| {
+                if tracing::enabled!(tracing::Level::ERROR) {
+                    error!(
+                        target: "sneldb::cursor_loader",
+                        uid = self.uid,
+                        "Schema not found"
+                    );
+                }
+                QueryExecutionError::SchemaNotFound(format!("No schema for UID {}", self.uid))
+            })?;
+            let event_type = reg.get_event_type_by_uid(&self.uid).ok_or_else(|| {
+                QueryExecutionError::SchemaNotFound(format!(
+                    "No event_type mapping for UID {}",
+                    self.uid
+                ))
+            })?;
+            (schema_ref.clone(), event_type)
         };
+
+        let schema_fields: Vec<String> = schema.fields().cloned().collect();
 
         if tracing::enabled!(tracing::Level::INFO) {
             info!(
                 target: "sneldb::cursor_loader",
                 uid = self.uid,
-                fields = ?schema.fields().collect::<Vec<_>>(),
+                fields = ?schema_fields.as_slice(),
                 "Loaded schema for UID"
             );
         }
 
-        let mut all_cursors = vec![];
+        let mut all_cursors = Vec::new();
+        let mut type_catalog = ColumnTypeCatalog::with_capacity(schema_fields.len() + 3);
+
+        let context_key: ColumnKey = (event_type_name.clone(), "context_id".to_string());
+        let timestamp_key: ColumnKey = (event_type_name.clone(), "timestamp".to_string());
+        let event_type_key: ColumnKey = (event_type_name.clone(), "event_type".to_string());
 
         for segment_id in &self.segment_ids {
             let segment_dir = self.base_dir.join(segment_id);
@@ -77,40 +96,57 @@ impl ZoneCursorLoader {
                 ZoneMeta::load(&zones_path).map_err(|e| ZoneMetaError::Other(e.to_string()))?;
 
             for zone in &zone_metas {
-                let context_ids = ColumnReader::load_for_zone(
+                let context_snapshot = ColumnReader::load_for_zone_snapshot(
                     &segment_dir,
                     segment_id,
                     &self.uid,
                     "context_id",
                     zone.zone_id,
+                    None,
                 )?;
+                let context_phys = context_snapshot.physical_type();
+                let context_ids = context_snapshot.into_strings();
+                type_catalog.record_if_absent(&context_key, context_phys);
 
-                let timestamps = ColumnReader::load_for_zone(
+                let timestamp_snapshot = ColumnReader::load_for_zone_snapshot(
                     &segment_dir,
                     segment_id,
                     &self.uid,
                     "timestamp",
                     zone.zone_id,
+                    None,
                 )?;
+                let timestamp_phys = timestamp_snapshot.physical_type();
+                let timestamps = timestamp_snapshot.into_strings();
+                type_catalog.record_if_absent(&timestamp_key, timestamp_phys);
 
-                let event_types = ColumnReader::load_for_zone(
+                let event_type_snapshot = ColumnReader::load_for_zone_snapshot(
                     &segment_dir,
                     segment_id,
                     &self.uid,
                     "event_type",
                     zone.zone_id,
+                    None,
                 )?;
+                let event_type_phys = event_type_snapshot.physical_type();
+                let event_types = event_type_snapshot.into_strings();
+                type_catalog.record_if_absent(&event_type_key, event_type_phys);
 
                 let mut payload_fields = HashMap::new();
-                for field in schema.fields() {
-                    let values = ColumnReader::load_for_zone(
+                for field in &schema_fields {
+                    let snapshot = ColumnReader::load_for_zone_snapshot(
                         &segment_dir,
                         segment_id,
                         &self.uid,
                         field,
                         zone.zone_id,
+                        None,
                     )?;
+                    let phys = snapshot.physical_type();
+                    let values = snapshot.into_strings();
                     payload_fields.insert(field.clone(), values);
+                    let key: ColumnKey = (event_type_name.clone(), field.clone());
+                    type_catalog.record_if_absent(&key, phys);
                 }
 
                 if tracing::enabled!(tracing::Level::DEBUG) {
@@ -119,7 +155,7 @@ impl ZoneCursorLoader {
                         uid = self.uid,
                         segment_id = segment_id,
                         zone_id = zone.zone_id,
-                        fields = ?schema.fields().collect::<Vec<_>>(),
+                        fields = ?schema_fields.as_slice(),
                         "Constructed ZoneCursor"
                     );
                 }
@@ -159,6 +195,9 @@ impl ZoneCursorLoader {
             );
         }
 
-        Ok(all_cursors)
+        Ok(LoadedZoneCursors {
+            cursors: all_cursors,
+            type_catalog,
+        })
     }
 }

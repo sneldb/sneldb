@@ -1,5 +1,6 @@
 use crate::engine::core::ColumnWriter;
 use crate::engine::core::FieldXorFilter;
+use crate::engine::core::column::type_catalog::ColumnTypeCatalog;
 use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
 use crate::engine::core::read::catalog::{IndexKind, SegmentIndexCatalog};
 use crate::engine::core::time::{CalendarDir, TemporalIndexBuilder};
@@ -22,6 +23,7 @@ pub struct ZoneWriter<'a> {
     pub uid: &'a str,
     pub segment_dir: &'a Path,
     pub registry: Arc<RwLock<SchemaRegistry>>,
+    type_catalog: Option<ColumnTypeCatalog>,
 }
 
 impl<'a> ZoneWriter<'a> {
@@ -30,7 +32,13 @@ impl<'a> ZoneWriter<'a> {
             uid,
             segment_dir,
             registry,
+            type_catalog: None,
         }
+    }
+
+    pub fn with_type_catalog(mut self, catalog: ColumnTypeCatalog) -> Self {
+        self.type_catalog = Some(catalog);
+        self
     }
 
     pub async fn write_all(&self, zone_plans: &[ZonePlan]) -> Result<(), StoreError> {
@@ -49,7 +57,10 @@ impl<'a> ZoneWriter<'a> {
         metadata_writer.write(zone_plans)?;
 
         // Write .col files
-        let writer = ColumnWriter::new(self.segment_dir.to_path_buf(), self.registry.clone());
+        let mut writer = ColumnWriter::new(self.segment_dir.to_path_buf(), self.registry.clone());
+        if let Some(catalog) = &self.type_catalog {
+            writer = writer.with_type_hints(catalog.clone());
+        }
         if tracing::enabled!(tracing::Level::DEBUG) {
             debug!(
                 target: "sneldb::flush",

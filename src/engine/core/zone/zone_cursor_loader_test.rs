@@ -1,3 +1,5 @@
+use crate::engine::core::column::format::PhysicalType;
+use crate::engine::core::zone::zone_cursor_loader::LoadedZoneCursors;
 use crate::engine::core::{Flusher, ZoneCursorLoader};
 use crate::shared::config::CONFIG;
 use crate::test_helpers::factories::{EventFactory, MemTableFactory, SchemaRegistryFactory};
@@ -75,7 +77,10 @@ async fn test_zone_cursor_loader_e2e() {
         registry,
         base_dir.clone(),
     );
-    let cursors = loader.load_all().await.expect("load_all failed");
+    let LoadedZoneCursors {
+        cursors,
+        type_catalog,
+    } = loader.load_all().await.expect("load_all failed");
 
     let num_events: usize = 3;
     let zone_size: usize = CONFIG.engine.event_per_zone;
@@ -105,4 +110,7 @@ async fn test_zone_cursor_loader_e2e() {
     assert_eq!(all_rows[1].timestamp, "123457");
 
     assert_eq!(cursors.len(), expected_zones);
+
+    let timestamp_key = ("user_deleted".to_string(), "timestamp".to_string());
+    assert_eq!(type_catalog.get(&timestamp_key), Some(PhysicalType::I64));
 }
