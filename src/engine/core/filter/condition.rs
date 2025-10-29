@@ -69,7 +69,9 @@ impl<'a> PreparedAccessor<'a> {
     pub fn warm_numeric_cache(&self, fields: &HashSet<String>) {
         for field in fields {
             if let Some(column) = self.columns.get(field) {
-                column.warm_numeric_cache();
+                if !column.is_typed() {
+                    column.warm_numeric_cache();
+                }
             }
         }
     }

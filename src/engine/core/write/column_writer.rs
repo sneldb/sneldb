@@ -8,6 +8,7 @@ use crate::engine::core::write::column_paths::ColumnPathResolver;
 use crate::engine::core::{UidResolver, WriteJob, ZonePlan};
 use crate::engine::errors::StoreError;
 use crate::engine::schema::SchemaRegistry;
+use crate::engine::schema::types::FieldType;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -60,7 +61,6 @@ impl ColumnWriter {
         let mut types_by_key: std::collections::HashMap<(String, String), PhysicalType> =
             std::collections::HashMap::new();
         {
-            use crate::engine::schema::types::FieldType;
             let reg = self.registry.read().await;
             for j in &write_jobs {
                 let (event_type, field) = (&j.key.0, &j.key.1);
@@ -68,12 +68,16 @@ impl ColumnWriter {
                     PhysicalType::I64
                 } else if let Some(schema) = reg.get(event_type) {
                     match schema.field_type(field) {
-                        Some(FieldType::I64) => PhysicalType::I64,
+                        Some(FieldType::I64)
+                        | Some(FieldType::Timestamp)
+                        | Some(FieldType::Date) => PhysicalType::I64,
                         Some(FieldType::U64) => PhysicalType::U64,
                         Some(FieldType::F64) => PhysicalType::F64,
                         Some(FieldType::Bool) => PhysicalType::Bool,
                         Some(FieldType::Optional(inner)) => match inner.as_ref() {
-                            FieldType::I64 => PhysicalType::I64,
+                            FieldType::I64 | FieldType::Timestamp | FieldType::Date => {
+                                PhysicalType::I64
+                            }
                             FieldType::U64 => PhysicalType::U64,
                             FieldType::F64 => PhysicalType::F64,
                             FieldType::Bool => PhysicalType::Bool,

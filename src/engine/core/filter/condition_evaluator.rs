@@ -1,3 +1,4 @@
+use crate::engine::core::column::format::PhysicalType;
 use crate::engine::core::filter::condition::{FieldAccessor, PreparedAccessor};
 use crate::engine::core::filter::direct_event_accessor::DirectEventAccessor;
 use crate::engine::core::{
@@ -129,26 +130,42 @@ impl ConditionEvaluator {
                 }
                 let mut builder = EventBuilder::new();
                 for (field, values) in &zone.values {
-                    if let Some(n) = values.get_u64_at(i) {
-                        builder.add_field_u64(field, n);
-                        continue;
-                    }
-                    if let Some(n) = values.get_i64_at(i) {
-                        builder.add_field_i64(field, n);
-                        continue;
-                    }
-                    if let Some(f) = values.get_f64_at(i) {
-                        builder.add_field_f64(field, f);
-                        continue;
-                    }
-                    if let Some(b) = values.get_bool_at(i) {
-                        builder.add_field_bool(field, b);
-                        continue;
-                    }
-                    if let Some(value) = values.get_str_at(i) {
-                        builder.add_field(field, value);
-                    } else {
-                        builder.add_field_null(field);
+                    match values.physical_type() {
+                        Some(PhysicalType::U64) => {
+                            if let Some(n) = values.get_u64_at(i) {
+                                builder.add_field_u64(field, n);
+                            } else {
+                                builder.add_field_null(field);
+                            }
+                        }
+                        Some(PhysicalType::I64) => {
+                            if let Some(n) = values.get_i64_at(i) {
+                                builder.add_field_i64(field, n);
+                            } else {
+                                builder.add_field_null(field);
+                            }
+                        }
+                        Some(PhysicalType::F64) => {
+                            if let Some(f) = values.get_f64_at(i) {
+                                builder.add_field_f64(field, f);
+                            } else {
+                                builder.add_field_null(field);
+                            }
+                        }
+                        Some(PhysicalType::Bool) => {
+                            if let Some(b) = values.get_bool_at(i) {
+                                builder.add_field_bool(field, b);
+                            } else {
+                                builder.add_field_null(field);
+                            }
+                        }
+                        _ => {
+                            if let Some(value) = values.get_str_at(i) {
+                                builder.add_field(field, value);
+                            } else {
+                                builder.add_field_null(field);
+                            }
+                        }
                     }
                 }
                 results.push(builder.build());

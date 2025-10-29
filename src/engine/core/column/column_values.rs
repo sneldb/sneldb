@@ -318,6 +318,9 @@ impl ColumnValues {
     /// Pre-builds the numeric cache for this column if any numeric access is expected.
     /// This avoids first-touch contention and amortizes parsing cost outside the hot loop.
     pub fn warm_numeric_cache(&self) {
+        if self.is_typed() {
+            return;
+        }
         let _ = self.numeric_cache.get_or_init(|| {
             let mut parsed: Vec<Option<i64>> = Vec::with_capacity(self.ranges.len());
             for i in 0..self.ranges.len() {

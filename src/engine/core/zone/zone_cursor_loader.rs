@@ -2,10 +2,12 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::engine::core::column::format::PhysicalType;
 use crate::engine::core::column::type_catalog::ColumnTypeCatalog;
 use crate::engine::core::{ColumnKey, ColumnReader, ZoneCursor, ZoneMeta};
 use crate::engine::errors::{QueryExecutionError, ZoneMetaError};
 use crate::engine::schema::SchemaRegistry;
+use crate::engine::schema::types::FieldType;
 use serde_json::Value;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
@@ -78,6 +80,19 @@ impl ZoneCursorLoader {
         let context_key: ColumnKey = (event_type_name.clone(), "context_id".to_string());
         let timestamp_key: ColumnKey = (event_type_name.clone(), "timestamp".to_string());
         let event_type_key: ColumnKey = (event_type_name.clone(), "event_type".to_string());
+
+        // Prefill type hints from schema before inspecting on-disk payloads so compaction can
+        // emit typed column blocks even if the source segments stored values as VarBytes.
+        type_catalog.record_if_absent(&context_key, PhysicalType::VarBytes);
+        type_catalog.record_if_absent(&timestamp_key, PhysicalType::I64);
+        type_catalog.record_if_absent(&event_type_key, PhysicalType::VarBytes);
+        for field in &schema_fields {
+            if let Some(field_type) = schema.field_type(field) {
+                let phys_hint = field_type_to_physical_type(field_type);
+                let key: ColumnKey = (event_type_name.clone(), field.clone());
+                type_catalog.record_if_absent(&key, phys_hint);
+            }
+        }
 
         for segment_id in &self.segment_ids {
             let segment_dir = self.base_dir.join(segment_id);
@@ -200,5 +215,16 @@ impl ZoneCursorLoader {
             cursors: all_cursors,
             type_catalog,
         })
+    }
+}
+
+fn field_type_to_physical_type(field_type: &FieldType) -> PhysicalType {
+    match field_type {
+        FieldType::I64 | FieldType::Timestamp | FieldType::Date => PhysicalType::I64,
+        FieldType::U64 => PhysicalType::U64,
+        FieldType::F64 => PhysicalType::F64,
+        FieldType::Bool => PhysicalType::Bool,
+        FieldType::Optional(inner) => field_type_to_physical_type(inner.as_ref()),
+        _ => PhysicalType::VarBytes,
     }
 }
