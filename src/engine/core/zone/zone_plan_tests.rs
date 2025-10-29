@@ -1,6 +1,7 @@
 use crate::engine::core::ZonePlan;
 use crate::test_helpers::factory::Factory;
-use serde_json::json;
+use serde_json::{json, Number, Value};
+use std::collections::HashMap;
 
 #[test]
 fn test_build_all_divides_events_into_zones() {
@@ -150,5 +151,38 @@ fn test_collect_unique_field_values_includes_empty_for_missing() {
     assert!(
         score_values.contains(""),
         "should contain empty string for missing field"
+    );
+}
+
+#[test]
+fn test_from_rows_preserves_typed_payload() {
+    let mut payload = HashMap::new();
+    payload.insert("score".to_string(), Value::Number(Number::from(123)));
+    payload.insert("region".to_string(), Value::String("eu".into()));
+
+    let rows = vec![
+        Factory::zone_row()
+            .with_context_id("ctx-numeric")
+            .with_event_type("signup")
+            .with_payload_map(payload)
+            .create(),
+    ];
+
+    let plan = ZonePlan::from_rows(rows, "uid-typed".into(), 55, 0).unwrap();
+    let event = &plan.events[0];
+
+    assert_eq!(
+        event
+            .payload
+            .get("score")
+            .and_then(|v| v.as_i64()),
+        Some(123)
+    );
+    assert_eq!(
+        event
+            .payload
+            .get("region")
+            .and_then(|v| v.as_str()),
+        Some("eu")
     );
 }

@@ -1,4 +1,5 @@
 use crate::engine::core::ZoneRow;
+use serde_json::Value;
 use std::collections::HashMap;
 
 pub struct ZoneRowFactory {
@@ -7,7 +8,7 @@ pub struct ZoneRowFactory {
     event_type: String,
     segment_id: u64,
     zone_id: u32,
-    payload: HashMap<String, String>,
+    payload: HashMap<String, Value>,
 }
 
 impl ZoneRowFactory {
@@ -18,7 +19,7 @@ impl ZoneRowFactory {
             event_type: "signup".into(),
             segment_id: 42,
             zone_id: 0,
-            payload: HashMap::from([("plan".into(), "free".into())]),
+            payload: HashMap::from([("plan".into(), Value::String("free".into()))]),
         }
     }
 
@@ -38,7 +39,12 @@ impl ZoneRowFactory {
     }
 
     pub fn with_payload_field(mut self, key: &str, value: &str) -> Self {
-        self.payload.insert(key.into(), value.into());
+        self.payload.insert(key.into(), Value::String(value.into()));
+        self
+    }
+
+    pub fn with_payload_map(mut self, map: HashMap<String, Value>) -> Self {
+        self.payload = map;
         self
     }
 

@@ -89,6 +89,23 @@ impl GlobalZoneIndexCache {
         }
     }
 
+    pub fn invalidate_segment(&self, segment_label: &str) {
+        if let Ok(mut guard) = self.inner.lock() {
+            let keys: Vec<_> = guard
+                .iter()
+                .filter(|(key, _)| key.path.ends_with(segment_label))
+                .map(|(key, _)| key.clone())
+                .collect();
+            for key in keys {
+                guard.pop(&key);
+            }
+        }
+
+        if let Ok(mut inflight) = self.inflight.lock() {
+            inflight.retain(|key, _| !key.path.ends_with(segment_label));
+        }
+    }
+
     pub fn get_or_load(
         &self,
         base_dir: &Path,

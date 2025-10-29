@@ -25,7 +25,10 @@ fn test_build_event() {
 
     // Test payload
     if let Value::Object(payload) = event.payload {
-        assert_eq!(payload.get("custom_field").unwrap(), "test_value");
+        assert_eq!(
+            payload.get("custom_field").and_then(|v| v.as_str()),
+            Some("test_value")
+        );
     } else {
         panic!("Expected payload to be an Object");
     }

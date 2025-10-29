@@ -1,5 +1,6 @@
 pub mod compaction_worker;
 pub mod compactor;
+pub mod handover;
 pub mod merge_plan;
 pub mod policy;
 
@@ -10,3 +11,5 @@ mod policy_test;
 mod compaction_worker_test;
 #[cfg(test)]
 mod compactor_test;
+#[cfg(test)]
+mod handover_test;

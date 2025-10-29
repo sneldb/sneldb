@@ -66,7 +66,10 @@ async fn executes_query_with_memtable_and_segment() {
 
     // Verify: Only the event with status = "ok" should match
     assert_eq!(results.len(), 1);
-    assert_eq!(results[0].payload.get("status").unwrap(), "ok");
+    assert_eq!(
+        results[0].payload.get("status").and_then(|v| v.as_str()),
+        Some("ok")
+    );
 }
 
 #[tokio::test]
@@ -239,8 +242,14 @@ async fn executes_query_with_only_segment_match() {
     let results = execution.run().await.unwrap();
 
     assert_eq!(results.len(), 2);
-    assert_eq!(results[0].payload.get("status").unwrap(), "ok");
-    assert_eq!(results[1].payload.get("status").unwrap(), "ok");
+    assert_eq!(
+        results[0].payload.get("status").and_then(|v| v.as_str()),
+        Some("ok")
+    );
+    assert_eq!(
+        results[1].payload.get("status").and_then(|v| v.as_str()),
+        Some("ok")
+    );
 }
 
 #[tokio::test]
@@ -385,7 +394,10 @@ async fn executes_query_limit_short_circuits_before_segments_when_memtable_satis
     assert_eq!(results.len(), 2);
     // Ensure we returned only memtable-sourced rows (segment not consulted)
     for e in results {
-        assert_eq!(e.payload.get("source").unwrap(), "memtable");
+        assert_eq!(
+            e.payload.get("source").and_then(|v| v.as_str()),
+            Some("memtable")
+        );
     }
 }
 

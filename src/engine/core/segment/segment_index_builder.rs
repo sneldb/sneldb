@@ -41,7 +41,7 @@ impl<'a> SegmentIndexBuilder<'a> {
         // Load segment index
         let mut segment_index = match SegmentIndex::load(shard_dir).await {
             Ok(idx) => {
-                debug!(target: "segment_index_builder::add_segment_entry", ?shard_dir, count = idx.entries.len(), "Loaded existing segment index");
+                debug!(target: "segment_index_builder::add_segment_entry", ?shard_dir, count = idx.len(), "Loaded existing segment index");
                 idx
             }
             Err(e) => {
@@ -54,8 +54,8 @@ impl<'a> SegmentIndexBuilder<'a> {
         };
 
         // Append entry
-        segment_index.append(entry).await?;
-        debug!(target: "segment_index_builder::add_segment_entry", count = segment_index.entries.len(), "Appended new segment entry");
+        segment_index.insert_entry(entry);
+        debug!(target: "segment_index_builder::add_segment_entry", "Inserted new segment entry");
 
         // Save updated index
         if let Err(e) = segment_index.save(shard_dir).await {

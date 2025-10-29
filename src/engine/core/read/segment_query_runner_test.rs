@@ -87,7 +87,10 @@ async fn segment_query_runner_returns_matching_events() {
     let results = runner.run().await;
 
     assert_eq!(results.len(), 1);
-    assert_eq!(results[0].payload.get("status").unwrap(), "ok");
+    assert_eq!(
+        results[0].payload.get("status").and_then(|v| v.as_str()),
+        Some("ok")
+    );
 }
 
 #[tokio::test]

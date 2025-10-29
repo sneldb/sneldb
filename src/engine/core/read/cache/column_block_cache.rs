@@ -76,6 +76,27 @@ impl GlobalColumnBlockCache {
         }
     }
 
+    pub fn invalidate_segment(&self, segment_label: &str) {
+        if let Ok(mut guard) = self.inner.lock() {
+            let keys: Vec<_> = guard
+                .iter()
+                .filter(|(key, _)| key.path().to_string_lossy().contains(segment_label))
+                .map(|(key, _)| key.clone())
+                .collect();
+            for key in keys {
+                if let Some(removed) = guard.pop(&key) {
+                    self.current_bytes
+                        .fetch_sub(removed.size, Ordering::Relaxed);
+                    self.evictions.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+        }
+
+        if let Ok(mut inflight) = self.inflight.lock() {
+            inflight.retain(|key, _| !key.path().to_string_lossy().contains(segment_label));
+        }
+    }
+
     pub fn get_or_load<F>(
         &self,
         col_path: &Path,

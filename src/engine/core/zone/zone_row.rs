@@ -1,3 +1,4 @@
+use serde_json::Value;
 use std::collections::HashMap;
 
 /// Represents one reconstructed row from a zone
@@ -8,5 +9,5 @@ pub struct ZoneRow {
     pub context_id: String,
     pub timestamp: String,
     pub event_type: String,
-    pub payload: HashMap<String, String>,
+    pub payload: HashMap<String, Value>,
 }

@@ -10,4 +10,12 @@ impl ColumnBlockCacheKey {
     pub fn new(path: PathBuf, zone_id: u32) -> Self {
         Self { path, zone_id }
     }
+
+    pub fn path(&self) -> &PathBuf {
+        &self.path
+    }
+
+    pub fn zone_id(&self) -> u32 {
+        self.zone_id
+    }
 }

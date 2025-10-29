@@ -1,5 +1,6 @@
 use crate::engine::core::{Event, ZoneRow};
 use crate::engine::errors::StoreError;
+use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
 use tracing::{info, trace, warn};
 
@@ -186,11 +187,14 @@ impl ZonePlan {
 
         let events: Vec<Event> = rows
             .into_iter()
-            .map(|row| Event {
-                context_id: row.context_id,
-                timestamp: row.timestamp.parse::<u64>().unwrap(),
-                event_type: row.event_type.clone(),
-                payload: serde_json::to_value(row.payload).unwrap(),
+            .map(|row| {
+                let payload = Value::Object(row.payload.into_iter().collect::<Map<_, _>>());
+                Event {
+                    context_id: row.context_id,
+                    timestamp: row.timestamp.parse::<u64>().unwrap(),
+                    event_type: row.event_type.clone(),
+                    payload,
+                }
             })
             .collect();
 

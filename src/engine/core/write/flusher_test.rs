@@ -54,9 +54,9 @@ async fn test_flusher_flushes_memtable_to_segment_dir() {
     let segment_index = SegmentIndex::load(&shard_dir)
         .await
         .expect("Failed to load segment index");
-    assert_eq!(segment_index.entries.len(), 1, "Expected one segment entry");
+    assert_eq!(segment_index.len(), 1, "Expected one segment entry");
 
-    let entry = &segment_index.entries[0];
+    let entry = segment_index.iter_all().next().expect("Missing entry");
     assert_eq!(format!("{:05}", entry.id), format!("{:05}", segment_id));
     assert_eq!(entry.uids, vec![uid]);
 }
@@ -118,8 +118,8 @@ async fn test_flusher_skips_empty_event_types() {
 
     // SegmentIndex should include only the non-empty uid
     let segment_index = SegmentIndex::load(&shard_dir).await.expect("load index");
-    assert_eq!(segment_index.entries.len(), 1);
-    let entry = &segment_index.entries[0];
+    assert_eq!(segment_index.len(), 1);
+    let entry = segment_index.iter_all().next().expect("Missing entry");
     assert_eq!(format!("{:05}", entry.id), format!("{:05}", segment_id));
     assert_eq!(entry.uids, vec![uid_non_empty]);
 }

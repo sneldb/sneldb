@@ -5,12 +5,10 @@ use tokio::sync::RwLock;
 use crate::engine::core::segment::segment_id::SegmentId;
 use crate::engine::core::zone::zone_batch_sizer::ZoneBatchSizer;
 use crate::engine::core::zone::zone_cursor_loader::LoadedZoneCursors;
-use crate::engine::core::{
-    SegmentIndexBuilder, ZoneCursorLoader, ZoneMerger, ZonePlan, ZoneWriter,
-};
+use crate::engine::core::{ZoneCursorLoader, ZoneMerger, ZonePlan, ZoneWriter};
 use crate::engine::errors::CompactorError;
 use crate::engine::schema::SchemaRegistry;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 pub struct Compactor {
     pub uid: String,
@@ -86,20 +84,6 @@ impl Compactor {
             .await
             .map_err(|e| CompactorError::ZoneWriter(e.to_string()))?;
         info!(target: "compactor::run", zones_written = zone_plans.len(), "Wrote compacted zones");
-
-        // Step 5: Update segment index
-        // Note: Compaction uses its own lock since it's a separate process
-        let compaction_lock = Arc::new(tokio::sync::Mutex::new(()));
-        SegmentIndexBuilder {
-            segment_id: self.output_segment_id,
-            segment_dir: &self.output_dir,
-            event_type_uids: vec![self.uid.clone()],
-            flush_coordination_lock: compaction_lock,
-        }
-        .add_segment_entry(Some(&self.output_dir))
-        .await
-        .map_err(|e| CompactorError::SegmentIndex(e.to_string()))?;
-        info!(target: "compactor::run", segment_id = self.output_segment_id, "Updated segment index");
 
         Ok(())
     }

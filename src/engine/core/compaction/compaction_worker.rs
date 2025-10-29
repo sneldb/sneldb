@@ -1,3 +1,4 @@
+use super::handover::CompactionHandover;
 use super::merge_plan::MergePlan;
 use super::policy::{CompactionPolicy, KWayCountPolicy};
 use crate::engine::core::segment::segment_id::SegmentId;
@@ -19,23 +20,30 @@ pub struct CompactionWorker {
     pub shard_id: u32,
     pub shard_dir: PathBuf,
     pub registry: Arc<RwLock<SchemaRegistry>>,
+    pub handover: Arc<CompactionHandover>,
 }
 
 impl CompactionWorker {
-    pub fn new(shard_id: u32, shard_dir: PathBuf, registry: Arc<RwLock<SchemaRegistry>>) -> Self {
+    pub fn new(
+        shard_id: u32,
+        shard_dir: PathBuf,
+        registry: Arc<RwLock<SchemaRegistry>>,
+        handover: Arc<CompactionHandover>,
+    ) -> Self {
         Self {
             shard_id,
             shard_dir,
             registry,
+            handover,
         }
     }
 
     pub async fn run(&self) -> Result<(), CompactorError> {
         // Step 1: Load segment index
-        let mut segment_index = SegmentIndex::load(&self.shard_dir)
+        let segment_index = SegmentIndex::load(&self.shard_dir)
             .await
             .map_err(|e| CompactorError::SegmentIndex(e.to_string()))?;
-        info!(target: "compaction_worker::run", shard = self.shard_id, entries = segment_index.entries.len(), "Loaded segment index");
+        info!(target: "compaction_worker::run", shard = self.shard_id, entries = segment_index.len(), "Loaded segment index");
 
         // Step 2: Plan compaction using policy (k-way per uid)
         let policy = KWayCountPolicy::default();
@@ -65,31 +73,23 @@ impl CompactionWorker {
                 .await
                 .map_err(|e| CompactorError::ZoneWriter(e.to_string()))?;
 
-            // Add new entry to index
+            // Prepare new entry for handover commit
             let new_entry = SegmentEntry {
                 id: plan.output_segment_id as u32,
                 uids: vec![plan.uid.clone()],
             };
-            segment_index
-                .append(new_entry)
+
+            self.handover
+                .commit(&plan, new_entry)
                 .await
                 .map_err(|e| CompactorError::SegmentIndex(e.to_string()))?;
-
-            // Remove old entries
-            let before_count = segment_index.entries.len();
-            segment_index
-                .entries
-                .retain(|e| !plan.input_segment_labels.contains(&format!("{:05}", e.id)));
-            let after_count = segment_index.entries.len();
-            debug!(target: "compaction_worker::run", removed = (before_count - after_count), "Removed old segment entries");
+            debug!(target: "compaction_worker::run", shard = self.shard_id, new_label = %label, "Committed compaction handover");
         }
 
-        // Step 6: Save final segment index
-        segment_index
-            .save(&self.shard_dir)
+        let final_index = SegmentIndex::load(&self.shard_dir)
             .await
             .map_err(|e| CompactorError::SegmentIndex(e.to_string()))?;
-        info!(target: "compaction_worker::run", shard = self.shard_id, total_entries = segment_index.entries.len(), "Compaction complete");
+        info!(target: "compaction_worker::run", shard = self.shard_id, total_entries = final_index.len(), "Compaction complete");
 
         Ok(())
     }

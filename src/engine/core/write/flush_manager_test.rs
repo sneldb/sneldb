@@ -66,8 +66,9 @@ async fn test_flush_manager_queues_and_flushes_memtable() {
 
     // Verify segment index
     let segment_index = SegmentIndex::load(&base_dir).await.expect("load failed");
-    assert_eq!(segment_index.entries.len(), 1);
-    assert_eq!(format!("{:05}", segment_index.entries[0].id), "00001");
+    assert_eq!(segment_index.len(), 1);
+    let entry = segment_index.iter_all().next().expect("Missing entry");
+    assert_eq!(format!("{:05}", entry.id), "00001");
 
     // Verify internal segment_ids updated
     let ids = manager.get_segment_ids();
