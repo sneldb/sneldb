@@ -1,21 +1,21 @@
-// Map alias removed; no longer used after refactor
-use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use tracing::info;
-
 use crate::engine::core::column::compression::compressed_column_index::CompressedColumnIndex;
 use crate::engine::core::column::compression::compression_codec::Lz4Codec;
 use crate::engine::core::column::format::PhysicalType;
+use crate::engine::core::column::type_catalog::ColumnTypeCatalog;
 use crate::engine::core::write::column_block_writer::ColumnBlockWriter;
 use crate::engine::core::write::column_group_builder::ColumnGroupBuilder;
 use crate::engine::core::write::column_paths::ColumnPathResolver;
 use crate::engine::core::{UidResolver, WriteJob, ZonePlan};
 use crate::engine::errors::StoreError;
 use crate::engine::schema::SchemaRegistry;
+use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use tracing::info;
 pub struct ColumnWriter {
     pub segment_dir: PathBuf,
     pub registry: Arc<RwLock<SchemaRegistry>>,
+    type_hints: Option<ColumnTypeCatalog>,
 }
 
 impl ColumnWriter {
@@ -23,6 +23,33 @@ impl ColumnWriter {
         Self {
             segment_dir,
             registry,
+            type_hints: None,
+        }
+    }
+
+    pub fn with_type_hints(mut self, hints: ColumnTypeCatalog) -> Self {
+        self.type_hints = Some(hints);
+        self
+    }
+
+    fn merge_type_hints(
+        &self,
+        types_by_key: &mut std::collections::HashMap<(String, String), PhysicalType>,
+    ) {
+        if let Some(hints) = &self.type_hints {
+            use std::collections::hash_map::Entry;
+            for (key, phys) in hints.iter() {
+                match types_by_key.entry(key.clone()) {
+                    Entry::Occupied(mut existing) => {
+                        if *existing.get() == PhysicalType::VarBytes {
+                            existing.insert(*phys);
+                        }
+                    }
+                    Entry::Vacant(vacant) => {
+                        vacant.insert(*phys);
+                    }
+                }
+            }
         }
     }
 
@@ -60,6 +87,7 @@ impl ColumnWriter {
                 types_by_key.insert((event_type.clone(), field.clone()), phys);
             }
         }
+        self.merge_type_hints(&mut types_by_key);
         let segment_dir = self.segment_dir.clone();
 
         tokio::task::spawn_blocking(move || -> Result<(), StoreError> {

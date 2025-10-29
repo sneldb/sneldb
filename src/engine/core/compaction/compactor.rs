@@ -4,6 +4,7 @@ use tokio::sync::RwLock;
 
 use crate::engine::core::segment::segment_id::SegmentId;
 use crate::engine::core::zone::zone_batch_sizer::ZoneBatchSizer;
+use crate::engine::core::zone::zone_cursor_loader::LoadedZoneCursors;
 use crate::engine::core::{
     SegmentIndexBuilder, ZoneCursorLoader, ZoneMerger, ZonePlan, ZoneWriter,
 };
@@ -48,7 +49,10 @@ impl Compactor {
             Arc::clone(&self.registry),
             self.input_dir.clone(),
         );
-        let cursors = loader
+        let LoadedZoneCursors {
+            cursors,
+            type_catalog,
+        } = loader
             .load_all()
             .await
             .map_err(|e| CompactorError::ZoneCursorLoad(e.to_string()))?;
@@ -75,7 +79,8 @@ impl Compactor {
             .map_err(|e| CompactorError::ZoneWriter(e.to_string()))?;
 
         // Step 4: Write merged zones
-        let writer = ZoneWriter::new(&self.uid, &self.output_dir, Arc::clone(&self.registry));
+        let writer = ZoneWriter::new(&self.uid, &self.output_dir, Arc::clone(&self.registry))
+            .with_type_catalog(type_catalog);
         writer
             .write_all(&zone_plans)
             .await

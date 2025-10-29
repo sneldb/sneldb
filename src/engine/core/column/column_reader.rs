@@ -1,9 +1,10 @@
 use crate::engine::core::QueryCaches;
+use crate::engine::core::column::column_block_snapshot::ColumnBlockSnapshot;
 use crate::engine::core::column::column_values::ColumnValues;
 use crate::engine::core::column::compression::CompressedColumnIndex;
+use crate::engine::core::column::format::PhysicalType;
 use crate::engine::core::column::reader::decompress;
 use crate::engine::core::column::reader::io;
-use crate::engine::core::column::reader::{decompress::decompress_block, view::ColumnBlockView};
 use crate::engine::core::read::cache::DecompressedBlock;
 use crate::engine::errors::QueryExecutionError;
 use std::path::Path;
@@ -30,7 +31,7 @@ impl ColumnReader {
     fn build_zero_copy_values(
         entry: &crate::engine::core::column::compression::ZoneBlockEntry,
         block: &Arc<DecompressedBlock>,
-    ) -> Result<ColumnValues, QueryExecutionError> {
+    ) -> Result<(PhysicalType, ColumnValues), QueryExecutionError> {
         let decompressed: &[u8] = &block.bytes;
 
         use crate::engine::core::column::format::ColumnBlockHeader;
@@ -69,16 +70,21 @@ impl ColumnReader {
                     entry.num_rows
                 )));
             }
-            return Ok(ColumnValues::new(Arc::clone(block), ranges));
+            return Ok((
+                PhysicalType::VarBytes,
+                ColumnValues::new(Arc::clone(block), ranges),
+            ));
         }
 
         // Delegate type-specific decode to decoders
         let view = crate::engine::core::column::reader::view::ColumnBlockView::parse(decompressed)?;
-        super::reader::decoders::decoder_for(view.phys).build_values(
+        let phys = view.phys;
+        let values = super::reader::decoders::decoder_for(phys).build_values(
             &view,
             entry.num_rows as usize,
             Arc::clone(block),
-        )
+        )?;
+        Ok((phys, values))
     }
 
     /// Load a zone using caches where possible, returning a zero-copy view.
@@ -108,7 +114,8 @@ impl ColumnReader {
                             &handle, segment_id, uid, field, zone_id, entry,
                         )
                         .map_err(|e| QueryExecutionError::ColRead(format!("cache load: {e}")))?;
-                    return Self::build_zero_copy_values(entry, &block);
+                    let (_phys, values) = Self::build_zero_copy_values(entry, &block)?;
+                    return Ok(values);
                 }
                 // Legitimate empty: zone not present.
                 return Ok(ColumnValues::empty());
@@ -117,6 +124,42 @@ impl ColumnReader {
 
         // Fallback to disk path (zero-copy)
         Self::load_zone_compressed_zero_copy(segment_dir, segment_id, uid, field, zone_id)
+    }
+
+    pub fn load_for_zone_snapshot(
+        segment_dir: &Path,
+        segment_id: &str,
+        uid: &str,
+        field: &str,
+        zone_id: u32,
+        caches: Option<&QueryCaches>,
+    ) -> Result<ColumnBlockSnapshot, QueryExecutionError> {
+        if let Some(caches_ref) = caches {
+            if let Ok(handle) = caches_ref.get_or_load_column_handle(segment_id, uid, field) {
+                if tracing::enabled!(Level::INFO) {
+                    info!(
+                        target: "cache::column_handle::hit",
+                        %segment_id,
+                        %uid,
+                        %field,
+                        zone_id,
+                        "Using cached ColumnHandle"
+                    );
+                }
+                if let Some(entry) = handle.zfc_index.entries.get(&zone_id) {
+                    let block = caches_ref
+                        .get_or_load_decompressed_block(
+                            &handle, segment_id, uid, field, zone_id, entry,
+                        )
+                        .map_err(|e| QueryExecutionError::ColRead(format!("cache load: {e}")))?;
+                    let (phys, values) = Self::build_zero_copy_values(entry, &block)?;
+                    return Ok(ColumnBlockSnapshot::new(phys, values));
+                }
+                return Ok(ColumnBlockSnapshot::empty());
+            }
+        }
+
+        Self::load_zone_compressed_snapshot(segment_dir, segment_id, uid, field, zone_id)
     }
 
     /// Convenience path that collects strings (legacy callers). Decodes via the
@@ -137,7 +180,9 @@ impl ColumnReader {
                 "Loading column values for specific zone (legacy Vec<String> path)"
             );
         }
-        Self::load_zone_compressed(segment_dir, _segment_id, uid, field, zone_id)
+        let snapshot =
+            Self::load_zone_compressed_snapshot(segment_dir, _segment_id, uid, field, zone_id)?;
+        Ok(snapshot.into_strings())
     }
 
     /// Legacy helper: fully materialize strings from a compressed block.
@@ -148,26 +193,9 @@ impl ColumnReader {
         field: &str,
         zone_id: u32,
     ) -> Result<Vec<String>, QueryExecutionError> {
-        let zfc_path = segment_dir.join(format!("{}_{}.zfc", uid, field));
-        let index = CompressedColumnIndex::load_from_path(&zfc_path)
-            .map_err(|e| QueryExecutionError::ColRead(format!("zfc load: {e}")))?;
-        let Some(entry) = index.entries.get(&zone_id) else {
-            return Ok(Vec::new()); // legit empty: no such zone for this field
-        };
-
-        let mmap = io::map_column_file(segment_dir, uid, field)?;
-        let (start, end) = io::compressed_range(entry, mmap.len())?;
-        let compressed = &mmap[start..end];
-
-        let decompressed = decompress_block(compressed, entry.uncomp_len as usize)?;
-        let block = Arc::new(DecompressedBlock::from_bytes(decompressed));
-        let view = ColumnBlockView::parse(&block.bytes)?;
-
-        super::reader::decoders::decoder_for(view.phys).build_strings(
-            &view,
-            entry.num_rows as usize,
-            Arc::clone(&block),
-        )
+        let snapshot =
+            Self::load_zone_compressed_snapshot(segment_dir, _segment_id, uid, field, zone_id)?;
+        Ok(snapshot.into_strings())
     }
 
     /// Zero-copy load that returns a ColumnValues view, using the pooled buffer underneath.
@@ -179,11 +207,23 @@ impl ColumnReader {
         field: &str,
         zone_id: u32,
     ) -> Result<ColumnValues, QueryExecutionError> {
+        let snapshot =
+            Self::load_zone_compressed_snapshot(segment_dir, _segment_id, uid, field, zone_id)?;
+        Ok(snapshot.into_values())
+    }
+
+    fn load_zone_compressed_snapshot(
+        segment_dir: &Path,
+        _segment_id: &str,
+        uid: &str,
+        field: &str,
+        zone_id: u32,
+    ) -> Result<ColumnBlockSnapshot, QueryExecutionError> {
         let zfc_path = segment_dir.join(format!("{}_{}.zfc", uid, field));
         let index = CompressedColumnIndex::load_from_path(&zfc_path)
             .map_err(|e| QueryExecutionError::ColRead(format!("zfc load: {e}")))?;
         let Some(entry) = index.entries.get(&zone_id) else {
-            return Ok(ColumnValues::empty()); // legit empty
+            return Ok(ColumnBlockSnapshot::empty());
         };
 
         let mmap = io::map_column_file(segment_dir, uid, field)?;
@@ -193,6 +233,7 @@ impl ColumnReader {
         let decompressed = decompress::decompress_block(compressed, entry.uncomp_len as usize)?;
 
         let block = Arc::new(DecompressedBlock::from_bytes(decompressed));
-        Self::build_zero_copy_values(entry, &block)
+        let (phys, values) = Self::build_zero_copy_values(entry, &block)?;
+        Ok(ColumnBlockSnapshot::new(phys, values))
     }
 }
