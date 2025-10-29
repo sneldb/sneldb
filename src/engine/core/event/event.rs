@@ -1,6 +1,7 @@
+use crate::engine::core::event::event_id::EventId;
 use crate::engine::errors::StoreError;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Number, Value};
 use std::collections::{HashMap, HashSet};
 use tracing::{debug, warn};
 
@@ -9,10 +10,22 @@ pub struct Event {
     pub event_type: String,
     pub context_id: String,
     pub timestamp: u64,
+    #[serde(skip_serializing, skip_deserializing, default)]
+    pub(crate) id: EventId,
     pub payload: Value,
 }
 
 impl Event {
+    #[inline]
+    pub fn event_id(&self) -> EventId {
+        self.id
+    }
+
+    #[inline]
+    pub(crate) fn set_event_id(&mut self, id: EventId) {
+        self.id = id;
+    }
+
     pub fn validate(&self) -> Result<(), StoreError> {
         if self.context_id.trim().is_empty() {
             warn!(target: "event::validate", "Invalid context_id: empty");
@@ -30,6 +43,7 @@ impl Event {
             "context_id" => Some(Value::String(self.context_id.clone())),
             "event_type" => Some(Value::String(self.event_type.clone())),
             "timestamp" => Some(Value::Number(self.timestamp.into())),
+            "event_id" => Some(Value::Number(Number::from(self.id.raw()))),
             _ => self.payload.get(name).cloned(),
         }
     }
@@ -41,6 +55,7 @@ impl Event {
             "context_id" => self.context_id.clone(),
             "event_type" => self.event_type.clone(),
             "timestamp" => self.timestamp.to_string(),
+            "event_id" => self.id.raw().to_string(),
             other => {
                 if let Some(obj) = self.payload.as_object() {
                     if let Some(v) = obj.get(other) {
@@ -67,6 +82,7 @@ impl Event {
             "event_type" => self.event_type.clone(),
             // Pad timestamp to 20 digits for u64 (max: 18446744073709551615 = 20 digits)
             "timestamp" => format!("{:020}", self.timestamp),
+            "event_id" => format!("{:020}", self.id.raw()),
             other => {
                 if let Some(obj) = self.payload.as_object() {
                     if let Some(v) = obj.get(other) {
@@ -99,6 +115,7 @@ impl Event {
         fields.insert("context_id".to_string());
         fields.insert("event_type".to_string());
         fields.insert("timestamp".to_string());
+        fields.insert("event_id".to_string());
         if let Some(obj) = self.payload.as_object() {
             for key in obj.keys() {
                 fields.insert(key.clone());
@@ -118,6 +135,10 @@ impl Event {
             "event_type" => {
                 debug!(target: "event::meta", "Ordering events by event_type");
                 sorted.sort_by(|a, b| a.event_type.cmp(&b.event_type))
+            }
+            "event_id" => {
+                debug!(target: "event::meta", "Ordering events by event_id");
+                sorted.sort_by_key(|e| e.id.raw())
             }
             _ => {
                 debug!(target: "event::meta", %field, "Ordering not supported for this field");

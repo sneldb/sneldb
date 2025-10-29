@@ -15,13 +15,14 @@ impl<'a> ProjectionContext<'a> {
             "context_id".to_string(),
             "event_type".to_string(),
             "timestamp".to_string(),
+            "event_id".to_string(),
         ]
         .into_iter()
         .collect()
     }
 
     pub fn is_core_field(name: &str) -> bool {
-        matches!(name, "context_id" | "event_type" | "timestamp")
+        matches!(name, "context_id" | "event_type" | "timestamp" | "event_id")
     }
 
     pub fn filter_columns(&self) -> HashSet<String> {

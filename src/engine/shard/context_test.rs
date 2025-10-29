@@ -1,3 +1,4 @@
+use crate::engine::core::EventId;
 use crate::engine::shard::context::ShardContext;
 use std::fs::{File, create_dir_all};
 use tempfile::tempdir;
@@ -39,4 +40,26 @@ async fn test_shard_context_initialization_with_existing_segments() {
             "00003".to_string()
         ]
     );
+}
+
+#[tokio::test]
+async fn next_event_id_is_monotonic_and_shard_encoded() {
+    let tmp_dir = tempdir().unwrap();
+    let base_dir = tmp_dir.path().join("shard-7");
+    let wal_dir = base_dir.clone();
+    create_dir_all(&base_dir).unwrap();
+
+    let (tx, _rx) = mpsc::channel(1);
+    let mut ctx = ShardContext::new(7, tx, base_dir, wal_dir);
+
+    let first: EventId = ctx.next_event_id();
+    let second: EventId = ctx.next_event_id();
+
+    assert!(
+        second.raw() > first.raw(),
+        "event ids must be strictly increasing"
+    );
+
+    let shard_bits = (first.raw() >> 12) & ((1 << 10) - 1);
+    assert_eq!(shard_bits, 7, "shard id should be encoded in EventId");
 }

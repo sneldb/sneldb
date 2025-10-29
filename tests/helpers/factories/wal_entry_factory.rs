@@ -1,4 +1,4 @@
-use crate::engine::core::WalEntry;
+use crate::engine::core::{EventId, WalEntry};
 use rand::Rng;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -14,6 +14,7 @@ impl WalEntryFactory {
         params.insert("timestamp".into(), json!(123456));
         params.insert("event_type".into(), json!("test_event"));
         params.insert("payload".into(), json!({ "key": "value" }));
+        params.insert("event_id".into(), json!(1));
         Self { params }
     }
 
@@ -28,6 +29,7 @@ impl WalEntryFactory {
             timestamp: self.params["timestamp"].as_u64().unwrap(),
             event_type: self.params["event_type"].as_str().unwrap().to_string(),
             payload: self.params["payload"].clone(),
+            event_id: self.params["event_id"].as_u64().map(EventId::from).unwrap_or_default(),
         }
     }
 
@@ -48,6 +50,7 @@ impl WalEntryFactory {
                     timestamp,
                     event_type: self.params["event_type"].as_str().unwrap().to_string(),
                     payload,
+                    event_id: EventId::from(i as u64 + 1),
                 }
             })
             .collect()

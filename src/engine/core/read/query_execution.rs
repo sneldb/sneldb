@@ -1,9 +1,9 @@
 use crate::engine::core::{
-    Event, ExecutionStep, MemTable, MemTableQueryRunner, QueryCaches, QueryContext, QueryPlan,
-    SegmentQueryRunner,
+    Event, EventId, ExecutionStep, MemTable, MemTableQueryRunner, QueryCaches, QueryContext,
+    QueryPlan, SegmentQueryRunner,
 };
 use crate::engine::errors::QueryExecutionError;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tracing::{debug, info};
 
@@ -148,6 +148,11 @@ impl<'a> QueryExecution<'a> {
             "Retrieved events from disk segments"
         );
         events.extend(segment_events);
+
+        if !events.is_empty() {
+            let mut seen_ids: HashSet<EventId> = HashSet::with_capacity(events.len());
+            events.retain(|event| seen_ids.insert(event.event_id()));
+        }
 
         // Enforce final LIMIT if present (only when no ORDER BY/OFFSET - handler does pagination)
         if !has_pagination {

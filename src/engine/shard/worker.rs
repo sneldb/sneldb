@@ -56,6 +56,11 @@ async fn on_store(
     ctx: &mut ShardContext,
     registry: &Arc<tokio::sync::RwLock<SchemaRegistry>>,
 ) -> Result<(), String> {
+    let mut event = event;
+    if event.event_id().is_zero() {
+        let id = ctx.next_event_id();
+        event.set_event_id(id);
+    }
     insert_and_maybe_flush(event, ctx, registry)
         .await
         .map_err(|e| e.to_string())

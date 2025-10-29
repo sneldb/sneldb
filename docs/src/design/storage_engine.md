@@ -92,7 +92,7 @@ Small example:
 
 - **What**: The background worker turns the passive MemTable into an on-disk segment directory (for example, `00042/`).
 - Inside the segment:
-  - **Column files**: One file per field, optimized for sequential appends and later memory-mapped (mmap) access. Naming: `<uid>_<field>.col`. Example: `u01_timestamp.col`, `u01_event_type.col`, `u01_context_id.col`, `u01_plan.col`, `u01_country.col`. Where `<uid>` is defiened per event type.
+  - **Column files**: One file per field, optimized for sequential appends and later memory-mapped (mmap) access. Naming: `<uid>_<field>.col`. Example: `u01_event_id.col`, `u01_timestamp.col`, `u01_event_type.col`, `u01_context_id.col`, `u01_plan.col`, `u01_country.col`. Where `<uid>` is defined per event type.
   - **Zone metadata**: Per-zone min/max timestamps, row ranges, and presence stats for pruning.
   - **Filters/Indexes** (policy-driven):
     - XOR: `<uid>_<field>.xf` (approximate membership)

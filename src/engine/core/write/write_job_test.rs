@@ -29,7 +29,7 @@ fn builds_jobs_for_zone_plan_with_events() {
     let dir = tempdir().unwrap();
     let jobs = WriteJob::build(&[zone], dir.path(), &resolver);
 
-    assert_eq!(jobs.len(), 12);
+    assert_eq!(jobs.len(), 14);
 
     let expected_fields = vec![
         "device",
@@ -38,6 +38,7 @@ fn builds_jobs_for_zone_plan_with_events() {
         "timestamp",
         "context_id",
         "event_type",
+        "event_id",
     ];
 
     for job in &jobs {

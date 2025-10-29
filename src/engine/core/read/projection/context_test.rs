@@ -23,14 +23,16 @@ async fn core_fields_and_is_core_field() {
     let ctx = ProjectionContext { plan: &plan };
 
     let set = ctx.core_fields();
-    assert_eq!(set.len(), 3);
+    assert_eq!(set.len(), 4);
     assert!(set.contains("context_id"));
     assert!(set.contains("event_type"));
     assert!(set.contains("timestamp"));
+    assert!(set.contains("event_id"));
 
     assert!(ProjectionContext::is_core_field("context_id"));
     assert!(ProjectionContext::is_core_field("event_type"));
     assert!(ProjectionContext::is_core_field("timestamp"));
+    assert!(ProjectionContext::is_core_field("event_id"));
     assert!(!ProjectionContext::is_core_field("not_core"));
 }
 

@@ -34,6 +34,7 @@ impl WriteJob {
             all_fields.insert("context_id".to_string());
             all_fields.insert("event_type".to_string());
             all_fields.insert("timestamp".to_string());
+            all_fields.insert("event_id".to_string());
 
             for event in &zone_plan.events {
                 if let Some(obj) = event.payload.as_object() {

@@ -60,11 +60,13 @@ async fn writes_columns() {
     assert!(file_names.iter().any(|f| f.ends_with("_device.col")));
     assert!(file_names.iter().any(|f| f.ends_with("_ip.col")));
     assert!(file_names.iter().any(|f| f.ends_with("_timestamp.col")));
+    assert!(file_names.iter().any(|f| f.ends_with("_event_id.col")));
 
     // Also expect zone index files (.zfc) to exist
     assert!(file_names.iter().any(|f| f.ends_with("_device.zfc")));
     assert!(file_names.iter().any(|f| f.ends_with("_ip.zfc")));
     assert!(file_names.iter().any(|f| f.ends_with("_timestamp.zfc")));
+    assert!(file_names.iter().any(|f| f.ends_with("_event_id.zfc")));
 
     // Check that timestamp column, once decompressed, has a typed header (I64 phys)
     let ts_col = file_names

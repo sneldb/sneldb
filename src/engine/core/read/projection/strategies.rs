@@ -46,6 +46,7 @@ impl<'a> ProjectionStrategy for SelectionProjection<'a> {
             set.add_many(projected);
         }
 
+        set.add("event_id");
         set
     }
 }
@@ -114,6 +115,7 @@ impl<'a> ProjectionStrategy for AggregationProjection<'a> {
         if final_set.is_empty() {
             final_set.add("timestamp");
         }
+        final_set.add("event_id");
         final_set
     }
 }

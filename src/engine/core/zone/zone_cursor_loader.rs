@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::engine::core::column::format::PhysicalType;
 use crate::engine::core::column::type_catalog::ColumnTypeCatalog;
-use crate::engine::core::{ColumnKey, ColumnReader, ZoneCursor, ZoneMeta};
+use crate::engine::core::{ColumnKey, ColumnReader, EventId, ZoneCursor, ZoneMeta};
 use crate::engine::errors::{QueryExecutionError, ZoneMetaError};
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::schema::types::FieldType;
@@ -75,11 +75,12 @@ impl ZoneCursorLoader {
         }
 
         let mut all_cursors = Vec::new();
-        let mut type_catalog = ColumnTypeCatalog::with_capacity(schema_fields.len() + 3);
+        let mut type_catalog = ColumnTypeCatalog::with_capacity(schema_fields.len() + 4);
 
         let context_key: ColumnKey = (event_type_name.clone(), "context_id".to_string());
         let timestamp_key: ColumnKey = (event_type_name.clone(), "timestamp".to_string());
         let event_type_key: ColumnKey = (event_type_name.clone(), "event_type".to_string());
+        let event_id_key: ColumnKey = (event_type_name.clone(), "event_id".to_string());
 
         // Prefill type hints from schema before inspecting on-disk payloads so compaction can
         // emit typed column blocks even if the source segments stored values as VarBytes.
@@ -112,6 +113,19 @@ impl ZoneCursorLoader {
                 ZoneMeta::load(&zones_path).map_err(|e| ZoneMetaError::Other(e.to_string()))?;
 
             for zone in &zone_metas {
+                let parsed_segment_id = match segment_id.parse::<u64>() {
+                    Ok(id) => id,
+                    Err(_) => {
+                        if tracing::enabled!(tracing::Level::ERROR) {
+                            error!(
+                                target: "sneldb::cursor_loader",
+                                segment_id = segment_id,
+                                "Failed to parse segment_id to u64"
+                            );
+                        }
+                        return Err(QueryExecutionError::InvalidSegmentId(segment_id.clone()));
+                    }
+                };
                 let context_snapshot = ColumnReader::load_for_zone_snapshot(
                     &segment_dir,
                     segment_id,
@@ -135,6 +149,32 @@ impl ZoneCursorLoader {
                 let timestamp_phys = timestamp_snapshot.physical_type();
                 let timestamps = timestamp_snapshot.into_strings();
                 type_catalog.record_if_absent(&timestamp_key, timestamp_phys);
+
+                let event_id_snapshot = ColumnReader::load_for_zone_snapshot(
+                    &segment_dir,
+                    segment_id,
+                    &self.uid,
+                    "event_id",
+                    zone.zone_id,
+                    None,
+                )?;
+                let event_id_phys = event_id_snapshot.physical_type();
+                let event_id_values = event_id_snapshot.into_values();
+                let len = event_id_values.len();
+                let mut event_ids = Vec::with_capacity(len);
+                for idx in 0..len {
+                    let raw = event_id_values
+                        .get_u64_at(idx)
+                        .or_else(|| event_id_values.get_i64_at(idx).map(|v| v as u64))
+                        .or_else(|| {
+                            event_id_values
+                                .get_str_at(idx)
+                                .and_then(|s| s.parse::<u64>().ok())
+                        })
+                        .unwrap_or_default();
+                    event_ids.push(EventId::from(raw));
+                }
+                type_catalog.record_if_absent(&event_id_key, event_id_phys);
 
                 let event_type_snapshot = ColumnReader::load_for_zone_snapshot(
                     &segment_dir,
@@ -176,26 +216,13 @@ impl ZoneCursorLoader {
                     );
                 }
 
-                let parsed_segment_id = match segment_id.parse::<u64>() {
-                    Ok(id) => id,
-                    Err(_) => {
-                        if tracing::enabled!(tracing::Level::ERROR) {
-                            error!(
-                                target: "sneldb::cursor_loader",
-                                segment_id = segment_id,
-                                "Failed to parse segment_id to u64"
-                            );
-                        }
-                        return Err(QueryExecutionError::InvalidSegmentId(segment_id.clone()));
-                    }
-                };
-
                 all_cursors.push(ZoneCursor {
                     segment_id: parsed_segment_id,
                     zone_id: zone.zone_id,
                     context_ids,
                     timestamps,
                     event_types,
+                    event_ids,
                     payload_fields,
                     pos: 0,
                 });

@@ -1,5 +1,5 @@
 use crate::command::types::Command;
-use crate::engine::core::Event;
+use crate::engine::core::{Event, EventId};
 use crate::engine::schema::FieldType;
 use crate::engine::schema::PayloadTimeNormalizer;
 use crate::engine::schema::SchemaRegistry;
@@ -113,6 +113,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
             .as_secs(),
         event_type: event_type.clone(),
         context_id: context_id.clone(),
+        id: EventId::default(),
         payload: normalized_payload,
     };
 

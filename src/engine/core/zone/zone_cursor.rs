@@ -1,4 +1,4 @@
-use crate::engine::core::ZoneRow;
+use crate::engine::core::{EventId, ZoneRow};
 use serde_json::Value;
 use std::collections::HashMap;
 use tracing::trace;
@@ -15,6 +15,7 @@ pub struct ZoneCursor {
     /// Fixed columns
     pub timestamps: Vec<String>,
     pub event_types: Vec<String>, // redundant but aligns structure
+    pub event_ids: Vec<EventId>,
 
     /// All payload fields (e.g., {"plan": ["free", "pro", ...]})
     pub payload_fields: HashMap<String, Vec<Value>>,
@@ -86,6 +87,7 @@ impl ZoneCursor {
         Some(ZoneRow {
             segment_id: self.segment_id,
             zone_id: self.zone_id,
+            event_id: self.event_ids.get(idx).copied().unwrap_or_default(),
             context_id: self.context_ids[idx].clone(),
             timestamp: self.timestamps[idx].clone(),
             event_type: self.event_types[idx].clone(),

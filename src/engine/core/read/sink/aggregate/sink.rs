@@ -7,7 +7,7 @@ use crate::engine::core::read::aggregate::partial::{
     AggPartial, AggState, GroupKey as PartialKey, snapshot_aggregator,
 };
 use crate::engine::core::read::aggregate::plan::{AggregateOpSpec, AggregatePlan};
-use crate::engine::core::{Event, QueryPlan};
+use crate::engine::core::{Event, EventId, QueryPlan};
 use ahash::RandomState as AHashRandomState;
 use std::collections::HashMap;
 
@@ -20,6 +20,7 @@ pub struct AggregateSink {
     groups: std::collections::HashMap<GroupKey, Vec<AggregatorImpl>, AHashRandomState>,
     // Optional cap on the number of distinct groups produced
     group_limit: Option<usize>,
+    seen_event_ids: std::collections::HashSet<EventId, AHashRandomState>,
 }
 
 impl AggregateSink {
@@ -31,6 +32,7 @@ impl AggregateSink {
             time_field: "timestamp".to_string(),
             groups: std::collections::HashMap::with_hasher(AHashRandomState::new()),
             group_limit: None,
+            seen_event_ids: std::collections::HashSet::with_hasher(AHashRandomState::new()),
         }
     }
 
@@ -42,6 +44,7 @@ impl AggregateSink {
             time_field: "timestamp".to_string(),
             groups: std::collections::HashMap::with_hasher(AHashRandomState::new()),
             group_limit: None,
+            seen_event_ids: std::collections::HashSet::with_hasher(AHashRandomState::new()),
         }
     }
 
@@ -60,6 +63,7 @@ impl AggregateSink {
             time_field,
             groups: std::collections::HashMap::with_hasher(AHashRandomState::new()),
             group_limit: None,
+            seen_event_ids: std::collections::HashSet::with_hasher(AHashRandomState::new()),
         }
     }
 
@@ -68,6 +72,24 @@ impl AggregateSink {
     pub fn with_group_limit(mut self, limit: Option<usize>) -> Self {
         self.group_limit = limit;
         self
+    }
+
+    fn record_event_id(&mut self, id: Option<EventId>) -> bool {
+        if let Some(actual) = id {
+            self.seen_event_ids.insert(actual)
+        } else {
+            true
+        }
+    }
+
+    fn event_id_from_columns(columns: &HashMap<String, ColumnValues>, row_idx: usize) -> Option<EventId> {
+        columns.get("event_id").and_then(|values| {
+            values
+                .get_u64_at(row_idx)
+                .or_else(|| values.get_i64_at(row_idx).map(|v| v as u64))
+                .or_else(|| values.get_str_at(row_idx).and_then(|s| s.parse::<u64>().ok()))
+                .map(EventId::from)
+        })
     }
 
     /// Finalizes into a single synthetic Event with metrics in payload
@@ -168,6 +190,7 @@ impl AggregateSink {
                 event_type: plan.event_type().to_string(),
                 context_id: plan.context_id().unwrap_or("").to_string(),
                 timestamp: 0,
+                id: EventId::default(),
                 payload: serde_json::Value::Object(payload),
             };
             out.push(event);
@@ -201,6 +224,9 @@ impl AggregateSink {
 
 impl ResultSink for AggregateSink {
     fn on_row(&mut self, row_idx: usize, columns: &HashMap<String, ColumnValues>) {
+        if !self.record_event_id(Self::event_id_from_columns(columns, row_idx)) {
+            return;
+        }
         let key = GroupKey::from_row(
             self.time_bucket.as_ref(),
             self.group_by.as_deref(),
@@ -230,6 +256,9 @@ impl ResultSink for AggregateSink {
     }
 
     fn on_event(&mut self, event: &Event) {
+        if !self.record_event_id(Some(event.event_id())) {
+            return;
+        }
         let key = GroupKey::from_event(
             self.time_bucket.as_ref(),
             self.group_by.as_deref(),

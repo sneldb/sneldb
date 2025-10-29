@@ -74,12 +74,18 @@ impl WalRecovery {
             match line_result {
                 Ok(line) => match serde_json::from_str::<WalEntry>(&line) {
                     Ok(entry) => {
-                        let event = Event {
+                        let mut event = Event {
                             timestamp: entry.timestamp,
                             context_id: entry.context_id,
                             event_type: entry.event_type,
+                            id: entry.event_id,
                             payload: entry.payload,
                         };
+
+                        if event.event_id().is_zero() {
+                            let generated = ctx.next_event_id();
+                            event.set_event_id(generated);
+                        }
 
                         if let Err(e) = ctx.memtable.insert(event) {
                             return Err(std::io::Error::new(std::io::ErrorKind::Other, e));

@@ -133,6 +133,7 @@ impl FieldComparator {
             "context_id" => a.context_id.cmp(&b.context_id),
             "event_type" => a.event_type.cmp(&b.event_type),
             "timestamp" => a.timestamp.cmp(&b.timestamp),
+            "event_id" => a.event_id().raw().cmp(&b.event_id().raw()),
             other => Self::compare_payload_field(a, b, other),
         }
     }
@@ -188,6 +189,7 @@ impl FieldComparator {
             "context_id" => SortKey::String(event.context_id.clone()),
             "event_type" => SortKey::String(event.event_type.clone()),
             "timestamp" => SortKey::U64(event.timestamp),
+            "event_id" => SortKey::U64(event.event_id().raw()),
             other => {
                 // Get typed Value instead of String - avoids conversion!
                 match event.get_field(other) {
