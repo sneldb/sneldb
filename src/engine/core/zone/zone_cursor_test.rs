@@ -1,4 +1,4 @@
-use crate::engine::core::ZoneCursor;
+use crate::engine::core::{EventId, ZoneCursor};
 use serde_json::{Number, Value};
 use std::collections::HashMap;
 
@@ -33,6 +33,7 @@ fn test_zone_cursor_navigation() {
         context_ids: vec!["ctx1".into(), "ctx2".into()],
         timestamps: vec!["100".into(), "200".into()],
         event_types: vec!["signup".into(), "upgrade".into()],
+        event_ids: vec![EventId::from(1), EventId::from(2)],
         payload_fields,
         pos: 0,
     };
@@ -47,6 +48,7 @@ fn test_zone_cursor_navigation() {
     assert_eq!(row1.context_id, "ctx1");
     assert_eq!(row1.timestamp, "100");
     assert_eq!(row1.event_type, "signup");
+    assert_eq!(row1.event_id.raw(), 1);
     assert_eq!(
         row1.payload.get("plan").unwrap(),
         &Value::String("free".into())
@@ -65,6 +67,7 @@ fn test_zone_cursor_navigation() {
     assert_eq!(row2.context_id, "ctx2");
     assert_eq!(row2.timestamp, "200");
     assert_eq!(row2.event_type, "upgrade");
+    assert_eq!(row2.event_id.raw(), 2);
     assert_eq!(
         row2.payload.get("plan").unwrap(),
         &Value::String("pro".into())

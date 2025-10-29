@@ -107,6 +107,7 @@ impl ZonePlan {
         all_field_names.insert("context_id".to_string());
         all_field_names.insert("event_type".to_string());
         all_field_names.insert("timestamp".to_string());
+        all_field_names.insert("event_id".to_string());
 
         // Collect dynamic field names from all events in one pass
 
@@ -193,6 +194,7 @@ impl ZonePlan {
                     context_id: row.context_id,
                     timestamp: row.timestamp.parse::<u64>().unwrap(),
                     event_type: row.event_type.clone(),
+                    id: row.event_id,
                     payload,
                 }
             })

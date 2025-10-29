@@ -8,7 +8,7 @@
 ## Core pieces
 
 - Segments — `xxxxx/` (zero-padded numeric) directories under each shard.
-- Columns — `{uid}_{field}.col` files storing values with length prefixes.
+- Columns — `{uid}_{field}.col` files storing values with length prefixes (includes the engine-managed `event_id` column alongside user-defined fields).
 - Zone Compressed Offsets — `{uid}_{field}.zfc` files listing per-zone compressed block metadata and in-block offsets.
 - Zone Metadata — `{uid}.zones` containing per-zone min/max timestamps and row ranges.
 - Zone Index — `{uid}.idx` mapping context_id values to zone ids.

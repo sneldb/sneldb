@@ -1,4 +1,4 @@
-use crate::engine::core::Event;
+use crate::engine::core::{Event, EventId};
 use rand::Rng;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -23,10 +23,16 @@ impl EventFactory {
     }
 
     pub fn create(self) -> Event {
+        let event_id_raw = self
+            .params
+            .get("event_id")
+            .and_then(|v| v.as_u64())
+            .unwrap_or_else(|| rand::random::<u64>());
         Event {
             context_id: self.params["context_id"].as_str().unwrap().to_string(),
             timestamp: self.params["timestamp"].as_u64().unwrap(),
             event_type: self.params["event_type"].as_str().unwrap().to_string(),
+            id: EventId::from(event_id_raw),
             payload: self.params["payload"].clone(),
         }
     }
@@ -45,10 +51,17 @@ impl EventFactory {
                     obj.insert("index".into(), json!(i));
                 }
 
+                let event_id = self
+                    .params
+                    .get("event_id")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or_else(rand::random);
+
                 Event {
                     context_id,
                     timestamp,
                     event_type: self.params["event_type"].as_str().unwrap().to_string(),
+                    id: EventId::from(event_id),
                     payload,
                 }
             })

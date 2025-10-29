@@ -1,6 +1,6 @@
 use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
 use crate::engine::core::segment::range_allocator::RangeAllocator;
-use crate::engine::core::{FlushManager, MemTable, WalHandle};
+use crate::engine::core::{EventIdGenerator, FlushManager, MemTable, WalHandle};
 use crate::engine::shard::context::ShardContext;
 use crate::shared::config::CONFIG;
 use std::path::PathBuf;
@@ -81,6 +81,7 @@ impl ShardContextFactory {
         let ctx = ShardContext {
             id: self.id,
             memtable: MemTable::new(self.capacity),
+            passive_buffers: Arc::new(PassiveBufferSet::new(8)),
             flush_sender,
             segment_id: 0,
             next_l0_id,
@@ -93,7 +94,7 @@ impl ShardContextFactory {
             wal: Some(wal),
             flush_manager,
             flush_coordination_lock,
-            passive_buffers: Arc::new(PassiveBufferSet::new(8)),
+            event_id_gen: EventIdGenerator::new(),
         };
 
         ctx

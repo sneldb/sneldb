@@ -20,6 +20,7 @@ pub use compaction::compaction_worker::CompactionWorker;
 pub use compaction::compactor::Compactor;
 pub use event::event::Event;
 pub use event::event_builder::EventBuilder;
+pub use event::event_id::{EventId, EventIdGenerator};
 pub use filter::condition::Condition;
 pub use filter::condition::LogicalCondition;
 pub use filter::condition::LogicalOp;

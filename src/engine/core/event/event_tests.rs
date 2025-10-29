@@ -1,4 +1,4 @@
-use crate::engine::core::Event;
+use crate::engine::core::{Event, EventId};
 use crate::engine::errors::StoreError;
 use serde_json::{Number, Value, json};
 use std::collections::HashSet;
@@ -8,6 +8,7 @@ fn create_test_event() -> Event {
         event_type: "test_event".to_string(),
         context_id: "test_context".to_string(),
         timestamp: 1234567890,
+        id: EventId::from(99),
         payload: json!({
             "string_field": "value",
             "number_field": 42,
@@ -58,6 +59,10 @@ fn test_get_field() {
         event.get_field("timestamp"),
         Some(Value::Number(1234567890.into()))
     );
+    assert_eq!(
+        event.get_field("event_id"),
+        Some(Value::Number(99.into()))
+    );
 
     // Test payload fields
     assert_eq!(
@@ -86,6 +91,7 @@ fn test_get_field_value() {
     assert_eq!(event.get_field_value("context_id"), "test_context");
     assert_eq!(event.get_field_value("event_type"), "test_event");
     assert_eq!(event.get_field_value("timestamp"), "1234567890");
+    assert_eq!(event.get_field_value("event_id"), "99");
 
     // Test payload fields
     assert_eq!(event.get_field_value("string_field"), "value");
@@ -106,6 +112,7 @@ fn test_collect_all_fields() {
         "context_id".to_string(),
         "event_type".to_string(),
         "timestamp".to_string(),
+        "event_id".to_string(),
         "string_field".to_string(),
         "number_field".to_string(),
         "float_field".to_string(),
@@ -123,11 +130,13 @@ fn test_order_by() {
         Event {
             event_type: "event_b".to_string(),
             timestamp: 200,
+            id: EventId::from(200),
             ..create_test_event()
         },
         Event {
             event_type: "event_a".to_string(),
             timestamp: 100,
+            id: EventId::from(100),
             ..create_test_event()
         },
     ];

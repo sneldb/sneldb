@@ -1,4 +1,5 @@
 use crate::engine::core::Event;
+use crate::engine::core::event::event_id::EventId;
 use serde_json::{Map, Number, Value};
 
 /// Builds Event objects from zone values
@@ -6,6 +7,7 @@ pub struct EventBuilder {
     pub event_type: String,
     pub context_id: String,
     pub timestamp: u64,
+    pub event_id: EventId,
     // Use Map (BTreeMap) - proven faster for small collections (~20 fields)
     pub payload: Map<String, Value>,
 }
@@ -16,6 +18,7 @@ impl EventBuilder {
             event_type: String::new(),
             context_id: String::new(),
             timestamp: 0,
+            event_id: EventId::default(),
             payload: Map::new(),
         }
     }
@@ -33,6 +36,7 @@ impl EventBuilder {
             event_type: self.event_type,
             context_id: self.context_id,
             timestamp: self.timestamp,
+            id: self.event_id,
             payload: Value::Object(self.payload),
         }
     }
@@ -42,6 +46,9 @@ impl EventBuilder {
         match field {
             "timestamp" => {
                 self.timestamp = value as u64;
+            }
+            "event_id" => {
+                self.event_id = EventId::from((value as i128).max(0) as u64);
             }
             "context_id" | "event_type" => {
                 // fall back to string semantics for non-numeric fixed fields
@@ -65,6 +72,9 @@ impl EventBuilder {
         match field {
             "timestamp" => {
                 self.timestamp = value;
+            }
+            "event_id" => {
+                self.event_id = EventId::from(value);
             }
             "context_id" | "event_type" => {
                 self.add_field(field, &value.to_string());
@@ -116,6 +126,13 @@ impl EventBuilder {
             }
             "timestamp" => {
                 self.timestamp = value.parse::<u64>().unwrap_or(0);
+            }
+            "event_id" => {
+                self.event_id = value
+                    .trim()
+                    .parse::<u64>()
+                    .map(EventId::from)
+                    .unwrap_or_default();
             }
             _ => self.add_payload_field(field, value),
         }

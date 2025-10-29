@@ -556,3 +556,53 @@ async fn aggregate_sink_event_respects_group_limit() {
     let events = sink.into_events(&plan);
     assert_eq!(events.len(), 1);
 }
+
+#[tokio::test]
+async fn aggregate_sink_deduplicates_events_by_id() {
+    let specs = vec![AggregateOpSpec::CountAll];
+    let mut sink = AggregateSink::from_plan(&AggregatePlan {
+        ops: specs.clone(),
+        group_by: None,
+        time_bucket: None,
+    });
+
+    let event = EventFactory::new()
+        .with("payload", json!({"value": 1}))
+        .with("event_id", json!(123_u64))
+        .create();
+
+    // Same event twice should be counted once
+    sink.on_event(&event);
+    sink.on_event(&event);
+
+    let plan = make_plan("evt_dedupe_event", None).await;
+    let events = sink.into_events(&plan);
+    assert_eq!(events.len(), 1);
+    let payload = events[0].payload.as_object().unwrap();
+    assert_eq!(payload["count"], json!(1));
+}
+
+#[tokio::test]
+async fn aggregate_sink_deduplicates_rows_by_event_id_column() {
+    let specs = vec![AggregateOpSpec::CountAll];
+    let mut sink = AggregateSink::from_plan(&AggregatePlan {
+        ops: specs.clone(),
+        group_by: None,
+        time_bucket: None,
+    });
+
+    // Two rows share the same event_id; only the first should be counted
+    let columns = make_columns(&[
+        ("event_id", vec!["555", "555"]),
+        ("value", vec!["10", "20"]),
+    ]);
+
+    sink.on_row(0, &columns);
+    sink.on_row(1, &columns);
+
+    let plan = make_plan("evt_dedupe_rows", None).await;
+    let events = sink.into_events(&plan);
+    assert_eq!(events.len(), 1);
+    let payload = events[0].payload.as_object().unwrap();
+    assert_eq!(payload["count"], json!(1));
+}

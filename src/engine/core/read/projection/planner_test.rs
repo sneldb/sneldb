@@ -31,6 +31,7 @@ async fn projection_default_includes_all_payload_and_core() {
     assert!(cols.contains(&"context_id".to_string()));
     assert!(cols.contains(&"event_type".to_string()));
     assert!(cols.contains(&"timestamp".to_string()));
+    assert!(cols.contains(&"event_id".to_string()));
     // all payload fields
     assert!(cols.contains(&"country".to_string()));
     assert!(cols.contains(&"plan".to_string()));
@@ -63,6 +64,7 @@ async fn projection_aggregate_minimal_for_count_only() {
     let cols = ProjectionPlanner::new(&plan).columns_to_load().await;
     // COUNT-only should force timestamp so we can count events per zone without payload
     assert!(cols.contains(&"timestamp".to_string()));
+    assert!(cols.contains(&"event_id".to_string()));
     // But should not include unrelated payload columns by default
     assert!(!cols.contains(&"x".to_string()));
     assert!(!cols.contains(&"y".to_string()));
@@ -111,6 +113,7 @@ async fn projection_aggregate_includes_bucket_groupby_filters_and_args() {
     assert!(cols.contains(&"status".to_string()));
     // time bucket requires timestamp
     assert!(cols.contains(&"timestamp".to_string()));
+    assert!(cols.contains(&"event_id".to_string()));
     // group by field
     assert!(cols.contains(&"country".to_string()));
     // agg argument field
@@ -169,6 +172,7 @@ async fn projection_empty_list_behaves_like_all() {
     let cols = ProjectionPlanner::new(&plan).columns_to_load().await;
     assert!(cols.contains(&"country".to_string()));
     assert!(cols.contains(&"plan".to_string()));
+    assert!(cols.contains(&"event_id".to_string()));
 }
 
 #[tokio::test]

@@ -66,6 +66,8 @@ impl ColumnWriter {
                 let (event_type, field) = (&j.key.0, &j.key.1);
                 let phys = if field == "timestamp" {
                     PhysicalType::I64
+                } else if field == "event_id" {
+                    PhysicalType::U64
                 } else if let Some(schema) = reg.get(event_type) {
                     match schema.field_type(field) {
                         Some(FieldType::I64)

@@ -1,6 +1,9 @@
 use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
 use crate::engine::core::segment::range_allocator::RangeAllocator;
-use crate::engine::core::{Event, FlushManager, MemTable, SegmentIdLoader, WalHandle, WalRecovery};
+use crate::engine::core::{
+    Event, EventId, EventIdGenerator, FlushManager, MemTable, SegmentIdLoader, WalHandle,
+    WalRecovery,
+};
 use crate::engine::schema::registry::SchemaRegistry;
 use crate::shared::config::CONFIG;
 use std::collections::BTreeMap;
@@ -40,6 +43,8 @@ pub struct ShardContext {
 
     // Flush coordination - prevents concurrent segment index updates
     pub flush_coordination_lock: Arc<Mutex<()>>,
+
+    pub event_id_gen: EventIdGenerator,
 }
 
 impl ShardContext {
@@ -101,6 +106,7 @@ impl ShardContext {
             wal: Some(wal),
             flush_manager,
             flush_coordination_lock,
+            event_id_gen: EventIdGenerator::new(),
         };
 
         // Step 4: Recover MemTable from WAL
@@ -112,5 +118,9 @@ impl ShardContext {
         }
 
         ctx
+    }
+
+    pub fn next_event_id(&mut self) -> EventId {
+        self.event_id_gen.next(self.id as u16)
     }
 }

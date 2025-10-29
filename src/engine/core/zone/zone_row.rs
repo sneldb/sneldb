@@ -1,3 +1,4 @@
+use crate::engine::core::EventId;
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -6,6 +7,7 @@ use std::collections::HashMap;
 pub struct ZoneRow {
     pub segment_id: u64,
     pub zone_id: u32,
+    pub event_id: EventId,
     pub context_id: String,
     pub timestamp: String,
     pub event_type: String,
