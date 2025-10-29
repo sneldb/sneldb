@@ -5,28 +5,21 @@ use crate::engine::core::segment::segment_id::SegmentId;
 #[test]
 fn plans_chunks_of_k_per_uid_with_leftovers() {
     // Build a synthetic SegmentIndex with L0 segments for two UIDs
-    let mut index = SegmentIndex {
-        entries: Vec::new(),
-        path: std::path::PathBuf::from("/tmp/unused"),
-    };
+    let mut index = SegmentIndex::from_entries(std::path::PathBuf::from("/tmp/unused"), Vec::new());
 
     // 17 segments for uidA at L0, and 3 for uidB at L0
     for id in 0..17u32 {
-        index
-            .entries
-            .push(crate::engine::core::segment::segment_index::SegmentEntry {
-                id,
-                uids: vec!["uidA".to_string()],
-            });
+        index.insert_entry(crate::engine::core::segment::segment_index::SegmentEntry {
+            id,
+            uids: vec!["uidA".to_string()],
+        });
     }
     for id in 100..103u32 {
         // still L0 (< 10_000)
-        index
-            .entries
-            .push(crate::engine::core::segment::segment_index::SegmentEntry {
-                id,
-                uids: vec!["uidB".to_string()],
-            });
+        index.insert_entry(crate::engine::core::segment::segment_index::SegmentEntry {
+            id,
+            uids: vec!["uidB".to_string()],
+        });
     }
 
     // Existing L1 id will be allocated by allocator; we just assert counts

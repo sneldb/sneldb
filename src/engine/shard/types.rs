@@ -4,7 +4,7 @@ use crate::engine::shard::context::ShardContext;
 use crate::engine::shard::message::ShardMessage;
 use crate::engine::shard::worker::run_worker_loop;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock as StdRwLock};
 use std::time::Duration;
 use tokio::sync::{
     RwLock,
@@ -17,6 +17,12 @@ pub struct Shard {
     pub id: usize,
     pub tx: Sender<ShardMessage>,
     pub base_dir: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+pub struct ShardSharedState {
+    pub flush_lock: Arc<tokio::sync::Mutex<()>>,
+    pub segment_ids: Arc<StdRwLock<Vec<String>>>,
 }
 
 impl Shard {
@@ -34,7 +40,7 @@ impl Shard {
             Arc<RwLock<SchemaRegistry>>,
             Arc<tokio::sync::Mutex<MemTable>>,
         )>,
-        Arc<tokio::sync::Mutex<()>>,
+        ShardSharedState,
     ) {
         // Channels: one for shard messages, one for flush notifications
         let (flush_tx, flush_rx) = channel(8096);
@@ -49,8 +55,9 @@ impl Shard {
         // Create shard context (includes WAL + MemTable)
         let ctx = ShardContext::new(id, flush_tx.clone(), base_dir.clone(), wal_dir.clone());
 
-        // Clone the flush coordination lock before moving ctx
+        // Clone shared state before moving ctx
         let flush_lock = ctx.flush_coordination_lock.clone();
+        let segment_ids = ctx.segment_ids.clone();
 
         info!(
             target: "shard::types",
@@ -72,6 +79,13 @@ impl Shard {
 
         info!(target: "shard::types", shard_id = id, "Shard spawned successfully");
 
-        (Shard { id, tx, base_dir }, flush_rx, flush_lock)
+        (
+            Shard { id, tx, base_dir },
+            flush_rx,
+            ShardSharedState {
+                flush_lock,
+                segment_ids,
+            },
+        )
     }
 }

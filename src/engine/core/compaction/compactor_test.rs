@@ -1,6 +1,6 @@
 use crate::engine::core::Flusher;
 use crate::engine::core::column::format::PhysicalType;
-use crate::engine::core::{ColumnReader, Compactor, SegmentIndex, ZoneMeta};
+use crate::engine::core::{ColumnReader, Compactor, ZoneMeta};
 use crate::test_helpers::factories::{EventFactory, MemTableFactory, SchemaRegistryFactory};
 use serde_json::json;
 use std::sync::Arc;
@@ -130,18 +130,6 @@ async fn test_compactor_merges_segments_successfully() {
 
     let xf_path = output_dir.join(format!("{}_{}.xf", uid, "email"));
     assert!(xf_path.exists(), ".xf file should exist");
-
-    let index_path = output_dir.join(format!("{}.idx", uid));
-    assert!(index_path.exists(), ".idx file should exist");
-
-    let index = SegmentIndex::load(&output_dir)
-        .await
-        .expect("Load index failed");
-    let matching = index.list_for_uid(&uid);
-    assert!(
-        !matching.is_empty(),
-        "Segment index should contain entry for uid"
-    );
 
     // Read back context_id values and verify global sort
     let mut all_ctx = Vec::new();

@@ -35,8 +35,8 @@ impl CompactionPolicy for KWayCountPolicy {
     fn plan(&self, index: &SegmentIndex) -> Vec<MergePlan> {
         // Group L0 entries by UID
         let mut uid_to_segments: HashMap<String, Vec<String>> = HashMap::new();
-        for entry in &index.entries {
-            if SegmentId::from(entry.id).level() == 0 {
+        for entry in index.iter_all() {
+            if entry.level() == 0 {
                 for uid in &entry.uids {
                     uid_to_segments
                         .entry(uid.clone())

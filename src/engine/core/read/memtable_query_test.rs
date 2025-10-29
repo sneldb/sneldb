@@ -65,7 +65,10 @@ async fn filters_events_from_memtable_correctly() {
     // Step 6: Verify result
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].context_id, "ctx-a");
-    assert_eq!(result[0].payload.get("status").unwrap(), "ok");
+    assert_eq!(
+        result[0].payload.get("status").and_then(|v| v.as_str()),
+        Some("ok")
+    );
 }
 
 #[tokio::test]

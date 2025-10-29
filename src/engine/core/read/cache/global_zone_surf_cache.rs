@@ -1,3 +1,4 @@
+use super::seg_id::parse_segment_id_u64;
 use super::zone_surf_cache_entry::ZoneSurfCacheEntry;
 use super::zone_surf_cache_key::ZoneSurfCacheKey;
 use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
@@ -241,6 +242,28 @@ impl GlobalZoneSurfCache {
         map.remove(&key);
 
         Ok((filter, outcome))
+    }
+
+    pub fn invalidate_segment(&self, segment_label: &str) {
+        let segment_id = parse_segment_id_u64(segment_label);
+        if let Ok(mut guard) = self.inner.lock() {
+            let keys: Vec<_> = guard
+                .iter()
+                .filter(|(key, _)| key.segment_id == segment_id)
+                .map(|(key, _)| *key)
+                .collect();
+            for key in keys {
+                if let Some(entry) = guard.pop(&key) {
+                    let size = entry.estimated_size();
+                    self.current_bytes.fetch_sub(size, Ordering::Relaxed);
+                    self.evictions.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+        }
+
+        if let Ok(mut inflight) = self.inflight.lock() {
+            inflight.retain(|key, _| key.segment_id != segment_id);
+        }
     }
 
     /// Load a surf filter from file with validation (supports compressed & legacy)

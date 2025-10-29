@@ -66,7 +66,10 @@ async fn runs_memtable_query_runner_and_returns_matching_events() {
 
     // Verify: Only the "shipped" event is returned
     assert_eq!(result.len(), 1);
-    assert_eq!(result[0].payload.get("state").unwrap(), "shipped");
+    assert_eq!(
+        result[0].payload.get("state").and_then(|v| v.as_str()),
+        Some("shipped")
+    );
 }
 
 #[tokio::test]

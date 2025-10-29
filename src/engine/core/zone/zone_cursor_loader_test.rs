@@ -23,7 +23,7 @@ async fn test_zone_cursor_loader_e2e() {
     schema_factory
         .define_with_fields(
             "user_deleted",
-            &[("context_id", "string"), ("name", "string")],
+            &[("context_id", "string"), ("name", "string"), ("score", "i64")],
         )
         .await
         .unwrap();
@@ -39,21 +39,21 @@ async fn test_zone_cursor_loader_e2e() {
         .with("event_type", "user_deleted")
         .with("context_id", "ctx1")
         .with("timestamp", 123456)
-        .with("payload", json!({ "name": "Alice" }))
+        .with("payload", json!({ "name": "Alice", "score": 10 }))
         .create();
 
     let event2 = EventFactory::new()
         .with("event_type", "user_deleted")
         .with("context_id", "ctx2")
         .with("timestamp", 123457)
-        .with("payload", json!({ "name": "Bob" }))
+        .with("payload", json!({ "name": "Bob", "score": 20 }))
         .create();
 
     let event3 = EventFactory::new()
         .with("event_type", "user_deleted")
         .with("context_id", "ctx3")
         .with("timestamp", 123458)
-        .with("payload", json!({ "name": "Charlie" }))
+        .with("payload", json!({ "name": "Charlie", "score": 30 }))
         .create();
 
     let memtable = MemTableFactory::new()
@@ -97,10 +97,24 @@ async fn test_zone_cursor_loader_e2e() {
     println!("all_rows: {:?}", all_rows);
     let names: Vec<_> = all_rows
         .iter()
-        .map(|r| r.payload.get("name").unwrap().to_string())
+        .map(|r| {
+            r.payload
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap()
+                .to_string()
+        })
         .collect();
     assert!(names.contains(&"Alice".to_string()));
     assert!(names.contains(&"Bob".to_string()));
+
+    let scores: Vec<_> = all_rows
+        .iter()
+        .map(|r| r.payload.get("score").and_then(|v| v.as_i64()).unwrap())
+        .collect();
+    assert!(scores.contains(&10));
+    assert!(scores.contains(&20));
+    assert!(scores.contains(&30));
 
     assert_eq!(all_rows.len(), 3);
     assert_eq!(all_rows[0].context_id, "ctx1");
@@ -113,4 +127,6 @@ async fn test_zone_cursor_loader_e2e() {
 
     let timestamp_key = ("user_deleted".to_string(), "timestamp".to_string());
     assert_eq!(type_catalog.get(&timestamp_key), Some(PhysicalType::I64));
+    let score_key = ("user_deleted".to_string(), "score".to_string());
+    assert_eq!(type_catalog.get(&score_key), Some(PhysicalType::I64));
 }

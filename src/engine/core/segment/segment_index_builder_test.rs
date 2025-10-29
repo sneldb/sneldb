@@ -38,9 +38,9 @@ async fn test_segment_index_builder_adds_segment_entry() {
     let index = SegmentIndex::load(shard_dir)
         .await
         .expect("Failed to load index");
-    assert_eq!(index.entries.len(), 1, "Expected one entry in SegmentIndex");
+    assert_eq!(index.len(), 1, "Expected one entry in SegmentIndex");
 
-    let entry = &index.entries[0];
+    let entry = index.iter_all().next().expect("Missing entry");
     assert_eq!(entry.id, 42);
     assert_eq!(format!("{:05}", entry.id), "00042");
     assert_eq!(entry.uids, uids);

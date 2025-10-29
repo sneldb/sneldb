@@ -6,6 +6,7 @@ use crate::engine::core::column::type_catalog::ColumnTypeCatalog;
 use crate::engine::core::{ColumnKey, ColumnReader, ZoneCursor, ZoneMeta};
 use crate::engine::errors::{QueryExecutionError, ZoneMetaError};
 use crate::engine::schema::SchemaRegistry;
+use serde_json::Value;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 
@@ -143,9 +144,9 @@ impl ZoneCursorLoader {
                         None,
                     )?;
                     let phys = snapshot.physical_type();
-                    let values = snapshot.into_strings();
-                    payload_fields.insert(field.clone(), values);
                     let key: ColumnKey = (event_type_name.clone(), field.clone());
+                    let values: Vec<Value> = snapshot.into_json_values();
+                    payload_fields.insert(field.clone(), values);
                     type_catalog.record_if_absent(&key, phys);
                 }
 

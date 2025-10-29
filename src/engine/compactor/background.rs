@@ -1,9 +1,10 @@
+use crate::engine::core::compaction::handover::CompactionHandover;
 use crate::engine::core::{CompactionWorker, IoMonitor, SegmentIndex};
 use crate::engine::schema::SchemaRegistry;
 use crate::shared::config::CONFIG;
 use once_cell::sync::Lazy;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock as StdRwLock};
 use std::time::Duration;
 use sysinfo::{Disks, System};
 use tokio::sync::Semaphore;
@@ -14,11 +15,22 @@ use tracing::{error, warn};
 static GLOBAL_COMPACTION_SEMAPHORE: Lazy<Semaphore> =
     Lazy::new(|| Semaphore::new(CONFIG.engine.compaction_max_shard_concurrency));
 
-pub async fn start_background_compactor(shard_id: u32, shard_dir: PathBuf) {
+pub async fn start_background_compactor(
+    shard_id: u32,
+    shard_dir: PathBuf,
+    segment_ids: Arc<StdRwLock<Vec<String>>>,
+    flush_lock: Arc<tokio::sync::Mutex<()>>,
+) {
     tokio::spawn(async move {
         let mut sys = System::new_all();
         let disks = Disks::new_with_refreshed_list();
         let mut monitor = IoMonitor::new(&disks);
+        let handover = Arc::new(CompactionHandover::new(
+            shard_id,
+            shard_dir.clone(),
+            Arc::clone(&segment_ids),
+            Arc::clone(&flush_lock),
+        ));
 
         loop {
             sleep(Duration::from_secs(CONFIG.engine.compaction_interval)).await;
@@ -57,6 +69,7 @@ pub async fn start_background_compactor(shard_id: u32, shard_dir: PathBuf) {
                             shard_id,
                             shard_dir.clone(),
                             Arc::clone(&registry),
+                            Arc::clone(&handover),
                         );
 
                         if let Err(e) = worker.run().await {
