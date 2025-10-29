@@ -18,6 +18,17 @@
   let currentChartType = 'bar';
   let currentColorScheme = 'multicolor';
 
+  // Pagination state
+  let paginationState = {
+    baseQuery: null,      // Original query without pagination
+    currentPage: 1,
+    pageSize: 100,        // Default page size
+    totalRows: 0,
+    hasMore: false,
+    isPaginated: false,
+    isAggregation: false  // Whether current query is an aggregation query
+  };
+
   // Theme management
   function getTheme() {
     const stored = localStorage.getItem('theme');
@@ -497,7 +508,9 @@
   }
 
   function renderTable(data) {
-    if (!data || !data.columns || !data.rows) return;
+    if (!data || !data.columns || !data.rows) {
+      return;
+    }
 
     dataTable.innerHTML = '';
 
@@ -555,23 +568,225 @@
       }
 
       if (data) {
-        renderChart(data, currentChartType);
-        renderTable(data);
+        // Update pagination state (only for selection queries)
+        if (!paginationState.isAggregation) {
+          paginationState.totalRows = data.rows ? data.rows.length : 0;
+          // If we got fewer rows than pageSize, we're definitely on the last page
+          // If we got exactly pageSize rows, there might be more (we can't be sure without total count)
+          paginationState.hasMore = paginationState.isPaginated &&
+                                     paginationState.totalRows > 0 &&
+                                     paginationState.totalRows === paginationState.pageSize;
+        } else {
+          paginationState.totalRows = data.rows ? data.rows.length : 0;
+        }
+
+        // Render chart only for aggregation queries, table for both
+        const chartViewBtn = $('chartViewBtn');
+
+        if (paginationState.isAggregation) {
+          renderChart(data, currentChartType);
+          chartControls.style.display = 'flex';
+          viewControls.style.display = 'flex';
+          // Show chart button for aggregation queries
+          if (chartViewBtn) {
+            chartViewBtn.style.display = 'flex';
+          }
+          switchView('chart');
+        } else {
+          // For selection queries, show table view and hide chart controls
+          chartControls.style.display = 'none';
+          viewControls.style.display = 'flex';
+          // Hide chart button for selection queries
+          if (chartViewBtn) {
+            chartViewBtn.style.display = 'none';
+          }
+          switchView('table');
+          // Don't render chart for selection queries
+          if (currentChart) {
+            currentChart.destroy();
+            currentChart = null;
+          }
+        }
+
+        // Only render table if there are results, otherwise clear it
+        if (paginationState.totalRows > 0 || paginationState.isAggregation) {
+          emptyState.style.display = 'none';
+          renderTable(data);
+        } else {
+          // Clear table when there are no results
+          dataTable.innerHTML = '';
+          emptyState.style.display = 'flex';
+        }
         setOutput(JSON.stringify(json, null, 2));
 
-        switchView('chart');
+        // Show/hide pagination controls - opposite of chart button logic
+        const paginationEl = $('paginationControls');
+        if (paginationState.isAggregation) {
+          // Hide pagination for aggregation queries (same logic as hiding chart button)
+          if (paginationEl) {
+            paginationEl.style.setProperty('display', 'none', 'important');
+          }
+        } else {
+          // Show pagination for selection queries (opposite of chart button)
+          // Ensure pagination state is maintained for selection queries
+          if (!paginationState.isPaginated) {
+            // If somehow pagination wasn't set up, check if query has LIMIT/OFFSET
+            const trimmed = cmd.value.trim();
+            const limitMatch = trimmed.match(/\bLIMIT\s+(\d+)\b/i);
+            const offsetMatch = trimmed.match(/\bOFFSET\s+(\d+)\b/i);
+
+            if (limitMatch) {
+              const limitValue = parseInt(limitMatch[1], 10);
+              const offsetValue = offsetMatch ? parseInt(offsetMatch[1], 10) : 0;
+              const queryWithoutPagination = trimmed.replace(/\bLIMIT\s+\d+\b/gi, '').replace(/\bOFFSET\s+\d+\b/gi, '').trim();
+
+              paginationState.baseQuery = queryWithoutPagination;
+              paginationState.pageSize = limitValue;
+              paginationState.currentPage = Math.floor(offsetValue / limitValue) + 1;
+              paginationState.isPaginated = true;
+            } else {
+              // Auto-enable pagination for selection queries
+              const queryWithoutPagination = trimmed.replace(/\bLIMIT\s+\d+\b/gi, '').replace(/\bOFFSET\s+\d+\b/gi, '').trim();
+              paginationState.baseQuery = queryWithoutPagination;
+              paginationState.isPaginated = true;
+            }
+          }
+          updatePaginationUI();
+        }
       } else {
+        // Update pagination state when no data - use same logic as chart button
+        const paginationEl = $('paginationControls');
+        if (paginationState.isAggregation) {
+          // Hide pagination for aggregation queries (same logic as hiding chart button)
+          if (paginationEl) {
+            paginationEl.style.setProperty('display', 'none', 'important');
+          }
+        } else {
+          // Show pagination for selection queries (opposite of chart button)
+          if (paginationState.isPaginated) {
+            paginationState.totalRows = 0;
+            paginationState.hasMore = false;
+            // Still show pagination controls so user can go back
+            updatePaginationUI();
+          }
+        }
+
         emptyState.style.display = 'flex';
         chartControls.style.display = 'none';
         viewControls.style.display = 'none';
+        // Clear table when no data
+        dataTable.innerHTML = '';
         setOutput(text);
       }
     } catch (e) {
       emptyState.style.display = 'flex';
       chartControls.style.display = 'none';
       viewControls.style.display = 'none';
+      hidePaginationUI();
       setOutput(text);
     }
+  }
+
+  // Detect if a query is an aggregation query
+  function isAggregationQuery(query) {
+    const upperQuery = query.toUpperCase();
+    // Check for aggregation keywords
+    const aggKeywords = /\b(COUNT|AVG|TOTAL|MIN|MAX|SUM)\b/i;
+    const hasAggKeyword = aggKeywords.test(query);
+
+    // Check for PER clause (time aggregation) or GROUP BY
+    const hasTimeBucket = /\bPER\s+(HOUR|DAY|WEEK|MONTH)\b/i.test(query);
+    const hasGroupBy = /\bBY\b/i.test(query) && (hasAggKeyword || hasTimeBucket);
+
+    return hasAggKeyword || hasTimeBucket;
+  }
+
+  // Parse and modify query to add pagination if needed
+  function prepareQueryWithPagination(query) {
+    const trimmed = query.trim();
+    const upperQuery = trimmed.toUpperCase();
+
+    // Check if query is a QUERY command
+    if (!upperQuery.startsWith('QUERY')) {
+      paginationState.isPaginated = false;
+      paginationState.baseQuery = null;
+      paginationState.isAggregation = false;
+      return trimmed;
+    }
+
+    // Detect if this is an aggregation query
+    paginationState.isAggregation = isAggregationQuery(trimmed);
+
+    // Aggregation queries should not be paginated
+    if (paginationState.isAggregation) {
+      paginationState.isPaginated = false;
+      paginationState.baseQuery = null;
+      return trimmed;
+    }
+
+    // Check if LIMIT already exists
+    const limitMatch = trimmed.match(/\bLIMIT\s+(\d+)\b/i);
+    const offsetMatch = trimmed.match(/\bOFFSET\s+(\d+)\b/i);
+
+    let hasLimit = !!limitMatch;
+    let hasOffset = !!offsetMatch;
+
+    // Get the base query without pagination clauses
+    const queryWithoutPagination = trimmed.replace(/\bLIMIT\s+\d+\b/gi, '').replace(/\bOFFSET\s+\d+\b/gi, '').trim();
+
+    // Detect if this is a new user query (not navigation)
+    const isNewQuery = !paginationState.baseQuery || queryWithoutPagination !== paginationState.baseQuery;
+
+    if (isNewQuery) {
+      // User typed a new query
+      if (hasLimit) {
+        // User manually added LIMIT/OFFSET - extract values and enable pagination
+        const limitValue = parseInt(limitMatch[1], 10);
+        const offsetValue = hasOffset ? parseInt(offsetMatch[1], 10) : 0;
+
+        // Store base query and set up pagination state
+        paginationState.baseQuery = queryWithoutPagination;
+        paginationState.pageSize = limitValue;
+        paginationState.currentPage = Math.floor(offsetValue / limitValue) + 1;
+        paginationState.isPaginated = true;
+
+        // Return the query as-is since it already has LIMIT/OFFSET
+        return trimmed;
+      } else {
+        // No LIMIT in user's query - enable auto-pagination (only for selection queries)
+        if (!paginationState.isAggregation) {
+          paginationState.baseQuery = queryWithoutPagination;
+          paginationState.currentPage = 1;
+          paginationState.isPaginated = true;
+        }
+      }
+    } else if (!isNewQuery && hasLimit) {
+      // Query navigation case - extract LIMIT/OFFSET to update page state
+      const limitValue = parseInt(limitMatch[1], 10);
+      const offsetValue = hasOffset ? parseInt(offsetMatch[1], 10) : 0;
+
+      paginationState.pageSize = limitValue;
+      paginationState.currentPage = Math.floor(offsetValue / limitValue) + 1;
+    }
+
+    // If auto-pagination is enabled and no LIMIT in current query, add it
+    if (paginationState.isPaginated && !hasLimit) {
+      const limit = paginationState.pageSize;
+      const offset = (paginationState.currentPage - 1) * limit;
+
+      let modifiedQuery = paginationState.baseQuery;
+
+      if (offset > 0) {
+        modifiedQuery += ` LIMIT ${limit} OFFSET ${offset}`;
+      } else {
+        modifiedQuery += ` LIMIT ${limit}`;
+      }
+
+      return modifiedQuery;
+    }
+
+    // If user has LIMIT in their query, don't modify it
+    return trimmed;
   }
 
   async function run() {
@@ -588,7 +803,22 @@
       headers['Authorization'] = 'Bearer ' + window.SNELDB_AUTH_TOKEN;
     }
 
-    const lines = input.split(/\n+/).map(s => s.trim()).filter(Boolean);
+    // Prepare query with pagination
+    const queryToRun = prepareQueryWithPagination(input);
+
+    // Reset totalRows when starting a new query (will be updated when results arrive)
+    if (paginationState.isPaginated && !paginationState.isAggregation) {
+      // Keep totalRows if it's navigation (page change), reset only if it's a new query
+      const trimmed = input.trim();
+      const offsetMatch = trimmed.match(/\bOFFSET\s+(\d+)\b/i);
+      if (!offsetMatch) {
+        // New query without OFFSET means we're starting fresh
+        paginationState.totalRows = 0;
+        paginationState.hasMore = false;
+      }
+    }
+
+    const lines = queryToRun.split(/\n+/).map(s => s.trim()).filter(Boolean);
     const outputs = [];
 
     for (const line of lines) {
@@ -634,6 +864,110 @@
     if (btnEl) btnEl.classList.add('active');
   }
 
+  // Pagination UI functions
+  function updatePaginationUI() {
+    const paginationEl = $('paginationControls');
+    if (!paginationEl) {
+      return;
+    }
+
+    // Show/hide pagination - opposite of chart button logic
+    if (paginationState.isAggregation) {
+      // Hide pagination for aggregation queries (same as hiding chart button)
+      paginationEl.style.setProperty('display', 'none', 'important');
+      return;
+    }
+
+    // Show pagination for selection queries (opposite of chart button showing)
+    if (paginationState.isPaginated) {
+      paginationEl.style.setProperty('display', 'flex', 'important');
+      paginationEl.style.visibility = 'visible';
+      paginationEl.removeAttribute('hidden');
+
+      const pageInfo = $('paginationInfo');
+      const startRow = (paginationState.currentPage - 1) * paginationState.pageSize + 1;
+      const endRow = paginationState.totalRows > 0
+        ? startRow + paginationState.totalRows - 1
+        : startRow - 1;
+
+      if (pageInfo) {
+        if (paginationState.totalRows > 0) {
+          pageInfo.textContent = `Showing ${startRow}-${endRow}${paginationState.hasMore ? '+' : ''} rows (Page ${paginationState.currentPage})`;
+        } else {
+          pageInfo.textContent = `No results (Page ${paginationState.currentPage})`;
+        }
+      }
+
+      // Update button states
+      const prevBtn = $('paginationPrev');
+      const nextBtn = $('paginationNext');
+
+      if (prevBtn) {
+        prevBtn.disabled = paginationState.currentPage === 1;
+      }
+      if (nextBtn) {
+        // Disable next button if no more results
+        nextBtn.disabled = !paginationState.hasMore;
+      }
+
+      // Update page size selector
+      const pageSizeSelect = $('paginationPageSize');
+      if (pageSizeSelect) {
+        pageSizeSelect.value = paginationState.pageSize.toString();
+      }
+    } else {
+      paginationEl.style.display = 'none';
+    }
+  }
+
+  function hidePaginationUI() {
+    const paginationEl = $('paginationControls');
+    if (paginationEl) {
+      paginationEl.style.setProperty('display', 'none', 'important');
+    }
+  }
+
+  function goToPage(page) {
+    if (page < 1 || !paginationState.baseQuery) return;
+
+    paginationState.currentPage = page;
+
+    // Update query text in editor to show pagination
+    const limit = paginationState.pageSize;
+    const offset = (page - 1) * limit;
+    let newQuery = paginationState.baseQuery;
+
+    if (offset > 0) {
+      newQuery += ` LIMIT ${limit} OFFSET ${offset}`;
+    } else {
+      newQuery += ` LIMIT ${limit}`;
+    }
+
+    cmd.value = newQuery;
+    syncHighlight();
+
+    // Run the query
+    run();
+  }
+
+  function nextPage() {
+    if (paginationState.hasMore || paginationState.currentPage > 1) {
+      goToPage(paginationState.currentPage + 1);
+    }
+  }
+
+  function prevPage() {
+    if (paginationState.currentPage > 1) {
+      goToPage(paginationState.currentPage - 1);
+    }
+  }
+
+  function changePageSize(newSize) {
+    paginationState.pageSize = parseInt(newSize);
+    paginationState.currentPage = 1; // Reset to first page
+    goToPage(1);
+  }
+
   runBtn.addEventListener('click', run);
 
   clrBtn.addEventListener('click', () => {
@@ -641,13 +975,41 @@
     emptyState.style.display = 'flex';
     chartControls.style.display = 'none';
     viewControls.style.display = 'none';
+    hidePaginationUI();
     if (currentChart) {
       currentChart.destroy();
       currentChart = null;
     }
     dataTable.innerHTML = '';
     currentData = null;
+    paginationState.baseQuery = null;
+    paginationState.currentPage = 1;
+    paginationState.isPaginated = false;
+    paginationState.isAggregation = false;
+
+    // Reset chart button visibility
+    const chartViewBtn = $('chartViewBtn');
+    if (chartViewBtn) {
+      chartViewBtn.style.display = '';
+    }
   });
+
+  // Pagination event listeners
+  const paginationPrev = $('paginationPrev');
+  const paginationNext = $('paginationNext');
+  const paginationPageSize = $('paginationPageSize');
+
+  if (paginationPrev) {
+    paginationPrev.addEventListener('click', prevPage);
+  }
+  if (paginationNext) {
+    paginationNext.addEventListener('click', nextPage);
+  }
+  if (paginationPageSize) {
+    paginationPageSize.addEventListener('change', (e) => {
+      changePageSize(e.target.value);
+    });
+  }
 
   cmd.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {

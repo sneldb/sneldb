@@ -246,12 +246,83 @@ main {
   padding: 1rem 1.5rem;
   border-bottom: 1px solid var(--border);
   background: var(--bg-secondary);
+  flex-wrap: wrap;
+  gap: 0.75rem;
 }
 
 .section-header h2 {
   font-size: 1rem;
   font-weight: 600;
   color: var(--text-primary);
+  order: 1;
+  flex: 1;
+}
+
+/* Pagination Controls */
+.pagination-controls {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  flex-wrap: nowrap;
+  min-width: 0; /* Allow flex items to shrink */
+  flex-basis: 100%;
+  order: 3; /* Appears on next row after h2 and view-controls */
+}
+
+.pagination-info {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-right: auto;
+}
+
+.pagination-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.pagination-label {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pagination-select {
+  padding: 0.375rem 0.75rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.pagination-select:hover {
+  border-color: var(--primary);
+}
+
+.pagination-select:focus {
+  border-color: var(--primary);
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.btn-sm {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
 }
 
 /* Editor */
@@ -396,6 +467,19 @@ textarea::-webkit-scrollbar-thumb:hover {
   border-color: var(--secondary);
 }
 
+.btn:disabled,
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.btn:disabled:hover,
+.btn-secondary:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
 /* View Controls */
 .view-controls {
   display: flex;
@@ -403,6 +487,8 @@ textarea::-webkit-scrollbar-thumb:hover {
   background: var(--bg-tertiary);
   padding: 0.25rem;
   border-radius: 0.5rem;
+  order: 2; /* Same row as h2, on the right */
+  margin-left: auto; /* Push to the right */
 }
 
 .view-btn {
