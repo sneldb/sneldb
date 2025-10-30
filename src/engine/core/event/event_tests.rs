@@ -59,10 +59,7 @@ fn test_get_field() {
         event.get_field("timestamp"),
         Some(Value::Number(1234567890.into()))
     );
-    assert_eq!(
-        event.get_field("event_id"),
-        Some(Value::Number(99.into()))
-    );
+    assert_eq!(event.get_field("event_id"), Some(Value::Number(99.into())));
 
     // Test payload fields
     assert_eq!(

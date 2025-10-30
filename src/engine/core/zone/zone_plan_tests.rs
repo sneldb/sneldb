@@ -1,6 +1,6 @@
 use crate::engine::core::ZonePlan;
 use crate::test_helpers::factory::Factory;
-use serde_json::{json, Number, Value};
+use serde_json::{Number, Value, json};
 use std::collections::HashMap;
 
 #[test]
@@ -172,17 +172,11 @@ fn test_from_rows_preserves_typed_payload() {
     let event = &plan.events[0];
 
     assert_eq!(
-        event
-            .payload
-            .get("score")
-            .and_then(|v| v.as_i64()),
+        event.payload.get("score").and_then(|v| v.as_i64()),
         Some(123)
     );
     assert_eq!(
-        event
-            .payload
-            .get("region")
-            .and_then(|v| v.as_str()),
+        event.payload.get("region").and_then(|v| v.as_str()),
         Some("eu")
     );
 }
