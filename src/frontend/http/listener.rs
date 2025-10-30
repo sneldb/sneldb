@@ -1,8 +1,9 @@
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
-use std::{net::SocketAddr, sync::Arc};
+use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::net::TcpListener;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::frontend::context::FrontendContext;
 use crate::shared::config::CONFIG;
@@ -15,10 +16,38 @@ pub async fn run_http_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
 
     info!("HTTP server running at http://{addr}/command");
 
-    let ctx = ctx;
-
     loop {
-        let (stream, _peer_addr) = listener.accept().await?;
+        // Check shutdown before accepting new connections
+        if ctx.server_state.is_shutting_down() {
+            info!("HTTP server shutting down, not accepting new connections");
+            break;
+        }
+
+        // Use select to make accept cancellable on shutdown
+        let accept_result = tokio::select! {
+            result = listener.accept() => result,
+            _ = async {
+                // Poll shutdown flag periodically
+                loop {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    if ctx.server_state.is_shutting_down() {
+                        break;
+                    }
+                }
+            } => {
+                // Shutdown detected during accept wait
+                info!("HTTP server shutting down, stopping accept loop");
+                break;
+            }
+        };
+
+        let (stream, _peer_addr) = match accept_result {
+            Ok(stream) => stream,
+            Err(e) => {
+                warn!("Failed to accept HTTP connection: {}", e);
+                continue;
+            }
+        };
         let io = TokioIo::new(stream);
 
         let ctx = Arc::clone(&ctx);
@@ -32,6 +61,7 @@ pub async fn run_http_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
                             req,
                             Arc::clone(&ctx.registry),
                             Arc::clone(&ctx.shard_manager),
+                            Arc::clone(&ctx.server_state),
                         )
                     }),
                 )
@@ -41,4 +71,7 @@ pub async fn run_http_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
             }
         });
     }
+
+    info!("HTTP server shutdown complete");
+    Ok(())
 }

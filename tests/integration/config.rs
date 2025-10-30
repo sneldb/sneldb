@@ -65,6 +65,7 @@ pub struct ServerConfig {
     pub tcp_addr: String,
     pub http_addr: String,
     pub auth_token: String,
+    pub backpressure_threshold: u8,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -140,6 +141,7 @@ fn default_test_config(paths: &TestPaths) -> TestConfig {
             tcp_addr: "127.0.0.1:7172".into(),
             http_addr: "127.0.0.1:8086".into(),
             auth_token: "test".into(),
+            backpressure_threshold: 90,
         },
         logging: LoggingConfig {
             log_dir: format!("{}/logs", paths.base_dir),

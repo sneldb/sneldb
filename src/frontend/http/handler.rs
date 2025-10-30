@@ -4,6 +4,7 @@ use tokio::sync::RwLock;
 
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
+use crate::frontend::server_state::ServerState;
 use crate::shared::config::CONFIG;
 
 use super::dispatcher::{handle_json_command, handle_line_command};
@@ -12,13 +13,19 @@ use super::static_files::{serve_asset, serve_index};
 struct HttpHandler {
     registry: Arc<RwLock<SchemaRegistry>>,
     shard_manager: Arc<ShardManager>,
+    server_state: Arc<ServerState>,
 }
 
 impl HttpHandler {
-    fn new(registry: Arc<RwLock<SchemaRegistry>>, shard_manager: Arc<ShardManager>) -> Self {
+    fn new(
+        registry: Arc<RwLock<SchemaRegistry>>,
+        shard_manager: Arc<ShardManager>,
+        server_state: Arc<ServerState>,
+    ) -> Self {
         Self {
             registry,
             shard_manager,
+            server_state,
         }
     }
 
@@ -46,6 +53,26 @@ impl HttpHandler {
     async fn handle(&self, req: Request<Incoming>) -> Result<Response<String>, Infallible> {
         let path = req.uri().path().to_string();
 
+        // Check shutdown and backpressure before processing requests
+        // Static files (playground) are exempt from these checks
+        if !path.starts_with("/static/") && path != "/" {
+            if self.server_state.is_shutting_down() {
+                return Ok(Response::builder()
+                    .status(hyper::StatusCode::SERVICE_UNAVAILABLE)
+                    .header(hyper::header::CONTENT_TYPE, "text/plain")
+                    .body("Server is shutting down".to_string())
+                    .unwrap());
+            }
+
+            if self.server_state.is_under_pressure() {
+                return Ok(Response::builder()
+                    .status(hyper::StatusCode::SERVICE_UNAVAILABLE)
+                    .header(hyper::header::CONTENT_TYPE, "text/plain")
+                    .body("Server is under pressure, please retry later".to_string())
+                    .unwrap());
+            }
+        }
+
         if let Some(resp) = Self::serve_playground(&path) {
             return Ok(resp);
         }
@@ -56,6 +83,7 @@ impl HttpHandler {
                     req,
                     Arc::clone(&self.registry),
                     Arc::clone(&self.shard_manager),
+                    Arc::clone(&self.server_state),
                 )
                 .await
             }
@@ -64,6 +92,7 @@ impl HttpHandler {
                     req,
                     Arc::clone(&self.registry),
                     Arc::clone(&self.shard_manager),
+                    Arc::clone(&self.server_state),
                 )
                 .await
             }
@@ -76,7 +105,8 @@ pub async fn handle_request(
     req: Request<Incoming>,
     registry: Arc<RwLock<SchemaRegistry>>,
     shard_manager: Arc<ShardManager>,
+    server_state: Arc<ServerState>,
 ) -> Result<Response<String>, Infallible> {
-    let handler = HttpHandler::new(registry, shard_manager);
+    let handler = HttpHandler::new(registry, shard_manager, server_state);
     handler.handle(req).await
 }

@@ -9,6 +9,7 @@ use crate::command::types::Command;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
 use crate::frontend::http::json_command::JsonCommand;
+use crate::frontend::server_state::ServerState;
 use crate::shared::config::CONFIG;
 use crate::shared::response::{
     Response as ResponseType, json::JsonRenderer, render::Renderer, unix::UnixRenderer,
@@ -51,6 +52,7 @@ pub async fn handle_line_command(
     req: Request<Incoming>,
     registry: Arc<RwLock<SchemaRegistry>>,
     shard_manager: Arc<ShardManager>,
+    server_state: Arc<ServerState>,
 ) -> Result<Response<String>, Infallible> {
     if req.method() != hyper::Method::POST {
         return method_not_allowed();
@@ -71,7 +73,14 @@ pub async fn handle_line_command(
     }
 
     match parse_command(&input) {
-        Ok(cmd) => dispatch_and_respond(cmd, registry, shard_manager, renderer).await,
+        Ok(cmd) => {
+            // Increment pending operations before dispatch
+            server_state.increment_pending();
+            let result = dispatch_and_respond(cmd, registry, shard_manager, renderer).await;
+            // Decrement after dispatch completes
+            server_state.decrement_pending();
+            result
+        }
         Err(e) => render_error(&e.to_string(), StatusCode::BAD_REQUEST, renderer),
     }
 }
@@ -80,6 +89,7 @@ pub async fn handle_json_command(
     req: Request<Incoming>,
     registry: Arc<RwLock<SchemaRegistry>>,
     shard_manager: Arc<ShardManager>,
+    server_state: Arc<ServerState>,
 ) -> Result<Response<String>, Infallible> {
     if req.method() != hyper::Method::POST {
         return method_not_allowed();
@@ -95,7 +105,12 @@ pub async fn handle_json_command(
         Ok(json_cmd) => {
             let cmd: Command = json_cmd.into();
             info!("Received JSON command: {:?}", cmd);
-            dispatch_and_respond(cmd, registry, shard_manager, renderer).await
+            // Increment pending operations before dispatch
+            server_state.increment_pending();
+            let result = dispatch_and_respond(cmd, registry, shard_manager, renderer).await;
+            // Decrement after dispatch completes
+            server_state.decrement_pending();
+            result
         }
         Err(e) => render_error(
             &format!("Invalid JSON command: {e}"),
