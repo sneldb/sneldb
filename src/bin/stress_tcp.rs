@@ -11,7 +11,7 @@ use sysinfo::System;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
-use tokio::time::sleep;
+use tokio::time::{sleep, timeout};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -115,6 +115,7 @@ async fn main() -> Result<()> {
     let reporter = tokio::spawn(async move {
         let mut last = 0usize;
         let mut last_t = Instant::now();
+        let mut zero_progress_count = 0u32;
         loop {
             sleep(Duration::from_secs(1)).await;
             let now = Instant::now();
@@ -124,8 +125,20 @@ async fn main() -> Result<()> {
             println!("[PROG] total={} (+{}) {:.0} ev/s", cur, d, (d as f64) / dt);
             last = cur;
             last_t = now;
+
+            // Exit if we've reached total events
             if cur >= total_events {
                 break;
+            }
+
+            // Exit if no progress for 5 seconds (workers likely stopped)
+            if d == 0 {
+                zero_progress_count += 1;
+                if zero_progress_count >= 5 {
+                    break;
+                }
+            } else {
+                zero_progress_count = 0;
             }
         }
     });
@@ -167,7 +180,24 @@ async fn main() -> Result<()> {
                     line.clear();
                     match reader.read_line(&mut line).await {
                         Ok(0) | Err(_) => break, // EOF or error
-                        Ok(_) => continue,       // Keep draining
+                        Ok(_) => {
+                            // Check for backpressure messages and print them
+                            let trimmed = line.trim();
+                            if !trimmed.is_empty() {
+                                let lower = trimmed.to_lowercase();
+                                // Check for various backpressure/shutdown indicators
+                                if lower.contains("under pressure")
+                                    || lower.contains("service unavailable")
+                                    || trimmed.starts_with("503")
+                                    || trimmed.contains("ERROR:")
+                                    || trimmed.contains("503 Service")
+                                    || lower.contains("shutting down")
+                                {
+                                    eprintln!("[BACKPRESSURE] {}", trimmed);
+                                }
+                            }
+                            continue; // Keep draining
+                        }
                     }
                 }
             });
@@ -232,27 +262,45 @@ async fn main() -> Result<()> {
     let _ = sampler.await;
     let _ = reporter.await;
 
-    // Run REPLAY to sample latency
-    let replay_cmd = format!("REPLAY {} FOR {}\n", event_type, sample_ctx);
-    let t0 = Instant::now();
-    send_and_collect_json_with_timeout(&mut control_reader, &replay_cmd, 10, wait_dur).await?;
-    println!(
-        "Replay latency: {:.2} ms",
-        t0.elapsed().as_secs_f64() * 1000.0
-    );
+    // Run REPLAY to sample latency (only if control connection is still alive)
+    if let Ok(replay_result) = timeout(Duration::from_secs(2), async {
+        let replay_cmd = format!("REPLAY {} FOR {}\n", event_type, sample_ctx);
+        let t0 = Instant::now();
+        send_and_collect_json_with_timeout(&mut control_reader, &replay_cmd, 10, wait_dur).await?;
+        println!(
+            "Replay latency: {:.2} ms",
+            t0.elapsed().as_secs_f64() * 1000.0
+        );
+        Ok::<(), anyhow::Error>(())
+    })
+    .await
+    {
+        let _ = replay_result;
+    } else {
+        eprintln!("Skipping replay (connection closed)");
+    }
 
-    // Run QUERY (scoped) to sample latency over time using `created_at`
-    let since_secs = now_secs_i64 - 86_400; // last 24h
-    let query_cmd = format!(
-        "QUERY {} SINCE {} USING created_at WHERE id < 100\n",
-        event_type, since_secs
-    );
-    let t1 = Instant::now();
-    send_and_collect_json_with_timeout(&mut control_reader, &query_cmd, 10, wait_dur).await?;
-    println!(
-        "Query latency: {:.2} ms",
-        t1.elapsed().as_secs_f64() * 1000.0
-    );
+    // Run QUERY (scoped) to sample latency over time using `created_at` (only if connection alive)
+    if let Ok(query_result) = timeout(Duration::from_secs(2), async {
+        let since_secs = now_secs_i64 - 86_400; // last 24h
+        let query_cmd = format!(
+            "QUERY {} SINCE {} USING created_at WHERE id < 100\n",
+            event_type, since_secs
+        );
+        let t1 = Instant::now();
+        send_and_collect_json_with_timeout(&mut control_reader, &query_cmd, 10, wait_dur).await?;
+        println!(
+            "Query latency: {:.2} ms",
+            t1.elapsed().as_secs_f64() * 1000.0
+        );
+        Ok::<(), anyhow::Error>(())
+    })
+    .await
+    {
+        let _ = query_result;
+    } else {
+        eprintln!("Skipping query (connection closed)");
+    }
 
     Ok(())
 }

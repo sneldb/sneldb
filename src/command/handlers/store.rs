@@ -162,13 +162,13 @@ pub async fn handle<W: AsyncWrite + Unpin>(
                 target: "sneldb::store",
                 shard_id = shard.id,
                 context_id,
-                "Timed out sending Store message"
+                "Timed out sending Store message - shard channel full (backpressure)"
             );
             write_error(
                 writer,
                 renderer,
-                StatusCode::InternalError,
-                "Shard is busy, try again later",
+                StatusCode::ServiceUnavailable,
+                "Server is under pressure, please retry later",
             )
             .await
         }
@@ -242,7 +242,9 @@ async fn write_error<W: AsyncWrite + Unpin>(
     message: &str,
 ) -> std::io::Result<()> {
     let resp = Response::error(status, message.to_string());
-    writer.write_all(&renderer.render(&resp)).await
+    writer.write_all(&renderer.render(&resp)).await?;
+    writer.flush().await?;
+    Ok(())
 }
 
 /// Writes a success response to the writer.
@@ -252,5 +254,7 @@ async fn write_ok<W: AsyncWrite + Unpin>(
     message: &str,
 ) -> std::io::Result<()> {
     let resp = Response::ok_lines(vec![message.to_string()]);
-    writer.write_all(&renderer.render(&resp)).await
+    writer.write_all(&renderer.render(&resp)).await?;
+    writer.flush().await?;
+    Ok(())
 }

@@ -64,6 +64,13 @@ pub struct ServerConfig {
     pub tcp_addr: String,
     pub http_addr: String,
     pub auth_token: String,
+    /// Backpressure threshold: percentage of shard channel capacity before rejecting requests (0-100)
+    #[serde(default = "default_backpressure_threshold")]
+    pub backpressure_threshold: u8,
+}
+
+fn default_backpressure_threshold() -> u8 {
+    80 // Default to 80% of channel capacity
 }
 
 #[derive(Debug, Deserialize)]

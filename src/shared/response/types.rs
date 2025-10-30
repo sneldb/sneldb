@@ -7,6 +7,7 @@ pub enum StatusCode {
     BadRequest,
     NotFound,
     InternalError,
+    ServiceUnavailable,
 }
 
 impl StatusCode {
@@ -16,6 +17,7 @@ impl StatusCode {
             StatusCode::BadRequest => 400,
             StatusCode::NotFound => 404,
             StatusCode::InternalError => 500,
+            StatusCode::ServiceUnavailable => 503,
         }
     }
 
@@ -25,6 +27,7 @@ impl StatusCode {
             StatusCode::BadRequest => "Bad Request",
             StatusCode::NotFound => "Not Found",
             StatusCode::InternalError => "Internal Error",
+            StatusCode::ServiceUnavailable => "Service Unavailable",
         }
     }
 }
@@ -41,6 +44,7 @@ impl From<hyper::StatusCode> for StatusCode {
             200 => StatusCode::Ok,
             400 => StatusCode::BadRequest,
             404 => StatusCode::NotFound,
+            503 => StatusCode::ServiceUnavailable,
             401 | 403 | 405 => StatusCode::BadRequest, // Map unauthorized, forbidden, method not allowed to bad request
             _ => StatusCode::InternalError,            // Default to internal error for other codes
         }
