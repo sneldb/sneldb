@@ -29,7 +29,10 @@ impl WalEntryFactory {
             timestamp: self.params["timestamp"].as_u64().unwrap(),
             event_type: self.params["event_type"].as_str().unwrap().to_string(),
             payload: self.params["payload"].clone(),
-            event_id: self.params["event_id"].as_u64().map(EventId::from).unwrap_or_default(),
+            event_id: self.params["event_id"]
+                .as_u64()
+                .map(EventId::from)
+                .unwrap_or_default(),
         }
     }
 

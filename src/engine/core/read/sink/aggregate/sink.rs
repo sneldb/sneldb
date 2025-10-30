@@ -82,12 +82,19 @@ impl AggregateSink {
         }
     }
 
-    fn event_id_from_columns(columns: &HashMap<String, ColumnValues>, row_idx: usize) -> Option<EventId> {
+    fn event_id_from_columns(
+        columns: &HashMap<String, ColumnValues>,
+        row_idx: usize,
+    ) -> Option<EventId> {
         columns.get("event_id").and_then(|values| {
             values
                 .get_u64_at(row_idx)
                 .or_else(|| values.get_i64_at(row_idx).map(|v| v as u64))
-                .or_else(|| values.get_str_at(row_idx).and_then(|s| s.parse::<u64>().ok()))
+                .or_else(|| {
+                    values
+                        .get_str_at(row_idx)
+                        .and_then(|s| s.parse::<u64>().ok())
+                })
                 .map(EventId::from)
         })
     }

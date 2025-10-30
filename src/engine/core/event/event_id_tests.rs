@@ -34,7 +34,10 @@ fn generator_encodes_shard_and_monotonicity() {
     let second = generator.next(7).raw();
     let third = generator.next(7).raw();
 
-    assert!(first < second && second < third, "Event IDs must be strictly increasing");
+    assert!(
+        first < second && second < third,
+        "Event IDs must be strictly increasing"
+    );
     assert_eq!(shard_bits(first), 7);
     assert_eq!(shard_bits(second), 7);
     assert_eq!(shard_bits(third), 7);
