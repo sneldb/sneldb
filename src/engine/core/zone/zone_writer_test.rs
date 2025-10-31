@@ -99,13 +99,17 @@ async fn test_zone_writer_creates_all_outputs_correctly() {
         // Check that at least some zones contain expected values
         let mut found_zones = 0;
         for zone_id in 0..plans.len() {
-            if zxf.contains_in_zone(zone_id as u32, &json!("abc")) ||
-               zxf.contains_in_zone(zone_id as u32, &json!("xyz")) ||
-               zxf.contains_in_zone(zone_id as u32, &json!("def")) {
+            if zxf.contains_in_zone(zone_id as u32, &json!("abc"))
+                || zxf.contains_in_zone(zone_id as u32, &json!("xyz"))
+                || zxf.contains_in_zone(zone_id as u32, &json!("def"))
+            {
                 found_zones += 1;
             }
         }
-        assert!(found_zones > 0, "At least one zone should contain key values");
+        assert!(
+            found_zones > 0,
+            "At least one zone should contain key values"
+        );
     } else {
         // .zxf file might not exist if zones don't have enough unique values or field not in build plan
         // This is acceptable - the test still validates other outputs
