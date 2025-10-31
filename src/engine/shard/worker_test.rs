@@ -4,7 +4,6 @@ use crate::test_helpers::factories::{
 };
 use std::sync::Arc;
 use tempfile::tempdir;
-use tokio::time::{Duration, sleep};
 
 #[tokio::test]
 async fn test_store_flush_query_lifecycle() {
@@ -48,16 +47,18 @@ async fn test_store_flush_query_lifecycle() {
         .expect("Failed to send store message");
 
     // === Flush message ===
-    let (flush_tx, _flush_rx) = tokio::sync::mpsc::channel(1);
-    let flush_msg = message_factory.flush(flush_tx);
+    let (flush_msg, flush_ack) = message_factory.flush();
     shard
         .tx
         .send(flush_msg)
         .await
         .expect("Failed to send flush message");
 
-    // Wait for flush completion
-    sleep(Duration::from_millis(500)).await;
+    match flush_ack.await {
+        Ok(Ok(())) => {}
+        Ok(Err(err)) => panic!("Flush failed: {}", err),
+        Err(_) => panic!("Flush acknowledgement channel dropped"),
+    }
 
     // === Query message ===
     let query_cmd = CommandFactory::query()

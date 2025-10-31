@@ -4,7 +4,7 @@ use crate::engine::errors::StoreError;
 use crate::engine::schema::registry::SchemaRegistry;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
-use tokio::sync::{Mutex, RwLock as TokioRwLock, mpsc::Sender};
+use tokio::sync::{Mutex, RwLock as TokioRwLock, mpsc::Sender, oneshot};
 use tracing::{debug, error, info};
 
 /// Manages the flushing of MemTables to disk segments
@@ -16,6 +16,7 @@ pub struct FlushManager {
         MemTable,
         Arc<TokioRwLock<SchemaRegistry>>,
         Arc<Mutex<MemTable>>,
+        Option<oneshot::Sender<Result<(), StoreError>>>,
     )>,
     segment_ids: Arc<RwLock<Vec<String>>>,
 }
@@ -54,6 +55,7 @@ impl FlushManager {
         schema_registry: Arc<TokioRwLock<SchemaRegistry>>,
         segment_id: u64,
         passive_memtable: Arc<Mutex<MemTable>>,
+        completion: Option<oneshot::Sender<Result<(), StoreError>>>,
     ) -> Result<(), StoreError> {
         debug!(
             target: "sneldb::flush",
@@ -68,6 +70,7 @@ impl FlushManager {
                 full_memtable,
                 Arc::clone(&schema_registry),
                 Arc::clone(&passive_memtable),
+                completion,
             ))
             .await
             .map_err(|e| {

@@ -48,6 +48,7 @@ async fn test_flush_worker_processes_memtable() {
         memtable,
         Arc::clone(&registry),
         Arc::new(tokio::sync::Mutex::new(memtable_clone)),
+        None,
     ))
     .await
     .expect("Send failed");

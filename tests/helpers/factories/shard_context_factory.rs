@@ -1,6 +1,8 @@
 use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
 use crate::engine::core::segment::range_allocator::RangeAllocator;
 use crate::engine::core::{EventIdGenerator, FlushManager, MemTable, WalHandle};
+use crate::engine::errors::StoreError;
+use crate::engine::schema::registry::SchemaRegistry;
 use crate::engine::shard::context::ShardContext;
 use crate::shared::config::CONFIG;
 use std::path::PathBuf;
@@ -54,7 +56,13 @@ impl ShardContextFactory {
             .unwrap_or_else(|| tempdir.path().to_path_buf());
         let wal_dir = self.wal_dir.unwrap_or_else(|| tempdir.path().to_path_buf());
 
-        let (flush_sender, _rx) = mpsc::channel(8);
+        let (flush_sender, _rx) = mpsc::channel::<(
+            u64,
+            MemTable,
+            Arc<tokio::sync::RwLock<SchemaRegistry>>,
+            Arc<tokio::sync::Mutex<MemTable>>,
+            Option<tokio::sync::oneshot::Sender<Result<(), StoreError>>>,
+        )>(8);
 
         let wal_handle = WalHandle::new(self.id, &wal_dir).expect("Failed to create WAL writer");
         let wal = Arc::new(

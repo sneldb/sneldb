@@ -4,13 +4,14 @@ use crate::engine::core::{
     Event, EventId, EventIdGenerator, FlushManager, MemTable, SegmentIdLoader, WalHandle,
     WalRecovery,
 };
+use crate::engine::errors::StoreError;
 use crate::engine::schema::registry::SchemaRegistry;
 use crate::shared::config::CONFIG;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
-use tokio::sync::Mutex;
 use tokio::sync::mpsc::Sender;
+use tokio::sync::{Mutex, oneshot};
 use tracing::{info, warn};
 
 #[derive(Debug, Clone)]
@@ -25,6 +26,7 @@ pub struct ShardContext {
         MemTable,
         Arc<tokio::sync::RwLock<SchemaRegistry>>,
         Arc<Mutex<MemTable>>,
+        Option<oneshot::Sender<Result<(), StoreError>>>,
     )>,
     pub segment_id: u64,
     pub next_l0_id: u32,
@@ -55,6 +57,7 @@ impl ShardContext {
             MemTable,
             Arc<tokio::sync::RwLock<SchemaRegistry>>,
             Arc<Mutex<MemTable>>,
+            Option<oneshot::Sender<Result<(), StoreError>>>,
         )>,
         base_dir: PathBuf,
         wal_dir: PathBuf,

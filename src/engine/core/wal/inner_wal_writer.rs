@@ -1,7 +1,7 @@
 use crate::engine::core::WalEntry;
 use crate::shared::config::CONFIG;
 use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
 
@@ -159,9 +159,15 @@ impl InnerWalWriter {
                     path = ?file_path, size = metadata.len(),
                     "WAL file closed"
                 ),
-                Err(_) => warn!(
+                Err(err) if err.kind() == ErrorKind::NotFound => debug!(
                     target: "inner_wal_writer::flush_and_close",
                     path = ?file_path,
+                    "WAL file already cleaned up before metadata check"
+                ),
+                Err(err) => warn!(
+                    target: "inner_wal_writer::flush_and_close",
+                    path = ?file_path,
+                    error = %err,
                     "Could not read WAL file metadata after flush"
                 ),
             }

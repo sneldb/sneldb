@@ -1,12 +1,10 @@
 use crate::command::types::Command;
 use crate::engine::core::Event;
-use crate::engine::core::MemTable;
 use crate::engine::core::read::result::QueryResult;
 use crate::engine::schema::registry::SchemaRegistry;
 use crate::engine::shard::message::ShardMessage;
-use crate::shared::config::CONFIG;
 use std::sync::Arc;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{RwLock, mpsc, oneshot};
 
 pub struct ShardMessageFactory {
     registry: Arc<RwLock<SchemaRegistry>>,
@@ -21,13 +19,14 @@ impl ShardMessageFactory {
         ShardMessage::Store(event, Arc::clone(&self.registry))
     }
 
-    pub fn flush(&self, tx: mpsc::Sender<Vec<Event>>) -> ShardMessage {
-        ShardMessage::Flush(
-            tx,
-            Arc::clone(&self.registry),
-            Arc::new(tokio::sync::Mutex::new(MemTable::new(
-                CONFIG.engine.fill_factor * CONFIG.engine.event_per_zone,
-            ))),
+    pub fn flush(&self) -> (ShardMessage, oneshot::Receiver<Result<(), String>>) {
+        let (tx, rx) = oneshot::channel();
+        (
+            ShardMessage::Flush {
+                registry: Arc::clone(&self.registry),
+                completion: tx,
+            },
+            rx,
         )
     }
 

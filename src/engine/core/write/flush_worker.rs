@@ -6,7 +6,7 @@ use crate::engine::errors::StoreError;
 use crate::engine::schema::registry::SchemaRegistry;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock as TokioRwLock, mpsc::Receiver};
+use tokio::sync::{Mutex, RwLock as TokioRwLock, mpsc::Receiver, oneshot};
 use tracing::{debug, error, info};
 
 /// Worker that processes MemTables and writes them to disk
@@ -38,9 +38,12 @@ impl FlushWorker {
             MemTable,
             Arc<TokioRwLock<SchemaRegistry>>,
             Arc<tokio::sync::Mutex<MemTable>>,
+            Option<oneshot::Sender<Result<(), StoreError>>>,
         )>,
     ) -> Result<(), StoreError> {
-        while let Some((segment_id, memtable, registry, passive_memtable)) = rx.recv().await {
+        while let Some((segment_id, memtable, registry, passive_memtable, completion)) =
+            rx.recv().await
+        {
             let segment_dir = SegmentId::from(segment_id as u32).join_dir(&self.base_dir);
 
             info!(
@@ -58,39 +61,48 @@ impl FlushWorker {
                 Arc::clone(&registry),
                 Arc::clone(&self.flush_coordination_lock),
             );
-            if let Err(e) = flusher.flush().await {
-                error!(
-                    target: "sneldb::flush",
-                    shard_id = self.shard_id,
-                    segment_id,
-                    error = %e,
-                    "Flush failed"
-                );
-            } else {
-                info!(
-                    target: "sneldb::flush",
-                    shard_id = self.shard_id,
-                    segment_id,
-                    "Flush succeeded"
-                );
+            let flush_result = flusher.flush().await;
 
-                debug!(
-                    target: "sneldb::flush",
-                    shard_id = self.shard_id,
-                    segment_id,
-                    "Clearing passive MemTable"
-                );
-                let mut pmem = passive_memtable.lock().await;
-                pmem.flush();
+            match &flush_result {
+                Err(e) => {
+                    error!(
+                        target: "sneldb::flush",
+                        shard_id = self.shard_id,
+                        segment_id,
+                        error = %e,
+                        "Flush failed"
+                    );
+                }
+                Ok(()) => {
+                    info!(
+                        target: "sneldb::flush",
+                        shard_id = self.shard_id,
+                        segment_id,
+                        "Flush succeeded"
+                    );
 
-                debug!(
-                    target: "sneldb::flush",
-                    shard_id = self.shard_id,
-                    wal_cutoff = segment_id + 1,
-                    "Cleaning up WAL files"
-                );
-                let cleaner = WalCleaner::new(self.shard_id);
-                cleaner.cleanup_up_to(segment_id + 1);
+                    debug!(
+                        target: "sneldb::flush",
+                        shard_id = self.shard_id,
+                        segment_id,
+                        "Clearing passive MemTable"
+                    );
+                    let mut pmem = passive_memtable.lock().await;
+                    pmem.flush();
+
+                    debug!(
+                        target: "sneldb::flush",
+                        shard_id = self.shard_id,
+                        wal_cutoff = segment_id + 1,
+                        "Cleaning up WAL files"
+                    );
+                    let cleaner = WalCleaner::new(self.shard_id);
+                    cleaner.cleanup_up_to(segment_id + 1);
+                }
+            }
+
+            if let Some(completion) = completion {
+                let _ = completion.send(flush_result);
             }
         }
 

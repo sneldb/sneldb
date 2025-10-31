@@ -1,11 +1,14 @@
 use crate::engine::compactor::background::start_background_compactor;
 use crate::engine::core::FlushWorker;
+use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::Shard;
+use crate::engine::shard::message::ShardMessage;
 use crate::shared::path::absolutize;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::sync::oneshot;
 use tracing::{error, info};
 
 #[derive(Debug)]
@@ -70,5 +73,71 @@ impl ShardManager {
         context_id.hash(&mut hasher);
         let shard_id = (hasher.finish() as usize) % self.shards.len();
         &self.shards[shard_id]
+    }
+
+    /// Flush all shards and wait for completion. Returns a list of (shard_id, error) pairs.
+    pub async fn flush_all(
+        &self,
+        registry: Arc<tokio::sync::RwLock<SchemaRegistry>>,
+    ) -> Vec<(usize, String)> {
+        let mut completions = Vec::new();
+        let mut errors = Vec::new();
+
+        for shard in &self.shards {
+            let (tx, rx) = oneshot::channel();
+            match shard
+                .tx
+                .send(ShardMessage::Flush {
+                    registry: Arc::clone(&registry),
+                    completion: tx,
+                })
+                .await
+            {
+                Ok(_) => completions.push((shard.id, rx)),
+                Err(e) => errors.push((shard.id, format!("Failed to send flush command: {}", e))),
+            }
+        }
+
+        for (shard_id, rx) in completions {
+            match rx.await {
+                Ok(Ok(())) => {}
+                Ok(Err(err)) => errors.push((shard_id, err)),
+                Err(_) => errors.push((shard_id, "Flush completion channel dropped".to_string())),
+            }
+        }
+
+        errors
+    }
+
+    /// Signal all shards to shutdown and wait for acknowledgement. Returns (shard_id, error) pairs.
+    pub async fn shutdown_all(&self) -> Vec<(usize, String)> {
+        let mut completions = Vec::new();
+        let mut errors = Vec::new();
+
+        for shard in &self.shards {
+            let (tx, rx) = oneshot::channel();
+            match shard
+                .tx
+                .send(ShardMessage::Shutdown { completion: tx })
+                .await
+            {
+                Ok(_) => completions.push((shard.id, rx)),
+                Err(e) => {
+                    errors.push((shard.id, format!("Failed to send shutdown command: {}", e)))
+                }
+            }
+        }
+
+        for (shard_id, rx) in completions {
+            match rx.await {
+                Ok(Ok(())) => {}
+                Ok(Err(err)) => errors.push((shard_id, err)),
+                Err(_) => {
+                    errors.push((shard_id, "Shutdown completion channel dropped".to_string()))
+                }
+            }
+        }
+
+        errors
     }
 }

@@ -2324,7 +2324,20 @@ async fn test_offset_only_without_order_by() {
         .expect("store should succeed");
     }
 
-    sleep(Duration::from_millis(300)).await;
+    // Manual flush to ensure all data is on disk
+    let flush_cmd = crate::command::types::Command::Flush;
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::flush::handle(
+        &flush_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("flush should succeed");
+
+    sleep(Duration::from_millis(500)).await;
 
     // OFFSET 3 LIMIT 2 (no ORDER BY)
     let cmd = parse("QUERY offset_plain_evt OFFSET 3 LIMIT 2").expect("parse OFFSET LIMIT");
@@ -2337,19 +2350,39 @@ async fn test_offset_only_without_order_by() {
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
 
-    // Debug: print actual response
-    if !body.contains("\"rows\"") {
-        eprintln!("Unexpected response: {}", body);
-    }
-
     let json_start = body.find('{').unwrap_or(0);
     let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON");
-    let rows = json["results"][0]["rows"].as_array().unwrap_or_else(|| {
-        panic!("Expected rows array, got: {}", json);
+
+    // After flushing, we should always get a table response, not "No matching events found"
+    let results_array = json["results"]
+        .as_array()
+        .unwrap_or_else(|| panic!("Response should have results array, got: {}", json));
+
+    assert!(
+        !results_array.is_empty(),
+        "Results array should not be empty after flushing data. Got: {}",
+        json
+    );
+
+    // First result should be a table object with rows, not a string message
+    let result_obj = results_array[0].as_object().unwrap_or_else(|| {
+        panic!(
+            "First result should be a table object, not a string. Got: {}",
+            json
+        )
     });
 
+    let rows = result_obj
+        .get("rows")
+        .and_then(|r| r.as_array())
+        .unwrap_or_else(|| panic!("Table object should have rows array. Got: {}", json));
+
     // Should get at most 2 rows (LIMIT 2)
-    assert!(rows.len() <= 2, "OFFSET+LIMIT without ORDER BY should work");
+    assert!(
+        rows.len() <= 2,
+        "OFFSET+LIMIT without ORDER BY should work. Got {} rows, expected <= 2",
+        rows.len()
+    );
 }
 
 /// Tests OFFSET = 0 (should be same as no offset)

@@ -39,15 +39,19 @@ async fn test_shard_message_factory_variants() {
     }
 
     // Flush
-    let (tx_flush, _) = mpsc::channel(1);
-    let msg = factory.flush(tx_flush.clone());
+    let (msg, rx_flush) = factory.flush();
     match msg {
-        ShardMessage::Flush(sender, reg, _) => {
-            sender.clone().send(vec![]).await.ok(); // ensure it's usable
+        ShardMessage::Flush {
+            registry: reg,
+            completion,
+        } => {
+            // Simulate worker ack
+            completion.send(Ok(())).expect("oneshot send failed");
             assert!(Arc::ptr_eq(&reg, &registry));
         }
         _ => panic!("Expected Flush variant"),
     }
+    assert!(matches!(rx_flush.await, Ok(Ok(()))));
 
     // Query
     let (tx_query, _) = mpsc::channel(1);
