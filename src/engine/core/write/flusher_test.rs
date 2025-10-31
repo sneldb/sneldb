@@ -123,3 +123,65 @@ async fn test_flusher_skips_empty_event_types() {
     assert_eq!(format!("{:05}", entry.id), format!("{:05}", segment_id));
     assert_eq!(entry.uids, vec![uid_non_empty]);
 }
+
+#[tokio::test]
+async fn test_flusher_skips_empty_memtable_and_does_not_create_directory() {
+    let tmp_dir = tempdir().expect("Temp dir failed");
+    let shard_dir = tmp_dir.path().join("shard-2");
+    let segment_dir = shard_dir.join("00009");
+
+    let segment_id = 9;
+
+    let schema_factory = SchemaRegistryFactory::new();
+    let registry = schema_factory.registry();
+    let event_type = "user_created";
+
+    schema_factory
+        .define_with_fields(event_type, &[("context_id", "string"), ("email", "string")])
+        .await
+        .unwrap();
+
+    // Create an empty memtable
+    let memtable = MemTableFactory::new()
+        .with_capacity(10)
+        .create()
+        .expect("Failed to create memtable");
+
+    assert!(memtable.is_empty(), "MemTable should be empty");
+
+    // Verify segment directory does not exist before flush
+    assert!(
+        !segment_dir.exists(),
+        "Segment directory should not exist before flush"
+    );
+
+    let flusher = Flusher::new(
+        memtable,
+        segment_id,
+        &segment_dir,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    );
+
+    // Flush should succeed without error
+    flusher
+        .flush()
+        .await
+        .expect("Flush should succeed for empty memtable");
+
+    // Verify segment directory was NOT created
+    assert!(
+        !segment_dir.exists(),
+        "Segment directory should not be created when memtable is empty"
+    );
+
+    // Verify segment index was not created or is empty
+    let segment_index = SegmentIndex::load(&shard_dir)
+        .await
+        .expect("Failed to load segment index");
+    assert_eq!(
+        segment_index.len(),
+        0,
+        "Segment index should be empty when flushing empty memtable"
+    );
+}
