@@ -1,4 +1,5 @@
 use crate::engine::core::MemTable;
+use crate::engine::errors::StoreError;
 use crate::engine::schema::registry::SchemaRegistry;
 use crate::engine::shard::context::ShardContext;
 use crate::engine::shard::message::ShardMessage;
@@ -9,6 +10,7 @@ use std::time::Duration;
 use tokio::sync::{
     RwLock,
     mpsc::{Receiver, Sender, channel},
+    oneshot,
 };
 use tracing::{error, info};
 
@@ -39,11 +41,18 @@ impl Shard {
             MemTable,
             Arc<RwLock<SchemaRegistry>>,
             Arc<tokio::sync::Mutex<MemTable>>,
+            Option<oneshot::Sender<Result<(), StoreError>>>,
         )>,
         ShardSharedState,
     ) {
         // Channels: one for shard messages, one for flush notifications
-        let (flush_tx, flush_rx) = channel(8096);
+        let (flush_tx, flush_rx) = channel::<(
+            u64,
+            MemTable,
+            Arc<RwLock<SchemaRegistry>>,
+            Arc<tokio::sync::Mutex<MemTable>>,
+            Option<oneshot::Sender<Result<(), StoreError>>>,
+        )>(8096);
         let (tx, rx) = channel(8096);
 
         // Ensure shard directory exists

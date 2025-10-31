@@ -6,15 +6,17 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::sync::mpsc::Sender;
 
-use crate::engine::core::MemTable;
+use tokio::sync::oneshot;
 
 pub enum ShardMessage {
     Store(Event, Arc<RwLock<SchemaRegistry>>),
-    Flush(
-        Sender<Vec<Event>>,
-        Arc<RwLock<SchemaRegistry>>,
-        Arc<tokio::sync::Mutex<MemTable>>,
-    ),
+    Flush {
+        registry: Arc<RwLock<SchemaRegistry>>,
+        completion: oneshot::Sender<Result<(), String>>,
+    },
     Query(Command, Sender<QueryResult>, Arc<RwLock<SchemaRegistry>>),
     Replay(Command, Sender<Vec<Event>>, Arc<RwLock<SchemaRegistry>>),
+    Shutdown {
+        completion: oneshot::Sender<Result<(), String>>,
+    },
 }

@@ -49,6 +49,7 @@ async fn test_flush_manager_queues_and_flushes_memtable() {
             Arc::clone(&registry),
             segment_id,
             Arc::new(tokio::sync::Mutex::new(memtable_clone)),
+            None,
         )
         .await
         .expect("FlushManager failed");

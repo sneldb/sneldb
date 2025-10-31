@@ -65,6 +65,7 @@ pub async fn insert_and_maybe_flush(
                 Arc::clone(schema_registry),
                 current_segment_id,
                 Arc::clone(&passive_arc),
+                None,
             )
             .await?;
 

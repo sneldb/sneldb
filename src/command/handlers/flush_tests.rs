@@ -1,14 +1,12 @@
 use crate::command::handlers::flush::handle;
-use crate::engine::core::MemTable;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
 use crate::engine::shard::message::ShardMessage;
-use crate::shared::config::CONFIG;
 use crate::shared::response::JsonRenderer;
 use std::sync::Arc;
 use tempfile::tempdir;
 use tokio::io::duplex;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{RwLock, oneshot};
 use tokio::time::{Duration, timeout};
 
 #[tokio::test]
@@ -39,22 +37,22 @@ async fn test_flush_dispatches_message_to_all_shards() {
     // Confirm each shard received a flush
     let mut received = 0;
     for shard in shard_manager.all_shards() {
-        let (tx, mut rx) = mpsc::channel(1);
+        let (tx, rx) = oneshot::channel();
 
         let _ = shard
             .tx
-            .send(ShardMessage::Flush(
-                tx,
-                Arc::clone(&registry),
-                Arc::new(tokio::sync::Mutex::new(MemTable::new(
-                    CONFIG.engine.fill_factor * CONFIG.engine.event_per_zone,
-                ))),
-            ))
+            .send(ShardMessage::Flush {
+                registry: Arc::clone(&registry),
+                completion: tx,
+            })
             .await;
 
-        // Try to wait for a response; just to sync and verify comms
-        let _ = timeout(Duration::from_millis(10), rx.recv()).await;
-        received += 1;
+        match timeout(Duration::from_millis(200), rx).await {
+            Ok(Ok(Ok(()))) => received += 1,
+            Ok(Ok(Err(e))) => panic!("Shard flush returned error: {}", e),
+            Ok(Err(_)) => panic!("Shard flush completion channel dropped"),
+            Err(_) => panic!("Timed out waiting for shard flush completion"),
+        }
     }
 
     assert_eq!(received, 3, "Expected flush to be sent to 3 shards");

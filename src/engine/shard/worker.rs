@@ -7,7 +7,7 @@ use crate::engine::shard::context::ShardContext;
 use crate::engine::shard::message::ShardMessage;
 use crate::engine::store::insert::insert_and_maybe_flush;
 use std::sync::Arc;
-use tokio::sync::mpsc::Receiver;
+use tokio::sync::{mpsc::Receiver, oneshot};
 use tracing::{debug, error, info};
 
 const LOG_TARGET: &str = "engine::shard::worker";
@@ -38,11 +38,31 @@ pub async fn run_worker_loop(mut ctx: ShardContext, mut rx: Receiver<ShardMessag
                     error!(target: LOG_TARGET, shard_id = id, error = %e, "Replay failed");
                 }
             }
-            ShardMessage::Flush(_, registry, _) => {
+            ShardMessage::Flush {
+                registry,
+                completion,
+            } => {
                 debug!(target: LOG_TARGET, shard_id = id, "Received Flush message");
-                if let Err(e) = on_flush(&mut ctx, &registry).await {
-                    error!(target: LOG_TARGET, shard_id = id, error = %e, "Flush failed");
+                match on_flush(&mut ctx, &registry).await {
+                    Ok(()) => {
+                        let _ = completion.send(Ok(()));
+                    }
+                    Err(e) => {
+                        error!(target: LOG_TARGET, shard_id = id, error = %e, "Flush failed");
+                        let _ = completion.send(Err(e));
+                    }
                 }
+            }
+            ShardMessage::Shutdown { completion } => {
+                debug!(target: LOG_TARGET, shard_id = id, "Received Shutdown message");
+                let result = on_shutdown(&mut ctx).await;
+                if let Err(ref e) = result {
+                    error!(target: LOG_TARGET, shard_id = id, error = %e, "Shutdown sequence failed");
+                } else {
+                    info!(target: LOG_TARGET, shard_id = id, "Shutdown sequence completed");
+                }
+                let _ = completion.send(result);
+                break;
             }
         }
     }
@@ -124,13 +144,35 @@ async fn on_flush(
 
     // Use the existing flush manager from context
     info!(target: LOG_TARGET, shard_id = ctx.id, "Queueing memtable for flush");
+    let (completion_tx, completion_rx) = oneshot::channel();
     ctx.flush_manager
         .queue_for_flush(
             flushed_mem,
             Arc::clone(registry),
             segment_id,
             Arc::clone(&passive),
+            Some(completion_tx),
         )
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    match completion_rx.await {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(e)) => Err(e.to_string()),
+        Err(_) => Err("Flush worker dropped completion signal".to_string()),
+    }
+}
+
+async fn on_shutdown(ctx: &mut ShardContext) -> Result<(), String> {
+    info!(target: LOG_TARGET, shard_id = ctx.id, "Initiating shard shutdown");
+
+    // Ensure any passive buffers are cleaned up before exiting
+    ctx.passive_buffers.prune_empties().await;
+
+    if let Some(wal) = ctx.wal.as_ref() {
+        info!(target: LOG_TARGET, shard_id = ctx.id, "Shutting down WAL");
+        wal.shutdown().await;
+    }
+
+    Ok(())
 }
