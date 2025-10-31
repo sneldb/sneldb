@@ -72,6 +72,12 @@ pub async fn run_http_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
         });
     }
 
+    // After breaking from accept loop, wait briefly for active connections to finish
+    if ctx.server_state.is_shutting_down() {
+        info!("HTTP server waiting for active connections to complete...");
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+    }
+
     info!("HTTP server shutdown complete");
     Ok(())
 }

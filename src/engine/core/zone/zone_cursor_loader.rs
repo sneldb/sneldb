@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::engine::core::column::format::PhysicalType;
 use crate::engine::core::column::type_catalog::ColumnTypeCatalog;
-use crate::engine::core::{ColumnKey, ColumnReader, EventId, ZoneCursor, ZoneMeta};
+use crate::engine::core::{ColumnKey, ColumnReader, EventId, QueryCaches, ZoneCursor, ZoneMeta};
 use crate::engine::errors::{QueryExecutionError, ZoneMetaError};
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::schema::types::FieldType;
@@ -13,11 +13,14 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 
 /// Loads ZoneCursors for a given UID across multiple segments
+/// Uses QueryCaches to avoid re-decompressing the same column blocks
 pub struct ZoneCursorLoader {
     uid: String,
     segment_ids: Vec<String>,
     registry: Arc<RwLock<SchemaRegistry>>,
     base_dir: PathBuf,
+    /// QueryCaches instance for caching decompressed column blocks
+    caches: QueryCaches,
 }
 
 #[derive(Debug)]
@@ -33,11 +36,14 @@ impl ZoneCursorLoader {
         registry: Arc<RwLock<SchemaRegistry>>,
         base_dir: PathBuf,
     ) -> Self {
+        // Create QueryCaches for this compaction run to reuse decompressed blocks
+        let caches = QueryCaches::new_abs(base_dir.clone());
         Self {
             uid,
             segment_ids,
             registry,
             base_dir,
+            caches,
         }
     }
 
@@ -132,7 +138,7 @@ impl ZoneCursorLoader {
                     &self.uid,
                     "context_id",
                     zone.zone_id,
-                    None,
+                    Some(&self.caches),
                 )?;
                 let context_phys = context_snapshot.physical_type();
                 let context_ids = context_snapshot.into_strings();
@@ -144,7 +150,7 @@ impl ZoneCursorLoader {
                     &self.uid,
                     "timestamp",
                     zone.zone_id,
-                    None,
+                    Some(&self.caches),
                 )?;
                 let timestamp_phys = timestamp_snapshot.physical_type();
                 let timestamps = timestamp_snapshot.into_strings();
@@ -156,7 +162,7 @@ impl ZoneCursorLoader {
                     &self.uid,
                     "event_id",
                     zone.zone_id,
-                    None,
+                    Some(&self.caches),
                 )?;
                 let event_id_phys = event_id_snapshot.physical_type();
                 let event_id_values = event_id_snapshot.into_values();
@@ -182,7 +188,7 @@ impl ZoneCursorLoader {
                     &self.uid,
                     "event_type",
                     zone.zone_id,
-                    None,
+                    Some(&self.caches),
                 )?;
                 let event_type_phys = event_type_snapshot.physical_type();
                 let event_types = event_type_snapshot.into_strings();
@@ -196,7 +202,7 @@ impl ZoneCursorLoader {
                         &self.uid,
                         field,
                         zone.zone_id,
-                        None,
+                        Some(&self.caches),
                     )?;
                     let phys = snapshot.physical_type();
                     let key: ColumnKey = (event_type_name.clone(), field.clone());

@@ -10,7 +10,7 @@ mod server_state_test;
 use context::FrontendContext;
 use std::sync::Arc;
 use tokio::signal;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 pub async fn start_all() -> anyhow::Result<()> {
     let ctx = FrontendContext::from_config().await;
@@ -24,6 +24,33 @@ pub async fn start_all() -> anyhow::Result<()> {
                 .expect("Failed to listen for shutdown signal");
             info!("Shutdown signal received, initiating graceful shutdown");
             shutdown_ctx.server_state.signal_shutdown();
+
+            // Wait for pending operations to complete (with timeout)
+            info!("Waiting for pending operations to complete...");
+            let shutdown_wait_start = std::time::Instant::now();
+            const MAX_SHUTDOWN_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
+
+            loop {
+                let pending = shutdown_ctx.server_state.pending_operations_count();
+                if pending == 0 {
+                    info!("All pending operations completed");
+                    break;
+                }
+
+                if shutdown_wait_start.elapsed() > MAX_SHUTDOWN_WAIT {
+                    warn!(
+                        target: "frontend::shutdown",
+                        pending = pending,
+                        "Shutdown timeout reached, proceeding with pending operations"
+                    );
+                    break;
+                }
+
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            }
+
+            // Give a small grace period for connections to close
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
             let registry = Arc::clone(&shutdown_ctx.registry);
             let flush_errors = shutdown_ctx.shard_manager.flush_all(registry).await;
@@ -49,6 +76,8 @@ pub async fn start_all() -> anyhow::Result<()> {
                     );
                 }
             }
+
+            info!("Graceful shutdown complete");
         })
     };
 

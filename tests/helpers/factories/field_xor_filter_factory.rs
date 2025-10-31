@@ -37,6 +37,6 @@ impl FieldXorFilterFactory {
             .filter_map(|v| FieldXorFilter::value_to_string(&v))
             .collect();
 
-        FieldXorFilter::new(&strings)
+        FieldXorFilter::new(&strings).expect("Failed to create XOR filter in factory")
     }
 }

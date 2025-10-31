@@ -83,17 +83,73 @@ impl ZoneXorFilterIndex {
                 continue;
             }
 
-            values.sort();
-            values.dedup();
-            let hashes = values
-                .into_iter()
-                .map(|s| crate::shared::hash::stable_hash64(&s))
-                .collect::<Vec<u64>>();
-            match BinaryFuse8::try_from_iterator(hashes.into_iter()) {
+            // Deduplicate values before hashing
+            let mut unique_values: Vec<String> = values;
+            unique_values.sort();
+            unique_values.dedup();
+
+            let unique_count = unique_values.len();
+
+            // Skip XOR filter for very high-cardinality fields (close to zone size).
+            // BinaryFuse8 construction can fail with sequential/patterned hash distributions
+            // that are common in high-cardinality fields like sequential IDs.
+            // Threshold: if >80% of events have unique values, skip the filter.
+            let zone_event_count = zone.events.len();
+            if zone_event_count > 0 && (unique_count as f64 / zone_event_count as f64) > 0.8 {
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    debug!(
+                        target: "sneldb::zxf",
+                        zone_id = zone.id,
+                        field,
+                        unique_count,
+                        zone_event_count,
+                        "Skipping zone XOR filter - field has very high cardinality (>{:.0}% unique), BinaryFuse8 may fail",
+                        (unique_count as f64 / zone_event_count as f64) * 100.0
+                    );
+                }
+                continue;
+            }
+
+            // Hash values and deduplicate hashes (handle hash collisions)
+            let mut unique_hashes: std::collections::HashSet<u64> =
+                std::collections::HashSet::with_capacity(unique_count);
+            for value in &unique_values {
+                unique_hashes.insert(crate::shared::hash::stable_hash64(value));
+            }
+
+            // BinaryFuse8 requires at least 2 unique values
+            if unique_hashes.len() < 2 {
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    debug!(
+                        target: "sneldb::zxf",
+                        zone_id = zone.id,
+                        field,
+                        unique_hash_count = unique_hashes.len(),
+                        "Skipping zone XOR filter - field has low cardinality (requires at least 2 unique values)"
+                    );
+                }
+                continue;
+            }
+
+            // Convert HashSet to Vec for iterator (order doesn't matter)
+            let hashes_vec: Vec<u64> = unique_hashes.into_iter().collect();
+            let hashes_count = hashes_vec.len();
+            match BinaryFuse8::try_from_iterator(hashes_vec.into_iter()) {
                 Ok(filter) => index.put_zone_filter(zone.id, filter),
                 Err(e) => {
+                    // BinaryFuse8 can fail to construct even with valid, deduplicated hashes
+                    // due to algorithmic limitations with certain hash distributions.
+                    // This is non-fatal - we just skip building the filter for this zone.
                     if tracing::enabled!(tracing::Level::WARN) {
-                        warn!(target: "sneldb::zxf", zone_id = zone.id, field, "Failed to build BinaryFuse8: {:?}", e);
+                        warn!(
+                            target: "sneldb::zxf",
+                            zone_id = zone.id,
+                            field,
+                            unique_values_count = unique_values.len(),
+                            unique_hashes_count = hashes_count,
+                            error = ?e,
+                            "Failed to build BinaryFuse8 filter - skipping zone filter (this is non-fatal)"
+                        );
                     }
                 }
             }
@@ -219,12 +275,13 @@ pub fn build_all_zxf_filtered(
         return Ok(());
     }
     let uid = zone_plans[0].uid.clone();
-    let mut all_fields: Vec<String> = Vec::new();
+    // Use HashSet for O(1) lookups instead of O(n) Vec::contains()
+    let mut all_fields: std::collections::HashSet<String> = std::collections::HashSet::new();
     for z in zone_plans {
         for e in &z.events {
-            for (k, _) in e.payload.as_object().into_iter().flat_map(|m| m.iter()) {
-                if !all_fields.contains(k) {
-                    all_fields.push(k.clone());
+            if let Some(obj) = e.payload.as_object() {
+                for k in obj.keys() {
+                    all_fields.insert(k.clone());
                 }
             }
         }

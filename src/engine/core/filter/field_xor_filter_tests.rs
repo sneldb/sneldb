@@ -10,7 +10,7 @@ fn creates_and_checks_membership() {
         "banana".to_string(),
         "cherry".to_string(),
     ];
-    let filter = FieldXorFilter::new(&values);
+    let filter = FieldXorFilter::new(&values).unwrap();
 
     assert!(filter.contains("banana"));
     assert!(filter.contains("cherry"));
@@ -19,7 +19,8 @@ fn creates_and_checks_membership() {
 
 #[test]
 fn handles_serde_json_values() {
-    let filter = FieldXorFilter::new(&["123".to_string(), "true".to_string(), "foo".to_string()]);
+    let filter =
+        FieldXorFilter::new(&["123".to_string(), "true".to_string(), "foo".to_string()]).unwrap();
     assert!(filter.contains_value(&json!(123)));
     assert!(filter.contains_value(&json!(true)));
     assert!(filter.contains_value(&json!("foo")));
@@ -32,7 +33,7 @@ fn saves_and_loads_correctly() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("test.xf");
 
-    let filter = FieldXorFilter::new(&["x".to_string(), "y".to_string()]);
+    let filter = FieldXorFilter::new(&["x".to_string(), "y".to_string()]).unwrap();
     filter.save(&path).unwrap();
 
     let loaded = FieldXorFilter::load(&path).unwrap();
