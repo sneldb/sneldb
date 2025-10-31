@@ -110,7 +110,6 @@ impl ZonePlan {
         all_field_names.insert("event_id".to_string());
 
         // Collect dynamic field names from all events in one pass
-
         for event in &self.events {
             if let Some(obj) = event.payload.as_object() {
                 for key in obj.keys() {
@@ -119,11 +118,20 @@ impl ZonePlan {
             }
         }
 
+        // Pre-compute HashMap keys to avoid repeated allocations
+        let uid = self.uid.clone();
+        let mut field_keys: HashMap<String, (String, String)> = HashMap::new();
+        for field in &all_field_names {
+            let key = (uid.clone(), field.clone());
+            field_keys.insert(field.clone(), key.clone());
+            field_values.insert(key, HashSet::new());
+        }
+
         // Now iterate through all fields and collect values from all events
         // (including empty strings for missing fields)
         for field in &all_field_names {
-            let key = (self.uid.clone(), field.clone());
-            let values = field_values.entry(key).or_insert_with(HashSet::new);
+            let key = field_keys.get(field).unwrap();
+            let values = field_values.get_mut(key).unwrap();
 
             for event in &self.events {
                 let value = event.get_field_value(field);

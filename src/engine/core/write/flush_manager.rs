@@ -34,9 +34,52 @@ impl FlushManager {
         // Spawn the flush worker task
         let worker = FlushWorker::new(shard_id, base_dir.clone(), flush_coordination_lock);
 
+        let worker_handle = tokio::spawn(async move {
+            let result = worker.run(rx).await;
+            match &result {
+                Ok(()) => {
+                    info!(
+                        target: "sneldb::flush",
+                        shard_id,
+                        "Flush worker exited normally (receiver closed)"
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        target: "sneldb::flush",
+                        shard_id,
+                        error = %e,
+                        "Flush worker exited with error"
+                    );
+                }
+            }
+            result
+        });
+
+        // Monitor the worker task to detect if it panics
+        let shard_id_for_monitor = shard_id;
         tokio::spawn(async move {
-            if let Err(e) = worker.run(rx).await {
-                error!(target: "sneldb::flush", shard_id, error = %e, "Flush worker failed");
+            let result = worker_handle.await;
+            match result {
+                Ok(Ok(())) => {
+                    // Normal exit
+                }
+                Ok(Err(e)) => {
+                    error!(
+                        target: "sneldb::flush",
+                        shard_id = shard_id_for_monitor,
+                        error = %e,
+                        "Flush worker task completed with error"
+                    );
+                }
+                Err(_panic) => {
+                    // Task panicked
+                    error!(
+                        target: "sneldb::flush",
+                        shard_id = shard_id_for_monitor,
+                        "Flush worker task panicked and crashed - channel will be closed"
+                    );
+                }
             }
         });
 

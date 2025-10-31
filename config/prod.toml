@@ -19,7 +19,7 @@ shard_count = 8
 event_per_zone = 8000
 compaction_interval = 40
 sys_io_threshold = 100
-max_inflight_passives = 256
+max_inflight_passives = 8
 segments_per_merge = 8
 compaction_max_shard_concurrency = 1
 

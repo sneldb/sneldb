@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use xorf::{BinaryFuse8, Filter};
 
 /// A wrapper around the xorf BinaryFuse8 implementation
@@ -15,21 +15,32 @@ pub struct FieldXorFilter {
 }
 
 impl FieldXorFilter {
-    pub fn new(values: &[String]) -> Self {
+    pub fn new(values: &[String]) -> Result<Self, String> {
         debug!(
             target: "sneldb::xorfilter",
             "Creating XOR filter from {} values",
             values.len()
         );
-        let hashes: Vec<u64> = values
-            .iter()
-            .map(|s| crate::shared::hash::stable_hash64(s))
-            .collect();
 
-        let filter = BinaryFuse8::try_from_iterator(hashes.iter().cloned())
-            .expect("Failed to create XOR filter");
+        if values.is_empty() {
+            return Err("Cannot create XOR filter from empty values".to_string());
+        }
 
-        Self { inner: filter }
+        // Hash all values (values should already be unique from collect_field_values,
+        // but we deduplicate hashes to handle hash collisions)
+        let mut unique_hashes: HashSet<u64> = HashSet::with_capacity(values.len());
+        for value in values {
+            let hash = crate::shared::hash::stable_hash64(value);
+            unique_hashes.insert(hash);
+        }
+
+        // Convert HashSet to Vec for iterator (order doesn't matter for filter construction)
+        let hashes_vec: Vec<u64> = unique_hashes.into_iter().collect();
+
+        let filter = BinaryFuse8::try_from_iterator(hashes_vec.into_iter())
+            .map_err(|e| format!("Failed to construct binary fuse filter: {:?}", e))?;
+
+        Ok(Self { inner: filter })
     }
 
     pub fn value_to_string(value: &Value) -> Option<String> {
@@ -133,6 +144,7 @@ impl FieldXorFilter {
     }
 
     /// Build XOR filters only for fields present in `allowed_fields`.
+    /// Errors during filter creation are logged and skipped (best-effort).
     pub fn build_all_filtered(
         zone_plans: &[ZonePlan],
         segment_dir: &Path,
@@ -149,9 +161,32 @@ impl FieldXorFilter {
                 continue;
             }
             let values_vec: Vec<String> = values.into_iter().collect();
-            let filter = Self::new(&values_vec);
-            let path = Self::get_filter_path(&uid, &field, segment_dir);
-            filter.save(&path)?;
+            match Self::new(&values_vec) {
+                Ok(filter) => {
+                    let path = Self::get_filter_path(&uid, &field, segment_dir);
+                    if let Err(e) = filter.save(&path) {
+                        warn!(
+                            target: "sneldb::xorfilter",
+                            uid = %uid,
+                            field = %field,
+                            error = %e,
+                            "Failed to save XOR filter"
+                        );
+                    }
+                }
+                Err(e) => {
+                    // Log errors as WARN - BinaryFuse8 construction can fail for various reasons
+                    warn!(
+                        target: "sneldb::xorfilter",
+                        uid = %uid,
+                        field = %field,
+                        error = %e,
+                        values_count = values_vec.len(),
+                        "Skipping XOR filter creation due to error"
+                    );
+                    // Continue with other fields - this is best-effort
+                }
+            }
         }
         Ok(())
     }

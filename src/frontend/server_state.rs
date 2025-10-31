@@ -46,6 +46,11 @@ impl ServerState {
         self.pending_operations.fetch_sub(1, Ordering::Relaxed);
     }
 
+    /// Returns the current count of pending operations
+    pub fn pending_operations_count(&self) -> usize {
+        self.pending_operations.load(Ordering::Relaxed)
+    }
+
     /// Checks if the server is under backpressure
     /// This is a lightweight check based on pending operations count.
     /// Returns true if the estimated channel usage exceeds the threshold.

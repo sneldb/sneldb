@@ -44,68 +44,101 @@ impl FlushWorker {
         while let Some((segment_id, memtable, registry, passive_memtable, completion)) =
             rx.recv().await
         {
+            // Spawn the flush operation in a separate task to catch panics
             let segment_dir = SegmentId::from(segment_id as u32).join_dir(&self.base_dir);
+            let shard_id = self.shard_id;
+            let flush_coord_lock = Arc::clone(&self.flush_coordination_lock);
 
-            info!(
-                target: "sneldb::flush",
-                shard_id = self.shard_id,
-                segment_id,
-                path = ?segment_dir,
-                "Starting flush"
-            );
+            let flush_task = tokio::spawn(async move {
+                info!(
+                    target: "sneldb::flush",
+                    shard_id,
+                    segment_id,
+                    path = ?segment_dir,
+                    "Starting flush"
+                );
 
-            let flusher = Flusher::new(
-                memtable,
-                segment_id,
-                &segment_dir,
-                Arc::clone(&registry),
-                Arc::clone(&self.flush_coordination_lock),
-            );
-            let flush_result = flusher.flush().await;
+                let flusher = Flusher::new(
+                    memtable,
+                    segment_id,
+                    &segment_dir,
+                    Arc::clone(&registry),
+                    Arc::clone(&flush_coord_lock),
+                );
+                let flush_result = flusher.flush().await;
 
-            match &flush_result {
-                Err(e) => {
+                match &flush_result {
+                    Err(e) => {
+                        error!(
+                            target: "sneldb::flush",
+                            shard_id,
+                            segment_id,
+                            error = %e,
+                            "Flush failed"
+                        );
+                    }
+                    Ok(()) => {
+                        info!(
+                            target: "sneldb::flush",
+                            shard_id,
+                            segment_id,
+                            "Flush succeeded"
+                        );
+
+                        debug!(
+                            target: "sneldb::flush",
+                            shard_id,
+                            segment_id,
+                            "Clearing passive MemTable"
+                        );
+                        let mut pmem = passive_memtable.lock().await;
+                        pmem.flush();
+
+                        debug!(
+                            target: "sneldb::flush",
+                            shard_id,
+                            wal_cutoff = segment_id + 1,
+                            "Cleaning up WAL files"
+                        );
+                        let cleaner = WalCleaner::new(shard_id);
+                        cleaner.cleanup_up_to(segment_id + 1);
+                    }
+                }
+
+                flush_result
+            });
+
+            // Await the task and handle panics
+            let flush_result = match flush_task.await {
+                Ok(Ok(flush_result)) => Ok(flush_result),
+                Ok(Err(e)) => Err(e),
+                Err(_panic) => {
+                    // Task panicked - log it and return an error but continue processing
+                    // The panic info is captured by tokio
                     error!(
                         target: "sneldb::flush",
                         shard_id = self.shard_id,
                         segment_id,
-                        error = %e,
-                        "Flush failed"
+                        "Flush worker task panicked during flush operation"
                     );
+                    Err(StoreError::FlushFailed(
+                        "panic during flush operation - task panicked".to_string(),
+                    ))
                 }
-                Ok(()) => {
-                    info!(
-                        target: "sneldb::flush",
-                        shard_id = self.shard_id,
-                        segment_id,
-                        "Flush succeeded"
-                    );
+            };
 
-                    debug!(
-                        target: "sneldb::flush",
-                        shard_id = self.shard_id,
-                        segment_id,
-                        "Clearing passive MemTable"
-                    );
-                    let mut pmem = passive_memtable.lock().await;
-                    pmem.flush();
-
-                    debug!(
-                        target: "sneldb::flush",
-                        shard_id = self.shard_id,
-                        wal_cutoff = segment_id + 1,
-                        "Cleaning up WAL files"
-                    );
-                    let cleaner = WalCleaner::new(self.shard_id);
-                    cleaner.cleanup_up_to(segment_id + 1);
-                }
-            }
-
+            // Always send completion signal, even on error/panic
             if let Some(completion) = completion {
                 let _ = completion.send(flush_result);
             }
         }
 
+        // Only log if the receiver was closed (shouldn't normally happen)
+        info!(
+            target: "sneldb::flush",
+            shard_id = self.shard_id,
+            "Flush worker receiver closed, worker exiting"
+        );
         Ok(())
     }
 }

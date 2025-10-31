@@ -6,6 +6,7 @@ use std::collections::HashSet;
 #[test]
 fn build_all_zxf_filtered_writes_file_and_filters_work() {
     // Build two zones with distinct fruit distributions
+    // Each zone needs at least 2 unique values to create a filter
     let e1 = EventFactory::new()
         .with("payload", json!({"fruit":"apple"}))
         .create();
@@ -14,6 +15,9 @@ fn build_all_zxf_filtered_writes_file_and_filters_work() {
         .create();
     let e3 = EventFactory::new()
         .with("payload", json!({"fruit":"carrot"}))
+        .create();
+    let e4 = EventFactory::new()
+        .with("payload", json!({"fruit":"date"}))
         .create();
 
     let z0 = ZonePlanFactory::new()
@@ -24,7 +28,7 @@ fn build_all_zxf_filtered_writes_file_and_filters_work() {
     let z1 = ZonePlanFactory::new()
         .with("id", 1)
         .with("uid", "u01")
-        .with("events", json!([e3.clone()]))
+        .with("events", json!([e3.clone(), e4.clone()]))
         .create();
 
     let dir = tempfile::tempdir().unwrap();
@@ -39,6 +43,7 @@ fn build_all_zxf_filtered_writes_file_and_filters_work() {
     assert!(idx.contains_in_zone(0, &json!("banana")));
     assert!(!idx.contains_in_zone(0, &json!("carrot")));
     assert!(idx.contains_in_zone(1, &json!("carrot")));
+    assert!(idx.contains_in_zone(1, &json!("date")));
 }
 
 #[test]
@@ -46,22 +51,29 @@ fn zxf_filtered_handles_numeric_and_bool_values() {
     use tempfile::tempdir;
 
     // Build zones with numeric and boolean payloads
+    // Each zone needs at least 2 unique values per field to create a filter
     let e1 = EventFactory::new()
         .with("payload", json!({"n": 42, "b": true}))
         .create();
     let e2 = EventFactory::new()
-        .with("payload", json!({"n": 7, "b": false}))
+        .with("payload", json!({"n": 43, "b": false}))
+        .create();
+    let e3 = EventFactory::new()
+        .with("payload", json!({"n": 7, "b": true}))
+        .create();
+    let e4 = EventFactory::new()
+        .with("payload", json!({"n": 8, "b": false}))
         .create();
 
     let z0 = ZonePlanFactory::new()
         .with("id", 0)
         .with("uid", "u02")
-        .with("events", json!([e1]))
+        .with("events", json!([e1, e2]))
         .create();
     let z1 = ZonePlanFactory::new()
         .with("id", 1)
         .with("uid", "u02")
-        .with("events", json!([e2]))
+        .with("events", json!([e3, e4]))
         .create();
 
     let dir = tempdir().unwrap();
@@ -79,16 +91,21 @@ fn zxf_filtered_handles_numeric_and_bool_values() {
     let path_b = dir.path().join("u02_b.zxf");
     let idx_b = ZoneXorFilterIndex::load(&path_b).unwrap();
     assert!(idx_b.contains_in_zone(0, &json!(true)));
-    assert!(idx_b.contains_in_zone(1, &json!(false)));
-    assert!(!idx_b.contains_in_zone(0, &json!(false)));
+    assert!(idx_b.contains_in_zone(0, &json!(false))); // Zone 0 has both true and false
+    assert!(idx_b.contains_in_zone(1, &json!(true)));
+    assert!(idx_b.contains_in_zone(1, &json!(false))); // Zone 1 has both true and false
 }
 
 #[test]
 fn zxf_zones_maybe_containing_multiple_zones() {
     use tempfile::tempdir;
 
+    // Each zone needs at least 2 unique values per field to create a filter
     let e0 = EventFactory::new()
         .with("payload", json!({"v":"X"}))
+        .create();
+    let e0_2 = EventFactory::new()
+        .with("payload", json!({"v":"Z"}))
         .create();
     let e1 = EventFactory::new()
         .with("payload", json!({"v":"X"}))
@@ -100,7 +117,7 @@ fn zxf_zones_maybe_containing_multiple_zones() {
     let z0 = ZonePlanFactory::new()
         .with("id", 0)
         .with("uid", "u03")
-        .with("events", json!([e0]))
+        .with("events", json!([e0, e0_2]))
         .create();
     let z1 = ZonePlanFactory::new()
         .with("id", 1)
@@ -143,13 +160,17 @@ fn zxf_build_for_field_returns_none_when_no_values() {
 fn zxf_filtered_skips_unallowed_fields() {
     use tempfile::tempdir;
 
+    // Need at least 2 unique values for "keep" to create a filter
     let e0 = EventFactory::new()
         .with("payload", json!({"keep":"x", "skip":"y"}))
+        .create();
+    let e1 = EventFactory::new()
+        .with("payload", json!({"keep":"z", "skip":"y"}))
         .create();
     let z0 = ZonePlanFactory::new()
         .with("id", 0)
         .with("uid", "u05")
-        .with("events", json!([e0]))
+        .with("events", json!([e0, e1]))
         .create();
 
     let dir = tempdir().unwrap();

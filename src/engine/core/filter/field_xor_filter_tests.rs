@@ -10,7 +10,7 @@ fn creates_and_checks_membership() {
         "banana".to_string(),
         "cherry".to_string(),
     ];
-    let filter = FieldXorFilter::new(&values);
+    let filter = FieldXorFilter::new(&values).unwrap();
 
     assert!(filter.contains("banana"));
     assert!(filter.contains("cherry"));
@@ -19,7 +19,8 @@ fn creates_and_checks_membership() {
 
 #[test]
 fn handles_serde_json_values() {
-    let filter = FieldXorFilter::new(&["123".to_string(), "true".to_string(), "foo".to_string()]);
+    let filter =
+        FieldXorFilter::new(&["123".to_string(), "true".to_string(), "foo".to_string()]).unwrap();
     assert!(filter.contains_value(&json!(123)));
     assert!(filter.contains_value(&json!(true)));
     assert!(filter.contains_value(&json!("foo")));
@@ -32,7 +33,7 @@ fn saves_and_loads_correctly() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("test.xf");
 
-    let filter = FieldXorFilter::new(&["x".to_string(), "y".to_string()]);
+    let filter = FieldXorFilter::new(&["x".to_string(), "y".to_string()]).unwrap();
     filter.save(&path).unwrap();
 
     let loaded = FieldXorFilter::load(&path).unwrap();
@@ -47,9 +48,16 @@ async fn builds_all_creates_filters_on_disk() {
     let dir = tempdir().unwrap();
     let segment_dir = dir.path();
 
-    let events = EventFactory::new()
-        .with("event_type", "login")
-        .create_list(3);
+    // Create events with at least 2 unique event_type values to ensure filter can be created
+    let mut events = vec![
+        EventFactory::new().with("event_type", "login").create(),
+        EventFactory::new().with("event_type", "logout").create(),
+    ];
+    events.extend(
+        EventFactory::new()
+            .with("event_type", "login")
+            .create_list(1),
+    );
 
     let zones = ZonePlannerFactory::new(events, "uid123")
         .with_segment_id(42)
@@ -65,4 +73,5 @@ async fn builds_all_creates_filters_on_disk() {
 
     let filter = FieldXorFilter::load(&filter_file).unwrap();
     assert!(filter.contains("login"));
+    assert!(filter.contains("logout"));
 }

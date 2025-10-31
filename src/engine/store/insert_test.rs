@@ -44,7 +44,7 @@ async fn test_insert_and_maybe_flush_e2e() {
             .create(),
         EventFactory::new()
             .with("event_type", event_type)
-            .with("context_id", "ctx1")
+            .with("context_id", "ctx2")
             .with("payload", json!({"key": "b", "value": 2}))
             .create(),
         EventFactory::new()
@@ -150,7 +150,7 @@ async fn test_insert_and_maybe_flush_e2e() {
         segment_path
     );
 
-    // verify scan returns all events
+    // verify scan returns all events with ctx1 (2 events, since we changed one to ctx2 for filter creation)
     let cmd = CommandFactory::query()
         .with_event_type(event_type)
         .with_context_id("ctx1")
@@ -166,7 +166,7 @@ async fn test_insert_and_maybe_flush_e2e() {
     .await
     .unwrap();
     match result {
-        QueryResult::Selection(selection) => assert_eq!(selection.rows.len(), 3),
+        QueryResult::Selection(selection) => assert_eq!(selection.rows.len(), 2),
         _ => panic!("Expected selection result, got {:?}", result),
     }
 }
