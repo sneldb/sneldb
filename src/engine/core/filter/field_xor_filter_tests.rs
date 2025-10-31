@@ -48,9 +48,16 @@ async fn builds_all_creates_filters_on_disk() {
     let dir = tempdir().unwrap();
     let segment_dir = dir.path();
 
-    let events = EventFactory::new()
-        .with("event_type", "login")
-        .create_list(3);
+    // Create events with at least 2 unique event_type values to ensure filter can be created
+    let mut events = vec![
+        EventFactory::new().with("event_type", "login").create(),
+        EventFactory::new().with("event_type", "logout").create(),
+    ];
+    events.extend(
+        EventFactory::new()
+            .with("event_type", "login")
+            .create_list(1),
+    );
 
     let zones = ZonePlannerFactory::new(events, "uid123")
         .with_segment_id(42)
@@ -66,4 +73,5 @@ async fn builds_all_creates_filters_on_disk() {
 
     let filter = FieldXorFilter::load(&filter_file).unwrap();
     assert!(filter.contains("login"));
+    assert!(filter.contains("logout"));
 }

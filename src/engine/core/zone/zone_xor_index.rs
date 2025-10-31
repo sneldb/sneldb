@@ -88,47 +88,11 @@ impl ZoneXorFilterIndex {
             unique_values.sort();
             unique_values.dedup();
 
-            let unique_count = unique_values.len();
-
-            // Skip XOR filter for very high-cardinality fields (close to zone size).
-            // BinaryFuse8 construction can fail with sequential/patterned hash distributions
-            // that are common in high-cardinality fields like sequential IDs.
-            // Threshold: if >80% of events have unique values, skip the filter.
-            let zone_event_count = zone.events.len();
-            if zone_event_count > 0 && (unique_count as f64 / zone_event_count as f64) > 0.8 {
-                if tracing::enabled!(tracing::Level::DEBUG) {
-                    debug!(
-                        target: "sneldb::zxf",
-                        zone_id = zone.id,
-                        field,
-                        unique_count,
-                        zone_event_count,
-                        "Skipping zone XOR filter - field has very high cardinality (>{:.0}% unique), BinaryFuse8 may fail",
-                        (unique_count as f64 / zone_event_count as f64) * 100.0
-                    );
-                }
-                continue;
-            }
-
             // Hash values and deduplicate hashes (handle hash collisions)
             let mut unique_hashes: std::collections::HashSet<u64> =
-                std::collections::HashSet::with_capacity(unique_count);
+                std::collections::HashSet::with_capacity(unique_values.len());
             for value in &unique_values {
                 unique_hashes.insert(crate::shared::hash::stable_hash64(value));
-            }
-
-            // BinaryFuse8 requires at least 2 unique values
-            if unique_hashes.len() < 2 {
-                if tracing::enabled!(tracing::Level::DEBUG) {
-                    debug!(
-                        target: "sneldb::zxf",
-                        zone_id = zone.id,
-                        field,
-                        unique_hash_count = unique_hashes.len(),
-                        "Skipping zone XOR filter - field has low cardinality (requires at least 2 unique values)"
-                    );
-                }
-                continue;
             }
 
             // Convert HashSet to Vec for iterator (order doesn't matter)

@@ -34,13 +34,6 @@ impl FieldXorFilter {
             unique_hashes.insert(hash);
         }
 
-        if unique_hashes.len() < 2 {
-            return Err(format!(
-                "Cannot create XOR filter: need at least 2 unique hashes, got {}",
-                unique_hashes.len()
-            ));
-        }
-
         // Convert HashSet to Vec for iterator (order doesn't matter for filter construction)
         let hashes_vec: Vec<u64> = unique_hashes.into_iter().collect();
 
@@ -182,26 +175,15 @@ impl FieldXorFilter {
                     }
                 }
                 Err(e) => {
-                    // Log low cardinality cases (single value) as DEBUG since this is expected
-                    // Log other errors as WARN since they indicate actual problems
-                    if e.contains("need at least 2 unique") {
-                        debug!(
-                            target: "sneldb::xorfilter",
-                            uid = %uid,
-                            field = %field,
-                            values_count = values_vec.len(),
-                            "Skipping XOR filter creation - field has low cardinality (requires at least 2 unique values)"
-                        );
-                    } else {
-                        warn!(
-                            target: "sneldb::xorfilter",
-                            uid = %uid,
-                            field = %field,
-                            error = %e,
-                            values_count = values_vec.len(),
-                            "Skipping XOR filter creation due to error"
-                        );
-                    }
+                    // Log errors as WARN - BinaryFuse8 construction can fail for various reasons
+                    warn!(
+                        target: "sneldb::xorfilter",
+                        uid = %uid,
+                        field = %field,
+                        error = %e,
+                        values_count = values_vec.len(),
+                        "Skipping XOR filter creation due to error"
+                    );
                     // Continue with other fields - this is best-effort
                 }
             }
