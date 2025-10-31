@@ -40,6 +40,16 @@ impl Flusher {
         let segment_dir = self.segment_dir.clone();
         let registry = self.registry.clone();
 
+        // Early return if memtable is empty to avoid creating empty segment directories
+        if self.memtable.is_empty() {
+            debug!(
+                target: "sneldb::flush",
+                segment_id = segment_id,
+                "MemTable is empty, skipping flush"
+            );
+            return Ok(());
+        }
+
         fs::create_dir_all(&segment_dir)?;
 
         // Move events out of the MemTable without cloning
@@ -109,6 +119,22 @@ impl Flusher {
             }
             .add_segment_entry(None)
             .await?;
+        } else {
+            // No files were written, clean up empty directory
+            if let Err(e) = fs::remove_dir(&segment_dir) {
+                debug!(
+                    target: "sneldb::flush",
+                    segment_id = segment_id,
+                    error = %e,
+                    "Failed to remove empty segment directory (may not exist or may not be empty)"
+                );
+            } else {
+                debug!(
+                    target: "sneldb::flush",
+                    segment_id = segment_id,
+                    "Removed empty segment directory"
+                );
+            }
         }
 
         info!(target: "sneldb::flush", segment_id = segment_id, "Flush completed successfully");
