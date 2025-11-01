@@ -1,6 +1,6 @@
 use crate::engine::core::MemTable;
 use crate::engine::core::read::result::QueryResult;
-use crate::engine::query::scan::scan;
+use crate::engine::query::scan::{scan, scan_streaming};
 use crate::engine::replay::scan::scan as replay_scan;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::context::ShardContext;
@@ -30,6 +30,17 @@ pub async fn run_worker_loop(mut ctx: ShardContext, mut rx: Receiver<ShardMessag
                 debug!(target: LOG_TARGET, shard_id = id, "Received Query message");
                 if let Err(e) = on_query(command, tx, &ctx, &registry).await {
                     error!(target: LOG_TARGET, shard_id = id, error = %e, "Query failed");
+                }
+            }
+            ShardMessage::QueryStream {
+                command,
+                response,
+                registry,
+            } => {
+                debug!(target: LOG_TARGET, shard_id = id, "Received QueryStream message");
+                let result = on_query_streaming(command, &ctx, &registry).await;
+                if response.send(result).is_err() {
+                    error!(target: LOG_TARGET, shard_id = id, "Streaming response receiver dropped");
                 }
             }
             ShardMessage::Replay(command, tx, registry) => {
@@ -107,6 +118,23 @@ async fn on_query(
         debug!(target: LOG_TARGET, shard_id = ctx.id, "Query completed on shard");
     }
     tx.send(results).await.map_err(|e| e.to_string())
+}
+
+async fn on_query_streaming(
+    command: crate::command::types::Command,
+    ctx: &ShardContext,
+    registry: &Arc<tokio::sync::RwLock<SchemaRegistry>>,
+) -> Result<crate::engine::core::read::flow::shard_pipeline::ShardFlowHandle, String> {
+    scan_streaming(
+        &command,
+        registry,
+        &ctx.base_dir,
+        &ctx.segment_ids,
+        &ctx.memtable,
+        &ctx.passive_buffers,
+    )
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// Handles Replay messages.

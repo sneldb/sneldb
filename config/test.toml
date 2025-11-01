@@ -49,8 +49,8 @@ file_level = "error"
 [query]
 zone_index_cache_max_entries = 256
 column_block_cache_max_bytes = 67108864
-# Default capacity for process-wide ZoneSurf LRU cache (10MB for tests)
 zone_surf_cache_max_bytes = 10485760
+streaming_enabled = false
 
 [time]
 timezone = "UTC"

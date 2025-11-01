@@ -11,6 +11,7 @@ pub struct TestConfig {
     pub schema: SchemaConfig,
     pub playground: PlaygroundConfig,
     pub time: TimeConfig,
+    pub query: QueryConfig,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -18,6 +19,13 @@ pub struct SchemaConfig {
     pub def_dir: String,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct QueryConfig {
+    pub zone_index_cache_max_entries: usize,
+    pub column_block_cache_max_bytes: usize,
+    pub zone_surf_cache_max_bytes: usize,
+    pub streaming_enabled: bool,
+}
 #[derive(Serialize, Deserialize)]
 pub struct TimeConfig {
     pub timezone: String,
@@ -105,6 +113,12 @@ fn default_test_config(paths: &TestPaths) -> TestConfig {
             timezone: "UTC".to_string(),
             week_start: "Mon".to_string(),
             use_calendar_bucketing: true,
+        },
+        query: QueryConfig {
+            zone_index_cache_max_entries: 1024,
+            column_block_cache_max_bytes: 268435456,
+            zone_surf_cache_max_bytes: 104857600,
+            streaming_enabled: false,
         },
         wal: WalConfig {
             enabled: true,

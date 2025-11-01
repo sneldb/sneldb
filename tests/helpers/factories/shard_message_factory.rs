@@ -1,5 +1,6 @@
 use crate::command::types::Command;
 use crate::engine::core::Event;
+use crate::engine::core::read::flow::shard_pipeline::ShardFlowHandle;
 use crate::engine::core::read::result::QueryResult;
 use crate::engine::schema::registry::SchemaRegistry;
 use crate::engine::shard::message::ShardMessage;
@@ -36,5 +37,28 @@ impl ShardMessageFactory {
 
     pub fn replay(&self, command: Command, tx: mpsc::Sender<Vec<Event>>) -> ShardMessage {
         ShardMessage::Replay(command, tx, Arc::clone(&self.registry))
+    }
+
+    pub fn query_stream(
+        &self,
+        command: Command,
+    ) -> (
+        ShardMessage,
+        oneshot::Receiver<Result<ShardFlowHandle, String>>,
+    ) {
+        let (tx, rx) = oneshot::channel();
+        (
+            ShardMessage::QueryStream {
+                command,
+                response: tx,
+                registry: Arc::clone(&self.registry),
+            },
+            rx,
+        )
+    }
+
+    pub fn shutdown(&self) -> (ShardMessage, oneshot::Receiver<Result<(), String>>) {
+        let (tx, rx) = oneshot::channel();
+        (ShardMessage::Shutdown { completion: tx }, rx)
     }
 }

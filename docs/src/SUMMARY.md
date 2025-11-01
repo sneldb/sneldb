@@ -27,6 +27,7 @@
   - [Overview](./design/overview.md)
   - [Storage Engine](./design/storage_engine.md)
   - [Query and Replay](./design/query_replay.md)
+  - [Streaming Query Flow](./design/streaming_flow.md)
   - [Aggregations](./design/aggregations.md)
   - [Sharding](./design/sharding.md)
   - [Infrastructure](./design/infrastructure.md)

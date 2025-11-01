@@ -1,3 +1,5 @@
+use crate::engine::core::read::flow::shard_pipeline::{ShardFlowHandle, build_memtable_flow};
+use crate::engine::core::read::flow::{FlowContext, FlowOperatorError};
 use crate::engine::core::{Event, EventSorter, MemTable, MemTableQuery, QueryContext, QueryPlan};
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -47,6 +49,30 @@ impl<'a> MemTableQueryRunner<'a> {
         );
 
         events
+    }
+
+    pub async fn stream(
+        &self,
+        ctx: Arc<FlowContext>,
+        limit_override: Option<usize>,
+    ) -> Result<Option<ShardFlowHandle>, FlowOperatorError> {
+        let plan_arc = Arc::new(self.plan.clone());
+        let memtable_arc = self.memtable.map(|m| Arc::new(m.clone()));
+        let passive_arcs: Vec<_> = self
+            .passive_memtables
+            .iter()
+            .map(|arc| Arc::clone(arc))
+            .collect();
+
+        let handle = build_memtable_flow(
+            plan_arc,
+            memtable_arc,
+            passive_arcs,
+            Arc::clone(&ctx),
+            limit_override,
+        )
+        .await?;
+        Ok(Some(handle))
     }
 
     /// Queries all memtables (active and passive) with optional limit.
