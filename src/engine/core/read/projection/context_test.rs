@@ -23,11 +23,15 @@ async fn core_fields_and_is_core_field() {
     let ctx = ProjectionContext { plan: &plan };
 
     let set = ctx.core_fields();
-    assert_eq!(set.len(), 4);
-    assert!(set.contains("context_id"));
-    assert!(set.contains("event_type"));
-    assert!(set.contains("timestamp"));
-    assert!(set.contains("event_id"));
+    assert_eq!(
+        set,
+        vec![
+            "context_id".to_string(),
+            "event_type".to_string(),
+            "timestamp".to_string(),
+            "event_id".to_string(),
+        ]
+    );
 
     assert!(ProjectionContext::is_core_field("context_id"));
     assert!(ProjectionContext::is_core_field("event_type"));
@@ -65,10 +69,7 @@ async fn filter_columns_includes_only_active_filters_and_dedupes() {
 
     let ctx = ProjectionContext { plan: &plan };
     let set = ctx.filter_columns();
-    assert_eq!(set.len(), 2);
-    assert!(set.contains("a"));
-    assert!(set.contains("timestamp"));
-    assert!(!set.contains("b"));
+    assert_eq!(set, vec!["a".to_string(), "timestamp".to_string()]);
 }
 
 #[tokio::test]
@@ -90,9 +91,7 @@ async fn payload_fields_returns_defined_schema_fields() {
 
     let ctx = ProjectionContext { plan: &plan };
     let fields = ctx.payload_fields().await;
-    assert_eq!(fields.len(), 2);
-    assert!(fields.contains("country"));
-    assert!(fields.contains("amount"));
+    assert_eq!(fields, vec!["amount".to_string(), "country".to_string()]);
 }
 
 #[tokio::test]

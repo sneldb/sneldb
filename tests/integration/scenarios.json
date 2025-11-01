@@ -1894,4 +1894,75 @@
     ],
     "matcher": { "kind": "include_all", "value": ["mx2"] }
   }
+  ,
+  {
+    "name": "streaming_memtable_basic",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE streaming_basic FIELDS { \"value\": \"int\" }",
+      "STORE streaming_basic FOR mem-1 PAYLOAD {\"value\":1}",
+      "STORE streaming_basic FOR mem-2 PAYLOAD {\"value\":2}",
+      "QUERY streaming_basic WHERE value >= 0"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"type\":\"schema\"" },
+      { "kind": "include_all", "value": ["mem-1", "mem-2"] },
+      { "kind": "include", "value": "\"type\":\"end\"" }
+    ]
+  }
+  ,
+  {
+    "name": "streaming_segment_and_memtable",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE streaming_mix FIELDS { \"value\": \"int\" }",
+      "STORE streaming_mix FOR seg-ctx PAYLOAD {\"value\":1}",
+      "STORE streaming_mix FOR seg-ctx2 PAYLOAD {\"value\":2}",
+      "FLUSH",
+      "STORE streaming_mix FOR mem-ctx PAYLOAD {\"value\":3}",
+      "QUERY streaming_mix WHERE value >= 0"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["seg-ctx", "seg-ctx2", "mem-ctx"] },
+      { "kind": "include", "value": "\"type\":\"schema\"" },
+      { "kind": "include", "value": "\"type\":\"end\"" }
+    ]
+  }
+  ,
+  {
+    "name": "streaming_limit_offset",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE streaming_limit FIELDS { \"value\": \"int\" }",
+      "STORE streaming_limit FOR ctx-1 PAYLOAD {\"value\":10}",
+      "STORE streaming_limit FOR ctx-2 PAYLOAD {\"value\":20}",
+      "STORE streaming_limit FOR ctx-3 PAYLOAD {\"value\":30}",
+      "STORE streaming_limit FOR ctx-4 PAYLOAD {\"value\":40}",
+      "QUERY streaming_limit WHERE value >= 0 OFFSET 1 LIMIT 2"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["ctx-2", "ctx-3"] },
+      { "kind": "include_none", "value": ["ctx-1", "ctx-4"] },
+      { "kind": "include", "value": "\"row_count\":2" }
+    ]
+  }
+  ,
+  {
+    "name": "streaming_order_by_limit",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE streaming_order FIELDS { \"value\": \"int\" }",
+      "STORE streaming_order FOR seg-1 PAYLOAD {\"value\":30}",
+      "STORE streaming_order FOR seg-2 PAYLOAD {\"value\":10}",
+      "FLUSH",
+      "STORE streaming_order FOR mem-1 PAYLOAD {\"value\":20}",
+      "STORE streaming_order FOR mem-2 PAYLOAD {\"value\":40}",
+      "QUERY streaming_order ORDER BY value ASC LIMIT 3"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"type\":\"schema\"" },
+      { "kind": "regex", "value": "seg-2(?s).*mem-1(?s).*seg-1" },
+      { "kind": "include", "value": "\"type\":\"end\"" }
+    ]
+  }
 ]

@@ -4,6 +4,7 @@ pub mod catalog;
 pub mod event_sorter;
 pub mod execution_step;
 pub mod field_comparator;
+pub mod flow;
 pub mod index_planner;
 pub mod index_strategy;
 pub mod memtable_query;

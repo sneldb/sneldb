@@ -2,42 +2,51 @@ use std::collections::HashSet;
 
 #[derive(Default, Debug, Clone)]
 pub struct ProjectionColumns {
-    set: HashSet<String>,
+    seen: HashSet<String>,
+    ordered: Vec<String>,
 }
 
 impl ProjectionColumns {
     pub fn new() -> Self {
         Self {
-            set: HashSet::new(),
+            seen: HashSet::new(),
+            ordered: Vec::new(),
         }
     }
 
     pub fn add(&mut self, name: impl Into<String>) {
-        self.set.insert(name.into());
+        let name = name.into();
+        if self.seen.insert(name.clone()) {
+            self.ordered.push(name);
+        }
     }
 
     pub fn add_many<I: IntoIterator<Item = String>>(&mut self, iter: I) {
-        self.set.extend(iter);
+        for item in iter {
+            self.add(item);
+        }
     }
 
     pub fn union(mut self, other: ProjectionColumns) -> ProjectionColumns {
-        self.set.extend(other.set);
+        for name in other.ordered {
+            self.add(name);
+        }
         self
     }
 
     pub fn contains(&self, name: &str) -> bool {
-        self.set.contains(name)
+        self.seen.contains(name)
     }
 
     pub fn is_empty(&self) -> bool {
-        self.set.is_empty()
+        self.ordered.is_empty()
     }
 
     pub fn len(&self) -> usize {
-        self.set.len()
+        self.ordered.len()
     }
 
     pub fn into_vec(self) -> Vec<String> {
-        self.set.into_iter().collect()
+        self.ordered
     }
 }

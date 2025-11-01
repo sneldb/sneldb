@@ -17,7 +17,7 @@ data_dir = "../data/cols"
 index_dir = "../data/index/"
 shard_count = 8
 event_per_zone = 8000
-compaction_interval = 40
+compaction_interval = 400
 sys_io_threshold = 100
 max_inflight_passives = 8
 segments_per_merge = 8
@@ -49,6 +49,7 @@ file_level = "error"
 zone_index_cache_max_entries = 60000
 column_block_cache_max_bytes = 4294967296
 zone_surf_cache_max_bytes = 4294967296
+streaming_enabled = true
 
 [time]
 timezone = "UTC"
