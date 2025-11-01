@@ -54,6 +54,7 @@ pub struct QueryConfig {
     pub zone_index_cache_max_entries: Option<usize>,
     pub column_block_cache_max_bytes: Option<usize>,
     pub zone_surf_cache_max_bytes: Option<usize>,
+    pub streaming_enabled: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]

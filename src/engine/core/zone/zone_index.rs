@@ -203,6 +203,7 @@ impl ZoneIndex {
         }
 
         // Construct CandidateZone instances only for unique zone ids
+        // Optimize: reuse segment_id String - convert once, clone per zone (ownership required)
         let mut out = Vec::with_capacity(zone_ids.len());
         let seg = segment_id.to_string();
         for zone_id in zone_ids {

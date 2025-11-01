@@ -82,7 +82,8 @@ impl RowComparator {
 
     /// Helper to sort rows by a field in place.
     pub fn sort_by_field(rows: &mut [Vec<Value>], field: &str, ascending: bool) {
-        rows.sort_by(|a, b| {
+        // Use sort_unstable_by for better performance - maintains relative order of equal elements
+        rows.sort_unstable_by(|a, b| {
             let ord = Self::compare(a, b, field);
             if ascending { ord } else { ord.reverse() }
         });

@@ -270,10 +270,11 @@ impl FieldComparator {
             .collect();
 
         // Phase 2: Sort by cached keys (O(n log n), no parsing!)
+        // Use sort_unstable_by for better performance - maintains relative order of equal elements
         if ascending {
-            decorated.sort_by(|(key_a, _), (key_b, _)| key_a.cmp(key_b));
+            decorated.sort_unstable_by(|(key_a, _), (key_b, _)| key_a.cmp(key_b));
         } else {
-            decorated.sort_by(|(key_a, _), (key_b, _)| key_b.cmp(key_a));
+            decorated.sort_unstable_by(|(key_a, _), (key_b, _)| key_b.cmp(key_a));
         }
 
         // Phase 3: Undecorate - Reorder events in-place using permutation (O(n))

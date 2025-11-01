@@ -1,7 +1,11 @@
+use crate::engine::core::read::flow::{BatchSchema, BatchSender, FlowContext, FlowOperatorError};
 use crate::engine::core::{
     ConditionEvaluatorBuilder, Event, EventSorter, ExecutionStep, QueryCaches, QueryContext,
     QueryPlan, ZoneHydrator,
 };
+use serde_json::Value;
+use std::cmp::Ordering;
+use std::sync::Arc;
 use tracing::info;
 
 pub struct SegmentQueryRunner<'a> {
@@ -94,4 +98,186 @@ impl<'a> SegmentQueryRunner<'a> {
         self.limit = limit;
         self
     }
+
+    pub async fn stream_into(
+        &self,
+        flow_ctx: Arc<FlowContext>,
+        schema: Arc<BatchSchema>,
+        sender: BatchSender,
+    ) -> Result<(), FlowOperatorError> {
+        let query_ctx = QueryContext::from_command(&self.plan.command);
+        let candidate_zones = self.hydrate_zones(&query_ctx).await;
+        let eval_limit = self.determine_eval_limit(&query_ctx);
+        let evaluator = ConditionEvaluatorBuilder::build_from_plan(self.plan);
+
+        if let Some(order_spec) = self.plan.order_by() {
+            let order_index = schema
+                .columns()
+                .iter()
+                .position(|col| col.name == order_spec.field)
+                .ok_or_else(|| FlowOperatorError::Operator("order column missing".to_string()))?;
+            let ascending = !order_spec.desc;
+
+            let mut rows: Vec<Vec<Value>> = Vec::new();
+            let mut emitted = 0usize;
+
+            for zone in candidate_zones {
+                let remaining_limit = eval_limit.map(|lim| lim.saturating_sub(emitted));
+                if matches!(remaining_limit, Some(0)) {
+                    break;
+                }
+
+                let events = evaluator.evaluate_zones_with_limit(vec![zone], remaining_limit);
+                for event in events {
+                    if let Some(limit) = eval_limit {
+                        if emitted >= limit {
+                            break;
+                        }
+                    }
+
+                    let mut row = Vec::with_capacity(schema.column_count());
+                    for column in schema.columns() {
+                        row.push(event.get_field(&column.name).unwrap_or(Value::Null));
+                    }
+                    rows.push(row);
+                    emitted += 1;
+                }
+
+                if let Some(limit) = eval_limit {
+                    if emitted >= limit {
+                        break;
+                    }
+                }
+            }
+
+            // Use sort_unstable_by for better performance - maintains relative order of equal elements
+            rows.sort_unstable_by(|a, b| {
+                let ord = compare_json_values(&a[order_index], &b[order_index]);
+                if ascending { ord } else { ord.reverse() }
+            });
+
+            info!(
+                target: "sneldb::segment_source",
+                rows = rows.len(),
+                limit = eval_limit,
+                order_index = order_index,
+                ascending = ascending,
+                "Segment source collected ordered rows"
+            );
+
+            if let Some(limit) = eval_limit {
+                if rows.len() > limit {
+                    rows.truncate(limit);
+                }
+            }
+
+            let mut builder = flow_ctx.pool().acquire(Arc::clone(&schema));
+            for row in rows.iter() {
+                builder
+                    .push_row(row)
+                    .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
+
+                if builder.is_full() {
+                    let batch = builder
+                        .finish()
+                        .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
+                    sender
+                        .send(batch)
+                        .await
+                        .map_err(|_| FlowOperatorError::ChannelClosed)?;
+                    builder = flow_ctx.pool().acquire(Arc::clone(&schema));
+                }
+            }
+
+            if builder.len() > 0 {
+                let batch = builder
+                    .finish()
+                    .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
+                sender
+                    .send(batch)
+                    .await
+                    .map_err(|_| FlowOperatorError::ChannelClosed)?;
+            }
+
+            Ok(())
+        } else {
+            let mut builder = flow_ctx.pool().acquire(Arc::clone(&schema));
+            let mut row = Vec::with_capacity(schema.column_count());
+            let mut emitted = 0usize;
+
+            for zone in candidate_zones {
+                let remaining_limit = eval_limit.map(|lim| lim.saturating_sub(emitted));
+                if matches!(remaining_limit, Some(0)) {
+                    break;
+                }
+
+                let events = evaluator.evaluate_zones_with_limit(vec![zone], remaining_limit);
+                for event in events {
+                    row.clear();
+                    for column in schema.columns() {
+                        row.push(event.get_field(&column.name).unwrap_or(Value::Null));
+                    }
+
+                    builder
+                        .push_row(&row)
+                        .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
+
+                    if builder.is_full() {
+                        let batch = builder
+                            .finish()
+                            .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
+                        sender
+                            .send(batch)
+                            .await
+                            .map_err(|_| FlowOperatorError::ChannelClosed)?;
+                        builder = flow_ctx.pool().acquire(Arc::clone(&schema));
+                    }
+
+                    emitted += 1;
+                    if let Some(limit) = eval_limit {
+                        if emitted >= limit {
+                            break;
+                        }
+                    }
+                }
+
+                if let Some(limit) = eval_limit {
+                    if emitted >= limit {
+                        break;
+                    }
+                }
+            }
+
+            if builder.len() > 0 {
+                let batch = builder
+                    .finish()
+                    .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
+                sender
+                    .send(batch)
+                    .await
+                    .map_err(|_| FlowOperatorError::ChannelClosed)?;
+            }
+
+            Ok(())
+        }
+    }
+}
+
+fn compare_json_values(a: &Value, b: &Value) -> Ordering {
+    if let (Some(va), Some(vb)) = (a.as_u64(), b.as_u64()) {
+        return va.cmp(&vb);
+    }
+    if let (Some(va), Some(vb)) = (a.as_i64(), b.as_i64()) {
+        return va.cmp(&vb);
+    }
+    if let (Some(va), Some(vb)) = (a.as_f64(), b.as_f64()) {
+        return va.partial_cmp(&vb).unwrap_or(Ordering::Equal);
+    }
+    if let (Some(va), Some(vb)) = (a.as_bool(), b.as_bool()) {
+        return va.cmp(&vb);
+    }
+    if let (Some(va), Some(vb)) = (a.as_str(), b.as_str()) {
+        return va.cmp(vb);
+    }
+    a.to_string().cmp(&b.to_string())
 }

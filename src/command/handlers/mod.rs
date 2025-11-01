@@ -2,7 +2,7 @@ pub mod define;
 pub mod flush;
 pub mod kway_merger;
 pub mod query;
-pub mod query_orchestrator;
+pub mod query_batch_stream;
 pub mod replay;
 pub mod rlte_coordinator;
 pub mod row_comparator;
@@ -16,6 +16,8 @@ mod define_tests;
 mod flush_tests;
 #[cfg(test)]
 mod kway_merger_test;
+#[cfg(test)]
+mod query_batch_stream_test;
 #[cfg(test)]
 mod query_tests;
 #[cfg(test)]

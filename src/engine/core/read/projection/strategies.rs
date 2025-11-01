@@ -32,15 +32,18 @@ impl<'a> ProjectionStrategy for SelectionProjection<'a> {
 
         let all_payload = ctx.payload_fields().await;
         if mode_all {
-            set.add_many(all_payload);
+            set.add_many(all_payload.clone());
         } else if let crate::command::types::Command::Query {
             return_fields: Some(list),
             ..
         } = &self.plan.command
         {
+            let payload_set: HashSet<String> = all_payload.into_iter().collect();
             let projected: HashSet<String> = list
                 .iter()
-                .filter(|f| ProjectionContext::is_core_field(f) || all_payload.contains(*f))
+                .filter(|f| {
+                    ProjectionContext::is_core_field(f) || payload_set.contains(&f.to_string())
+                })
                 .cloned()
                 .collect();
             set.add_many(projected);
@@ -101,11 +104,12 @@ impl<'a> ProjectionStrategy for AggregationProjection<'a> {
         }
 
         // intersect
-        let all_payload = ctx.payload_fields().await;
+        let payload_vec = ctx.payload_fields().await;
+        let payload_set: HashSet<String> = payload_vec.into_iter().collect();
         let items: Vec<String> = set
             .into_vec()
             .into_iter()
-            .filter(|c| ProjectionContext::is_core_field(c) || all_payload.contains(c))
+            .filter(|c| ProjectionContext::is_core_field(c) || payload_set.contains(c))
             .collect();
         let mut final_set = ProjectionColumns::new();
         final_set.add_many(items);

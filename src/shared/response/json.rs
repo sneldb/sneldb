@@ -1,7 +1,8 @@
 use crate::shared::response::render::Renderer;
 use crate::shared::response::types::{Response, ResponseBody};
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::Value;
+use serde_json::json;
 
 pub struct JsonRenderer;
 
@@ -11,6 +12,55 @@ struct JsonResponse<'a> {
     status: u16,
     message: &'a str,
     results: &'a [Value],
+}
+
+#[derive(Serialize)]
+struct SchemaFrame<'a> {
+    #[serde(rename = "type")]
+    frame_type: &'static str,
+    columns: &'a [ColumnRef<'a>],
+}
+
+// Frame structure that avoids Value cloning by serializing values by reference
+#[derive(Serialize)]
+struct RowFrameNoClone<'a> {
+    #[serde(rename = "type")]
+    frame_type: &'static str,
+    values: RowValuesNoClone<'a>,
+}
+
+// Serializes Values by reference without cloning
+struct RowValuesNoClone<'a> {
+    columns: &'a [&'a str],
+    values: &'a [&'a Value],
+}
+
+impl<'a> Serialize for RowValuesNoClone<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(Some(self.columns.len()))?;
+        for (name, value) in self.columns.iter().zip(self.values.iter()) {
+            map.serialize_key(name)?;
+            map.serialize_value(*value)?;
+        }
+        map.end()
+    }
+}
+
+#[derive(Serialize)]
+struct EndFrame {
+    #[serde(rename = "type")]
+    frame_type: &'static str,
+    row_count: usize,
+}
+
+#[derive(Serialize)]
+struct ColumnRef<'a> {
+    name: &'a str,
+    logical_type: &'a str,
 }
 
 impl Renderer for JsonRenderer {
@@ -50,6 +100,73 @@ impl Renderer for JsonRenderer {
 
         buf.push(b'\n');
         buf
+    }
+
+    fn stream_schema(&self, columns: &[(String, String)], out: &mut Vec<u8>) {
+        out.clear();
+
+        // Convert columns to ColumnRef slices
+        let column_refs: Vec<ColumnRef> = columns
+            .iter()
+            .map(|(name, logical_type)| ColumnRef {
+                name: name.as_str(),
+                logical_type: logical_type.as_str(),
+            })
+            .collect();
+
+        let frame = SchemaFrame {
+            frame_type: "schema",
+            columns: &column_refs,
+        };
+
+        // Serialize directly into out
+        if sonic_rs::to_writer(&mut *out, &frame).is_err() {
+            out.clear();
+            out.extend_from_slice(b"{\"type\":\"schema\",\"columns\":[]}\n");
+            return;
+        }
+
+        out.push(b'\n');
+    }
+
+    fn stream_row(&self, columns: &[&str], values: &[&Value], out: &mut Vec<u8>) {
+        out.clear();
+
+        // Use RowValuesNoClone which serializes Values by reference without cloning
+        let row_values = RowValuesNoClone { columns, values };
+
+        let frame = RowFrameNoClone {
+            frame_type: "row",
+            values: row_values,
+        };
+
+        // Serialize directly into out - sonic-rs will serialize RowValuesNoClone
+        // which serializes each Value by reference, avoiding cloning
+        if sonic_rs::to_writer(&mut *out, &frame).is_err() {
+            out.clear();
+            out.extend_from_slice(b"{\"type\":\"row\",\"values\":{}}\n");
+            return;
+        }
+
+        out.push(b'\n');
+    }
+
+    fn stream_end(&self, row_count: usize, out: &mut Vec<u8>) {
+        out.clear();
+
+        let frame = EndFrame {
+            frame_type: "end",
+            row_count,
+        };
+
+        // Serialize directly into out
+        if sonic_rs::to_writer(&mut *out, &frame).is_err() {
+            out.clear();
+            out.extend_from_slice(b"{\"type\":\"end\",\"row_count\":0}\n");
+            return;
+        }
+
+        out.push(b'\n');
     }
 }
 

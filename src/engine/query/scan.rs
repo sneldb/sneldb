@@ -1,8 +1,10 @@
 use crate::command::types::Command;
+use crate::engine::core::read::flow::shard_pipeline::ShardFlowHandle;
 use crate::engine::core::read::result::QueryResult;
 use crate::engine::core::{MemTable, QueryPlan};
 use crate::engine::errors::QueryExecutionError;
 use crate::engine::query::execution_engine::{ExecutionEngine, ScanContext};
+use crate::engine::query::streaming::StreamingScan;
 use crate::engine::schema::registry::SchemaRegistry;
 use std::path::Path;
 use std::sync::Arc;
@@ -49,4 +51,26 @@ pub async fn scan(
         passive_buffers,
     );
     ExecutionEngine::execute(&plan, &ctx).await
+}
+
+/// Entry point used by shard workers to start a streaming scan and return the
+/// resulting flow handle back to the coordinator.
+pub async fn scan_streaming(
+    command: &Command,
+    registry: &Arc<RwLock<SchemaRegistry>>,
+    segment_base_dir: &Path,
+    segment_ids: &Arc<std::sync::RwLock<Vec<String>>>,
+    memtable: &MemTable,
+    passive_buffers: &Arc<crate::engine::core::memory::passive_buffer_set::PassiveBufferSet>,
+) -> Result<ShardFlowHandle, QueryExecutionError> {
+    let scan = StreamingScan::new(
+        command,
+        registry,
+        segment_base_dir,
+        segment_ids,
+        memtable,
+        passive_buffers,
+    )
+    .await?;
+    scan.execute().await
 }

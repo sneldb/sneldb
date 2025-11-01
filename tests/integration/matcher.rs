@@ -53,22 +53,17 @@ impl Matcher {
             (MatcherKind::Match, MatcherValue::Single(s))
             | (MatcherKind::Regex, MatcherValue::Single(s)) => {
                 debug!("Checking regex match with pattern: {}", s);
-                let re = match Regex::new(s) {
-                    Ok(re) => re,
+                match Regex::new(s) {
+                    Ok(re) => {
+                        let result = re.is_match(actual);
+                        debug!("Regex match result: {}", result);
+                        result
+                    }
                     Err(e) => {
                         error!("Invalid regex: {}", e);
-                        return false;
-                    }
-                };
-                for line in actual.lines() {
-                    debug!("Testing line: {}", line);
-                    if re.is_match(line) {
-                        debug!("Regex match found for line: {}", line);
-                        return true;
+                        false
                     }
                 }
-                debug!("No lines matched the regex");
-                false
             }
             (MatcherKind::IncludeAll, MatcherValue::Multiple(vec)) => {
                 debug!("Checking if output contains all patterns: {:?}", vec);
