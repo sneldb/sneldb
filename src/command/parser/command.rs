@@ -23,10 +23,16 @@ pub fn parse_command(input: &str) -> Result<Command, ParseError> {
         Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("STORE") => {
             commands::store::parse(&tokens)
         }
+        Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("REMEMBER") => {
+            commands::remember::parse(input)
+        }
         Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("QUERY") => {
             commands::query::parse(input)
         }
         Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("FIND") => commands::query::parse(input),
+        Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("SHOW") => {
+            commands::show::parse(&tokens)
+        }
         Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("REPLAY") => {
             commands::replay::parse(&tokens)
         }

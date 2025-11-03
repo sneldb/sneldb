@@ -21,6 +21,8 @@
   - [Query](./commands/query.md)
   - [Replay](./commands/replay.md)
   - [Flush](./commands/flush.md)
+  - [Remember](./commands/remember.md)
+  - [Show](./commands/show.md)
 
 - [Design](./design.md)
 

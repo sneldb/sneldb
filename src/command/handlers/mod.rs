@@ -3,11 +3,13 @@ pub mod flush;
 pub mod kway_merger;
 pub mod query;
 pub mod query_batch_stream;
+pub mod remember;
 pub mod replay;
 pub mod rlte_coordinator;
 pub mod row_comparator;
 pub mod segment_discovery;
 pub mod shard_command_builder;
+pub mod show;
 pub mod store;
 
 #[cfg(test)]

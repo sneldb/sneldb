@@ -1,4 +1,4 @@
-use crate::command::handlers::{define, flush, query, replay, store};
+use crate::command::handlers::{define, flush, query, remember, replay, show, store};
 use crate::command::types::Command;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
@@ -22,8 +22,14 @@ pub async fn dispatch_command<W: AsyncWrite + Unpin>(
     match cmd {
         Store { .. } => store::handle(cmd, shard_manager, registry, writer, renderer).await,
         Define { .. } => define::handle(cmd, shard_manager, registry, writer, renderer).await,
+        RememberQuery { .. } => {
+            remember::handle(cmd, shard_manager, registry, writer, renderer).await
+        }
         Query { .. } => query::handle(cmd, shard_manager, registry, writer, renderer).await,
         Replay { .. } => replay::handle(cmd, shard_manager, registry, writer, renderer).await,
+        ShowMaterialized { .. } => {
+            show::handle(cmd, shard_manager, registry, writer, renderer).await
+        }
         Flush { .. } => flush::handle(cmd, shard_manager, registry, writer, renderer).await,
         _ => {
             error!(target: "sneldb::dispatch", ?cmd, "Unreachable command variant encountered");
