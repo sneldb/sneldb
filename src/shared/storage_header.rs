@@ -123,6 +123,9 @@ pub enum FileKind {
     CalendarDir,
     TemporalIndex,
     IndexCatalog,
+    MaterializationCatalog,
+    MaterializedManifest,
+    MaterializedFrame,
 }
 
 impl FileKind {
@@ -145,6 +148,9 @@ impl FileKind {
             FileKind::CalendarDir => *b"EVDBCAL\0",
             FileKind::TemporalIndex => *b"EVDBTFI\0",
             FileKind::IndexCatalog => *b"EVDBICX\0",
+            FileKind::MaterializationCatalog => *b"EVDBMCL\0",
+            FileKind::MaterializedManifest => *b"EVDBMMF\0",
+            FileKind::MaterializedFrame => *b"EVDBMFR\0",
         }
     }
 }

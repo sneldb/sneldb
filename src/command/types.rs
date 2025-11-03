@@ -31,6 +31,12 @@ pub enum Command {
         group_by: Option<Vec<String>>,
         event_sequence: Option<EventSequence>,
     },
+    RememberQuery {
+        spec: MaterializedQuerySpec,
+    },
+    ShowMaterialized {
+        name: String,
+    },
     Replay {
         event_type: Option<String>,
         context_id: String,
@@ -41,6 +47,12 @@ pub enum Command {
     Ping,
     Flush,
     Batch(Vec<Command>),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MaterializedQuerySpec {
+    pub name: String,
+    pub query: Box<Command>,
 }
 
 impl Command {

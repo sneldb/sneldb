@@ -11,6 +11,7 @@ The storage engine turns incoming events into durable, immutable data you can qu
 - **Flush worker**: Converts a full MemTable into an immutable on-disk segment in the background.
 - **Segments**: On-disk building blocks (columns, zone metadata, filters, lightweight indexes, index catalogs).
 - **Snapshots**: Optional utility files (`.snp` events, `.smt` metadata) for export/replay and range bookkeeping.
+- **Materializations**: Per-alias snapshots written by `REMEMBER QUERY` (catalog + frame files for remembered queries).
 - **Compactor** (covered later): Merges small segments into larger ones to keep reads predictable.
 
 ## Write Path (At a Glance)
@@ -187,3 +188,12 @@ This is the spine of the engine: durable append, fast memory, immutable segments
 - Unknown fields in `RETURN` are ignored (schema-driven).
 - Only the selected columns are mmap’d and read; others are skipped entirely, reducing I/O and memory.
 - Projection decisions are logged under the `query::projection` target for debugging.
+
+## Materialized Query Store
+
+- **Materialized Query Store**
+  - Directory structure: `materializations/catalog.bin` + `materializations/<alias>/frames/NNNNNN.mat` + `manifest.bin`.
+  - Catalog entries store the serialized query spec (JSON in bincode), schema snapshot, byte/row counters, high-water mark, retention hints, and telemetry deltas.
+  - Each frame is typed row storage with a shared header + LZ4-compressed payload (null bitmap + typed values) so it can be streamed back verbatim.
+  - SHOW streams existing frames, runs a delta pipeline using the stored high-water mark, appends new frames, and updates catalog metadata.
+  - Retention policies (max rows / max age) are persisted but currently optional; when present, frames are pruned after each append.
