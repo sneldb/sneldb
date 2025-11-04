@@ -45,8 +45,8 @@ impl FlowOperator for ProjectOp {
     ) -> Result<(), FlowOperatorError> {
         let target_schema = Arc::clone(&self.projection.schema);
 
-        while let Some(batch) = input.recv().await {
-            if batch.is_empty() {
+        while let Some(batch_arc) = input.recv().await {
+            if batch_arc.is_empty() {
                 continue;
             }
 
@@ -55,14 +55,14 @@ impl FlowOperator for ProjectOp {
 
             let mut column_views: Vec<&[Value]> = Vec::with_capacity(self.projection.indices.len());
             for index in &self.projection.indices {
-                column_views.push(batch.column(*index).map_err(|e| {
+                column_views.push(batch_arc.column(*index).map_err(|e| {
                     FlowOperatorError::Batch(format!("failed to read column {}: {}", index, e))
                 })?);
             }
 
             // Optimize: avoid Option overhead - row_idx is always valid since we iterate 0..batch.len()
             // Pre-allocate row_values once and reuse, clearing between rows
-            for row_idx in 0..batch.len() {
+            for row_idx in 0..batch_arc.len() {
                 row_values.clear();
                 // Direct indexing is safe and faster than .get().unwrap_or()
                 for col in &column_views {
@@ -78,21 +78,19 @@ impl FlowOperator for ProjectOp {
                         .finish()
                         .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
                     output
-                        .send(batch)
+                        .send(Arc::new(batch))
                         .await
                         .map_err(|_| FlowOperatorError::ChannelClosed)?;
                     builder = ctx.pool().acquire(Arc::clone(&target_schema));
                 }
             }
 
-            drop(batch);
-
             if builder.len() > 0 {
                 let batch = builder
                     .finish()
                     .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
                 output
-                    .send(batch)
+                    .send(Arc::new(batch))
                     .await
                     .map_err(|_| FlowOperatorError::ChannelClosed)?;
             }

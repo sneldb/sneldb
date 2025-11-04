@@ -20,4 +20,3 @@ pub mod materialized_query_spec {
         serde_json::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
-

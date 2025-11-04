@@ -58,6 +58,32 @@ struct EndFrame {
 }
 
 #[derive(Serialize)]
+struct BatchFrame<'a> {
+    #[serde(rename = "type")]
+    frame_type: &'static str,
+    rows: BatchRows<'a>,
+}
+
+// Serializes batch rows as array of arrays
+struct BatchRows<'a> {
+    rows: &'a [Vec<&'a Value>],
+}
+
+impl<'a> Serialize for BatchRows<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeSeq;
+        let mut seq = serializer.serialize_seq(Some(self.rows.len()))?;
+        for row in self.rows {
+            seq.serialize_element(row)?;
+        }
+        seq.end()
+    }
+}
+
+#[derive(Serialize)]
 struct ColumnRef<'a> {
     name: &'a str,
     logical_type: &'a str,
@@ -145,6 +171,24 @@ impl Renderer for JsonRenderer {
         if sonic_rs::to_writer(&mut *out, &frame).is_err() {
             out.clear();
             out.extend_from_slice(b"{\"type\":\"row\",\"values\":{}}\n");
+            return;
+        }
+
+        out.push(b'\n');
+    }
+
+    fn stream_batch(&self, _columns: &[&str], batch: &[Vec<&Value>], out: &mut Vec<u8>) {
+        out.clear();
+
+        // Serialize batch as array of arrays (more efficient than per-row objects)
+        let batch_frame = BatchFrame {
+            frame_type: "batch",
+            rows: BatchRows { rows: batch },
+        };
+
+        if sonic_rs::to_writer(&mut *out, &batch_frame).is_err() {
+            out.clear();
+            out.extend_from_slice(b"{\"type\":\"batch\",\"rows\":[]}\n");
             return;
         }
 

@@ -22,6 +22,9 @@ pub struct ZoneCursor {
 
     /// Current position inside this zone
     pub pos: usize,
+
+    /// Timestamp when the zone was created (preserved during compaction)
+    pub created_at: u64,
 }
 
 impl ZoneCursor {

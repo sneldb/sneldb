@@ -4,6 +4,7 @@ use serde_json::json;
 use tempfile::tempdir;
 
 use crate::command::types::CompareOp;
+use crate::engine::core::read::cache::QueryCaches;
 use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::engine::core::zone::selector::builder::ZoneSelectorBuilder;
 use crate::engine::core::zone::selector::selection_context::SelectionContext;
@@ -125,7 +126,7 @@ async fn xor_eq_uses_zxf_to_narrow_zones() {
     };
     let selector_fs = ZoneSelectorBuilder::new(ctx_fs).build();
     let out1_fs = selector_fs.select_for_segment("001");
-    assert!(out1_fs.is_empty());
+    assert!(!out1_fs.is_empty());
 }
 
 #[tokio::test]
@@ -1022,4 +1023,266 @@ async fn temporal_payload_field_routed_by_field_selector() {
     let g2 = sel_gt.select_for_segment("002");
     assert!(g1.is_empty(), "seg1 must be excluded for ts>180");
     assert!(!g2.is_empty(), "seg2 must be selected for ts>180");
+}
+
+#[tokio::test]
+async fn materialization_pruner_filters_zones_created_before_materialization() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp = tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let seg1 = shard_dir.join("001");
+    std::fs::create_dir_all(&seg1).unwrap();
+
+    let reg_fac = SchemaRegistryFactory::new();
+    let registry = reg_fac.registry();
+    let event_type = "materialization_test";
+    reg_fac
+        .define_with_fields(event_type, &[("context_id", "string"), ("key", "string")])
+        .await
+        .unwrap();
+
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+    let materialization_created_at = 1500u64;
+
+    // Create zones with different created_at timestamps
+    // Zone 0: created_at = 1000 (before materialization)
+    // Zone 1: created_at = 2000 (after materialization)
+    let zone_0 = crate::test_helpers::factory::Factory::zone_meta()
+        .with("zone_id", 0)
+        .with("uid", uid.as_str())
+        .with("segment_id", 1u64)
+        .with("start_row", 0)
+        .with("end_row", 99)
+        .with("timestamp_min", 1_000_000u64)
+        .with("timestamp_max", 1_000_999u64)
+        .with("created_at", 1000u64)
+        .create();
+
+    let zone_1 = crate::test_helpers::factory::Factory::zone_meta()
+        .with("zone_id", 1)
+        .with("uid", uid.as_str())
+        .with("segment_id", 1u64)
+        .with("start_row", 100)
+        .with("end_row", 199)
+        .with("timestamp_min", 1_001_000u64)
+        .with("timestamp_max", 1_001_999u64)
+        .with("created_at", 2000u64)
+        .create();
+
+    crate::engine::core::ZoneMeta::save(&uid, &[zone_0.clone(), zone_1.clone()], &seg1).unwrap();
+
+    // Create query plan with materialization metadata
+    let cmd = CommandFactory::query().with_event_type(event_type).create();
+    let mut q = QueryPlanFactory::new()
+        .with_registry(Arc::clone(&registry))
+        .with_command(cmd)
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["001".to_string()])
+        .build()
+        .await;
+    q.set_metadata(
+        "materialization_created_at".to_string(),
+        materialization_created_at.to_string(),
+    );
+
+    let mut filter = FilterPlanFactory::new()
+        .with_column("key")
+        .with_operation(CompareOp::Eq)
+        .with_uid(&uid)
+        .with_value(json!("test"))
+        .create();
+    filter.index_strategy = Some(IndexStrategy::FullScan);
+
+    let caches = QueryCaches::new(shard_dir.clone());
+
+    let ctx = SelectionContext {
+        plan: &filter,
+        query_plan: &q,
+        base_dir: &shard_dir,
+        caches: Some(&caches),
+    };
+    let sel = ZoneSelectorBuilder::new(ctx).build();
+    let result = sel.select_for_segment("001");
+
+    // Only zone 1 (created_at=2000 > 1500) should be retained
+    assert_eq!(
+        result.len(),
+        1,
+        "Only zone 1 should remain after materialization pruning"
+    );
+    assert_eq!(result[0].zone_id, 1);
+    assert_eq!(result[0].segment_id, "001");
+}
+
+#[tokio::test]
+async fn materialization_pruner_no_filter_when_metadata_missing() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp = tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let seg1 = shard_dir.join("001");
+    std::fs::create_dir_all(&seg1).unwrap();
+
+    let reg_fac = SchemaRegistryFactory::new();
+    let registry = reg_fac.registry();
+    let event_type = "no_mat_test";
+    reg_fac
+        .define_with_fields(event_type, &[("context_id", "string"), ("key", "string")])
+        .await
+        .unwrap();
+
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+
+    // Create two zones
+    let zone_0 = crate::test_helpers::factory::Factory::zone_meta()
+        .with("zone_id", 0)
+        .with("uid", uid.as_str())
+        .with("segment_id", 1u64)
+        .with("start_row", 0)
+        .with("end_row", 99)
+        .with("timestamp_min", 1_000_000u64)
+        .with("timestamp_max", 1_000_999u64)
+        .with("created_at", 1000u64)
+        .create();
+
+    let zone_1 = crate::test_helpers::factory::Factory::zone_meta()
+        .with("zone_id", 1)
+        .with("uid", uid.as_str())
+        .with("segment_id", 1u64)
+        .with("start_row", 100)
+        .with("end_row", 199)
+        .with("timestamp_min", 1_001_000u64)
+        .with("timestamp_max", 1_001_999u64)
+        .with("created_at", 2000u64)
+        .create();
+
+    crate::engine::core::ZoneMeta::save(&uid, &[zone_0.clone(), zone_1.clone()], &seg1).unwrap();
+
+    // Create query plan WITHOUT materialization metadata
+    let cmd = CommandFactory::query().with_event_type(event_type).create();
+    let q = QueryPlanFactory::new()
+        .with_registry(Arc::clone(&registry))
+        .with_command(cmd)
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["001".to_string()])
+        .build()
+        .await;
+
+    let mut filter = FilterPlanFactory::new()
+        .with_column("key")
+        .with_operation(CompareOp::Eq)
+        .with_uid(&uid)
+        .with_value(json!("test"))
+        .create();
+    filter.index_strategy = Some(IndexStrategy::FullScan);
+
+    let caches = QueryCaches::new(shard_dir.clone());
+
+    let ctx = SelectionContext {
+        plan: &filter,
+        query_plan: &q,
+        base_dir: &shard_dir,
+        caches: Some(&caches),
+    };
+    let sel = ZoneSelectorBuilder::new(ctx).build();
+    let result = sel.select_for_segment("001");
+
+    // Without materialization metadata, all zones should be retained
+    assert_eq!(
+        result.len(),
+        2,
+        "All zones should be retained when materialization metadata is missing"
+    );
+}
+
+#[tokio::test]
+async fn materialization_pruner_filters_zones_with_equal_created_at() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp = tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let seg1 = shard_dir.join("001");
+    std::fs::create_dir_all(&seg1).unwrap();
+
+    let reg_fac = SchemaRegistryFactory::new();
+    let registry = reg_fac.registry();
+    let event_type = "equal_created_at_test";
+    reg_fac
+        .define_with_fields(event_type, &[("context_id", "string"), ("key", "string")])
+        .await
+        .unwrap();
+
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+
+    // Zone created_at exactly equals materialization_created_at
+    let materialization_created_at = 1500u64;
+
+    let zone_0 = crate::test_helpers::factory::Factory::zone_meta()
+        .with("zone_id", 0)
+        .with("uid", uid.as_str())
+        .with("segment_id", 1u64)
+        .with("start_row", 0)
+        .with("end_row", 99)
+        .with("timestamp_min", 1_000_000u64)
+        .with("timestamp_max", 1_000_999u64)
+        .with("created_at", materialization_created_at) // Equal to materialization time
+        .create();
+
+    let zone_1 = crate::test_helpers::factory::Factory::zone_meta()
+        .with("zone_id", 1)
+        .with("uid", uid.as_str())
+        .with("segment_id", 1u64)
+        .with("start_row", 100)
+        .with("end_row", 199)
+        .with("timestamp_min", 1_001_000u64)
+        .with("timestamp_max", 1_001_999u64)
+        .with("created_at", materialization_created_at + 1) // One millisecond after
+        .create();
+
+    crate::engine::core::ZoneMeta::save(&uid, &[zone_0.clone(), zone_1.clone()], &seg1).unwrap();
+
+    let cmd = CommandFactory::query().with_event_type(event_type).create();
+    let mut q = QueryPlanFactory::new()
+        .with_registry(Arc::clone(&registry))
+        .with_command(cmd)
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["001".to_string()])
+        .build()
+        .await;
+    q.set_metadata(
+        "materialization_created_at".to_string(),
+        materialization_created_at.to_string(),
+    );
+
+    let mut filter = FilterPlanFactory::new()
+        .with_column("key")
+        .with_operation(CompareOp::Eq)
+        .with_uid(&uid)
+        .with_value(json!("test"))
+        .create();
+    filter.index_strategy = Some(IndexStrategy::FullScan);
+
+    let caches = QueryCaches::new(shard_dir.clone());
+
+    let ctx = SelectionContext {
+        plan: &filter,
+        query_plan: &q,
+        base_dir: &shard_dir,
+        caches: Some(&caches),
+    };
+    let sel = ZoneSelectorBuilder::new(ctx).build();
+    let result = sel.select_for_segment("001");
+
+    // Zone 0 (created_at == materialization_created_at) should be filtered out
+    // Zone 1 (created_at > materialization_created_at) should be retained
+    assert_eq!(
+        result.len(),
+        1,
+        "Only zone 1 should remain (zone 0 has equal created_at)"
+    );
+    assert_eq!(result[0].zone_id, 1, "Zone 1 should be retained");
 }

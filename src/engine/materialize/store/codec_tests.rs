@@ -1,4 +1,6 @@
-use super::codec::{batch_schema_to_snapshots, schema_hash, BatchCodec, EncodedFrame, Lz4BatchCodec};
+use super::codec::{
+    BatchCodec, EncodedFrame, Lz4BatchCodec, batch_schema_to_snapshots, schema_hash,
+};
 use super::frame::data::FrameData;
 use super::frame::header::FrameHeader;
 use super::frame::metadata::StoredFrameMeta;
@@ -92,4 +94,3 @@ fn lz4_codec_roundtrip() {
     assert_eq!(decoded.column(0).unwrap()[0], json!(1_700_000_000_u64));
     assert!(decoded.column(1).unwrap()[1].is_null());
 }
-

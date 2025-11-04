@@ -22,4 +22,3 @@ fn storage_remove_deletes_files() {
     storage.remove("000001.mat");
     assert!(!path.exists());
 }
-

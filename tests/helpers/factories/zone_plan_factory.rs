@@ -38,6 +38,11 @@ impl ZonePlanFactory {
             event_type: self.params["event_type"].as_str().unwrap().to_string(),
             segment_id: self.params["segment_id"].as_u64().unwrap(),
             events,
+            created_at: self
+                .params
+                .get("created_at")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0),
         }
     }
 }

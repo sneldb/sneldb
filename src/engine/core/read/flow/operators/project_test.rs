@@ -58,7 +58,8 @@ async fn project_op_reorders_and_drops_columns() {
             .push_row(&[json!(idx), json!(format!("s{}", idx)), json!(idx * 10)])
             .unwrap();
     }
-    tx.send(builder.finish().unwrap()).await.unwrap();
+    let batch = builder.finish().unwrap();
+    tx.send(Arc::new(batch)).await.unwrap();
     drop(tx);
 
     let ctx_clone = Arc::clone(&ctx);

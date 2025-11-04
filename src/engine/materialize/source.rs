@@ -36,9 +36,10 @@ impl FlowSource for MaterializedSource {
         _ctx: Arc<FlowContext>,
     ) -> Result<(), FlowOperatorError> {
         for meta in self.frames.into_iter() {
-            let batch = self.store.read_frame(&meta).map_err(materialize_err)?;
+            let batch_arc = self.store.read_frame(&meta).map_err(materialize_err)?;
+            // Send Arc directly - zero copy on cache hits!
             output
-                .send(batch)
+                .send(batch_arc)
                 .await
                 .map_err(|_| FlowOperatorError::ChannelClosed)?;
         }

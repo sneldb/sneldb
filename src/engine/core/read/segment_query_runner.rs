@@ -182,7 +182,7 @@ impl<'a> SegmentQueryRunner<'a> {
                         .finish()
                         .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
                     sender
-                        .send(batch)
+                        .send(Arc::new(batch))
                         .await
                         .map_err(|_| FlowOperatorError::ChannelClosed)?;
                     builder = flow_ctx.pool().acquire(Arc::clone(&schema));
@@ -194,7 +194,7 @@ impl<'a> SegmentQueryRunner<'a> {
                     .finish()
                     .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
                 sender
-                    .send(batch)
+                    .send(Arc::new(batch))
                     .await
                     .map_err(|_| FlowOperatorError::ChannelClosed)?;
             }
@@ -227,7 +227,7 @@ impl<'a> SegmentQueryRunner<'a> {
                             .finish()
                             .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
                         sender
-                            .send(batch)
+                            .send(Arc::new(batch))
                             .await
                             .map_err(|_| FlowOperatorError::ChannelClosed)?;
                         builder = flow_ctx.pool().acquire(Arc::clone(&schema));
@@ -253,7 +253,7 @@ impl<'a> SegmentQueryRunner<'a> {
                     .finish()
                     .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
                 sender
-                    .send(batch)
+                    .send(Arc::new(batch))
                     .await
                     .map_err(|_| FlowOperatorError::ChannelClosed)?;
             }

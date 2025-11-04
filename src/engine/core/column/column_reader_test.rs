@@ -46,6 +46,7 @@ async fn reads_column_values_for_zone() {
         uid: uid.clone(),
         event_type: "login".into(),
         segment_id: 7,
+        created_at: 0,
     };
 
     // Write columns
@@ -102,6 +103,7 @@ async fn zero_copy_numeric_and_bounds_checks() {
         uid: uid.clone(),
         event_type: "metrics".into(),
         segment_id: 1,
+        created_at: 0,
     };
     let writer = ColumnWriter::new(segment_dir.clone(), Arc::clone(&registry));
     writer.write_all(&[zone]).await.unwrap();
@@ -146,6 +148,7 @@ async fn legacy_vec_string_path_varbytes() {
         uid: uid.clone(),
         event_type: "test".into(),
         segment_id: 3,
+        created_at: 0,
     };
     let writer = ColumnWriter::new(segment_dir.clone(), Arc::clone(&registry));
     writer.write_all(&[zone]).await.unwrap();
@@ -214,6 +217,7 @@ async fn load_snapshot_reports_physical_types() {
         uid: uid.clone(),
         event_type: "metrics".into(),
         segment_id: 8,
+        created_at: 0,
     };
     let writer = ColumnWriter::new(segment_dir.clone(), Arc::clone(&registry));
     writer.write_all(&[zone]).await.unwrap();

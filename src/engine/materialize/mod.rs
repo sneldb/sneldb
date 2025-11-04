@@ -1,4 +1,4 @@
-mod catalog;
+pub mod catalog;
 mod error;
 mod high_water;
 mod sink;

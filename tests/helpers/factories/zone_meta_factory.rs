@@ -33,6 +33,11 @@ impl ZoneMetaFactory {
             end_row: self.params["end_row"].as_u64().unwrap() as u32,
             timestamp_min: self.params["timestamp_min"].as_u64().unwrap(),
             timestamp_max: self.params["timestamp_max"].as_u64().unwrap(),
+            created_at: self
+                .params
+                .get("created_at")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0),
         }
     }
 }

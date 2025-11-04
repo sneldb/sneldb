@@ -32,4 +32,3 @@ fn telemetry_summarizes_manifest() {
     assert!(snapshot.high_water_mark.is_some());
     assert_eq!(snapshot.high_water_mark.unwrap().timestamp, 2);
 }
-

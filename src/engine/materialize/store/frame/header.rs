@@ -3,6 +3,7 @@ use std::io::{Read, Write};
 use crate::engine::materialize::MaterializationError;
 
 pub const FRAME_VERSION: u32 = 1;
+pub const FRAME_VERSION_V2: u32 = 2; // Version 2: columnar storage with metadata
 
 #[derive(Debug, Clone)]
 pub struct FrameHeader {
@@ -76,4 +77,3 @@ impl FrameHeader {
         })
     }
 }
-

@@ -80,7 +80,7 @@ async fn test_recv_returns_batches_from_stream() {
         .push_row(&vec![json!("ctx-1"), json!(42)])
         .expect("push row");
     let batch = builder.finish().expect("finish batch");
-    tx.send(batch).await.expect("send batch");
+    tx.send(Arc::new(batch)).await.expect("send batch");
 
     // Receive the batch
     let received = stream.recv().await;
@@ -94,7 +94,7 @@ async fn test_recv_returns_batches_from_stream() {
         .push_row(&vec![json!("ctx-2"), json!(84)])
         .expect("push row");
     let batch = builder.finish().expect("finish batch");
-    tx.send(batch).await.expect("send batch");
+    tx.send(Arc::new(batch)).await.expect("send batch");
 
     let received = stream.recv().await;
     assert!(received.is_some());

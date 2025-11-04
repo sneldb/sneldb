@@ -6,4 +6,3 @@ fn schema_snapshot_new_assigns_fields() {
     assert_eq!(snapshot.name, "event_id");
     assert_eq!(snapshot.logical_type, "Integer");
 }
-

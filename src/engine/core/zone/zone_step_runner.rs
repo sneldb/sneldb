@@ -54,8 +54,24 @@ impl<'a> ZoneStepRunner<'a> {
                 full_segments.clone()
             };
 
+            let step_start = std::time::Instant::now();
             step.get_candidate_zones_with_segments(self.caches, &segments);
             let zones = std::mem::take(&mut step.candidate_zones);
+            let step_time = step_start.elapsed();
+
+            // Log slow steps when they find no zones (indicates expensive work for no result)
+            if zones.is_empty() && step_time.as_millis() > 10 {
+                if tracing::enabled!(tracing::Level::INFO) {
+                    tracing::info!(
+                        target: "sneldb::zone_step_runner",
+                        step_idx = idx,
+                        step_pos = pos,
+                        segments_checked = segments.len(),
+                        step_time_ms = step_time.as_millis(),
+                        "Step completed with 0 zones after expensive work"
+                    );
+                }
+            }
 
             // Derive pruned only once, on the first step, when allowed
             if allow_prune && pos == 0 {

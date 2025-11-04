@@ -46,4 +46,3 @@ fn stored_frame_meta_construction_preserves_values() {
     assert_eq!(meta.high_water_mark.timestamp, 20);
     assert_eq!(meta.schema.len(), 1);
 }
-

@@ -37,4 +37,3 @@ fn manifest_persist_and_reload() {
     assert_eq!(state.next_frame_index(), 1);
     assert_eq!(state.frames()[0].max_timestamp, 20);
 }
-

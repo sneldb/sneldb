@@ -26,6 +26,13 @@ impl<'a> ZoneCollector<'a> {
 
     /// Collects and combines zones from all execution steps
     pub fn collect_zones(&mut self) -> Vec<CandidateZone> {
+        let collect_start = std::time::Instant::now();
+        let has_materialization_metadata = self
+            .plan
+            .metadata
+            .get("materialization_created_at")
+            .is_some();
+
         if tracing::enabled!(tracing::Level::INFO) {
             info!(target: "sneldb::zone_collector", step_count = self.steps.len(), "Starting zone collection");
         }
@@ -56,7 +63,22 @@ impl<'a> ZoneCollector<'a> {
             info!(target: "sneldb::zone_collector", ?op, "Combining zones with logical operation");
         }
 
+        let total_zones_before_combine: usize = all_zones.iter().map(|zones| zones.len()).sum();
         let result = ZoneCombiner::new(all_zones, op).combine();
+
+        let collect_time = collect_start.elapsed();
+
+        if tracing::enabled!(tracing::Level::TRACE) {
+            tracing::trace!(
+                target: "sneldb::zone_collector",
+                step_count = self.steps.len(),
+                total_zones_before_combine = total_zones_before_combine,
+                zones_after_combine = result.len(),
+                has_materialization_metadata = has_materialization_metadata,
+                collect_time_ms = collect_time.as_millis(),
+                "Zone collection completed"
+            );
+        }
 
         if tracing::enabled!(tracing::Level::INFO) {
             info!(
@@ -65,7 +87,6 @@ impl<'a> ZoneCollector<'a> {
                 "Zone collection complete"
             );
         }
-        //   warn!("result: {:?}", result);
 
         result
     }

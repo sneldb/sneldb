@@ -36,6 +36,7 @@ fn test_zone_cursor_navigation() {
         event_ids: vec![EventId::from(1), EventId::from(2)],
         payload_fields,
         pos: 0,
+        created_at: 0,
     };
 
     // Initial state

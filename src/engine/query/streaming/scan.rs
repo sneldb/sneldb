@@ -25,15 +25,23 @@ pub struct StreamingScan<'a> {
 impl<'a> StreamingScan<'a> {
     pub async fn new(
         command: &Command,
+        metadata: Option<std::collections::HashMap<String, String>>,
         registry: &Arc<RwLock<SchemaRegistry>>,
         segment_base_dir: &Path,
         segment_ids: &Arc<std::sync::RwLock<Vec<String>>>,
         memtable: &'a MemTable,
         passive_buffers: &Arc<PassiveBufferSet>,
     ) -> Result<Self, QueryExecutionError> {
-        let plan = QueryPlan::new(command.clone(), registry, segment_base_dir, segment_ids)
+        let mut plan = QueryPlan::new(command.clone(), registry, segment_base_dir, segment_ids)
             .await
             .ok_or(QueryExecutionError::Aborted)?;
+
+        // Apply metadata if provided
+        if let Some(meta) = metadata {
+            for (k, v) in meta {
+                plan.set_metadata(k, v);
+            }
+        }
 
         if plan.aggregate_plan.is_some() {
             return Err(QueryExecutionError::Aborted);

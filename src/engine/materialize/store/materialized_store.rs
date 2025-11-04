@@ -1,10 +1,13 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use crate::engine::core::read::flow::ColumnBatch;
 use crate::engine::materialize::MaterializationError;
 use crate::engine::materialize::catalog::{
     MaterializationTelemetry, RetentionPolicy, SchemaSnapshot,
 };
+
+use crate::engine::core::read::cache::GlobalMaterializedFrameCache;
 
 use super::codec::{BatchCodec, Lz4BatchCodec, schema_hash};
 use super::frame::metadata::StoredFrameMeta;
@@ -85,10 +88,23 @@ impl MaterializedStore {
         Ok(meta)
     }
 
-    pub fn read_frame(&self, meta: &StoredFrameMeta) -> Result<ColumnBatch, MaterializationError> {
-        let reader = self.frame_storage.reader();
-        let frame_data = reader.read(meta)?;
-        self.codec.decode(meta, frame_data)
+    pub fn read_frame(
+        &self,
+        meta: &StoredFrameMeta,
+    ) -> Result<Arc<ColumnBatch>, MaterializationError> {
+        let cache = GlobalMaterializedFrameCache::instance();
+        let frame_dir = self.frame_dir();
+
+        let (batch_arc, _outcome) = cache.get_or_load(frame_dir, meta, || {
+            // Loader closure: read and decode the frame
+            let reader = self.frame_storage.reader();
+            let frame_data = reader.read(meta)?;
+            self.codec.decode(meta, frame_data)
+        })?;
+
+        // Return Arc directly - cache keeps a reference, so callers need to clone when unwrapping
+        // But at least we avoid decompression on cache hits!
+        Ok(batch_arc)
     }
 
     pub fn frame_dir(&self) -> &Path {

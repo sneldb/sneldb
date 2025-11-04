@@ -47,6 +47,11 @@ impl StreamingDispatch for StreamingShardDispatcher {
                 .tx
                 .send(ShardMessage::QueryStream {
                     command: command.into_owned(),
+                    metadata: if ctx.metadata.is_empty() {
+                        None
+                    } else {
+                        Some(ctx.metadata.clone())
+                    },
                     response: response_tx,
                     registry: Arc::clone(&ctx.registry),
                 })
