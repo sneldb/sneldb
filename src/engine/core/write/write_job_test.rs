@@ -22,6 +22,7 @@ fn builds_jobs_for_zone_plan_with_events() {
         uid: uid.to_string(),
         event_type: event_type.to_string(),
         segment_id: 9,
+        created_at: 0,
     };
 
     let resolver = ResolverFactory::new().with(event_type, uid).create();
@@ -87,6 +88,7 @@ fn builds_jobs_with_empty_strings_for_missing_fields() {
         uid: uid.to_string(),
         event_type: event_type.to_string(),
         segment_id: 1,
+        created_at: 0,
     };
 
     let resolver = ResolverFactory::new().with(event_type, uid).create();

@@ -8,7 +8,7 @@ use crate::engine::materialize::MaterializationError;
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 
 use super::data::FrameData;
-use super::header::{FrameHeader, FRAME_VERSION};
+use super::header::{FRAME_VERSION, FrameHeader};
 use super::metadata::StoredFrameMeta;
 
 pub struct FrameReader<'a> {
@@ -67,4 +67,3 @@ impl<'a> FrameReader<'a> {
         Ok(frame_header)
     }
 }
-

@@ -178,7 +178,14 @@ async fn write_streaming_response<W: AsyncWrite + Unpin>(
         .map(|(name, _)| name.as_str())
         .collect();
 
-    let mut encode_buf = Vec::with_capacity(4096); // Increased from 512 to 4KB
+    // Get batch size from config (default 1000, 0 = per-row mode)
+    let batch_size = CONFIG
+        .query
+        .as_ref()
+        .and_then(|cfg| cfg.streaming_batch_size)
+        .unwrap_or(1000);
+
+    let mut encode_buf = Vec::with_capacity(if batch_size > 0 { 65536 } else { 4096 });
     renderer.stream_schema(&column_metadata, &mut encode_buf);
     writer.write_all(&encode_buf).await?;
     encode_buf.clear();
@@ -192,21 +199,27 @@ async fn write_streaming_response<W: AsyncWrite + Unpin>(
     let offset = offset.map(|value| value as usize);
     let mut done = false;
 
+    // Zero-copy approach: serialize directly from Arc<ColumnBatch> references while batch is alive
+    // This avoids cloning all Values (6.98% overhead in flamegraph)
+    // Serialize immediately per-batch using references - eliminates all cloning!
+    // Note: We can't accumulate references across batches (lifetime issue), so we serialize per-batch
+
     while !done {
         match stream.recv().await {
-            Some(batch) => {
-                if batch.is_empty() {
+            Some(batch_arc) => {
+                if batch_arc.is_empty() {
                     continue;
                 }
 
-                let column_views: Vec<&[JsonValue]> = batch
+                let column_views: Vec<&[JsonValue]> = batch_arc
                     .columns()
                     .map(|column| column as &[JsonValue])
                     .collect();
 
-                let mut row_refs: Vec<&JsonValue> = Vec::with_capacity(column_names.len());
+                // Collect row indices that pass filters (zero-copy filtering)
+                let mut valid_row_indices: Vec<usize> = Vec::new();
 
-                for row_idx in 0..batch.len() {
+                for row_idx in 0..batch_arc.len() {
                     if let Some(idx) = event_id_idx {
                         if let Some(id) = column_views[idx][row_idx].as_u64() {
                             if !seen_ids.insert(id) {
@@ -229,15 +242,36 @@ async fn write_streaming_response<W: AsyncWrite + Unpin>(
                         }
                     }
 
-                    for col_idx in 0..column_names.len() {
-                        row_refs.push(&column_views[col_idx][row_idx]);
-                    }
+                    valid_row_indices.push(row_idx);
+                    emitted += 1;
+                }
 
-                    renderer.stream_row(&column_names, &row_refs, &mut encode_buf);
+                // Build references directly from batch and serialize immediately (zero-copy!)
+                // References are valid while batch_arc is in scope
+                // Serialize immediately per-batch to avoid lifetime issues
+                if batch_size > 0 && valid_row_indices.len() > 0 {
+                    // Batch mode: build all row references from this batch and serialize immediately
+                    let batch_rows: Vec<Vec<&JsonValue>> = valid_row_indices
+                        .iter()
+                        .map(|&row_idx| {
+                            (0..column_names.len())
+                                .map(|col_idx| &column_views[col_idx][row_idx])
+                                .collect()
+                        })
+                        .collect();
+                    renderer.stream_batch(&column_names, &batch_rows, &mut encode_buf);
                     writer.write_all(&encode_buf).await?;
                     encode_buf.clear();
-                    row_refs.clear();
-                    emitted += 1;
+                } else {
+                    // Per-row mode: serialize immediately with references (zero-copy!)
+                    for &row_idx in &valid_row_indices {
+                        let row_refs: Vec<&JsonValue> = (0..column_names.len())
+                            .map(|col_idx| &column_views[col_idx][row_idx])
+                            .collect();
+                        renderer.stream_row(&column_names, &row_refs, &mut encode_buf);
+                        writer.write_all(&encode_buf).await?;
+                        encode_buf.clear();
+                    }
                 }
             }
             None => break,
@@ -295,7 +329,7 @@ mod tests {
         let row1 = vec![json!("ctx-stream"), json!(42u64)];
         builder.push_row(&row1).expect("push row should succeed");
         let batch = builder.finish().expect("batch finish");
-        sender.send(batch).await.expect("send batch");
+        sender.send(Arc::new(batch)).await.expect("send batch");
         drop(sender);
 
         let stream = QueryBatchStream::new(Arc::clone(&schema), receiver, Vec::new());

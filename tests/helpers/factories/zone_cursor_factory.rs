@@ -62,6 +62,7 @@ impl ZoneCursorFactory {
             event_ids,
             payload_fields,
             pos: 0,
+            created_at: 0,
         }
     }
 }

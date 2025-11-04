@@ -48,14 +48,15 @@ async fn test_store_handle_valid_event_is_routed() {
 
     shard
         .tx
-        .send(ShardMessage::Query(
-            CommandFactory::query()
+        .send(ShardMessage::Query {
+            command: CommandFactory::query()
                 .with_event_type("test_event")
                 .with_context_id("ctx1")
                 .create(),
+            metadata: None,
             tx,
-            registry.clone(),
-        ))
+            registry: registry.clone(),
+        })
         .await
         .unwrap();
 
@@ -112,14 +113,15 @@ async fn test_store_normalizes_datetime_rfc3339_to_epoch_seconds() {
     let (tx, mut rx) = mpsc::channel(1);
     shard
         .tx
-        .send(ShardMessage::Query(
-            CommandFactory::query()
+        .send(ShardMessage::Query {
+            command: CommandFactory::query()
                 .with_event_type("evt_time_norm")
                 .with_context_id("ctx-time-norm-1")
                 .create(),
+            metadata: None,
             tx,
-            registry.clone(),
-        ))
+            registry: registry.clone(),
+        })
         .await
         .unwrap();
 
@@ -220,14 +222,15 @@ async fn test_store_normalizes_datetime_integer_units() {
         let (tx, mut rx) = mpsc::channel(1);
         shard
             .tx
-            .send(ShardMessage::Query(
-                CommandFactory::query()
+            .send(ShardMessage::Query {
+                command: CommandFactory::query()
                     .with_event_type("evt_units")
                     .with_context_id(ctx)
                     .create(),
+                metadata: None,
                 tx,
-                registry.clone(),
-            ))
+                registry: registry.clone(),
+            })
             .await
             .unwrap();
 
@@ -285,14 +288,15 @@ async fn test_store_normalizes_date_string_to_midnight() {
     let (tx, mut rx) = mpsc::channel(1);
     shard
         .tx
-        .send(ShardMessage::Query(
-            CommandFactory::query()
+        .send(ShardMessage::Query {
+            command: CommandFactory::query()
                 .with_event_type("evt_date_norm")
                 .with_context_id("ctx-date-norm-1")
                 .create(),
+            metadata: None,
             tx,
-            registry.clone(),
-        ))
+            registry: registry.clone(),
+        })
         .await
         .unwrap();
 
@@ -344,14 +348,15 @@ async fn test_store_optional_datetime_null_passes() {
     let (tx, mut rx) = mpsc::channel(1);
     shard
         .tx
-        .send(ShardMessage::Query(
-            CommandFactory::query()
+        .send(ShardMessage::Query {
+            command: CommandFactory::query()
                 .with_event_type("evt_optional_time")
                 .with_context_id("ctx-optional-1")
                 .create(),
+            metadata: None,
             tx,
-            registry.clone(),
-        ))
+            registry: registry.clone(),
+        })
         .await
         .unwrap();
 
@@ -636,14 +641,15 @@ async fn test_store_handle_accepts_datetime_string_field() {
     let (tx, mut rx) = mpsc::channel(1);
     shard
         .tx
-        .send(ShardMessage::Query(
-            CommandFactory::query()
+        .send(ShardMessage::Query {
+            command: CommandFactory::query()
                 .with_event_type("evt_time")
                 .with_context_id("ctx-time-1")
                 .create(),
+            metadata: None,
             tx,
-            registry.clone(),
-        ))
+            registry: registry.clone(),
+        })
         .await
         .unwrap();
 
@@ -696,14 +702,15 @@ async fn test_store_handle_accepts_date_string_field() {
     let (tx, mut rx) = mpsc::channel(1);
     shard
         .tx
-        .send(ShardMessage::Query(
-            CommandFactory::query()
+        .send(ShardMessage::Query {
+            command: CommandFactory::query()
                 .with_event_type("evt_date")
                 .with_context_id("ctx-date-1")
                 .create(),
+            metadata: None,
             tx,
-            registry.clone(),
-        ))
+            registry: registry.clone(),
+        })
         .await
         .unwrap();
 

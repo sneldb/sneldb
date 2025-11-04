@@ -103,7 +103,7 @@ impl MergerState {
 
                 if builder.is_full() {
                     let batch = builder.finish().map_err(|e| e.to_string())?;
-                    if self.sender.send(batch).await.is_err() {
+                    if self.sender.send(Arc::new(batch)).await.is_err() {
                         return Ok(());
                     }
                     builder = self.pool.acquire(Arc::clone(&self.schema));
@@ -126,7 +126,7 @@ impl MergerState {
 
         if builder.len() > 0 {
             let batch = builder.finish().map_err(|e| e.to_string())?;
-            let _ = self.sender.send(batch).await;
+            let _ = self.sender.send(Arc::new(batch)).await;
         }
 
         Ok(())
@@ -135,7 +135,7 @@ impl MergerState {
 
 struct RowStream {
     receiver: BatchReceiver,
-    current_batch: Option<ColumnBatch>,
+    current_batch: Option<Arc<ColumnBatch>>,
     row_idx: usize,
 }
 

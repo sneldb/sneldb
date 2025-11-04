@@ -43,7 +43,7 @@ async fn send_batch(
         builder.push_row(&[json!(value)]).unwrap();
         if builder.is_full() {
             let batch = builder.finish().unwrap();
-            sender.send(batch).await.unwrap();
+            sender.send(Arc::new(batch)).await.unwrap();
             builder = BatchPool::new(batch_size)
                 .unwrap()
                 .acquire(Arc::clone(&schema));
@@ -51,7 +51,7 @@ async fn send_batch(
     }
     if builder.len() > 0 {
         let batch = builder.finish().unwrap();
-        sender.send(batch).await.unwrap();
+        sender.send(Arc::new(batch)).await.unwrap();
     }
 }
 

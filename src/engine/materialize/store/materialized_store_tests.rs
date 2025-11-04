@@ -1,4 +1,4 @@
-use super::{batch_schema_to_snapshots, MaterializedStore, StoredFrameMeta};
+use super::{MaterializedStore, StoredFrameMeta, batch_schema_to_snapshots};
 use crate::engine::core::read::flow::{BatchPool, BatchSchema, ColumnBatch};
 use crate::engine::core::read::result::ColumnSpec;
 use crate::engine::materialize::high_water::HighWaterMark;
@@ -46,18 +46,10 @@ fn materialized_store_roundtrip() {
     let pool = BatchPool::new(16).unwrap();
     let mut builder = pool.acquire(Arc::clone(&schema_arc));
     builder
-        .push_row(&[
-            json!(1_700_000_000_u64),
-            json!("ctx-a"),
-            json!(1001_u64),
-        ])
+        .push_row(&[json!(1_700_000_000_u64), json!("ctx-a"), json!(1001_u64)])
         .unwrap();
     builder
-        .push_row(&[
-            json!(1_700_000_100_u64),
-            json!("ctx-b"),
-            json!(1002_u64),
-        ])
+        .push_row(&[json!(1_700_000_100_u64), json!("ctx-b"), json!(1002_u64)])
         .unwrap();
     let batch = builder.finish().unwrap();
 
@@ -68,10 +60,13 @@ fn materialized_store_roundtrip() {
     assert_eq!(meta.min_timestamp, 1_700_000_000);
     assert_eq!(meta.max_timestamp, 1_700_000_100);
     assert_eq!(meta.max_event_id, 1002);
-    assert_eq!(meta.high_water_mark, HighWaterMark::new(1_700_000_100, 1002));
+    assert_eq!(
+        meta.high_water_mark,
+        HighWaterMark::new(1_700_000_100, 1002)
+    );
 
     let read_batch = store.read_frame(&meta).unwrap();
-    let rows = batch_to_rows(&read_batch);
+    let rows = batch_to_rows(&*read_batch);
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0][1], json!("ctx-a"));
     assert_eq!(rows[1][2], json!(1002));
@@ -87,11 +82,7 @@ fn manifest_persists_across_reopen() {
         let mut store = MaterializedStore::open(dir.path()).unwrap();
         let mut builder = pool.acquire(Arc::clone(&schema));
         builder
-            .push_row(&[
-                json!(1_700_000_500_u64),
-                json!("ctx-c"),
-                json!(42_u64),
-            ])
+            .push_row(&[json!(1_700_000_500_u64), json!("ctx-c"), json!(42_u64)])
             .unwrap();
         let batch = builder.finish().unwrap();
         let snapshots = batch_schema_to_snapshots(&schema);
@@ -103,7 +94,6 @@ fn manifest_persists_across_reopen() {
     assert_eq!(store.frames().len(), 1);
     let meta: &StoredFrameMeta = &store.frames()[0];
     let batch = store.read_frame(meta).unwrap();
-    let rows = batch_to_rows(&batch);
+    let rows = batch_to_rows(&*batch);
     assert_eq!(rows[0][1], json!("ctx-c"));
 }
-

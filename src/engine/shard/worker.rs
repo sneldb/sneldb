@@ -26,19 +26,25 @@ pub async fn run_worker_loop(mut ctx: ShardContext, mut rx: Receiver<ShardMessag
                     error!(target: LOG_TARGET, shard_id = id, error = %e, "Failed to store event");
                 }
             }
-            ShardMessage::Query(command, tx, registry) => {
+            ShardMessage::Query {
+                command,
+                metadata,
+                tx,
+                registry,
+            } => {
                 debug!(target: LOG_TARGET, shard_id = id, "Received Query message");
-                if let Err(e) = on_query(command, tx, &ctx, &registry).await {
+                if let Err(e) = on_query(command, metadata, tx, &ctx, &registry).await {
                     error!(target: LOG_TARGET, shard_id = id, error = %e, "Query failed");
                 }
             }
             ShardMessage::QueryStream {
                 command,
+                metadata,
                 response,
                 registry,
             } => {
                 debug!(target: LOG_TARGET, shard_id = id, "Received QueryStream message");
-                let result = on_query_streaming(command, &ctx, &registry).await;
+                let result = on_query_streaming(command, metadata, &ctx, &registry).await;
                 if response.send(result).is_err() {
                     error!(target: LOG_TARGET, shard_id = id, "Streaming response receiver dropped");
                 }
@@ -100,12 +106,14 @@ async fn on_store(
 /// Handles Query messages.
 async fn on_query(
     command: crate::command::types::Command,
+    metadata: Option<std::collections::HashMap<String, String>>,
     tx: tokio::sync::mpsc::Sender<QueryResult>,
     ctx: &ShardContext,
     registry: &Arc<tokio::sync::RwLock<SchemaRegistry>>,
 ) -> Result<(), String> {
     let results = scan(
         &command,
+        metadata,
         registry,
         &ctx.base_dir,
         &ctx.segment_ids,
@@ -122,11 +130,13 @@ async fn on_query(
 
 async fn on_query_streaming(
     command: crate::command::types::Command,
+    metadata: Option<std::collections::HashMap<String, String>>,
     ctx: &ShardContext,
     registry: &Arc<tokio::sync::RwLock<SchemaRegistry>>,
 ) -> Result<crate::engine::core::read::flow::shard_pipeline::ShardFlowHandle, String> {
     scan_streaming(
         &command,
+        metadata,
         registry,
         &ctx.base_dir,
         &ctx.segment_ids,

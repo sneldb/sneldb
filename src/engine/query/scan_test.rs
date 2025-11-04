@@ -61,6 +61,7 @@ async fn scan_query_returns_expected_events() {
     let segment_ids = Arc::new(StdRwLock::new(vec!["001".into()]));
     let result = scan(
         &command,
+        None,
         &registry,
         &segment_base_dir,
         &segment_ids,
@@ -208,6 +209,7 @@ async fn scan_where_expr_logic() {
 
         let result = scan(
             &command,
+            None,
             &registry,
             tmp_dir.path(),
             &segment_ids,
@@ -265,6 +267,7 @@ async fn scan_query_with_context_id_and_expr_logic() {
     let cmd = CommandFactory::query().with_context_id("ctx1").create();
     let result = scan(
         &cmd,
+        None,
         &registry,
         dir.path(),
         &segment_ids,
@@ -291,6 +294,7 @@ async fn scan_query_with_context_id_and_expr_logic() {
         .create();
     let result = scan(
         &cmd,
+        None,
         &registry,
         dir.path(),
         &segment_ids,
@@ -317,6 +321,7 @@ async fn scan_query_with_context_id_and_expr_logic() {
         .create();
     let result = scan(
         &cmd,
+        None,
         &registry,
         dir.path(),
         &segment_ids,
@@ -343,6 +348,7 @@ async fn scan_query_with_context_id_and_expr_logic() {
         .create();
     let result = scan(
         &cmd,
+        None,
         &registry,
         dir.path(),
         &segment_ids,
@@ -375,6 +381,7 @@ async fn scan_query_with_context_id_and_expr_logic() {
         .create();
     let result = scan(
         &cmd,
+        None,
         &registry,
         dir.path(),
         &segment_ids,
@@ -432,6 +439,7 @@ async fn scan_aggregate_count_by_country() {
 
     let result = scan(
         &cmd,
+        None,
         &registry,
         dir,
         &segment_ids,
@@ -490,6 +498,7 @@ async fn scan_aggregate_count_unique_and_avg_by_country() {
 
     let result = scan(
         &cmd,
+        None,
         &registry,
         dir,
         &segment_ids,

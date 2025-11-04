@@ -5,4 +5,3 @@ pub struct FrameData {
     pub header: FrameHeader,
     pub compressed: Vec<u8>,
 }
-

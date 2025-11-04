@@ -43,4 +43,3 @@ fn retention_drops_old_frames_by_row_count() {
     assert_eq!(state.frames().len(), 1);
     assert_eq!(state.frames()[0].file_name, "000001.mat");
 }
-

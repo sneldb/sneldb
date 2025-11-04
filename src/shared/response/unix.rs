@@ -99,6 +99,31 @@ impl Renderer for UnixRenderer {
         out.push(b'\n');
     }
 
+    fn stream_batch(&self, _columns: &[&str], batch: &[Vec<&Value>], out: &mut Vec<u8>) {
+        out.clear();
+
+        // Serialize batch as array of arrays (same format as JsonRenderer)
+        #[derive(serde::Serialize)]
+        struct UnixBatchFrame<'a> {
+            #[serde(rename = "type")]
+            frame_type: &'static str,
+            rows: &'a [Vec<&'a Value>],
+        }
+
+        let batch_frame = UnixBatchFrame {
+            frame_type: "batch",
+            rows: batch,
+        };
+
+        if sonic_rs::to_writer(&mut *out, &batch_frame).is_err() {
+            out.clear();
+            out.extend_from_slice(b"{\"type\":\"batch\",\"rows\":[]}\n");
+            return;
+        }
+
+        out.push(b'\n');
+    }
+
     fn stream_end(&self, row_count: usize, out: &mut Vec<u8>) {
         out.clear();
         let mut serializer = JsonSerializer::new(&mut *out);

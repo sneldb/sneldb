@@ -65,6 +65,7 @@ async fn streaming_scan_emits_memtable_rows() {
 
     let scan = StreamingScan::new(
         &command,
+        None,
         &registry,
         &base_dir,
         &segment_ids,
@@ -129,6 +130,7 @@ async fn streaming_scan_rejects_aggregate_queries() {
 
     let result = StreamingScan::new(
         &command,
+        None,
         &registry,
         &base_dir,
         &segment_ids,

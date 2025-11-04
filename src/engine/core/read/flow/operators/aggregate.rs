@@ -46,22 +46,22 @@ impl FlowOperator for AggregateOp {
         let mut sink = AggregateSink::from_query_plan(&self.config.plan, &self.config.aggregate);
         let mut synthetic_id = 1u64;
 
-        while let Some(batch) = input.recv().await {
-            if batch.is_empty() {
+        while let Some(batch_arc) = input.recv().await {
+            if batch_arc.is_empty() {
                 continue;
             }
 
-            let schema = batch.schema();
+            let schema = batch_arc.schema();
             let column_names: Vec<String> =
                 schema.columns().iter().map(|c| c.name.clone()).collect();
             let mut column_views: Vec<&[Value]> = Vec::with_capacity(schema.column_count());
             for col_idx in 0..schema.column_count() {
-                column_views.push(batch.column(col_idx).map_err(|e| {
+                column_views.push(batch_arc.column(col_idx).map_err(|e| {
                     FlowOperatorError::Batch(format!("failed to read column: {}", e))
                 })?);
             }
 
-            for row_idx in 0..batch.len() {
+            for row_idx in 0..batch_arc.len() {
                 let event = event_from_row(
                     &column_views,
                     &column_names,
@@ -119,7 +119,7 @@ impl FlowOperator for AggregateOp {
                     .finish()
                     .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
                 output
-                    .send(batch)
+                    .send(Arc::new(batch))
                     .await
                     .map_err(|_| FlowOperatorError::ChannelClosed)?;
                 builder = ctx.pool().acquire(Arc::clone(&schema));
@@ -131,7 +131,7 @@ impl FlowOperator for AggregateOp {
                 .finish()
                 .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
             output
-                .send(batch)
+                .send(Arc::new(batch))
                 .await
                 .map_err(|_| FlowOperatorError::ChannelClosed)?;
         }

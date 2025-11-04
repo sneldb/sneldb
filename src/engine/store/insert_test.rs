@@ -157,6 +157,7 @@ async fn test_insert_and_maybe_flush_e2e() {
         .create();
     let result = scan(
         &cmd,
+        None,
         &registry,
         &ctx.base_dir,
         &ctx.segment_ids,

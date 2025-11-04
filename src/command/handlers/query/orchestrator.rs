@@ -30,6 +30,16 @@ impl<'a> QueryExecutionPipeline<'a> {
         Self { ctx, planner }
     }
 
+    pub fn with_metadata(mut self, metadata: std::collections::HashMap<String, String>) -> Self {
+        self.ctx = QueryContext {
+            command: self.ctx.command,
+            shard_manager: self.ctx.shard_manager,
+            registry: self.ctx.registry,
+            metadata,
+        };
+        self
+    }
+
     pub fn streaming_supported(&self) -> bool {
         matches!(
             self.ctx.command,

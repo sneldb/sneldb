@@ -114,13 +114,49 @@ impl ZoneMerger {
 
     /// Returns the next batch of rows from the merged stream, up to the specified maximum size.
     /// Returns None if there are no more rows to return.
+    /// Also returns the maximum created_at timestamp from all cursors that contributed to this batch.
     /// This is useful for processing rows in chunks rather than one at a time.
-    pub fn next_zone(&mut self, max_rows: usize) -> Option<Vec<ZoneRow>> {
+    pub fn next_zone(&mut self, max_rows: usize) -> Option<(Vec<ZoneRow>, u64)> {
         let mut batch = Vec::with_capacity(max_rows);
+        let mut max_created_at = 0u64;
 
         while batch.len() < max_rows {
-            if let Some(row) = self.next_row() {
-                batch.push(row);
+            if let Some(Reverse(top)) = self.heap.pop() {
+                let cursor = &mut self.cursors[top.cursor_index];
+                let row = cursor.next_row();
+
+                if tracing::enabled!(tracing::Level::TRACE) {
+                    trace!(
+                        target: "sneldb::query",
+                        cursor_index = top.cursor_index,
+                        context_id = top.context_id,
+                        "Returning next row from cursor"
+                    );
+                }
+
+                if let Some(next_ctx) = cursor.peek_context_id() {
+                    self.heap.push(Reverse(HeapItem {
+                        context_id: next_ctx.to_string(),
+                        cursor_index: top.cursor_index,
+                    }));
+                    if tracing::enabled!(tracing::Level::TRACE) {
+                        trace!(
+                            target: "sneldb::query",
+                            cursor_index = top.cursor_index,
+                            context_id = next_ctx,
+                            "Pushed next context_id to heap"
+                        );
+                    }
+                }
+
+                if let Some(r) = row {
+                    // Track max created_at as we collect rows
+                    max_created_at = max_created_at.max(cursor.created_at);
+                    batch.push(r);
+                } else {
+                    // No more rows from this cursor, continue to next
+                    continue;
+                }
             } else {
                 break;
             }
@@ -137,10 +173,11 @@ impl ZoneMerger {
                 debug!(
                     target: "sneldb::query",
                     batch_size = batch.len(),
+                    max_created_at,
                     "next_zone returned batch"
                 );
             }
-            Some(batch)
+            Some((batch, max_created_at))
         }
     }
 }

@@ -41,11 +41,16 @@ impl BatchDispatch for BatchShardDispatcher {
 
             let _ = shard
                 .tx
-                .send(ShardMessage::Query(
-                    command.into_owned(),
-                    tx_clone,
-                    Arc::clone(&ctx.registry),
-                ))
+                .send(ShardMessage::Query {
+                    command: command.into_owned(),
+                    metadata: if ctx.metadata.is_empty() {
+                        None
+                    } else {
+                        Some(ctx.metadata.clone())
+                    },
+                    tx: tx_clone,
+                    registry: Arc::clone(&ctx.registry),
+                })
                 .await;
         }
 

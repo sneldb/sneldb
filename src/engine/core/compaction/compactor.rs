@@ -62,11 +62,16 @@ impl Compactor {
         let mut zone_id = 0;
         let level = SegmentId::from(self.output_segment_id as u32).level();
         let target_rows = ZoneBatchSizer::target_rows(level);
-        while let Some(batch) = merger.next_zone(target_rows) {
-            let plan =
-                ZonePlan::from_rows(batch, self.uid.clone(), self.output_segment_id, zone_id)
-                    .map_err(|e| CompactorError::ZoneWriter(e.to_string()))?;
-            debug!(target: "compactor::run", zone_id, "Created zone plan");
+        while let Some((batch, max_created_at)) = merger.next_zone(target_rows) {
+            let plan = ZonePlan::from_rows(
+                batch,
+                self.uid.clone(),
+                self.output_segment_id,
+                zone_id,
+                max_created_at,
+            )
+            .map_err(|e| CompactorError::ZoneWriter(e.to_string()))?;
+            debug!(target: "compactor::run", zone_id, max_created_at, "Created zone plan");
             zone_plans.push(plan);
             zone_id += 1;
         }

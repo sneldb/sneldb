@@ -80,7 +80,7 @@ fn test_zone_merger_interleaved_complex_merge() {
 
     // Fetch all rows in batches of 3
     let mut all_rows = Vec::new();
-    while let Some(batch) = merger.next_zone(3) {
+    while let Some((batch, _created_at)) = merger.next_zone(3) {
         for row in batch {
             all_rows.push(row.context_id);
         }
@@ -103,12 +103,12 @@ fn test_zone_merger_next_zone_respects_batch_size() {
 
     let mut merger = ZoneMerger::new(vec![cursor]);
 
-    let batch = merger.next_zone(2).unwrap();
+    let (batch, _created_at) = merger.next_zone(2).unwrap();
     assert_eq!(batch.len(), 2);
     assert_eq!(batch[0].context_id, "ctx1");
     assert_eq!(batch[1].context_id, "ctx2");
 
-    let remaining = merger.next_zone(2).unwrap();
+    let (remaining, _created_at) = merger.next_zone(2).unwrap();
     assert_eq!(remaining.len(), 1);
     assert_eq!(remaining[0].context_id, "ctx3");
 
@@ -137,7 +137,7 @@ fn test_zone_merger_next_zone_interleaved_batching() {
 
     let mut merger = ZoneMerger::new(vec![cursor1, cursor2, cursor3]);
 
-    let batch1 = merger.next_zone(2).unwrap();
+    let (batch1, _created_at) = merger.next_zone(2).unwrap();
     assert_eq!(
         batch1
             .iter()
@@ -146,7 +146,7 @@ fn test_zone_merger_next_zone_interleaved_batching() {
         vec!["ctx01", "ctx02"]
     );
 
-    let batch2 = merger.next_zone(2).unwrap();
+    let (batch2, _created_at) = merger.next_zone(2).unwrap();
     assert_eq!(
         batch2
             .iter()
@@ -155,7 +155,7 @@ fn test_zone_merger_next_zone_interleaved_batching() {
         vec!["ctx03", "ctx04"]
     );
 
-    let batch3 = merger.next_zone(2).unwrap();
+    let (batch3, _created_at) = merger.next_zone(2).unwrap();
     assert_eq!(
         batch3
             .iter()

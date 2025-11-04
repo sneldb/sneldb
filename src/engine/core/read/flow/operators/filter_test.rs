@@ -52,7 +52,7 @@ async fn filter_op_drops_rows() {
         builder.push_row(&[json!(value)]).expect("row inserted");
     }
     let batch = builder.finish().expect("batch builds");
-    tx.send(batch).await.expect("send batch");
+    tx.send(Arc::new(batch)).await.expect("send batch");
     drop(tx);
 
     let ctx_clone = Arc::clone(&ctx);

@@ -53,6 +53,15 @@ async fn remember_query(
         return Err("REMEMBER only supports QUERY commands".into());
     }
 
+    let mut catalog = load_catalog()?;
+
+    if catalog.entries().contains_key(spec.alias()) {
+        return Err(format!("Materialization '{}' already exists", spec.alias()));
+    }
+
+    let mut entry = MaterializationEntry::new(spec.clone(), catalog.root_dir())
+        .map_err(|e| format!("Failed to create catalog entry: {e}"))?;
+
     let pipeline = QueryExecutionPipeline::new(&query_command, shard_manager, Arc::clone(registry));
 
     if !pipeline.streaming_supported() {
@@ -67,15 +76,6 @@ async fn remember_query(
 
     let schema_arc = stream.schema();
     let snapshots = batch_schema_to_snapshots(&schema_arc);
-
-    let mut catalog = load_catalog()?;
-
-    if catalog.entries().contains_key(spec.alias()) {
-        return Err(format!("Materialization '{}' already exists", spec.alias()));
-    }
-
-    let mut entry = MaterializationEntry::new(spec.clone(), catalog.root_dir())
-        .map_err(|e| format!("Failed to create catalog entry: {e}"))?;
 
     let store = MaterializedStore::open(&entry.storage_path)
         .map_err(|e| format!("Failed to open materialized store: {e}"))?;
@@ -114,10 +114,7 @@ async fn remember_query(
     summary.push(format!("rows stored: {}", sink.total_rows()));
     summary.push(format!("rows appended: {}", sink.last_rows_appended()));
     summary.push(format!("compressed bytes: {}", sink.total_bytes()));
-    summary.push(format!(
-        "bytes appended: {}",
-        sink.last_bytes_appended()
-    ));
+    summary.push(format!("bytes appended: {}", sink.last_bytes_appended()));
     if !high_water.is_zero() {
         summary.push(format!(
             "high-water mark: timestamp={} event_id={}",

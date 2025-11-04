@@ -31,7 +31,7 @@ async fn send_updates_metrics() {
     assert_eq!(sender.capacity(), 1);
 
     let batch = build_batch(&schema, &pool, 1);
-    sender.send(batch).await.expect("send succeeds");
+    sender.send(Arc::new(batch)).await.expect("send succeeds");
     assert_eq!(metrics.total_sent_batches(), 1);
     assert_eq!(metrics.pending_batches(), 1);
 
@@ -43,12 +43,12 @@ async fn send_updates_metrics() {
     // Saturate channel again to check backpressure accounting.
     let saturated = build_batch(&schema, &pool, 2);
     sender
-        .send(saturated)
+        .send(Arc::new(saturated))
         .await
         .expect("second send should enqueue");
 
     let blocked = build_batch(&schema, &pool, 3);
-    match sender.try_send(blocked) {
+    match sender.try_send(Arc::new(blocked)) {
         Err(TrySendError::Full(returned)) => {
             // returned batch drops here, recycling buffers via Drop impl
             drop(returned);

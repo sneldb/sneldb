@@ -52,7 +52,7 @@ impl FlowSource for SegmentSource {
                     .finish()
                     .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
                 output
-                    .send(batch)
+                    .send(Arc::new(batch))
                     .await
                     .map_err(|_| FlowOperatorError::ChannelClosed)?;
                 builder = ctx.pool().acquire(Arc::clone(&self.config.schema));
@@ -64,7 +64,7 @@ impl FlowSource for SegmentSource {
                 .finish()
                 .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
             output
-                .send(batch)
+                .send(Arc::new(batch))
                 .await
                 .map_err(|_| FlowOperatorError::ChannelClosed)?;
         }

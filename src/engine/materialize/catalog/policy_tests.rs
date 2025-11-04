@@ -20,4 +20,3 @@ fn policy_detects_limits() {
     };
     assert!(!policy.is_noop());
 }
-

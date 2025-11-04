@@ -14,6 +14,8 @@ pub struct ZonePlan {
     pub uid: String,
     pub event_type: String,
     pub segment_id: u64,
+    /// Maximum created_at timestamp from source zones (for compaction)
+    pub created_at: u64,
 }
 
 impl ZonePlan {
@@ -64,6 +66,7 @@ impl ZonePlan {
                 uid: uid.clone(),
                 event_type: event_type.clone(),
                 segment_id,
+                created_at: crate::shared::time::now(),
             });
 
             zone_id += 1;
@@ -165,6 +168,7 @@ impl ZonePlan {
         uid: String,
         segment_id: u64,
         zone_id: u32,
+        created_at: u64,
     ) -> Result<ZonePlan, StoreError> {
         if rows.is_empty() {
             if tracing::enabled!(tracing::Level::WARN) {
@@ -216,6 +220,7 @@ impl ZonePlan {
             uid,
             event_type,
             segment_id,
+            created_at,
         })
     }
 }

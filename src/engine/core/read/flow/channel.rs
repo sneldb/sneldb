@@ -7,15 +7,15 @@ use super::metrics::FlowMetrics;
 
 #[derive(Clone)]
 pub struct BatchSender {
-    inner: mpsc::Sender<ColumnBatch>,
+    inner: mpsc::Sender<Arc<ColumnBatch>>,
     metrics: Arc<FlowMetrics>,
 }
 
 impl BatchSender {
     pub async fn send(
         &self,
-        batch: ColumnBatch,
-    ) -> Result<(), mpsc::error::SendError<ColumnBatch>> {
+        batch: Arc<ColumnBatch>,
+    ) -> Result<(), mpsc::error::SendError<Arc<ColumnBatch>>> {
         let rows = batch.len() as u64;
         match self.inner.send(batch).await {
             Ok(()) => {
@@ -28,8 +28,8 @@ impl BatchSender {
 
     pub fn try_send(
         &self,
-        batch: ColumnBatch,
-    ) -> Result<(), mpsc::error::TrySendError<ColumnBatch>> {
+        batch: Arc<ColumnBatch>,
+    ) -> Result<(), mpsc::error::TrySendError<Arc<ColumnBatch>>> {
         let rows = batch.len() as u64;
         match self.inner.try_send(batch) {
             Ok(()) => {
@@ -52,12 +52,12 @@ impl BatchSender {
 }
 
 pub struct BatchReceiver {
-    inner: mpsc::Receiver<ColumnBatch>,
+    inner: mpsc::Receiver<Arc<ColumnBatch>>,
     metrics: Arc<FlowMetrics>,
 }
 
 impl BatchReceiver {
-    pub async fn recv(&mut self) -> Option<ColumnBatch> {
+    pub async fn recv(&mut self) -> Option<Arc<ColumnBatch>> {
         if let Some(batch) = self.inner.recv().await {
             let len = batch.len() as u64;
             self.metrics.on_receive(len);

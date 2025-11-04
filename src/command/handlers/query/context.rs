@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use tokio::sync::RwLock;
@@ -11,6 +12,7 @@ pub struct QueryContext<'a> {
     pub command: &'a Command,
     pub shard_manager: &'a ShardManager,
     pub registry: Arc<RwLock<SchemaRegistry>>,
+    pub metadata: HashMap<String, String>,
 }
 
 impl<'a> QueryContext<'a> {
@@ -23,6 +25,12 @@ impl<'a> QueryContext<'a> {
             command,
             shard_manager,
             registry,
+            metadata: HashMap::new(),
         }
+    }
+
+    pub fn with_metadata(mut self, metadata: HashMap<String, String>) -> Self {
+        self.metadata = metadata;
+        self
     }
 }

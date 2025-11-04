@@ -104,7 +104,7 @@ async fn aggregate_op_computes_count_and_total() {
 
     let (tx, rx) = FlowChannel::bounded(4, Arc::clone(ctx.metrics()));
     let (out_tx, mut out_rx) = FlowChannel::bounded(4, Arc::clone(ctx.metrics()));
-    tx.send(batch).await.unwrap();
+    tx.send(Arc::new(batch)).await.unwrap();
     drop(tx);
 
     let op = AggregateOp::new(AggregateOpConfig {

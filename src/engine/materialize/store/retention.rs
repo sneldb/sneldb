@@ -1,6 +1,8 @@
 use crate::engine::materialize::MaterializationError;
 use crate::engine::materialize::catalog::RetentionPolicy;
 
+use crate::engine::core::read::cache::GlobalMaterializedFrameCache;
+
 use super::frame::storage::FrameStorage;
 use super::manifest::ManifestState;
 use crate::shared::time::now;
@@ -58,6 +60,9 @@ impl<'a> RetentionEnforcer<'a> {
         for &idx in drop_indices.iter().rev() {
             if let Some(frame) = state.frames().get(idx) {
                 self.storage.remove(&frame.file_name);
+                // Invalidate cache entry for the removed frame
+                let cache = GlobalMaterializedFrameCache::instance();
+                cache.invalidate_frame(self.storage.path(), &frame.file_name);
             }
         }
 

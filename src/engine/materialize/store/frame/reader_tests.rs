@@ -1,8 +1,8 @@
 use super::reader::FrameReader;
 use super::storage::FrameStorage;
+use crate::engine::materialize::MaterializationError;
 use crate::engine::materialize::catalog::SchemaSnapshot;
 use crate::engine::materialize::store::codec::EncodedFrame;
-use crate::engine::materialize::MaterializationError;
 use tempfile::tempdir;
 
 fn build_encoded_frame() -> EncodedFrame {
@@ -21,10 +21,7 @@ fn build_encoded_frame() -> EncodedFrame {
 
 fn write_frame(storage: &FrameStorage) -> (super::metadata::StoredFrameMeta, EncodedFrame) {
     let encoded = build_encoded_frame();
-    let meta = storage
-        .writer()
-        .write(0, &encoded)
-        .expect("write frame");
+    let meta = storage.writer().write(0, &encoded).expect("write frame");
     (meta, encoded)
 }
 
@@ -84,4 +81,3 @@ fn reader_rejects_schema_hash_mismatch() {
         other => panic!("expected corrupt error, got {other:?}"),
     }
 }
-

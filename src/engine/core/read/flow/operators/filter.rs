@@ -26,11 +26,11 @@ impl FlowOperator for FilterOp {
         output: BatchSender,
         ctx: Arc<FlowContext>,
     ) -> Result<(), FlowOperatorError> {
-        while let Some(batch) = input.recv().await {
-            if batch.is_empty() {
+        while let Some(batch_arc) = input.recv().await {
+            if batch_arc.is_empty() {
                 continue;
             }
-            let schema = Arc::new(batch.schema().clone());
+            let schema = Arc::new(batch_arc.schema().clone());
             let mut builder = ctx.pool().acquire(Arc::clone(&schema));
             let column_count = schema.column_count();
 
@@ -38,12 +38,12 @@ impl FlowOperator for FilterOp {
 
             let mut column_views: Vec<&[Value]> = Vec::with_capacity(column_count);
             for col_idx in 0..column_count {
-                column_views.push(batch.column(col_idx).map_err(|e| {
+                column_views.push(batch_arc.column(col_idx).map_err(|e| {
                     FlowOperatorError::Batch(format!("failed to read column: {}", e))
                 })?);
             }
 
-            for row_idx in 0..batch.len() {
+            for row_idx in 0..batch_arc.len() {
                 row_values.clear();
                 for col in &column_views {
                     row_values.push(col.get(row_idx).cloned().unwrap_or(Value::Null));
@@ -61,7 +61,7 @@ impl FlowOperator for FilterOp {
                             .finish()
                             .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
                         output
-                            .send(batch)
+                            .send(Arc::new(batch))
                             .await
                             .map_err(|_| FlowOperatorError::ChannelClosed)?;
                         builder = ctx.pool().acquire(Arc::clone(&schema));
@@ -69,14 +69,12 @@ impl FlowOperator for FilterOp {
                 }
             }
 
-            drop(batch);
-
             if builder.len() > 0 {
                 let batch = builder
                     .finish()
                     .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
                 output
-                    .send(batch)
+                    .send(Arc::new(batch))
                     .await
                     .map_err(|_| FlowOperatorError::ChannelClosed)?;
             }

@@ -23,6 +23,7 @@ impl<'a> ZoneHydrator<'a> {
     }
 
     pub async fn hydrate(self) -> Vec<CandidateZone> {
+        let hydrate_start = std::time::Instant::now();
         if tracing::enabled!(tracing::Level::DEBUG) {
             debug!(target: "sneldb::query", "Starting zone hydration for plan {:?}", self.plan);
         }
@@ -30,6 +31,8 @@ impl<'a> ZoneHydrator<'a> {
         let mut candidate_zones = ZoneCollector::new(self.plan, self.steps.clone())
             .with_caches(self.caches)
             .collect_zones();
+
+        let zones_after_collect = candidate_zones.len();
 
         if tracing::enabled!(tracing::Level::DEBUG) {
             debug!(target: "sneldb::query", "Collected {} candidate zones", candidate_zones.len());
@@ -40,10 +43,14 @@ impl<'a> ZoneHydrator<'a> {
         let mut seen: HashSet<(u32, String)> = HashSet::with_capacity(candidate_zones.len());
         candidate_zones.retain(|z| seen.insert((z.zone_id, z.segment_id.clone())));
 
+        let zones_after_dedup = candidate_zones.len();
+
         // If coordinator supplied a zone filter, apply it now
         if let Some(filter) = &self.zone_filter {
             filter.apply(&mut candidate_zones);
         }
+        let zones_after_filter = candidate_zones.len();
+
         if tracing::enabled!(tracing::Level::DEBUG) {
             debug!(target: "sneldb::query", "Deduplicated to {} candidate zones", candidate_zones.len());
         }
@@ -75,6 +82,20 @@ impl<'a> ZoneHydrator<'a> {
         if tracing::enabled!(tracing::Level::DEBUG) {
             debug!(target: "sneldb::query", "Candidate zones: {:?}", candidate_zones.len());
         }
+
+        let hydrate_time = hydrate_start.elapsed();
+        if tracing::enabled!(tracing::Level::TRACE) {
+            tracing::trace!(
+                target: "sneldb::zone_hydrator",
+                zones_after_collect = zones_after_collect,
+                zones_after_dedup = zones_after_dedup,
+                zones_after_filter = zones_after_filter,
+                final_zones = candidate_zones.len(),
+                hydrate_time_ms = hydrate_time.as_millis(),
+                "Zone hydration completed"
+            );
+        }
+
         candidate_zones
     }
 

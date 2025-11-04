@@ -44,6 +44,7 @@ async fn writes_columns() {
         uid: "uid-login".into(),
         event_type: "login".into(),
         segment_id: 7,
+        created_at: 0,
     };
 
     let writer = ColumnWriter::new(dir.path().to_path_buf(), registry);
@@ -132,6 +133,7 @@ async fn uses_type_hints_when_schema_falls_back_to_varbytes() {
         uid: "uid-hinted".into(),
         event_type: "hinted".into(),
         segment_id: 2,
+        created_at: 0,
     };
 
     let mut catalog = ColumnTypeCatalog::new();

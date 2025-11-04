@@ -231,6 +231,7 @@ impl ZoneCursorLoader {
                     event_ids,
                     payload_fields,
                     pos: 0,
+                    created_at: zone.created_at,
                 });
             }
         }

@@ -32,7 +32,12 @@ impl ShardMessageFactory {
     }
 
     pub fn query(&self, command: Command, tx: mpsc::Sender<QueryResult>) -> ShardMessage {
-        ShardMessage::Query(command, tx, Arc::clone(&self.registry))
+        ShardMessage::Query {
+            command,
+            metadata: None,
+            tx,
+            registry: Arc::clone(&self.registry),
+        }
     }
 
     pub fn replay(&self, command: Command, tx: mpsc::Sender<Vec<Event>>) -> ShardMessage {
@@ -50,6 +55,7 @@ impl ShardMessageFactory {
         (
             ShardMessage::QueryStream {
                 command,
+                metadata: None,
                 response: tx,
                 registry: Arc::clone(&self.registry),
             },

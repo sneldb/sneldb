@@ -73,7 +73,7 @@ async fn build_handle(
         }
         if builder.len() > 0 {
             let batch = builder.finish().expect("batch");
-            let _ = tx.send(batch).await;
+            let _ = tx.send(Arc::new(batch)).await;
         }
         drop(tx);
     });

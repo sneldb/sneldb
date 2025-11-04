@@ -14,6 +14,7 @@ use tracing::{debug, error, info};
 /// Executes a query by scanning memtables and on-disk segments.
 pub async fn scan(
     command: &Command,
+    metadata: Option<std::collections::HashMap<String, String>>,
     registry: &Arc<RwLock<SchemaRegistry>>,
     segment_base_dir: &Path,
     segment_ids: &Arc<std::sync::RwLock<Vec<String>>>,
@@ -29,17 +30,24 @@ pub async fn scan(
     );
 
     // Step 1: Build query plan
-    let plan = match QueryPlan::new(command.clone(), registry, segment_base_dir, segment_ids).await
-    {
-        Some(p) => {
-            info!(target: "engine::query::scan", "Query plan successfully created");
-            p
+    let mut plan =
+        match QueryPlan::new(command.clone(), registry, segment_base_dir, segment_ids).await {
+            Some(p) => {
+                info!(target: "engine::query::scan", "Query plan successfully created");
+                p
+            }
+            None => {
+                error!(target: "engine::query::scan", "Failed to create query plan");
+                return Err(QueryExecutionError::Aborted);
+            }
+        };
+
+    // Apply metadata if provided
+    if let Some(meta) = metadata {
+        for (k, v) in meta {
+            plan.set_metadata(k, v);
         }
-        None => {
-            error!(target: "engine::query::scan", "Failed to create query plan");
-            return Err(QueryExecutionError::Aborted);
-        }
-    };
+    }
 
     // Step 2: Build context and delegate to ExecutionEngine
 
@@ -57,6 +65,7 @@ pub async fn scan(
 /// resulting flow handle back to the coordinator.
 pub async fn scan_streaming(
     command: &Command,
+    metadata: Option<std::collections::HashMap<String, String>>,
     registry: &Arc<RwLock<SchemaRegistry>>,
     segment_base_dir: &Path,
     segment_ids: &Arc<std::sync::RwLock<Vec<String>>>,
@@ -65,6 +74,7 @@ pub async fn scan_streaming(
 ) -> Result<ShardFlowHandle, QueryExecutionError> {
     let scan = StreamingScan::new(
         command,
+        metadata,
         registry,
         segment_base_dir,
         segment_ids,

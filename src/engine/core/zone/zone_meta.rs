@@ -16,6 +16,8 @@ pub struct ZoneMeta {
     pub end_row: u32,
     pub timestamp_min: u64,
     pub timestamp_max: u64,
+    #[serde(default)]
+    pub created_at: u64,
 }
 
 impl ZoneMeta {
@@ -114,6 +116,7 @@ impl ZoneMeta {
             timestamp_max: sorted_by_time.last().unwrap().timestamp,
             uid: zone_plan.uid.clone(),
             segment_id: zone_plan.segment_id,
+            created_at: zone_plan.created_at,
         })
     }
 

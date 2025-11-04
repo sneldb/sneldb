@@ -4,13 +4,13 @@ use std::path::Path;
 
 use crc32fast::Hasher as Crc32Hasher;
 
-use crate::engine::materialize::high_water::HighWaterMark;
 use crate::engine::materialize::MaterializationError;
+use crate::engine::materialize::high_water::HighWaterMark;
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 
-use super::header::{FrameHeader, FRAME_VERSION};
-use super::metadata::StoredFrameMeta;
 use super::super::codec::EncodedFrame;
+use super::header::{FRAME_VERSION, FrameHeader};
+use super::metadata::StoredFrameMeta;
 
 pub struct FrameWriter<'a> {
     frame_dir: &'a Path,
@@ -76,4 +76,3 @@ impl<'a> FrameWriter<'a> {
         })
     }
 }
-

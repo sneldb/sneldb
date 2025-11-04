@@ -126,7 +126,7 @@ impl MemTableSource {
                     .finish()
                     .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
                 output
-                    .send(batch)
+                    .send(Arc::new(batch))
                     .await
                     .map_err(|_| FlowOperatorError::ChannelClosed)?;
                 *builder = Some(self.new_builder(ctx, Arc::clone(schema)));
@@ -264,7 +264,7 @@ impl FlowSource for MemTableSource {
                         .finish()
                         .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
                     output
-                        .send(batch)
+                        .send(Arc::new(batch))
                         .await
                         .map_err(|_| FlowOperatorError::ChannelClosed)?;
                     builder = Some(self.new_builder(&ctx, Arc::clone(&schema)));
@@ -277,7 +277,7 @@ impl FlowSource for MemTableSource {
                         .finish()
                         .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
                     output
-                        .send(batch)
+                        .send(Arc::new(batch))
                         .await
                         .map_err(|_| FlowOperatorError::ChannelClosed)?;
                 }
@@ -321,7 +321,7 @@ impl FlowSource for MemTableSource {
                             .finish()
                             .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
                         output
-                            .send(batch)
+                            .send(Arc::new(batch))
                             .await
                             .map_err(|_| FlowOperatorError::ChannelClosed)?;
                     }
@@ -363,7 +363,7 @@ impl FlowSource for MemTableSource {
                     .finish()
                     .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
                 output
-                    .send(batch)
+                    .send(Arc::new(batch))
                     .await
                     .map_err(|_| FlowOperatorError::ChannelClosed)?;
             }

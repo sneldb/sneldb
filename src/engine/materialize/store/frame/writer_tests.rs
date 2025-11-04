@@ -1,8 +1,8 @@
 use super::storage::FrameStorage;
 use super::writer::FrameWriter;
+use crate::engine::materialize::MaterializationError;
 use crate::engine::materialize::catalog::SchemaSnapshot;
 use crate::engine::materialize::high_water::HighWaterMark;
-use crate::engine::materialize::MaterializationError;
 use crate::engine::materialize::store::codec::EncodedFrame;
 use tempfile::tempdir;
 
@@ -33,7 +33,10 @@ fn writer_persists_frame_and_returns_metadata() {
     assert_eq!(meta.file_name, "000000.mat");
     assert_eq!(meta.schema_hash, encoded.schema_hash);
     assert_eq!(meta.max_timestamp, encoded.max_timestamp);
-    assert_eq!(meta.high_water_mark, HighWaterMark::new(encoded.max_timestamp, encoded.max_event_id));
+    assert_eq!(
+        meta.high_water_mark,
+        HighWaterMark::new(encoded.max_timestamp, encoded.max_event_id)
+    );
 
     let frame_path = storage.path().join(&meta.file_name);
     assert!(frame_path.exists());
@@ -52,7 +55,10 @@ fn writer_output_can_be_read_back() {
     let data = reader.read(&meta).expect("read frame");
     assert_eq!(data.header.schema_hash, encoded.schema_hash);
     assert_eq!(data.header.row_count, encoded.row_count);
-    assert_eq!(data.header.compressed_len as usize, encoded.compressed.len());
+    assert_eq!(
+        data.header.compressed_len as usize,
+        encoded.compressed.len()
+    );
     assert_eq!(data.compressed, encoded.compressed);
 }
 
@@ -65,4 +71,3 @@ fn writer_propagates_io_error() {
     let err = writer.write(0, &encoded).unwrap_err();
     matches!(err, MaterializationError::Io(_));
 }
-

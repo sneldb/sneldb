@@ -65,7 +65,7 @@ async fn build_handle(
     let batch = builder.finish().expect("finish batch");
 
     let send_task = tokio::spawn(async move {
-        let _ = tx.send(batch).await;
+        let _ = tx.send(Arc::new(batch)).await;
     });
 
     ShardFlowHandle::new(rx, schema, vec![send_task])

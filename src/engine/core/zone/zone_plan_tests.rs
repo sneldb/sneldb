@@ -98,7 +98,7 @@ fn test_from_rows_constructs_zone_plan() {
         Factory::zone_row().with_context_id("ctx1").create(),
         Factory::zone_row().with_context_id("ctx2").create(),
     ];
-    let plan = ZonePlan::from_rows(rows, "u99".into(), 77, 3).unwrap();
+    let plan = ZonePlan::from_rows(rows, "u99".into(), 77, 3, 0).unwrap();
 
     assert_eq!(plan.uid, "u99");
     assert_eq!(plan.segment_id, 77);
@@ -168,7 +168,7 @@ fn test_from_rows_preserves_typed_payload() {
             .create(),
     ];
 
-    let plan = ZonePlan::from_rows(rows, "uid-typed".into(), 55, 0).unwrap();
+    let plan = ZonePlan::from_rows(rows, "uid-typed".into(), 55, 0, 0).unwrap();
     let event = &plan.events[0];
 
     assert_eq!(

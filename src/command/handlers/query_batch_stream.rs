@@ -40,7 +40,7 @@ impl QueryBatchStream {
     /// Receives the next batch from the stream.
     ///
     /// Returns `None` when the stream is exhausted.
-    pub async fn recv(&mut self) -> Option<ColumnBatch> {
+    pub async fn recv(&mut self) -> Option<Arc<ColumnBatch>> {
         self.receiver.recv().await
     }
 }

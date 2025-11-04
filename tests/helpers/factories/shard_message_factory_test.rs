@@ -57,10 +57,14 @@ async fn test_shard_message_factory_variants() {
     let (tx_query, _) = mpsc::channel(1);
     let msg = factory.query(cmd.clone(), tx_query.clone());
     match msg {
-        ShardMessage::Query(c, sender, reg) => {
+        ShardMessage::Query {
+            command: c,
+            metadata: _,
+            tx: sender,
+            registry: reg,
+        } => {
             assert_eq!(format!("{:?}", c), format!("{:?}", cmd));
             sender
-                .clone()
                 .send(QueryResult::Selection(SelectionResult {
                     columns: vec![],
                     rows: vec![],

@@ -1,5 +1,5 @@
-use super::file::CatalogFile;
 use super::entry::MaterializationEntry;
+use super::file::CatalogFile;
 use crate::engine::materialize::MaterializationError;
 use crate::test_helpers::factories::CommandFactory;
 use std::collections::HashMap;
@@ -65,4 +65,3 @@ fn corrupt_file_is_backed_up_and_returns_empty() -> Result<(), MaterializationEr
     assert!(!path.exists());
     Ok(())
 }
-
