@@ -53,12 +53,13 @@ impl FlowOperator for ProjectOp {
             let mut builder = ctx.pool().acquire(Arc::clone(&target_schema));
             let mut row_values: Vec<Value> = Vec::with_capacity(self.projection.indices.len());
 
-            let mut column_views: Vec<&[Value]> = Vec::with_capacity(self.projection.indices.len());
+            let mut column_vecs: Vec<Vec<Value>> = Vec::with_capacity(self.projection.indices.len());
             for index in &self.projection.indices {
-                column_views.push(batch_arc.column(*index).map_err(|e| {
+                column_vecs.push(batch_arc.column(*index).map_err(|e| {
                     FlowOperatorError::Batch(format!("failed to read column {}: {}", index, e))
                 })?);
             }
+            let column_views: Vec<&[Value]> = column_vecs.iter().map(|v| v.as_slice()).collect();
 
             // Optimize: avoid Option overhead - row_idx is always valid since we iterate 0..batch.len()
             // Pre-allocate row_values once and reuse, clearing between rows

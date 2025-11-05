@@ -1,3 +1,5 @@
+use bytes::Bytes;
+use http_body_util::Full;
 use hyper::{Request, Response, StatusCode, body::Incoming};
 use std::{convert::Infallible, sync::Arc};
 use tokio::sync::RwLock;
@@ -29,28 +31,28 @@ impl HttpHandler {
         }
     }
 
-    fn not_found() -> Response<String> {
+    fn not_found() -> Response<Full<Bytes>> {
         Response::builder()
             .status(StatusCode::NOT_FOUND)
-            .body("Not Found".to_string())
+            .body(full_body(b"Not Found".to_vec()))
             .unwrap()
     }
 
-    fn serve_playground(path: &str) -> Option<Response<String>> {
+    fn serve_playground(path: &str) -> Option<Response<Full<Bytes>>> {
         if !CONFIG.playground.enabled {
             return None;
         }
         match path {
-            "/" => Some(serve_index()),
+            "/" => Some(serve_index().map(|body| full_body(body.into_bytes()))),
             p if p.starts_with("/static/") => {
                 let name = p.trim_start_matches("/static/");
-                Some(serve_asset(name))
+                Some(serve_asset(name).map(|body| full_body(body.into_bytes())))
             }
             _ => None,
         }
     }
 
-    async fn handle(&self, req: Request<Incoming>) -> Result<Response<String>, Infallible> {
+    async fn handle(&self, req: Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
         let path = req.uri().path().to_string();
 
         // Check shutdown and backpressure before processing requests
@@ -60,7 +62,7 @@ impl HttpHandler {
                 return Ok(Response::builder()
                     .status(hyper::StatusCode::SERVICE_UNAVAILABLE)
                     .header(hyper::header::CONTENT_TYPE, "text/plain")
-                    .body("Server is shutting down".to_string())
+                    .body(full_body(b"Server is shutting down".to_vec()))
                     .unwrap());
             }
 
@@ -68,7 +70,9 @@ impl HttpHandler {
                 return Ok(Response::builder()
                     .status(hyper::StatusCode::SERVICE_UNAVAILABLE)
                     .header(hyper::header::CONTENT_TYPE, "text/plain")
-                    .body("Server is under pressure, please retry later".to_string())
+                    .body(full_body(
+                        b"Server is under pressure, please retry later".to_vec(),
+                    ))
                     .unwrap());
             }
         }
@@ -106,7 +110,11 @@ pub async fn handle_request(
     registry: Arc<RwLock<SchemaRegistry>>,
     shard_manager: Arc<ShardManager>,
     server_state: Arc<ServerState>,
-) -> Result<Response<String>, Infallible> {
+) -> Result<Response<Full<Bytes>>, Infallible> {
     let handler = HttpHandler::new(registry, shard_manager, server_state);
     handler.handle(req).await
+}
+
+fn full_body(data: Vec<u8>) -> Full<Bytes> {
+    Full::new(Bytes::from(data))
 }

@@ -1,6 +1,7 @@
-use http_body_util::BodyExt;
+use bytes::Bytes;
+use http_body_util::{BodyExt, Full};
 use hyper::{Request, Response, StatusCode, body::Incoming, header};
-use std::{convert::Infallible, sync::Arc};
+use std::{convert::Infallible, sync::Arc, time::Instant};
 use tokio::sync::RwLock;
 
 use crate::command::dispatcher::dispatch_command;
@@ -12,7 +13,7 @@ use crate::frontend::http::json_command::JsonCommand;
 use crate::frontend::server_state::ServerState;
 use crate::shared::config::CONFIG;
 use crate::shared::response::{
-    Response as ResponseType, json::JsonRenderer, render::Renderer, unix::UnixRenderer,
+    ArrowRenderer, JsonRenderer, Response as ResponseType, render::Renderer, unix::UnixRenderer,
 };
 use tracing::info;
 
@@ -53,7 +54,7 @@ pub async fn handle_line_command(
     registry: Arc<RwLock<SchemaRegistry>>,
     shard_manager: Arc<ShardManager>,
     server_state: Arc<ServerState>,
-) -> Result<Response<String>, Infallible> {
+) -> Result<Response<Full<Bytes>>, Infallible> {
     if req.method() != hyper::Method::POST {
         return method_not_allowed();
     }
@@ -65,6 +66,7 @@ pub async fn handle_line_command(
     let input = String::from_utf8_lossy(&body).trim().to_string();
     let renderer: Arc<dyn Renderer + Send + Sync> = match CONFIG.server.output_format.as_str() {
         "json" => Arc::new(JsonRenderer),
+        "arrow" => Arc::new(ArrowRenderer),
         _ => Arc::new(UnixRenderer),
     };
 
@@ -76,10 +78,12 @@ pub async fn handle_line_command(
         Ok(cmd) => {
             // Increment pending operations before dispatch
             server_state.increment_pending();
+            let start = Instant::now();
             let result = dispatch_and_respond(cmd, registry, shard_manager, renderer).await;
+            let execution_time_ms = start.elapsed().as_secs_f64() * 1000.0;
             // Decrement after dispatch completes
             server_state.decrement_pending();
-            result
+            add_execution_time_header(result, execution_time_ms)
         }
         Err(e) => render_error(&e.to_string(), StatusCode::BAD_REQUEST, renderer),
     }
@@ -90,7 +94,7 @@ pub async fn handle_json_command(
     registry: Arc<RwLock<SchemaRegistry>>,
     shard_manager: Arc<ShardManager>,
     server_state: Arc<ServerState>,
-) -> Result<Response<String>, Infallible> {
+) -> Result<Response<Full<Bytes>>, Infallible> {
     if req.method() != hyper::Method::POST {
         return method_not_allowed();
     }
@@ -99,7 +103,10 @@ pub async fn handle_json_command(
     }
 
     let body = req.collect().await.unwrap().to_bytes();
-    let renderer: Arc<dyn Renderer + Send + Sync> = Arc::new(JsonRenderer);
+    let renderer: Arc<dyn Renderer + Send + Sync> = match CONFIG.server.output_format.as_str() {
+        "arrow" => Arc::new(ArrowRenderer),
+        _ => Arc::new(JsonRenderer),
+    };
 
     match sonic_rs::from_slice::<JsonCommand>(&body) {
         Ok(json_cmd) => {
@@ -107,10 +114,12 @@ pub async fn handle_json_command(
             info!("Received JSON command: {:?}", cmd);
             // Increment pending operations before dispatch
             server_state.increment_pending();
+            let start = Instant::now();
             let result = dispatch_and_respond(cmd, registry, shard_manager, renderer).await;
+            let execution_time_ms = start.elapsed().as_secs_f64() * 1000.0;
             // Decrement after dispatch completes
             server_state.decrement_pending();
-            result
+            add_execution_time_header(result, execution_time_ms)
         }
         Err(e) => render_error(
             &format!("Invalid JSON command: {e}"),
@@ -125,7 +134,7 @@ async fn dispatch_and_respond(
     registry: Arc<RwLock<SchemaRegistry>>,
     shard_manager: Arc<ShardManager>,
     renderer: Arc<dyn Renderer + Send + Sync>,
-) -> Result<Response<String>, Infallible> {
+) -> Result<Response<Full<Bytes>>, Infallible> {
     let mut output = Vec::new();
     let result = dispatch_command(
         &cmd,
@@ -139,33 +148,34 @@ async fn dispatch_and_respond(
     if let Err(e) = result {
         return Ok(Response::builder()
             .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body(format!("Execution error: {}", e))
+            .body(full_body(format!("Execution error: {}", e).into_bytes()))
             .unwrap());
     }
 
     let content_type = match CONFIG.server.output_format.as_str() {
         "json" => "application/json",
+        "arrow" => "application/vnd.apache.arrow.stream",
         _ => "text/plain",
     };
 
     Ok(Response::builder()
         .status(StatusCode::OK)
         .header(hyper::header::CONTENT_TYPE, content_type)
-        .body(String::from_utf8_lossy(&output).to_string())
+        .body(full_body(output))
         .unwrap())
 }
 
-fn unauthorized() -> Result<Response<String>, Infallible> {
+fn unauthorized() -> Result<Response<Full<Bytes>>, Infallible> {
     Ok(Response::builder()
         .status(StatusCode::UNAUTHORIZED)
-        .body("Unauthorized".to_string())
+        .body(full_body(b"Unauthorized".to_vec()))
         .unwrap())
 }
 
-fn method_not_allowed() -> Result<Response<String>, Infallible> {
+fn method_not_allowed() -> Result<Response<Full<Bytes>>, Infallible> {
     Ok(Response::builder()
         .status(StatusCode::METHOD_NOT_ALLOWED)
-        .body("Method Not Allowed".to_string())
+        .body(full_body(b"Method Not Allowed".to_vec()))
         .unwrap())
 }
 
@@ -173,7 +183,7 @@ fn render_error(
     msg: &str,
     status: StatusCode,
     renderer: Arc<dyn Renderer + Send + Sync>,
-) -> Result<Response<String>, Infallible> {
+) -> Result<Response<Full<Bytes>>, Infallible> {
     let resp = ResponseType::error(
         crate::shared::response::StatusCode::from(status),
         msg.to_string(),
@@ -182,6 +192,27 @@ fn render_error(
     Ok(Response::builder()
         .status(status)
         .header(hyper::header::CONTENT_TYPE, "application/json")
-        .body(String::from_utf8_lossy(&body).to_string())
+        .body(full_body(body))
         .unwrap())
+}
+
+fn full_body(data: Vec<u8>) -> Full<Bytes> {
+    Full::new(Bytes::from(data))
+}
+
+fn add_execution_time_header(
+    response: Result<Response<Full<Bytes>>, Infallible>,
+    execution_time_ms: f64,
+) -> Result<Response<Full<Bytes>>, Infallible> {
+    match response {
+        Ok(mut resp) => {
+            let headers = resp.headers_mut();
+            let execution_time_str = format!("{:.3}", execution_time_ms);
+            if let Ok(header_value) = execution_time_str.parse::<hyper::header::HeaderValue>() {
+                headers.insert("X-Execution-Time-Ms", header_value);
+            }
+            Ok(resp)
+        }
+        Err(e) => Err(e),
+    }
 }

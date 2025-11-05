@@ -116,9 +116,7 @@ impl ValueCodec {
     }
 
     #[inline(always)]
-    fn decode_json_fast<'a>(
-        data: &'a [u8],
-    ) -> Result<(Value, &'a [u8]), MaterializationError> {
+    fn decode_json_fast<'a>(data: &'a [u8]) -> Result<(Value, &'a [u8]), MaterializationError> {
         if data.len() < 4 {
             return Err(MaterializationError::Corrupt(
                 "Insufficient bytes for JSON length".into(),
@@ -142,9 +140,7 @@ impl ValueCodec {
     }
 
     #[inline(always)]
-    fn decode_string_fast<'a>(
-        data: &'a [u8],
-    ) -> Result<(Value, &'a [u8]), MaterializationError> {
+    fn decode_string_fast<'a>(data: &'a [u8]) -> Result<(Value, &'a [u8]), MaterializationError> {
         let (bytes, rest) = ByteEncoder::decode_bytes(data)?;
         // Use from_utf8_unchecked for hot path - we control the encoding
         // But we need to validate for safety, so keep the check but optimize

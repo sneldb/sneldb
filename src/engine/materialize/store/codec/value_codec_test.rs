@@ -1,6 +1,6 @@
 use super::value_codec::ValueCodec;
 use crate::engine::materialize::MaterializationError;
-use serde_json::{json, Number, Value};
+use serde_json::{Number, Value, json};
 
 #[test]
 fn encode_decode_timestamp_roundtrip() {

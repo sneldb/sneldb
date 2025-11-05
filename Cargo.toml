@@ -57,6 +57,14 @@ winnow = "0.6.14"
 peg = "0.8"
 zstd = "0.13"
 rmp-serde = "1.1"
+arrow-array = { version = "54.0.0" }
+arrow-buffer = { version = "54.0.0" }
+arrow-data = { version = "54.0.0" }
+arrow-ipc = { version = "54.0.0" }
+arrow-schema = { version = "54.0.0" }
+bytes = "1.5"
+arrow = "57.0.0"
+clap = { version = "4.4", features = ["derive"] }
 
 [dev-dependencies]
 serde_json = "1.0"
@@ -81,3 +89,7 @@ path = "src/bin/stress_tcp.rs"
 [[bin]]
 name = "wal_archive_manager"
 path = "src/bin/wal_archive_manager.rs"
+
+[[bin]]
+name = "sneldb_cli"
+path = "src/bin/sneldb_cli.rs"

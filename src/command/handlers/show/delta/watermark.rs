@@ -135,7 +135,7 @@ impl WatermarkDeduplicator {
     fn clone_detached(batch: &Arc<ColumnBatch>) -> ColumnBatch {
         let len = batch.len();
         let schema = batch.schema();
-        let columns: Vec<Vec<JsonValue>> = batch.columns().map(|col| col.to_vec()).collect();
+        let columns: Vec<Vec<JsonValue>> = batch.columns();
         ColumnBatch::new(Arc::new(schema.clone()), columns, len, None)
             .expect("Failed to recreate batch")
     }

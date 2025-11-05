@@ -6,6 +6,7 @@ use tokio::task;
 use crate::frontend::context::FrontendContext;
 use crate::frontend::unix::connection::Connection;
 use crate::shared::config::CONFIG;
+use crate::shared::response::ArrowRenderer;
 use crate::shared::response::json::JsonRenderer;
 use crate::shared::response::render::Renderer;
 use crate::shared::response::unix::UnixRenderer;
@@ -38,6 +39,7 @@ pub async fn run_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
                 let renderer: Arc<dyn Renderer + Send + Sync> =
                     match CONFIG.server.output_format.as_str() {
                         "json" => Arc::new(JsonRenderer),
+                        "arrow" => Arc::new(ArrowRenderer),
                         _ => Arc::new(UnixRenderer),
                     };
 

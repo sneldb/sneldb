@@ -1,4 +1,4 @@
-use crate::shared::response::render::Renderer;
+use crate::shared::response::render::{Renderer, StreamingFormat};
 use crate::shared::response::types::{Response, ResponseBody};
 use serde::Serialize;
 use serde::ser::{SerializeMap, SerializeSeq, Serializer as SerdeSerializer};
@@ -66,7 +66,11 @@ impl Renderer for UnixRenderer {
         output
     }
 
-    fn stream_schema(&self, columns: &[(String, String)], out: &mut Vec<u8>) {
+    fn streaming_format(&self) -> StreamingFormat {
+        StreamingFormat::Json
+    }
+
+    fn stream_schema_json(&self, columns: &[(String, String)], out: &mut Vec<u8>) {
         out.clear();
         let mut serializer = JsonSerializer::new(&mut *out);
         let mut map =
@@ -79,7 +83,7 @@ impl Renderer for UnixRenderer {
         out.push(b'\n');
     }
 
-    fn stream_row(&self, columns: &[&str], values: &[&Value], out: &mut Vec<u8>) {
+    fn stream_row_json(&self, columns: &[&str], values: &[&Value], out: &mut Vec<u8>) {
         out.clear();
 
         // Use RowValues which serializes Values by reference without cloning
@@ -99,7 +103,7 @@ impl Renderer for UnixRenderer {
         out.push(b'\n');
     }
 
-    fn stream_batch(&self, _columns: &[&str], batch: &[Vec<&Value>], out: &mut Vec<u8>) {
+    fn stream_batch_json(&self, _columns: &[&str], batch: &[Vec<&Value>], out: &mut Vec<u8>) {
         out.clear();
 
         // Serialize batch as array of arrays (same format as JsonRenderer)
@@ -124,7 +128,7 @@ impl Renderer for UnixRenderer {
         out.push(b'\n');
     }
 
-    fn stream_end(&self, row_count: usize, out: &mut Vec<u8>) {
+    fn stream_end_json(&self, row_count: usize, out: &mut Vec<u8>) {
         out.clear();
         let mut serializer = JsonSerializer::new(&mut *out);
         let mut map =

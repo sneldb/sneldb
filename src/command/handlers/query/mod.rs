@@ -17,8 +17,10 @@ use crate::engine::core::read::result::QueryResult;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
 use crate::shared::config::CONFIG;
-use crate::shared::response::render::Renderer;
+use crate::shared::response::ArrowStreamEncoder;
+use crate::shared::response::render::{Renderer, StreamingFormat};
 use crate::shared::response::{Response, StatusCode};
+use arrow_array::Array;
 use serde_json::Value as JsonValue;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -186,9 +188,37 @@ async fn write_streaming_response<W: AsyncWrite + Unpin>(
         .unwrap_or(1000);
 
     let mut encode_buf = Vec::with_capacity(if batch_size > 0 { 65536 } else { 4096 });
-    renderer.stream_schema(&column_metadata, &mut encode_buf);
-    writer.write_all(&encode_buf).await?;
-    encode_buf.clear();
+    let mut arrow_encoder = if renderer.streaming_format() == StreamingFormat::Arrow {
+        Some(ArrowStreamEncoder::new(&schema).map_err(|err| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to initialize Arrow encoder: {err}"),
+            )
+        })?)
+    } else {
+        None
+    };
+
+    match renderer.streaming_format() {
+        StreamingFormat::Json => {
+            renderer.stream_schema_json(&column_metadata, &mut encode_buf);
+            writer.write_all(&encode_buf).await?;
+            encode_buf.clear();
+        }
+        StreamingFormat::Arrow => {
+            let encoder = arrow_encoder
+                .as_mut()
+                .expect("arrow encoder should exist for arrow format");
+            encoder.write_schema(&mut encode_buf).map_err(|err| {
+                std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to encode Arrow schema: {err}"),
+                )
+            })?;
+            write_with_backpressure(writer.get_mut(), &encode_buf).await?;
+            encode_buf.clear();
+        }
+    }
 
     let event_id_idx = column_names.iter().position(|&name| name == "event_id");
 
@@ -211,77 +241,218 @@ async fn write_streaming_response<W: AsyncWrite + Unpin>(
                     continue;
                 }
 
-                let column_views: Vec<&[JsonValue]> = batch_arc
-                    .columns()
-                    .map(|column| column as &[JsonValue])
-                    .collect();
-
-                // Collect row indices that pass filters (zero-copy filtering)
+                // Collect row indices that pass filters
+                // For Arrow format, filter directly on Arrow arrays (zero JSON conversion!)
                 let mut valid_row_indices: Vec<usize> = Vec::new();
 
-                for row_idx in 0..batch_arc.len() {
-                    if let Some(idx) = event_id_idx {
-                        if let Some(id) = column_views[idx][row_idx].as_u64() {
-                            if !seen_ids.insert(id) {
-                                continue;
+                match renderer.streaming_format() {
+                    StreamingFormat::Arrow => {
+                        // Filter directly on Arrow arrays - no JSON conversion!
+                        let record_batch = batch_arc.record_batch();
+
+                        for row_idx in 0..batch_arc.len() {
+                            // Check event_id deduplication if needed (only convert that one column if necessary)
+                            if let Some(idx) = event_id_idx {
+                                let event_id_array = record_batch.column(idx);
+                                // Extract event_id value directly from Arrow array (zero JSON conversion!)
+                                let id = if let Some(int_array) = event_id_array
+                                    .as_any()
+                                    .downcast_ref::<arrow_array::Int64Array>(
+                                ) {
+                                    if !int_array.is_null(row_idx) {
+                                        Some(int_array.value(row_idx) as u64)
+                                    } else {
+                                        None
+                                    }
+                                } else if let Some(uint_array) = event_id_array
+                                    .as_any()
+                                    .downcast_ref::<arrow_array::UInt64Array>(
+                                ) {
+                                    if !uint_array.is_null(row_idx) {
+                                        Some(uint_array.value(row_idx))
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    // Fallback: convert only this column to JSON (rare case)
+                                    match batch_arc.column(idx) {
+                                        Ok(event_id_col) => {
+                                            event_id_col.get(row_idx).and_then(|v| v.as_u64())
+                                        }
+                                        Err(_) => None,
+                                    }
+                                };
+
+                                if let Some(id) = id {
+                                    if !seen_ids.insert(id) {
+                                        continue;
+                                    }
+                                }
+                            }
+
+                            if let Some(off) = offset {
+                                if skipped < off {
+                                    skipped += 1;
+                                    continue;
+                                }
+                            }
+
+                            if let Some(lim) = limit {
+                                if emitted >= lim {
+                                    done = true;
+                                    break;
+                                }
+                            }
+
+                            valid_row_indices.push(row_idx);
+                            emitted += 1;
+                        }
+                    }
+                    StreamingFormat::Json => {
+                        // For JSON format, need JSON Values for serialization
+                        let columns = batch_arc.columns();
+                        let column_views: Vec<&[JsonValue]> = columns
+                            .iter()
+                            .map(|column| column.as_slice() as &[JsonValue])
+                            .collect();
+
+                        for row_idx in 0..batch_arc.len() {
+                            if let Some(idx) = event_id_idx {
+                                if let Some(id) = column_views[idx][row_idx].as_u64() {
+                                    if !seen_ids.insert(id) {
+                                        continue;
+                                    }
+                                }
+                            }
+
+                            if let Some(off) = offset {
+                                if skipped < off {
+                                    skipped += 1;
+                                    continue;
+                                }
+                            }
+
+                            if let Some(lim) = limit {
+                                if emitted >= lim {
+                                    done = true;
+                                    break;
+                                }
+                            }
+
+                            valid_row_indices.push(row_idx);
+                            emitted += 1;
+                        }
+
+                        // Serialize JSON immediately (column_views is in scope here)
+                        if batch_size > 0 && valid_row_indices.len() > 0 {
+                            let batch_rows: Vec<Vec<&JsonValue>> = valid_row_indices
+                                .iter()
+                                .map(|&row_idx| {
+                                    (0..column_names.len())
+                                        .map(|col_idx| &column_views[col_idx][row_idx])
+                                        .collect()
+                                })
+                                .collect();
+                            renderer.stream_batch_json(&column_names, &batch_rows, &mut encode_buf);
+                            writer.write_all(&encode_buf).await?;
+                            encode_buf.clear();
+                        } else {
+                            for &row_idx in &valid_row_indices {
+                                let row_refs: Vec<&JsonValue> = (0..column_names.len())
+                                    .map(|col_idx| &column_views[col_idx][row_idx])
+                                    .collect();
+                                renderer.stream_row_json(&column_names, &row_refs, &mut encode_buf);
+                                writer.write_all(&encode_buf).await?;
+                                encode_buf.clear();
                             }
                         }
                     }
-
-                    if let Some(off) = offset {
-                        if skipped < off {
-                            skipped += 1;
-                            continue;
-                        }
-                    }
-
-                    if let Some(limit) = limit {
-                        if emitted >= limit {
-                            done = true;
-                            break;
-                        }
-                    }
-
-                    valid_row_indices.push(row_idx);
-                    emitted += 1;
                 }
 
-                // Build references directly from batch and serialize immediately (zero-copy!)
-                // References are valid while batch_arc is in scope
-                // Serialize immediately per-batch to avoid lifetime issues
-                if batch_size > 0 && valid_row_indices.len() > 0 {
-                    // Batch mode: build all row references from this batch and serialize immediately
-                    let batch_rows: Vec<Vec<&JsonValue>> = valid_row_indices
-                        .iter()
-                        .map(|&row_idx| {
-                            (0..column_names.len())
-                                .map(|col_idx| &column_views[col_idx][row_idx])
-                                .collect()
-                        })
-                        .collect();
-                    renderer.stream_batch(&column_names, &batch_rows, &mut encode_buf);
-                    writer.write_all(&encode_buf).await?;
+                // For Arrow format, serialize now (valid_row_indices computed above)
+                if renderer.streaming_format() == StreamingFormat::Arrow {
+                    let encoder = arrow_encoder
+                        .as_mut()
+                        .expect("arrow encoder should exist for arrow format");
+
+                    // Optimize: If all rows are included (no filtering), pass None to avoid expensive slicing
+                    let row_indices_opt = if valid_row_indices.len() == batch_arc.len() {
+                        // Check if valid_row_indices is contiguous [0, 1, 2, ..., len-1]
+                        let is_contiguous = valid_row_indices
+                            .iter()
+                            .enumerate()
+                            .all(|(i, &idx)| idx == i);
+                        if is_contiguous {
+                            None // Fast path: use RecordBatch reference directly (no slicing!)
+                        } else {
+                            Some(&valid_row_indices[..])
+                        }
+                    } else {
+                        Some(&valid_row_indices[..])
+                    };
+
+                    encoder
+                        .write_batch(
+                            &schema,
+                            batch_arc.as_ref(),
+                            row_indices_opt,
+                            &mut encode_buf,
+                        )
+                        .map_err(|err| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                format!("Failed to encode Arrow batch: {err}"),
+                            )
+                        })?;
+                    // Write with flushing to handle backpressure
+                    write_with_backpressure(writer.get_mut(), &encode_buf).await?;
                     encode_buf.clear();
-                } else {
-                    // Per-row mode: serialize immediately with references (zero-copy!)
-                    for &row_idx in &valid_row_indices {
-                        let row_refs: Vec<&JsonValue> = (0..column_names.len())
-                            .map(|col_idx| &column_views[col_idx][row_idx])
-                            .collect();
-                        renderer.stream_row(&column_names, &row_refs, &mut encode_buf);
-                        writer.write_all(&encode_buf).await?;
-                        encode_buf.clear();
-                    }
                 }
             }
             None => break,
         }
     }
 
-    renderer.stream_end(emitted, &mut encode_buf);
-    writer.write_all(&encode_buf).await?;
-    encode_buf.clear();
+    match renderer.streaming_format() {
+        StreamingFormat::Json => {
+            renderer.stream_end_json(emitted, &mut encode_buf);
+            writer.write_all(&encode_buf).await?;
+            encode_buf.clear();
+        }
+        StreamingFormat::Arrow => {
+            if let Some(encoder) = arrow_encoder.as_mut() {
+                encoder.write_end(&mut encode_buf).map_err(|err| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Failed to finalize Arrow stream: {err}"),
+                    )
+                })?;
+                write_with_backpressure(writer.get_mut(), &encode_buf).await?;
+                encode_buf.clear();
+            }
+        }
+    }
     writer.flush().await
+}
+
+/// Write data with backpressure handling - flushes after write to prevent buffer overflow
+async fn write_with_backpressure<W: AsyncWrite + Unpin>(
+    writer: &mut W,
+    data: &[u8],
+) -> std::io::Result<()> {
+    // Write in chunks to avoid overwhelming the socket buffer
+    const CHUNK_SIZE: usize = 64 * 1024; // 64KB chunks
+
+    if data.len() <= CHUNK_SIZE {
+        writer.write_all(data).await?;
+        writer.flush().await?;
+    } else {
+        for chunk in data.chunks(CHUNK_SIZE) {
+            writer.write_all(chunk).await?;
+            writer.flush().await?;
+        }
+    }
+    Ok(())
 }
 
 fn streaming_enabled() -> bool {
