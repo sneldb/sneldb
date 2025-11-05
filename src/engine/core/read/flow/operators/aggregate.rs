@@ -54,12 +54,13 @@ impl FlowOperator for AggregateOp {
             let schema = batch_arc.schema();
             let column_names: Vec<String> =
                 schema.columns().iter().map(|c| c.name.clone()).collect();
-            let mut column_views: Vec<&[Value]> = Vec::with_capacity(schema.column_count());
+            let mut column_vecs: Vec<Vec<Value>> = Vec::with_capacity(schema.column_count());
             for col_idx in 0..schema.column_count() {
-                column_views.push(batch_arc.column(col_idx).map_err(|e| {
+                column_vecs.push(batch_arc.column(col_idx).map_err(|e| {
                     FlowOperatorError::Batch(format!("failed to read column: {}", e))
                 })?);
             }
+            let column_views: Vec<&[Value]> = column_vecs.iter().map(|v| v.as_slice()).collect();
 
             for row_idx in 0..batch_arc.len() {
                 let event = event_from_row(

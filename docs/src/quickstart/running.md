@@ -18,5 +18,5 @@ QUERY subscription WHERE id=1
 Notes
 
 - The UI posts raw command lines to `POST /command` (no JSON API required).
-- Set `server.output_format` to `text` (terminal-like) or `json` (toggle pretty in UI).
+- Set `server.output_format` to `text` (terminal-like), `json`, or `arrow` (Apache Arrow IPC stream).
 - To disable the Playground, set `[playground] enabled = false`.

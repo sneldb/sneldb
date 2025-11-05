@@ -5,15 +5,18 @@ use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
 use crate::command::handlers::query_batch_stream::QueryBatchStream;
 use crate::command::handlers::show::errors::ShowError;
-use crate::engine::core::read::flow::BatchSchema;
+use crate::engine::core::read::flow::{BatchSchema, ColumnBatch};
 use crate::shared::config::CONFIG;
-use crate::shared::response::render::Renderer;
+use crate::shared::response::ArrowStreamEncoder;
+use crate::shared::response::render::{Renderer, StreamingFormat};
+use arrow_array::{Array, Int64Array, UInt64Array};
 
 use serde_json::Value as JsonValue;
 
 pub struct ShowResponseWriter<'a, W: AsyncWrite + Unpin> {
     writer: BufWriter<&'a mut W>,
     renderer: &'a dyn Renderer,
+    schema: Arc<BatchSchema>,
     column_metadata: Vec<(String, String)>,
     column_names: Vec<String>,
     batch_size: usize,
@@ -72,6 +75,7 @@ impl<'a, W: AsyncWrite + Unpin> ShowResponseWriter<'a, W> {
         Self {
             writer: BufWriter::with_capacity(65536, writer),
             renderer,
+            schema: Arc::clone(&schema),
             column_metadata,
             column_names,
             batch_size,
@@ -87,9 +91,16 @@ impl<'a, W: AsyncWrite + Unpin> ShowResponseWriter<'a, W> {
         }
     }
 
-    pub async fn write(mut self, mut stream: QueryBatchStream) -> Result<(), ShowError> {
+    pub async fn write(self, stream: QueryBatchStream) -> Result<(), ShowError> {
+        match self.renderer.streaming_format() {
+            StreamingFormat::Json => self.write_json(stream).await,
+            StreamingFormat::Arrow => self.write_arrow(stream).await,
+        }
+    }
+
+    async fn write_json(mut self, mut stream: QueryBatchStream) -> Result<(), ShowError> {
         self.renderer
-            .stream_schema(&self.column_metadata, &mut self.encode_buf);
+            .stream_schema_json(&self.column_metadata, &mut self.encode_buf);
         self.writer
             .write_all(&self.encode_buf)
             .await
@@ -108,9 +119,10 @@ impl<'a, W: AsyncWrite + Unpin> ShowResponseWriter<'a, W> {
                         continue;
                     }
 
-                    let column_views: Vec<&[JsonValue]> = batch_arc
-                        .columns()
-                        .map(|column| column as &[JsonValue])
+                    let columns = batch_arc.columns();
+                    let column_views: Vec<&[JsonValue]> = columns
+                        .iter()
+                        .map(|column| column.as_slice() as &[JsonValue])
                         .collect();
 
                     let mut valid_row_indices: Vec<usize> = Vec::new();
@@ -163,7 +175,7 @@ impl<'a, W: AsyncWrite + Unpin> ShowResponseWriter<'a, W> {
                             })
                             .collect();
 
-                        self.renderer.stream_batch(
+                        self.renderer.stream_batch_json(
                             &column_name_refs,
                             &batch_rows,
                             &mut self.encode_buf,
@@ -178,7 +190,7 @@ impl<'a, W: AsyncWrite + Unpin> ShowResponseWriter<'a, W> {
                             let row_refs: Vec<&JsonValue> = (0..column_count)
                                 .map(|col_idx| &column_views[col_idx][row_idx])
                                 .collect();
-                            self.renderer.stream_row(
+                            self.renderer.stream_row_json(
                                 &column_name_refs,
                                 &row_refs,
                                 &mut self.encode_buf,
@@ -195,7 +207,8 @@ impl<'a, W: AsyncWrite + Unpin> ShowResponseWriter<'a, W> {
             }
         }
 
-        self.renderer.stream_end(self.emitted, &mut self.encode_buf);
+        self.renderer
+            .stream_end_json(self.emitted, &mut self.encode_buf);
         self.writer
             .write_all(&self.encode_buf)
             .await
@@ -206,6 +219,151 @@ impl<'a, W: AsyncWrite + Unpin> ShowResponseWriter<'a, W> {
             .await
             .map_err(|err| ShowError::new(err.to_string()))?;
 
+        Ok(())
+    }
+
+    async fn write_arrow(mut self, mut stream: QueryBatchStream) -> Result<(), ShowError> {
+        let mut encoder = ArrowStreamEncoder::new(&self.schema)
+            .map_err(|err| ShowError::new(format!("Failed to initialize Arrow encoder: {err}")))?;
+
+        encoder
+            .write_schema(&mut self.encode_buf)
+            .map_err(|err| ShowError::new(format!("Failed to encode Arrow schema: {err}")))?;
+        self.writer
+            .write_all(&self.encode_buf)
+            .await
+            .map_err(|err| ShowError::new(err.to_string()))?;
+        self.encode_buf.clear();
+
+        let mut done = false;
+        while !done {
+            match stream.recv().await {
+                Some(batch_arc) => {
+                    if batch_arc.is_empty() {
+                        continue;
+                    }
+
+                    let mut valid_row_indices: Vec<usize> = Vec::new();
+                    let is_materialized_frame = self.batch_count < self.materialized_frame_count;
+
+                    // For Arrow format, filter directly on Arrow arrays (zero JSON conversion!)
+                    let record_batch = batch_arc.record_batch();
+
+                    for row_idx in 0..batch_arc.len() {
+                        // Check event_id deduplication directly from Arrow arrays
+                        if let Some(ref mut seen_ids_set) = self.seen_ids {
+                            if let Some(idx) = self.event_id_idx {
+                                let event_id_array = record_batch.column(idx);
+                                let id = if let Some(int_array) =
+                                    event_id_array.as_any().downcast_ref::<Int64Array>()
+                                {
+                                    if !int_array.is_null(row_idx) {
+                                        Some(int_array.value(row_idx) as u64)
+                                    } else {
+                                        None
+                                    }
+                                } else if let Some(uint_array) =
+                                    event_id_array.as_any().downcast_ref::<UInt64Array>()
+                                {
+                                    if !uint_array.is_null(row_idx) {
+                                        Some(uint_array.value(row_idx))
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    // Fallback: convert only this column to JSON (rare case)
+                                    match batch_arc.column(idx) {
+                                        Ok(event_id_col) => {
+                                            event_id_col.get(row_idx).and_then(|v| v.as_u64())
+                                        }
+                                        Err(_) => None,
+                                    }
+                                };
+
+                                if let Some(id) = id {
+                                    if is_materialized_frame {
+                                        seen_ids_set.insert(id);
+                                    } else if !seen_ids_set.insert(id) {
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+
+                        if let Some(offset) = self.offset {
+                            if self.skipped < offset {
+                                self.skipped += 1;
+                                continue;
+                            }
+                        }
+
+                        if let Some(limit) = self.limit {
+                            if self.emitted >= limit {
+                                done = true;
+                                break;
+                            }
+                        }
+
+                        valid_row_indices.push(row_idx);
+                        self.emitted += 1;
+                    }
+
+                    self.batch_count += 1;
+
+                    if valid_row_indices.is_empty() {
+                        continue;
+                    }
+
+                    self.write_arrow_batch(&mut encoder, batch_arc.as_ref(), &valid_row_indices)
+                        .await?;
+                }
+                None => break,
+            }
+        }
+
+        encoder
+            .write_end(&mut self.encode_buf)
+            .map_err(|err| ShowError::new(format!("Failed to finalize Arrow stream: {err}")))?;
+        self.writer
+            .write_all(&self.encode_buf)
+            .await
+            .map_err(|err| ShowError::new(err.to_string()))?;
+        self.encode_buf.clear();
+        self.writer
+            .flush()
+            .await
+            .map_err(|err| ShowError::new(err.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn write_arrow_batch(
+        &mut self,
+        encoder: &mut ArrowStreamEncoder,
+        batch: &ColumnBatch,
+        row_indices: &[usize],
+    ) -> Result<(), ShowError> {
+        // Optimize: If all rows are included (no filtering), pass None to avoid expensive slicing
+        let row_indices_opt = if row_indices.len() == batch.len() {
+            // Check if row_indices is contiguous [0, 1, 2, ..., len-1]
+            let is_contiguous = row_indices.iter().enumerate().all(|(i, &idx)| idx == i);
+            if is_contiguous {
+                None // Fast path: use RecordBatch reference directly (no slicing!)
+            } else {
+                Some(row_indices)
+            }
+        } else {
+            Some(row_indices)
+        };
+
+        encoder
+            .write_batch(&self.schema, batch, row_indices_opt, &mut self.encode_buf)
+            .map_err(|err| ShowError::new(format!("Failed to encode Arrow batch: {err}")))?;
+        self.writer
+            .write_all(&self.encode_buf)
+            .await
+            .map_err(|err| ShowError::new(err.to_string()))?;
+        self.encode_buf.clear();
         Ok(())
     }
 }
