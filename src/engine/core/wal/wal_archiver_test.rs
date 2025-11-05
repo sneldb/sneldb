@@ -282,15 +282,18 @@ fn test_archive_preserves_event_metadata() {
     assert_eq!(recovered_entry1.event_type, "user_signup");
     assert_eq!(recovered_entry1.context_id, "user-123");
     assert_eq!(recovered_entry1.timestamp, 1700000000);
-    assert_eq!(recovered_entry1.payload["email"], json!("test@example.com"));
-    assert_eq!(recovered_entry1.payload["plan"], json!("pro"));
+    assert_eq!(
+        recovered_entry1.payload_as_json()["email"],
+        json!("test@example.com")
+    );
+    assert_eq!(recovered_entry1.payload_as_json()["plan"], json!("pro"));
 
     let recovered_entry2 = &archive.body.entries[1];
     assert_eq!(recovered_entry2.event_type, "purchase");
     assert_eq!(recovered_entry2.context_id, "user-456");
     assert_eq!(recovered_entry2.timestamp, 1700003600);
-    assert_eq!(recovered_entry2.payload["amount"], json!(99.99));
-    assert_eq!(recovered_entry2.payload["currency"], json!("USD"));
+    assert_eq!(recovered_entry2.payload_as_json()["amount"], json!(99.99));
+    assert_eq!(recovered_entry2.payload_as_json()["currency"], json!("USD"));
 }
 
 #[test]
@@ -545,7 +548,7 @@ fn test_archive_large_payload() {
 
     assert_eq!(archive.header.entry_count, 1);
     assert_eq!(
-        archive.body.entries[0].payload["data"],
+        archive.body.entries[0].payload_as_json()["data"],
         json!(large_data),
         "Large payload should be preserved"
     );

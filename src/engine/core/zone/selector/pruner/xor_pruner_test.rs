@@ -67,12 +67,14 @@ async fn skips_xor_for_payload_temporal_field() {
     assert!(cal.exists());
 
     let artifacts = ZoneArtifacts::new(&shard_dir, Some(&caches));
+    use crate::engine::types::ScalarValue;
     let pruner = XorPruner { artifacts };
+    let val = ScalarValue::from(json!(123u64));
     let args = super::PruneArgs {
         segment_id: "001",
         uid: &uid,
         column: "ts",
-        value: Some(&json!(123u64)),
+        value: Some(&val),
         op: Some(&CompareOp::Eq),
     };
     let out = pruner

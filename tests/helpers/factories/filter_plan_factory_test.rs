@@ -1,4 +1,5 @@
 use crate::command::types::CompareOp;
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::FilterPlanFactory;
 use serde_json::json;
 
@@ -14,7 +15,7 @@ fn creates_filter_plan_with_expected_fields() {
 
     assert_eq!(filter.column, "amount");
     assert_eq!(filter.operation, Some(CompareOp::Gte));
-    assert_eq!(filter.value, Some(json!(100)));
+    assert_eq!(filter.value, Some(ScalarValue::from(json!(100))));
     assert_eq!(filter.priority, 2);
     assert_eq!(filter.uid.as_deref(), Some("uid123"));
 }

@@ -8,5 +8,6 @@ pub mod replay;
 pub mod schema;
 pub mod shard;
 pub mod store;
+pub mod types;
 
 pub use errors::*;

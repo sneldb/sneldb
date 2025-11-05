@@ -88,12 +88,7 @@ async fn temporal_builder_writes_cal_and_slab_tfi_for_datetime_field() {
             .expect("load zti from slab");
         // Pick a timestamp from this zone's events (if present) and assert it exists in zti
         if let Some(ev) = zp.events.get(0) {
-            if let Some(ts) = ev
-                .payload
-                .as_object()
-                .and_then(|o| o.get("created_at"))
-                .and_then(|v| v.as_u64())
-            {
+            if let Some(ts) = ev.payload.get("created_at").and_then(|v| v.as_u64()) {
                 assert!(zti.contains_ts(ts as i64));
             }
         }
@@ -190,12 +185,7 @@ async fn temporal_builder_handles_multiple_temporal_fields() {
             } else if let Some(ts) = zp
                 .events
                 .iter()
-                .filter_map(|ev| {
-                    ev.payload
-                        .as_object()
-                        .and_then(|o| o.get(field))
-                        .and_then(|v| v.as_u64())
-                })
+                .filter_map(|ev| ev.payload.get(field).and_then(|v| v.as_u64()))
                 .next()
             {
                 assert!(

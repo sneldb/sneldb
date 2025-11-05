@@ -29,11 +29,12 @@ fn build_column_batch(len: usize) -> ColumnBatch {
         .expect("schema"),
     );
 
+    use crate::engine::types::ScalarValue;
     let mut timestamps = Vec::with_capacity(len);
     let mut event_ids = Vec::with_capacity(len);
     for idx in 0..len {
-        timestamps.push(json!(idx as u64));
-        event_ids.push(json!(idx as u64));
+        timestamps.push(ScalarValue::from(json!(idx as u64)));
+        event_ids.push(ScalarValue::from(json!(idx as u64)));
     }
 
     ColumnBatch::new(schema, vec![timestamps, event_ids], len, None).expect("batch")

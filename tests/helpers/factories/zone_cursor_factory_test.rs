@@ -1,3 +1,4 @@
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factory::Factory;
 
 #[test]
@@ -25,15 +26,27 @@ fn test_zone_cursor_from_rows() {
     assert_eq!(cursor.zone_id, 5);
     assert_eq!(cursor.segment_id, 999);
     assert_eq!(cursor.len(), 2);
-    assert_eq!(cursor.payload_fields["plan"], vec!["pro", "premium"]);
+    assert_eq!(
+        cursor.payload_fields["plan"],
+        vec![
+            ScalarValue::Utf8("pro".to_string()),
+            ScalarValue::Utf8("premium".to_string())
+        ]
+    );
 
     let first = cursor.next_row().unwrap();
     assert_eq!(first.context_id, "ctx1");
-    assert_eq!(first.payload["plan"], "pro");
+    assert_eq!(
+        first.payload.get("plan").and_then(|v| v.as_str()),
+        Some("pro")
+    );
 
     let second = cursor.next_row().unwrap();
     assert_eq!(second.context_id, "ctx2");
-    assert_eq!(second.payload["plan"], "premium");
+    assert_eq!(
+        second.payload.get("plan").and_then(|v| v.as_str()),
+        Some("premium")
+    );
 
     assert!(cursor.next_row().is_none()); // end of cursor
 }

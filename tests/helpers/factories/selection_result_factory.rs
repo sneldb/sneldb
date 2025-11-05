@@ -1,6 +1,7 @@
 use serde_json::Value;
 
 use crate::engine::core::read::result::{ColumnSpec, SelectionResult};
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::ColumnSpecFactory;
 
 pub struct SelectionResultFactory {
@@ -45,7 +46,10 @@ impl SelectionResultFactory {
                 },
             })
             .collect();
-        let rs: Vec<Vec<Value>> = rows.iter().map(|r| r.to_vec()).collect();
+        let rs: Vec<Vec<ScalarValue>> = rows
+            .iter()
+            .map(|r| r.iter().map(|v| ScalarValue::from(v.clone())).collect())
+            .collect();
         SelectionResult {
             columns: cols,
             rows: rs,
@@ -53,9 +57,14 @@ impl SelectionResultFactory {
     }
 
     pub fn create(self) -> SelectionResult {
+        let scalar_rows: Vec<Vec<ScalarValue>> = self
+            .rows
+            .into_iter()
+            .map(|row| row.into_iter().map(ScalarValue::from).collect())
+            .collect();
         SelectionResult {
             columns: self.columns,
-            rows: self.rows,
+            rows: scalar_rows,
         }
     }
 }

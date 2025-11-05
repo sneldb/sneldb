@@ -25,14 +25,10 @@ impl<'a> DirectEventAccessor<'a> {
     pub fn get_field_as_i64(&self, field: &str) -> Option<i64> {
         match field {
             "timestamp" => Some(self.event.timestamp as i64),
-            _ => {
-                if let Some(obj) = self.event.payload.as_object() {
-                    if let Some(v) = obj.get(field) {
-                        return v.as_i64().or_else(|| v.as_str()?.parse().ok());
-                    }
-                }
-                None
-            }
+            _ => self.event.payload.get(field).and_then(|v| {
+                v.as_i64()
+                    .or_else(|| v.as_str().and_then(|s| s.parse::<i64>().ok()))
+            }),
         }
     }
 }

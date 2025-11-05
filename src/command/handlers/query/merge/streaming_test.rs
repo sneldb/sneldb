@@ -6,6 +6,7 @@ use crate::command::types::Command;
 use crate::engine::core::read::flow::shard_pipeline::ShardFlowHandle;
 use crate::engine::core::read::flow::{BatchPool, BatchSchema, FlowChannel, FlowMetrics};
 use crate::engine::shard::manager::ShardManager;
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::SchemaRegistryFactory;
 use serde_json::json;
 use std::sync::Arc;
@@ -60,7 +61,8 @@ async fn build_handle(
     let pool = BatchPool::new(16).expect("batch pool");
     let mut builder = pool.acquire(Arc::clone(&schema));
     for row in rows.into_iter() {
-        builder.push_row(&row).expect("push row");
+        let scalar_row: Vec<ScalarValue> = row.into_iter().map(ScalarValue::from).collect();
+        builder.push_row(&scalar_row).expect("push row");
     }
     let batch = builder.finish().expect("finish batch");
 

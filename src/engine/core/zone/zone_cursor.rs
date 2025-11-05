@@ -1,5 +1,5 @@
 use crate::engine::core::{EventId, ZoneRow};
-use serde_json::Value;
+use crate::engine::types::ScalarValue;
 use std::collections::HashMap;
 use tracing::trace;
 
@@ -18,7 +18,7 @@ pub struct ZoneCursor {
     pub event_ids: Vec<EventId>,
 
     /// All payload fields (e.g., {"plan": ["free", "pro", ...]})
-    pub payload_fields: HashMap<String, Vec<Value>>,
+    pub payload_fields: HashMap<String, Vec<ScalarValue>>,
 
     /// Current position inside this zone
     pub pos: usize,
@@ -71,7 +71,7 @@ impl ZoneCursor {
         let idx = self.pos;
         self.pos += 1;
 
-        let payload: HashMap<String, Value> = self
+        let payload: HashMap<String, ScalarValue> = self
             .payload_fields
             .iter()
             .map(|(k, v)| (k.clone(), v[idx].clone()))

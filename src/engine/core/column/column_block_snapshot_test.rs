@@ -8,6 +8,7 @@ use crate::engine::core::column::column_block_snapshot::ColumnBlockSnapshot;
 use crate::engine::core::column::column_values::ColumnValues;
 use crate::engine::core::column::format::PhysicalType;
 use crate::engine::core::read::cache::DecompressedBlock;
+use crate::engine::types::ScalarValue;
 use serde_json::{Number, Value};
 
 fn build_varbytes(values: &[&str]) -> ColumnValues {
@@ -176,21 +177,21 @@ fn empty_snapshot_uses_defaults() {
 fn json_values_preserve_typed_columns() {
     let i64_snapshot = ColumnBlockSnapshot::new(PhysicalType::I64, build_i64(&[Some(42), None]));
     assert_eq!(
-        i64_snapshot.to_json_values(),
-        vec![Value::Number(Number::from(42)), Value::Null]
+        i64_snapshot.clone().into_scalar_values(),
+        vec![ScalarValue::Int64(42), ScalarValue::Null]
     );
 
     let bool_snapshot =
         ColumnBlockSnapshot::new(PhysicalType::Bool, build_bool(&[Some(true), None]));
     assert_eq!(
-        bool_snapshot.to_json_values(),
-        vec![Value::Bool(true), Value::Null]
+        bool_snapshot.clone().into_scalar_values(),
+        vec![ScalarValue::Boolean(true), ScalarValue::Null]
     );
 
     let var_snapshot = ColumnBlockSnapshot::new(PhysicalType::VarBytes, build_varbytes(&["alpha"]));
     assert_eq!(
-        var_snapshot.to_json_values(),
-        vec![Value::String("alpha".to_string())]
+        var_snapshot.into_scalar_values(),
+        vec![ScalarValue::Utf8("alpha".to_string())]
     );
 }
 

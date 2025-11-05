@@ -1,5 +1,5 @@
 use crate::engine::core::{EventId, ZoneCursor, ZoneRow};
-use serde_json::Value;
+use crate::engine::types::ScalarValue;
 use std::collections::HashMap;
 
 pub struct ZoneCursorFactory {
@@ -37,7 +37,7 @@ impl ZoneCursorFactory {
         let mut timestamps = Vec::new();
         let mut event_types = Vec::new();
         let mut event_ids = Vec::new();
-        let mut payload_fields: HashMap<String, Vec<Value>> = HashMap::new();
+        let mut payload_fields: HashMap<String, Vec<ScalarValue>> = HashMap::new();
 
         for row in &self.rows {
             context_ids.push(row.context_id.clone());

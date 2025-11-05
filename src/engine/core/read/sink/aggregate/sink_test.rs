@@ -7,8 +7,15 @@ use crate::engine::core::read::sink::aggregate::sink::AggregateSink;
 use crate::test_helpers::factories::{
     CommandFactory, DecompressedBlockFactory, EventFactory, QueryPlanFactory, SchemaRegistryFactory,
 };
-use serde_json::json;
+use serde_json::{Value, json};
 use std::collections::HashMap;
+
+fn payload_map(event: &crate::engine::core::Event) -> serde_json::Map<String, Value> {
+    match event.payload_as_json() {
+        Value::Object(map) => map,
+        _ => panic!("expected object payload"),
+    }
+}
 
 fn make_columns(field_rows: &[(&str, Vec<&str>)]) -> HashMap<String, ColumnValues> {
     let mut map: HashMap<String, ColumnValues> = HashMap::new();
@@ -92,7 +99,7 @@ async fn aggregate_sink_row_no_grouping_computes_all_metrics() {
     let plan = make_plan("order", None).await;
     let events = sink.into_events(&plan);
     assert_eq!(events.len(), 1);
-    let p = events[0].payload.as_object().unwrap();
+    let p = payload_map(&events[0]);
     assert_eq!(p["count"], json!(3));
     assert_eq!(p["count_unique_user"], json!(2));
     assert_eq!(p["total_amount"], json!(60));
@@ -139,7 +146,7 @@ async fn aggregate_sink_row_group_by_and_month_bucket() {
     let mut seen_us = false;
     let mut seen_de = false;
     for e in events {
-        let p = e.payload.as_object().unwrap();
+        let p = payload_map(&e);
         let country = p["country"].as_str().unwrap();
         if country == "US" {
             seen_us = true;
@@ -225,7 +232,7 @@ async fn aggregate_sink_row_missing_groupby_field_emits_empty_string() {
     let plan = make_plan("order", None).await;
     let events = sink.into_events(&plan);
     assert_eq!(events.len(), 1);
-    let p = events[0].payload.as_object().unwrap();
+    let p = payload_map(&events[0]);
     assert_eq!(p["country"], json!("US"));
     assert_eq!(p["plan"], json!(""));
 }
@@ -253,7 +260,7 @@ async fn aggregate_sink_into_events_with_no_updates_emits_default_zero_event() {
     let plan = make_plan("evt", Some("ctx")).await;
     let events = sink.into_events(&plan);
     assert_eq!(events.len(), 1);
-    let p = events[0].payload.as_object().unwrap();
+    let p = payload_map(&events[0]);
     assert_eq!(p["count"], json!(0));
 }
 
@@ -299,15 +306,23 @@ async fn aggregate_sink_event_group_by_and_day_bucket() {
     let plan = make_plan("evt", None).await;
     let mut events = sink.into_events(&plan);
     events.sort_by(|a, b| {
-        a.payload["country"]
-            .as_str()
-            .cmp(&b.payload["country"].as_str())
+        let a_country = a
+            .payload
+            .get("country")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let b_country = b
+            .payload
+            .get("country")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        a_country.cmp(b_country)
     });
     assert_eq!(events.len(), 3);
 
     let mut by_key: HashMap<(String, u64), (i64, i64)> = HashMap::new();
     for e in &events {
-        let p = e.payload.as_object().unwrap();
+        let p = payload_map(e);
         let country = p["country"].as_str().unwrap().to_string();
         let bucket = p["bucket"].as_u64().unwrap();
         let count = p["count"].as_i64().unwrap();
@@ -379,15 +394,25 @@ async fn aggregate_sink_event_bucket_using_created_at() {
 
     let mut events = sink.into_events(&plan);
     events.sort_by(|a, b| {
-        a.payload["bucket"]
-            .as_u64()
-            .cmp(&b.payload["bucket"].as_u64())
+        let a_bucket = a
+            .payload
+            .get("bucket")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let b_bucket = b
+            .payload
+            .get("bucket")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        a_bucket.cmp(&b_bucket)
     });
     assert_eq!(events.len(), 2);
-    assert_eq!(events[0].payload["bucket"], json!(86_400));
-    assert_eq!(events[0].payload["count"], json!(2));
-    assert_eq!(events[1].payload["bucket"], json!(172_800));
-    assert_eq!(events[1].payload["count"], json!(1));
+    let first_payload = payload_map(&events[0]);
+    assert_eq!(first_payload["bucket"], json!(86_400));
+    assert_eq!(first_payload["count"], json!(2));
+    let second_payload = payload_map(&events[1]);
+    assert_eq!(second_payload["bucket"], json!(172_800));
+    assert_eq!(second_payload["count"], json!(1));
 }
 
 // Edge cases -------------------------------------------------------------
@@ -401,7 +426,7 @@ async fn aggregate_sink_row_avg_without_rows_is_zero() {
     let plan = make_plan("evt", None).await;
     let events = sink.into_events(&plan);
     assert_eq!(events.len(), 1);
-    let p = events[0].payload.as_object().unwrap();
+    let p = payload_map(&events[0]);
     assert_eq!(p["avg_amount"].as_f64().unwrap(), 0.0);
 }
 
@@ -416,7 +441,7 @@ async fn aggregate_sink_row_count_field_counts_empty_strings() {
     sink.on_row(1, &columns);
     let plan = make_plan("evt", None).await;
     let events = sink.into_events(&plan);
-    let p = events[0].payload.as_object().unwrap();
+    let p = payload_map(&events[0]);
     assert_eq!(p["count_visits"], json!(2));
 }
 
@@ -436,7 +461,7 @@ async fn aggregate_sink_row_sum_avg_ignore_non_numeric() {
     sink.on_row(1, &columns);
     let plan = make_plan("evt", None).await;
     let events = sink.into_events(&plan);
-    let p = events[0].payload.as_object().unwrap();
+    let p = payload_map(&events[0]);
     assert_eq!(p["total_amount"], json!(10));
     assert_eq!(p["avg_amount"].as_f64().unwrap(), 10.0);
 }
@@ -458,7 +483,7 @@ async fn aggregate_sink_row_min_max_mixed_types_prefers_numeric() {
     sink.on_row(2, &columns);
     let plan = make_plan("evt", None).await;
     let events = sink.into_events(&plan);
-    let p = events[0].payload.as_object().unwrap();
+    let p = payload_map(&events[0]);
     assert_eq!(p["min_name"], json!("2"));
     assert_eq!(p["max_name"], json!("10"));
 }
@@ -511,7 +536,7 @@ async fn aggregate_sink_event_count_unique_empty_and_missing_collapsed() {
     sink.on_event(&e2);
     let plan = make_plan("evt", None).await;
     let events = sink.into_events(&plan);
-    let p = events[0].payload.as_object().unwrap();
+    let p = payload_map(&events[0]);
     assert_eq!(p["count_unique_user"], json!(1));
 }
 
@@ -578,7 +603,7 @@ async fn aggregate_sink_deduplicates_events_by_id() {
     let plan = make_plan("evt_dedupe_event", None).await;
     let events = sink.into_events(&plan);
     assert_eq!(events.len(), 1);
-    let payload = events[0].payload.as_object().unwrap();
+    let payload = payload_map(&events[0]);
     assert_eq!(payload["count"], json!(1));
 }
 
@@ -603,6 +628,6 @@ async fn aggregate_sink_deduplicates_rows_by_event_id_column() {
     let plan = make_plan("evt_dedupe_rows", None).await;
     let events = sink.into_events(&plan);
     assert_eq!(events.len(), 1);
-    let payload = events[0].payload.as_object().unwrap();
+    let payload = payload_map(&events[0]);
     assert_eq!(payload["count"], json!(1));
 }

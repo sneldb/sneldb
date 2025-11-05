@@ -8,6 +8,7 @@ use crate::engine::core::read::flow::{BatchSchema, ColumnBatch, FlowChannel, Flo
 use crate::engine::core::read::result::ColumnSpec;
 use crate::engine::materialize::catalog::SchemaSnapshot;
 use crate::engine::materialize::{HighWaterMark, MaterializationEntry};
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::command_factory::CommandFactory;
 use serde_json::json;
 
@@ -45,8 +46,14 @@ fn build_schema() -> Arc<BatchSchema> {
 }
 
 fn build_batch(schema: Arc<BatchSchema>, rows: &[(u64, u64)]) -> Arc<ColumnBatch> {
-    let timestamps = rows.iter().map(|(ts, _)| json!(ts)).collect();
-    let event_ids = rows.iter().map(|(_, id)| json!(id)).collect();
+    let timestamps: Vec<ScalarValue> = rows
+        .iter()
+        .map(|(ts, _)| ScalarValue::from(json!(ts)))
+        .collect();
+    let event_ids: Vec<ScalarValue> = rows
+        .iter()
+        .map(|(_, id)| ScalarValue::from(json!(id)))
+        .collect();
     Arc::new(
         ColumnBatch::new(schema, vec![timestamps, event_ids], rows.len(), None).expect("batch"),
     )

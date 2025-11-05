@@ -4,12 +4,12 @@ use crate::engine::core::column::compression::compression_codec::{
 };
 use crate::engine::core::filter::surf_encoding::encode_value;
 use crate::engine::core::filter::surf_trie::SurfTrie;
+use crate::engine::types::ScalarValue;
 // removed schema-aware builder; these imports remain only if reintroduced
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 use base64::{Engine, engine::general_purpose::STANDARD as B64};
 use memmap2::MmapOptions;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
@@ -39,16 +39,22 @@ fn is_field_numeric_consistent(zone_plans: &[ZonePlan], key: &str) -> bool {
             let Some(v) = ev.payload.get(key) else {
                 continue;
             };
-            match v {
-                Value::Number(n) => {
-                    let this = if n.as_i64().is_some() {
+            let this = match v {
+                ScalarValue::Int64(_) | ScalarValue::Timestamp(_) => Kind::I,
+                ScalarValue::Float64(_) => Kind::F,
+                // JSON numbers are now Utf8 strings - parse to determine type
+                ScalarValue::Utf8(s) => {
+                    if s.parse::<i64>().is_ok() {
                         Kind::I
-                    } else if n.as_u64().is_some() {
+                    } else if s.parse::<u64>().is_ok() {
                         Kind::U
-                    } else if n.as_f64().is_some() {
+                    } else if s.parse::<f64>().is_ok() {
                         Kind::F
                     } else {
                         return false;
+                    }
+                }
+                _ => return false,
                     };
                     kind = match (kind, this) {
                         (Kind::Unknown, k) => k,
@@ -56,9 +62,6 @@ fn is_field_numeric_consistent(zone_plans: &[ZonePlan], key: &str) -> bool {
                         // allow I/U mix by promoting to F only if all integral; to simplify, reject mix here
                         _ => return false,
                     };
-                }
-                _ => return false,
-            }
         }
     }
     kind != Kind::Unknown
@@ -156,8 +159,8 @@ impl ZoneSurfFilter {
 
         for zp in zone_plans {
             let mut dynamic_keys: Vec<String> = Vec::new();
-            if let Some(obj) = zp.events.get(0).and_then(|e| e.payload.as_object()) {
-                dynamic_keys.extend(obj.keys().cloned());
+            if let Some(event) = zp.events.get(0) {
+                dynamic_keys.extend(event.payload.keys().cloned());
             }
             for key in dynamic_keys {
                 if !allowed_fields.contains(&key) {

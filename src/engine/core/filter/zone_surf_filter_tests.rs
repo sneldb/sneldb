@@ -2,6 +2,7 @@
 
 use crate::engine::core::filter::surf_encoding::encode_value;
 use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factory::Factory;
 use serde_json::json;
 use std::collections::HashSet;
@@ -41,7 +42,7 @@ fn zone_surf_numeric_selection() {
     assert!(path.exists());
     let zsf = ZoneSurfFilter::load(&path).unwrap();
 
-    let b10 = encode_value(&json!(10)).unwrap();
+    let b10 = encode_value(&ScalarValue::from(json!(10))).unwrap();
     let seg = "seg1";
 
     // > 10 selects z1 only
@@ -53,7 +54,7 @@ fn zone_surf_numeric_selection() {
     assert_eq!(ge, vec![1u32]);
 
     // <= 9 selects z0 only
-    let b9 = encode_value(&json!(9)).unwrap();
+    let b9 = encode_value(&ScalarValue::from(json!(9))).unwrap();
     let le = zsf
         .zones_overlapping_le(&b9, true, seg)
         .into_iter()
@@ -77,7 +78,7 @@ fn zone_surf_boundary_inclusive_exclusive() {
     let zsf = ZoneSurfFilter::load(&path).unwrap();
     let seg = "segB";
 
-    let b20 = encode_value(&json!(20)).unwrap();
+    let b20 = encode_value(&ScalarValue::from(json!(20))).unwrap();
 
     // >= 20 (inclusive) selects z0 and z1
     let ge_inc = zsf
@@ -158,7 +159,7 @@ fn zone_surf_float_ranges() {
     let seg = "segF";
 
     // > -1.0 selects z1 only
-    let b = encode_value(&json!(-1.0)).unwrap();
+    let b = encode_value(&ScalarValue::from(json!(-1.0))).unwrap();
     let ge = zsf
         .zones_overlapping_ge(&b, false, seg)
         .into_iter()
@@ -167,7 +168,7 @@ fn zone_surf_float_ranges() {
     assert_eq!(ge, vec![1u32]);
 
     // <= -2.0 selects z0 only
-    let b2 = encode_value(&json!(-2.0)).unwrap();
+    let b2 = encode_value(&ScalarValue::from(json!(-2.0))).unwrap();
     let le = zsf
         .zones_overlapping_le(&b2, true, seg)
         .into_iter()
@@ -222,7 +223,7 @@ fn zone_surf_flag_numeric_ranges() {
     let seg = "segBool";
 
     // > 0 selects zone with 1 only
-    let b0 = encode_value(&json!(0)).unwrap();
+    let b0 = encode_value(&ScalarValue::from(json!(0))).unwrap();
     let ge = zsf
         .zones_overlapping_ge(&b0, false, seg)
         .into_iter()
@@ -391,7 +392,7 @@ fn zone_surf_gt_boundary_byte_carry() {
 
     let seg = "segC";
     // > 255 should include zone 0
-    let b255 = encode_value(&json!(255)).unwrap();
+    let b255 = encode_value(&ScalarValue::from(json!(255))).unwrap();
     let zones = zsf
         .zones_overlapping_ge(&b255, false, seg)
         .into_iter()
@@ -400,7 +401,7 @@ fn zone_surf_gt_boundary_byte_carry() {
     assert!(zones.contains(&0u32));
 
     // > 65535 should include zone 1
-    let b65535 = encode_value(&json!(65535)).unwrap();
+    let b65535 = encode_value(&ScalarValue::from(json!(65535))).unwrap();
     let zones2 = zsf
         .zones_overlapping_ge(&b65535, false, seg)
         .into_iter()
@@ -423,7 +424,7 @@ fn zone_surf_gt_prefix_terminal_has_greater_descendants() {
     let zsf = ZoneSurfFilter::load(&path).unwrap();
 
     let seg = "segP";
-    let b10 = encode_value(&json!(10)).unwrap();
+    let b10 = encode_value(&ScalarValue::from(json!(10))).unwrap();
     let zones = zsf
         .zones_overlapping_ge(&b10, false, seg)
         .into_iter()
@@ -450,7 +451,7 @@ fn zone_surf_gt_many_bounds_monotonic() {
 
     // For every bound b strictly less than max, > b must select the zone
     for w in 0..values.len() - 1 {
-        let b = encode_value(&json!(values[w])).unwrap();
+        let b = encode_value(&ScalarValue::from(json!(values[w]))).unwrap();
         let zones = zsf
             .zones_overlapping_ge(&b, false, seg)
             .into_iter()
@@ -590,9 +591,9 @@ fn zonesurf_no_panic_le_on_exact_length_equal() {
 
     // Build a trie with keys where one key equals the bound exactly
     let keys = vec![
-        encode_value(&json!("a")).unwrap(),
-        encode_value(&json!("ab")).unwrap(),
-        encode_value(&json!("ac")).unwrap(),
+        encode_value(&ScalarValue::from(json!("a"))).unwrap(),
+        encode_value(&ScalarValue::from(json!("ab"))).unwrap(),
+        encode_value(&ScalarValue::from(json!("ac"))).unwrap(),
     ];
     let trie = SurfTrie::build_from_sorted(&keys);
     let zsf = ZoneSurfFilter {
@@ -600,7 +601,7 @@ fn zonesurf_no_panic_le_on_exact_length_equal() {
     };
 
     // Upper bound equals "a"; exclusive (< a) should not panic and returns empty
-    let upper = encode_value(&json!("a")).unwrap();
+    let upper = encode_value(&ScalarValue::from(json!("a"))).unwrap();
     let seg = "segNP";
     let out = zsf.zones_overlapping_le(&upper, false, seg);
     assert!(out.is_empty());

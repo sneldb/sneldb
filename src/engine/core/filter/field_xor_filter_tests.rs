@@ -1,4 +1,5 @@
 use crate::engine::core::FieldXorFilter;
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::{EventFactory, ZonePlannerFactory};
 use serde_json::json;
 use tempfile::tempdir;
@@ -21,11 +22,11 @@ fn creates_and_checks_membership() {
 fn handles_serde_json_values() {
     let filter =
         FieldXorFilter::new(&["123".to_string(), "true".to_string(), "foo".to_string()]).unwrap();
-    assert!(filter.contains_value(&json!(123)));
-    assert!(filter.contains_value(&json!(true)));
-    assert!(filter.contains_value(&json!("foo")));
-    assert!(!filter.contains_value(&json!("bar")));
-    assert!(!filter.contains_value(&json!(null)));
+    assert!(filter.contains_value(&ScalarValue::from(json!(123))));
+    assert!(filter.contains_value(&ScalarValue::from(json!(true))));
+    assert!(filter.contains_value(&ScalarValue::from(json!("foo"))));
+    assert!(!filter.contains_value(&ScalarValue::from(json!("bar"))));
+    assert!(!filter.contains_value(&ScalarValue::from(json!(null))));
 }
 
 #[test]

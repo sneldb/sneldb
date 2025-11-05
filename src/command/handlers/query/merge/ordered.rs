@@ -1,7 +1,7 @@
 use crate::command::handlers::kway_merger::KWayMerger;
 use crate::command::handlers::query::context::QueryContext;
 use crate::engine::core::read::result::{ColumnSpec, QueryResult, SelectionResult};
-use serde_json::Value;
+use crate::engine::types::ScalarValue;
 
 pub struct OrderedMerger {
     field: String,
@@ -25,7 +25,7 @@ impl OrderedMerger {
         _ctx: &QueryContext<'_>,
         shard_results: Vec<QueryResult>,
     ) -> Result<QueryResult, String> {
-        let mut per_shard_rows: Vec<Vec<Vec<Value>>> = Vec::new();
+        let mut per_shard_rows: Vec<Vec<Vec<ScalarValue>>> = Vec::new();
         let mut columns_opt: Option<Vec<ColumnSpec>> = None;
 
         for result in shard_results {

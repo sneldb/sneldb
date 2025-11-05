@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::engine::core::read::flow::ColumnBatch;
 use crate::engine::materialize::HighWaterMark;
 
-use serde_json::Value as JsonValue;
+use crate::engine::types::ScalarValue;
 
 #[derive(Clone)]
 pub struct WatermarkDeduplicator {
@@ -135,16 +135,12 @@ impl WatermarkDeduplicator {
     fn clone_detached(batch: &Arc<ColumnBatch>) -> ColumnBatch {
         let len = batch.len();
         let schema = batch.schema();
-        let columns: Vec<Vec<JsonValue>> = batch.columns();
+        let columns: Vec<Vec<ScalarValue>> = batch.columns();
         ColumnBatch::new(Arc::new(schema.clone()), columns, len, None)
             .expect("Failed to recreate batch")
     }
 
-    fn parse_u64(value: &JsonValue) -> Option<u64> {
-        match value {
-            JsonValue::Number(number) => number.as_u64(),
-            JsonValue::String(s) => s.parse::<u64>().ok(),
-            _ => None,
-        }
+    fn parse_u64(value: &ScalarValue) -> Option<u64> {
+        value.as_u64()
     }
 }

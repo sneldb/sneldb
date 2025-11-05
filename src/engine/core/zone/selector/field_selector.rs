@@ -41,7 +41,7 @@ impl<'a> ZoneSelector for FieldSelector<'a> {
             segment_id,
             uid,
             column: &self.plan.column,
-            value: self.plan.value.as_ref(),
+            value: self.plan.value.as_ref().map(|v| v),
             op: self.plan.operation.as_ref(),
         };
 

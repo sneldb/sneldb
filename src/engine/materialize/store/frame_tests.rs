@@ -26,10 +26,11 @@ fn frame_writer_reader_roundtrip() {
     let schema = Arc::new(build_schema());
     let snapshots = batch_schema_to_snapshots(&schema);
 
+    use crate::engine::types::ScalarValue;
     let pool = BatchPool::new(8).unwrap();
     let mut builder = pool.acquire(Arc::clone(&schema));
     builder
-        .push_row(&[json!(1_700_000_000_u64), json!(42_u64)])
+        .push_row(&[ScalarValue::from(json!(1_700_000_000_u64)), ScalarValue::from(json!(42_u64))])
         .unwrap();
     let batch = builder.finish().unwrap();
 
@@ -45,5 +46,5 @@ fn frame_writer_reader_roundtrip() {
     let decoded = codec.decode(&meta, data).unwrap();
 
     assert_eq!(decoded.len(), 1);
-    assert_eq!(decoded.column(1).unwrap()[0], json!(42));
+    assert_eq!(decoded.column(1).unwrap()[0], ScalarValue::from(json!(42)));
 }

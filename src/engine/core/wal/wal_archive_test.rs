@@ -437,12 +437,12 @@ fn test_roundtrip_with_complex_payloads() {
 
     let entry1 = &recovered.body.entries[0];
     assert_eq!(entry1.event_type, "user_action");
-    assert_eq!(entry1.payload["action"], json!("purchase"));
-    assert_eq!(entry1.payload["total"], json!(79.98));
+    assert_eq!(entry1.payload_as_json()["action"], json!("purchase"));
+    assert_eq!(entry1.payload_as_json()["total"], json!(79.98));
 
     let entry2 = &recovered.body.entries[1];
     assert_eq!(entry2.event_type, "system_event");
-    assert_eq!(entry2.payload["level"], json!("error"));
+    assert_eq!(entry2.payload_as_json()["level"], json!("error"));
 }
 
 #[test]

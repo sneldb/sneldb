@@ -60,17 +60,15 @@ impl<'a> TemporalIndexBuilder<'a> {
             // Precompute per-field timestamps by scanning events once
             let mut ts_per_field: HashMap<String, Vec<i64>> = HashMap::new();
             for ev in &zp.events {
-                // Iterate over payload object once; push relevant temporal fields
-                if let Some(obj) = ev.payload.as_object() {
-                    for (k, v) in obj.iter() {
-                        if !temporal_field_set.contains(k.as_str()) {
-                            continue;
-                        }
-                        if let Some(i) = v.as_i64() {
-                            ts_per_field.entry(k.clone()).or_default().push(i);
-                        } else if let Some(u) = v.as_u64() {
-                            ts_per_field.entry(k.clone()).or_default().push(u as i64);
-                        }
+                // Iterate over payload map once; push relevant temporal fields
+                for (k, v) in ev.payload.iter() {
+                    if !temporal_field_set.contains(k) {
+                        continue;
+                    }
+                    if let Some(i) = v.as_i64() {
+                        ts_per_field.entry(k.clone()).or_default().push(i);
+                    } else if let Some(u) = v.as_u64() {
+                        ts_per_field.entry(k.clone()).or_default().push(u as i64);
                     }
                 }
             }

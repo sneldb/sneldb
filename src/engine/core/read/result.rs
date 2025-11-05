@@ -1,6 +1,6 @@
 use crate::command::types::TimeGranularity;
 use crate::engine::core::read::aggregate::plan::AggregateOpSpec;
-use serde_json::Value;
+use crate::engine::types::ScalarValue;
 use std::collections::{HashMap, hash_map::Entry};
 
 #[derive(Debug, Clone)]
@@ -12,14 +12,14 @@ pub struct ColumnSpec {
 #[derive(Debug, Clone)]
 pub struct ResultTable {
     pub columns: Vec<ColumnSpec>,
-    pub rows: Vec<Vec<Value>>, // flat rows aligned to columns
+    pub rows: Vec<Vec<ScalarValue>>, // flat rows aligned to columns
     pub metadata: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct SelectionResult {
     pub columns: Vec<ColumnSpec>,
-    pub rows: Vec<Vec<Value>>, // pre-shaped selection rows
+    pub rows: Vec<Vec<ScalarValue>>, // pre-shaped selection rows
 }
 
 #[derive(Debug, Clone)]
@@ -122,19 +122,20 @@ impl AggregateResult {
             }
         }
 
-        let mut rows: Vec<Vec<Value>> = Vec::with_capacity(self.groups.len());
+        let mut rows: Vec<Vec<ScalarValue>> = Vec::with_capacity(self.groups.len());
         for (k, states) in self.groups.into_iter() {
-            let mut row: Vec<Value> = Vec::with_capacity(columns.len());
+            let mut row: Vec<ScalarValue> = Vec::with_capacity(columns.len());
             if let Some(b) = k.bucket {
-                row.push(Value::from(b as i64));
+                // Use Int64 for consistency with json!(value) which creates Int64
+                row.push(ScalarValue::Int64(b as i64));
             }
             if let Some(gb) = &self.group_by {
                 for (i, _name) in gb.iter().enumerate() {
                     let v = k
                         .groups
                         .get(i)
-                        .map(|s| Value::from(s.clone()))
-                        .unwrap_or(Value::from(""));
+                        .map(|s| ScalarValue::Utf8(s.clone()))
+                        .unwrap_or(ScalarValue::Utf8(String::new()));
                     row.push(v);
                 }
             }
@@ -143,19 +144,19 @@ impl AggregateResult {
                     (
                         AggregateOpSpec::CountAll,
                         super::aggregate::partial::AggState::CountAll { count },
-                    ) => row.push(Value::from(count)),
+                    ) => row.push(ScalarValue::Int64(count as i64)),
                     (
                         AggregateOpSpec::CountField { .. },
                         super::aggregate::partial::AggState::CountAll { count },
-                    ) => row.push(Value::from(count)),
+                    ) => row.push(ScalarValue::Int64(count as i64)),
                     (
                         AggregateOpSpec::CountUnique { .. },
                         super::aggregate::partial::AggState::CountUnique { values },
-                    ) => row.push(Value::from(values.len() as i64)),
+                    ) => row.push(ScalarValue::Int64(values.len() as i64)),
                     (
                         AggregateOpSpec::Total { .. },
                         super::aggregate::partial::AggState::Sum { sum },
-                    ) => row.push(Value::from(sum)),
+                    ) => row.push(ScalarValue::Int64(sum)),
                     (
                         AggregateOpSpec::Avg { .. },
                         super::aggregate::partial::AggState::Avg { sum, count },
@@ -165,18 +166,18 @@ impl AggregateResult {
                         } else {
                             (sum as f64) / (count as f64)
                         };
-                        row.push(Value::from(avg));
+                        row.push(ScalarValue::Float64(avg));
                     }
                     (
                         AggregateOpSpec::Min { .. },
                         super::aggregate::partial::AggState::Min { min_num, min_str },
                     ) => {
                         if let Some(n) = min_num {
-                            row.push(Value::from(n));
+                            row.push(ScalarValue::Int64(n));
                         } else if let Some(s) = min_str {
-                            row.push(Value::from(s));
+                            row.push(ScalarValue::Utf8(s));
                         } else {
-                            row.push(Value::from(""));
+                            row.push(ScalarValue::Utf8(String::new()));
                         }
                     }
                     (
@@ -184,14 +185,14 @@ impl AggregateResult {
                         super::aggregate::partial::AggState::Max { max_num, max_str },
                     ) => {
                         if let Some(n) = max_num {
-                            row.push(Value::from(n));
+                            row.push(ScalarValue::Int64(n));
                         } else if let Some(s) = max_str {
-                            row.push(Value::from(s));
+                            row.push(ScalarValue::Utf8(s));
                         } else {
-                            row.push(Value::from(""));
+                            row.push(ScalarValue::Utf8(String::new()));
                         }
                     }
-                    _ => row.push(Value::from(Value::Null)),
+                    _ => row.push(ScalarValue::Null),
                 }
             }
             rows.push(row);

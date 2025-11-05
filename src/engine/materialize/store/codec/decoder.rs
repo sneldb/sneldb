@@ -4,7 +4,8 @@ use crate::engine::core::read::flow::ColumnBatch;
 use crate::engine::materialize::MaterializationError;
 use crate::engine::materialize::store::frame::header::FrameHeader;
 use crate::engine::materialize::store::frame::metadata::StoredFrameMeta;
-use serde_json::{Number, Value};
+use crate::engine::types::ScalarValue;
+use serde_json::Value;
 use sonic_rs;
 
 use super::bitmap::NullBitmap;
@@ -76,7 +77,7 @@ impl Decoder {
         }
 
         // Pre-allocate columns
-        let mut columns: Vec<Vec<Value>> = (0..column_count)
+        let mut columns: Vec<Vec<ScalarValue>> = (0..column_count)
             .map(|_| Vec::with_capacity(row_count))
             .collect();
 
@@ -104,7 +105,7 @@ impl Decoder {
                 let idx = row * column_count + col_idx;
 
                 if NullBitmap::is_null(null_bitmap, idx) {
-                    columns[col_idx].push(Value::Null);
+                    columns[col_idx].push(ScalarValue::Null);
                     continue;
                 }
 
@@ -118,7 +119,7 @@ impl Decoder {
                         }
                         let (head, tail) = cursor.split_at(8);
                         let num = i64::from_le_bytes(head.try_into().unwrap());
-                        columns[col_idx].push(Value::Number(Number::from(num)));
+                        columns[col_idx].push(ScalarValue::Int64(num));
                         cursor = tail;
                     }
                     "Float" => {
@@ -129,10 +130,7 @@ impl Decoder {
                         }
                         let (head, tail) = cursor.split_at(8);
                         let num = f64::from_le_bytes(head.try_into().unwrap());
-                        let value = Number::from_f64(num)
-                            .map(Value::Number)
-                            .unwrap_or(Value::Null);
-                        columns[col_idx].push(value);
+                        columns[col_idx].push(ScalarValue::Float64(num));
                         cursor = tail;
                     }
                     "Boolean" => {
@@ -142,7 +140,7 @@ impl Decoder {
                             ));
                         }
                         let (head, tail) = cursor.split_at(1);
-                        columns[col_idx].push(Value::Bool(head[0] != 0));
+                        columns[col_idx].push(ScalarValue::Boolean(head[0] != 0));
                         cursor = tail;
                     }
                     _ => {
@@ -150,7 +148,7 @@ impl Decoder {
                         if let Some(length_table) = length_table {
                             let len = length_table[row] as usize;
                             if len == 0 {
-                                columns[col_idx].push(Value::Null);
+                                columns[col_idx].push(ScalarValue::Null);
                                 continue;
                             }
                             if cursor.len() < len {
@@ -159,27 +157,31 @@ impl Decoder {
                                 ));
                             }
                             let (value_bytes, tail) = cursor.split_at(len);
-                            let value = if logical_type == "String" {
+                            let scalar_value = if logical_type == "String" {
                                 // String data is stored without length prefix (length is in table)
                                 let s = std::str::from_utf8(value_bytes).map_err(|e| {
                                     MaterializationError::Corrupt(format!(
                                         "UTF-8 decode error: {e}"
                                     ))
                                 })?;
-                                Value::String(s.to_string())
+                                ScalarValue::Utf8(s.to_string())
                             } else {
                                 // JSON data is stored without length prefix (length is in table)
-                                sonic_rs::from_slice(value_bytes).map_err(|e| {
-                                    MaterializationError::Corrupt(format!("JSON parse error: {e}"))
-                                })?
+                                let json_value: Value =
+                                    sonic_rs::from_slice(value_bytes).map_err(|e| {
+                                        MaterializationError::Corrupt(format!(
+                                            "JSON parse error: {e}"
+                                        ))
+                                    })?;
+                                ScalarValue::from(json_value)
                             };
-                            columns[col_idx].push(value);
+                            columns[col_idx].push(scalar_value);
                             cursor = tail;
                         } else {
                             // Fallback to value codec for unknown types
                             let (value, remaining) =
                                 ValueCodec::decode_value_fast(cursor, logical_type)?;
-                            columns[col_idx].push(value);
+                            columns[col_idx].push(ScalarValue::from(value));
                             cursor = remaining;
                         }
                     }

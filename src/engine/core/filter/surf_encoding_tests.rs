@@ -1,13 +1,14 @@
 #![cfg(test)]
 
 use crate::engine::core::filter::surf_encoding::encode_value;
+use crate::engine::types::ScalarValue;
 use serde_json::json;
 
 #[test]
 fn integral_float_normalizes_to_integer_encoding() {
-    let b_i = encode_value(&json!(1)).unwrap();
-    let b_u = encode_value(&json!(1u64)).unwrap();
-    let b_f = encode_value(&json!(1.0)).unwrap();
+    let b_i = encode_value(&ScalarValue::from(json!(1))).unwrap();
+    let b_u = encode_value(&ScalarValue::from(json!(1u64))).unwrap();
+    let b_f = encode_value(&ScalarValue::from(json!(1.0))).unwrap();
 
     assert_eq!(b_i, b_u);
     assert_eq!(b_i, b_f);
@@ -19,7 +20,7 @@ fn float_encoding_is_order_preserving() {
     let floats = vec![-3.5, -1.0, -0.0, 0.0, 2.25, 10.5];
     let mut pairs: Vec<(Vec<u8>, f64)> = floats
         .iter()
-        .map(|f| (encode_value(&json!(f)).unwrap(), *f))
+        .map(|f| (encode_value(&ScalarValue::from(json!(f))).unwrap(), *f))
         .collect();
 
     // Sort by encoded bytes (lexicographic)

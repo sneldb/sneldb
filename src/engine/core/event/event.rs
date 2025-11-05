@@ -1,18 +1,21 @@
 use crate::engine::core::event::event_id::EventId;
 use crate::engine::errors::StoreError;
+use crate::engine::types::ScalarValue;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use serde::{Deserialize, Serialize};
-use serde_json::{Number, Value};
-use std::collections::{HashMap, HashSet};
+use serde_json::Value as JsonValue;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use tracing::{debug, warn};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Event {
     pub event_type: String,
     pub context_id: String,
     pub timestamp: u64,
     #[serde(skip_serializing, skip_deserializing, default)]
     pub(crate) id: EventId,
-    pub payload: Value,
+    #[serde(default)]
+    pub payload: BTreeMap<String, ScalarValue>,
 }
 
 impl Event {
@@ -38,12 +41,17 @@ impl Event {
         Ok(())
     }
 
-    pub fn get_field(&self, name: &str) -> Option<Value> {
+    pub fn get_field(&self, name: &str) -> Option<JsonValue> {
+        self.get_field_scalar(name)
+            .map(|v: ScalarValue| v.to_json())
+    }
+
+    pub fn get_field_scalar(&self, name: &str) -> Option<ScalarValue> {
         match name {
-            "context_id" => Some(Value::String(self.context_id.clone())),
-            "event_type" => Some(Value::String(self.event_type.clone())),
-            "timestamp" => Some(Value::Number(self.timestamp.into())),
-            "event_id" => Some(Value::Number(Number::from(self.id.raw()))),
+            "context_id" => Some(ScalarValue::Utf8(self.context_id.clone())),
+            "event_type" => Some(ScalarValue::Utf8(self.event_type.clone())),
+            "timestamp" => Some(ScalarValue::Timestamp(self.timestamp as i64)),
+            "event_id" => Some(ScalarValue::Int64(self.id.raw() as i64)),
             _ => self.payload.get(name).cloned(),
         }
     }
@@ -56,19 +64,11 @@ impl Event {
             "event_type" => self.event_type.clone(),
             "timestamp" => self.timestamp.to_string(),
             "event_id" => self.id.raw().to_string(),
-            other => {
-                if let Some(obj) = self.payload.as_object() {
-                    if let Some(v) = obj.get(other) {
-                        return match v {
-                            Value::String(s) => s.clone(),
-                            Value::Number(n) => n.to_string(),
-                            Value::Bool(b) => b.to_string(),
-                            _ => v.to_string(),
-                        };
-                    }
-                }
-                String::new()
-            }
+            other => self
+                .payload
+                .get(other)
+                .map(Self::scalar_to_string)
+                .unwrap_or_default(),
         }
     }
 
@@ -83,29 +83,11 @@ impl Event {
             // Pad timestamp to 20 digits for u64 (max: 18446744073709551615 = 20 digits)
             "timestamp" => format!("{:020}", self.timestamp),
             "event_id" => format!("{:020}", self.id.raw()),
-            other => {
-                if let Some(obj) = self.payload.as_object() {
-                    if let Some(v) = obj.get(other) {
-                        return match v {
-                            Value::String(s) => s.clone(),
-                            Value::Number(n) if n.is_i64() => {
-                                // Pad signed integers with bias to make them sortable
-                                let biased = n.as_i64().unwrap().wrapping_sub(i64::MIN) as u64;
-                                format!("{:020}", biased)
-                            }
-                            Value::Number(n) if n.is_u64() => {
-                                format!("{:020}", n.as_u64().unwrap())
-                            }
-                            Value::Number(n) if n.is_f64() => {
-                                format!("{:+025.10e}", n.as_f64().unwrap())
-                            }
-                            Value::Bool(b) => b.to_string(),
-                            _ => v.to_string(),
-                        };
-                    }
-                }
-                String::new()
-            }
+            other => self
+                .payload
+                .get(other)
+                .map(Self::scalar_to_sortable)
+                .unwrap_or_default(),
         }
     }
 
@@ -116,10 +98,8 @@ impl Event {
         fields.insert("event_type".to_string());
         fields.insert("timestamp".to_string());
         fields.insert("event_id".to_string());
-        if let Some(obj) = self.payload.as_object() {
-            for key in obj.keys() {
-                fields.insert(key.clone());
-            }
+        for key in self.payload.keys() {
+            fields.insert(key.clone());
         }
         debug!(target: "event::meta", ?fields, "Collected all field names");
         fields
@@ -162,5 +142,153 @@ impl Event {
         }
         debug!(target: "event::meta", "Grouped events by {}", field);
         map
+    }
+}
+
+impl Event {
+    fn scalar_to_string(value: &ScalarValue) -> String {
+        match value {
+            ScalarValue::Utf8(s) => s.clone(),
+            ScalarValue::Boolean(b) => b.to_string(),
+            ScalarValue::Int64(i) => i.to_string(),
+            ScalarValue::Float64(f) => f.to_string(),
+            ScalarValue::Timestamp(ts) => ts.to_string(),
+            ScalarValue::Binary(bytes) => BASE64_STANDARD.encode(bytes),
+            ScalarValue::Null => "null".to_string(),
+        }
+    }
+
+    fn scalar_to_sortable(value: &ScalarValue) -> String {
+        if let Some(i) = value.as_i64() {
+            let biased = i.wrapping_sub(i64::MIN) as u64;
+            return format!("{:020}", biased);
+        }
+        if let Some(u) = value.as_u64() {
+            return format!("{:020}", u);
+        }
+        if let Some(f) = value.as_f64() {
+            return format!("{:+025.10e}", f);
+        }
+        if let Some(s) = value.as_str() {
+            return s.to_string();
+        }
+        if let Some(b) = value.as_bool() {
+            return b.to_string();
+        }
+        value.to_json().to_string()
+    }
+
+    pub fn set_payload_json(&mut self, value: JsonValue) {
+        self.payload = match value {
+            JsonValue::Object(map) => {
+                let mut out = BTreeMap::new();
+                for (k, v) in map.into_iter() {
+                    out.insert(k, ScalarValue::from(v));
+                }
+                out
+            }
+            _ => BTreeMap::new(),
+        };
+    }
+
+    pub fn payload_as_json(&self) -> JsonValue {
+        let mut map = serde_json::Map::new();
+        for (k, v) in &self.payload {
+            map.insert(k.clone(), v.to_json());
+        }
+        JsonValue::Object(map)
+    }
+
+    /// Optimized: Build JSON string directly without intermediate JsonValue.
+    /// Since payloads are flat, we can serialize directly.
+    pub fn payload_as_json_string(&self) -> String {
+        if self.payload.is_empty() {
+            return "{}".to_string();
+        }
+
+        // Pre-allocate capacity: estimate ~20 chars per field (key + value + overhead)
+        let estimated_capacity = self.payload.len() * 30;
+        let mut result = String::with_capacity(estimated_capacity);
+        result.push('{');
+        let mut first = true;
+
+        for (k, v) in &self.payload {
+            if !first {
+                result.push(',');
+            }
+            first = false;
+
+            // Escape and add key
+            result.push('"');
+            escape_json_string(k, &mut result);
+            result.push('"');
+            result.push(':');
+
+            // Add value (no JSON parsing needed for flat payloads)
+            match v {
+                ScalarValue::Null => result.push_str("null"),
+                ScalarValue::Boolean(b) => result.push_str(if *b { "true" } else { "false" }),
+                ScalarValue::Int64(i) => {
+                    // Use itoa for fast integer formatting
+                    let mut buffer = itoa::Buffer::new();
+                    result.push_str(buffer.format(*i));
+                }
+                ScalarValue::Float64(f) => {
+                    // Use ryu for fast float formatting
+                    let mut buffer = ryu::Buffer::new();
+                    result.push_str(buffer.format(*f));
+                }
+                ScalarValue::Timestamp(ts) => {
+                    // Use itoa for fast integer formatting
+                    let mut buffer = itoa::Buffer::new();
+                    result.push_str(buffer.format(*ts));
+                }
+                ScalarValue::Utf8(s) => {
+                    result.push('"');
+                    escape_json_string(s, &mut result);
+                    result.push('"');
+                }
+                ScalarValue::Binary(bytes) => {
+                    result.push('"');
+                    let encoded = BASE64_STANDARD.encode(bytes);
+                    escape_json_string(&encoded, &mut result);
+                    result.push('"');
+                }
+            }
+        }
+
+        result.push('}');
+        result
+    }
+}
+
+/// Helper to escape JSON string values
+/// Optimized to avoid format! allocations by writing directly to the buffer
+#[inline(always)]
+fn escape_json_string(s: &str, out: &mut String) {
+    // Reserve capacity for worst case (every char needs escaping)
+    out.reserve(s.len() * 2);
+
+    for ch in s.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{0008}' => out.push_str("\\b"),
+            '\u{000C}' => out.push_str("\\f"),
+            c if c < '\u{0020}' => {
+                // Write unicode escape directly without format! allocation
+                out.push_str("\\u");
+                // Write hex digits directly (4 hex digits)
+                let n = c as u32;
+                out.push(char::from_digit((n >> 12) & 0xF, 16).unwrap());
+                out.push(char::from_digit((n >> 8) & 0xF, 16).unwrap());
+                out.push(char::from_digit((n >> 4) & 0xF, 16).unwrap());
+                out.push(char::from_digit(n & 0xF, 16).unwrap());
+            }
+            c => out.push(c),
+        }
     }
 }

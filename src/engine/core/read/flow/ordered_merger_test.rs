@@ -7,6 +7,7 @@ use crate::engine::core::read::flow::{
     OrderedStreamMerger,
 };
 use crate::engine::core::read::result::ColumnSpec;
+use crate::engine::types::ScalarValue;
 
 fn flow_context(batch_size: usize) -> Arc<FlowContext> {
     let metrics = FlowMetrics::new();
@@ -40,7 +41,9 @@ async fn send_batch(
         .unwrap()
         .acquire(Arc::clone(&schema));
     for value in values {
-        builder.push_row(&[json!(value)]).unwrap();
+        builder
+            .push_row(&[ScalarValue::from(json!(value))])
+            .unwrap();
         if builder.is_full() {
             let batch = builder.finish().unwrap();
             sender.send(Arc::new(batch)).await.unwrap();

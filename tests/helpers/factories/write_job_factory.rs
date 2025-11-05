@@ -1,5 +1,5 @@
 use crate::engine::core::{ColumnKey, WriteJob};
-use serde_json::Value;
+use crate::engine::types::ScalarValue;
 use std::path::PathBuf;
 
 #[derive(Clone)]
@@ -38,7 +38,7 @@ impl WriteJobFactory {
             key: self.key.clone(),
             zone_id: self.zone_id,
             path: self.path.clone(),
-            value: Value::String(value.into()),
+            value: ScalarValue::Utf8(value.into()),
         }
     }
 

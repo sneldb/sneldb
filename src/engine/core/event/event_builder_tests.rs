@@ -1,5 +1,6 @@
 use crate::engine::core::EventBuilder;
-use serde_json::{Number, Value};
+use crate::engine::types::ScalarValue;
+use serde_json::json;
 
 #[test]
 fn test_new_event_builder() {
@@ -23,15 +24,10 @@ fn test_build_event() {
     assert_eq!(event.context_id, "123");
     assert_eq!(event.timestamp, 1234567890);
 
-    // Test payload
-    if let Value::Object(payload) = event.payload {
-        assert_eq!(
-            payload.get("custom_field").and_then(|v| v.as_str()),
-            Some("test_value")
-        );
-    } else {
-        panic!("Expected payload to be an Object");
-    }
+    assert_eq!(
+        event.payload.get("custom_field"),
+        Some(&ScalarValue::Utf8("test_value".to_string()))
+    );
 }
 
 #[test]
@@ -41,22 +37,22 @@ fn test_add_field_with_numbers() {
     // Test integer
     builder.add_field("integer_field", "42");
     assert_eq!(
-        builder.payload.get("integer_field").unwrap(),
-        &Value::Number(42.into())
+        builder.payload.get("integer_field"),
+        Some(&ScalarValue::Int64(42))
     );
 
     // Test float
     builder.add_field("float_field", "3.14");
     assert_eq!(
-        builder.payload.get("float_field").unwrap(),
-        &Value::Number(Number::from_f64(3.14).unwrap())
+        builder.payload.get("float_field"),
+        Some(&ScalarValue::Float64(3.14))
     );
 
     // Test string
     builder.add_field("string_field", "hello");
     assert_eq!(
-        builder.payload.get("string_field").unwrap(),
-        &Value::String("hello".to_string())
+        builder.payload.get("string_field"),
+        Some(&ScalarValue::Utf8("hello".to_string()))
     );
 }
 
@@ -67,9 +63,15 @@ fn test_add_field_booleans_and_null() {
     builder.add_field("b_false", "false");
     builder.add_field("n_null", "null");
 
-    assert_eq!(builder.payload.get("b_true"), Some(&Value::Bool(true)));
-    assert_eq!(builder.payload.get("b_false"), Some(&Value::Bool(false)));
-    assert_eq!(builder.payload.get("n_null"), Some(&Value::Null));
+    assert_eq!(
+        builder.payload.get("b_true"),
+        Some(&ScalarValue::Boolean(true))
+    );
+    assert_eq!(
+        builder.payload.get("b_false"),
+        Some(&ScalarValue::Boolean(false))
+    );
+    assert_eq!(builder.payload.get("n_null"), Some(&ScalarValue::Null));
 }
 
 #[test]
@@ -79,15 +81,15 @@ fn test_add_field_whitespace_and_strings() {
     builder.add_field("ws_bool", "  true ");
     builder.add_field("raw_preserve", "  spaced  value  ");
 
+    assert_eq!(builder.payload.get("ws_int"), Some(&ScalarValue::Int64(7)));
     assert_eq!(
-        builder.payload.get("ws_int"),
-        Some(&Value::Number(7.into()))
+        builder.payload.get("ws_bool"),
+        Some(&ScalarValue::Boolean(true))
     );
-    assert_eq!(builder.payload.get("ws_bool"), Some(&Value::Bool(true)));
     // String fallback preserves original input (not trimmed)
     assert_eq!(
         builder.payload.get("raw_preserve"),
-        Some(&Value::String("  spaced  value  ".to_string()))
+        Some(&ScalarValue::Utf8("  spaced  value  ".to_string()))
     );
 }
 
@@ -99,12 +101,12 @@ fn test_add_field_large_u64_and_negative_i64() {
     builder.add_field("neg", "-9223372036854775808"); // i64::MIN
 
     assert_eq!(
-        builder.payload.get("big"),
-        Some(&Value::Number(Number::from(big)))
+        builder.payload.get("big").map(|v| v.to_json()),
+        Some(json!(big))
     );
     assert_eq!(
         builder.payload.get("neg"),
-        Some(&Value::Number(Number::from(i64::MIN)))
+        Some(&ScalarValue::Int64(i64::MIN))
     );
 }
 
@@ -117,15 +119,15 @@ fn test_add_field_nonfinite_float_falls_back_to_string() {
 
     assert_eq!(
         builder.payload.get("nan"),
-        Some(&Value::String("NaN".into()))
+        Some(&ScalarValue::Utf8("NaN".into()))
     );
     assert_eq!(
         builder.payload.get("inf"),
-        Some(&Value::String("inf".into()))
+        Some(&ScalarValue::Utf8("inf".into()))
     );
     assert_eq!(
         builder.payload.get("ninf"),
-        Some(&Value::String("-infinity".into()))
+        Some(&ScalarValue::Utf8("-infinity".into()))
     );
 }
 
@@ -138,7 +140,7 @@ fn test_overrides() {
     builder.add_field("x", "2");
 
     assert_eq!(builder.event_type, "b");
-    assert_eq!(builder.payload.get("x"), Some(&Value::Number(2.into())));
+    assert_eq!(builder.payload.get("x"), Some(&ScalarValue::Int64(2)));
 }
 
 #[test]

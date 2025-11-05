@@ -1,6 +1,7 @@
 use crate::engine::core::ZonePlan;
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factory::Factory;
-use serde_json::{Number, Value, json};
+use serde_json::json;
 use std::collections::HashMap;
 
 #[test]
@@ -32,9 +33,9 @@ fn test_group_by_event_type() {
 #[test]
 fn test_collect_unique_field_values() {
     let mut events = Factory::event().create_list(3);
-    events[0].payload = serde_json::json!({"plan": "free", "region": "eu"});
-    events[1].payload = serde_json::json!({"plan": "pro", "region": "us"});
-    events[2].payload = serde_json::json!({"plan": "free", "region": "us"});
+    events[0].set_payload_json(serde_json::json!({"plan": "free", "region": "eu"}));
+    events[1].set_payload_json(serde_json::json!({"plan": "pro", "region": "us"}));
+    events[2].set_payload_json(serde_json::json!({"plan": "free", "region": "us"}));
 
     let plan = ZonePlan::build_all(&events, 3, "uid-001".into(), 10)
         .unwrap()
@@ -115,13 +116,13 @@ fn test_collect_unique_field_values_includes_empty_for_missing() {
     let mut events = Factory::event().create_list(3);
 
     // Event 0: has 'country' and 'score'
-    events[0].payload = json!({"country": "US", "score": 100});
+    events[0].set_payload_json(json!({"country": "US", "score": 100}));
 
     // Event 1: has 'score' but missing 'country'
-    events[1].payload = json!({"score": 200});
+    events[1].set_payload_json(json!({"score": 200}));
 
     // Event 2: has 'country' but missing 'score'
-    events[2].payload = json!({"country": "UK"});
+    events[2].set_payload_json(json!({"country": "UK"}));
 
     let plan = ZonePlan::build_all(&events, 3, "uid-test".into(), 1)
         .unwrap()
@@ -157,8 +158,8 @@ fn test_collect_unique_field_values_includes_empty_for_missing() {
 #[test]
 fn test_from_rows_preserves_typed_payload() {
     let mut payload = HashMap::new();
-    payload.insert("score".to_string(), Value::Number(Number::from(123)));
-    payload.insert("region".to_string(), Value::String("eu".into()));
+    payload.insert("score".to_string(), ScalarValue::from(json!(123)));
+    payload.insert("region".to_string(), ScalarValue::from(json!("eu")));
 
     let rows = vec![
         Factory::zone_row()

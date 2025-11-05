@@ -1,6 +1,7 @@
 use crate::engine::core::Event;
 use crate::engine::core::event::event_id::EventId;
-use serde_json::{Map, Number, Value};
+use crate::engine::types::ScalarValue;
+use std::collections::BTreeMap;
 
 /// Builds Event objects from zone values
 pub struct EventBuilder {
@@ -8,8 +9,7 @@ pub struct EventBuilder {
     pub context_id: String,
     pub timestamp: u64,
     pub event_id: EventId,
-    // Use Map (BTreeMap) - proven faster for small collections (~20 fields)
-    pub payload: Map<String, Value>,
+    pub payload: BTreeMap<String, ScalarValue>,
 }
 
 impl EventBuilder {
@@ -19,7 +19,7 @@ impl EventBuilder {
             context_id: String::new(),
             timestamp: 0,
             event_id: EventId::default(),
-            payload: Map::new(),
+            payload: BTreeMap::new(),
         }
     }
 
@@ -31,13 +31,12 @@ impl EventBuilder {
     }
 
     pub fn build(self) -> Event {
-        // No conversion needed - payload is already Map (BTreeMap)
         Event {
             event_type: self.event_type,
             context_id: self.context_id,
             timestamp: self.timestamp,
             id: self.event_id,
-            payload: Value::Object(self.payload),
+            payload: self.payload,
         }
     }
 
@@ -56,14 +55,14 @@ impl EventBuilder {
             }
             _ => {
                 // Reuse the field string allocation from the match
-                self.insert_value(field, Value::Number(value.into()));
+                self.insert_value(field, ScalarValue::Int64(value));
             }
         }
     }
 
     /// Helper to insert a value with field name (avoids repeated to_string calls in hot paths)
     #[inline(always)]
-    fn insert_value(&mut self, field: &str, value: Value) {
+    fn insert_value(&mut self, field: &str, value: ScalarValue) {
         self.payload.insert(field.to_string(), value);
     }
 
@@ -80,17 +79,22 @@ impl EventBuilder {
                 self.add_field(field, &value.to_string());
             }
             _ => {
-                self.insert_value(field, Value::Number(Number::from(value)));
+                self.insert_value(
+                    field,
+                    i64::try_from(value)
+                        .map(ScalarValue::Int64)
+                        .unwrap_or_else(|_| ScalarValue::Utf8(value.to_string())),
+                );
             }
         }
     }
 
     #[inline]
     pub fn add_field_f64(&mut self, field: &str, value: f64) {
-        if let Some(n) = Number::from_f64(value) {
-            self.insert_value(field, Value::Number(n));
+        if value.is_finite() {
+            self.insert_value(field, ScalarValue::Float64(value));
         } else {
-            self.insert_value(field, Value::Null);
+            self.insert_value(field, ScalarValue::Null);
         }
     }
 
@@ -101,7 +105,7 @@ impl EventBuilder {
                 self.add_field(field, if value { "true" } else { "false" })
             }
             _ => {
-                self.insert_value(field, Value::Bool(value));
+                self.insert_value(field, ScalarValue::Boolean(value));
             }
         }
     }
@@ -111,7 +115,7 @@ impl EventBuilder {
         match field {
             "context_id" | "event_type" => self.add_field(field, ""),
             _ => {
-                self.insert_value(field, Value::Null);
+                self.insert_value(field, ScalarValue::Null);
             }
         }
     }
@@ -146,15 +150,15 @@ impl EventBuilder {
         // Booleans and null (JSON-style keywords, lowercase)
         match trimmed {
             "true" => {
-                self.insert_value(field, Value::Bool(true));
+                self.insert_value(field, ScalarValue::Boolean(true));
                 return;
             }
             "false" => {
-                self.insert_value(field, Value::Bool(false));
+                self.insert_value(field, ScalarValue::Boolean(false));
                 return;
             }
             "null" => {
-                self.insert_value(field, Value::Null);
+                self.insert_value(field, ScalarValue::Null);
                 return;
             }
             _ => {}
@@ -163,27 +167,32 @@ impl EventBuilder {
         // Try integers: prefer signed if a leading '-'; else try u64 first to capture large positives
         if trimmed.starts_with('-') {
             if let Ok(i) = trimmed.parse::<i64>() {
-                self.insert_value(field, Value::Number(i.into()));
+                self.insert_value(field, ScalarValue::Int64(i));
                 return;
             }
         } else if let Ok(u) = trimmed.parse::<u64>() {
-            self.insert_value(field, Value::Number(Number::from(u)));
+            self.insert_value(
+                field,
+                i64::try_from(u)
+                    .map(ScalarValue::Int64)
+                    .unwrap_or_else(|_| ScalarValue::Utf8(u.to_string())),
+            );
             return;
         } else if let Ok(i) = trimmed.parse::<i64>() {
-            self.insert_value(field, Value::Number(i.into()));
+            self.insert_value(field, ScalarValue::Int64(i));
             return;
         }
 
         // Try float; reject NaN/Inf that JSON cannot represent
         if let Ok(f) = trimmed.parse::<f64>() {
-            if let Some(n) = Number::from_f64(f) {
-                self.insert_value(field, Value::Number(n));
+            if f.is_finite() {
+                self.insert_value(field, ScalarValue::Float64(f));
                 return;
             }
             // Non-finite float: fall through to store as string
         }
 
         // Fallback: store as String (preserve original value, not trimmed)
-        self.insert_value(field, Value::String(value.to_string()));
+        self.insert_value(field, ScalarValue::Utf8(value.to_string()));
     }
 }

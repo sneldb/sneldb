@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
-use serde_json::Value;
+use crate::engine::types::ScalarValue;
 
 use super::batch::{BatchError, BatchSchema, ColumnBatchBuilder};
 
@@ -78,7 +78,7 @@ impl BatchPoolInner {
         }
     }
 
-    pub(crate) fn recycle(&self, schema: Arc<BatchSchema>, mut columns: Vec<Vec<Value>>) {
+    pub(crate) fn recycle(&self, schema: Arc<BatchSchema>, mut columns: Vec<Vec<ScalarValue>>) {
         for column in &mut columns {
             column.clear();
             column.shrink_to(self.batch_size);
@@ -94,5 +94,5 @@ impl BatchPoolInner {
 #[derive(Debug)]
 struct ReusableColumns {
     schema: Arc<BatchSchema>,
-    columns: Vec<Vec<Value>>,
+    columns: Vec<Vec<ScalarValue>>,
 }

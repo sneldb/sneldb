@@ -10,6 +10,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tempfile::tempdir;
 
+fn payload_map(event: &crate::engine::core::Event) -> serde_json::Map<String, serde_json::Value> {
+    match event.payload_as_json() {
+        serde_json::Value::Object(map) => map,
+        _ => panic!("expected object payload"),
+    }
+}
+
 async fn make_plan(
     event_type: &str,
     registry: &Arc<tokio::sync::RwLock<crate::engine::schema::registry::SchemaRegistry>>,
@@ -83,8 +90,14 @@ async fn make_plan_with_since(
 }
 
 fn table_to_map(table: ResultTable) -> (Vec<String>, Vec<Vec<serde_json::Value>>) {
+    use crate::engine::types::ScalarValue;
     let cols: Vec<String> = table.columns.into_iter().map(|c| c.name).collect();
-    (cols, table.rows)
+    let scalar_rows: Vec<Vec<serde_json::Value>> = table
+        .rows
+        .into_iter()
+        .map(|row| row.into_iter().map(|v| v.to_json()).collect())
+        .collect();
+    (cols, scalar_rows)
 }
 
 #[tokio::test]
@@ -171,7 +184,7 @@ async fn segment_aggregate_runner_count_unique_mixed_missing_and_empty() {
     let events = sink.into_events(&plan);
     eprintln!("events: {:?}", events);
     assert_eq!(events.len(), 1);
-    let p = events[0].payload.as_object().unwrap();
+    let p = payload_map(&events[0]);
     eprintln!("p: {:?}", p);
     // With columnar storage, all fields written for all events (for proper column alignment)
     // Missing and explicit empty both become "", so unique set is {"u1","u2",""}
@@ -257,7 +270,7 @@ async fn segment_aggregate_runner_min_max_numeric_preference() {
 
     let events = sink.into_events(&plan);
     assert_eq!(events.len(), 1);
-    let p = events[0].payload.as_object().unwrap();
+    let p = payload_map(&events[0]);
     assert_eq!(p["min_name"], json!("2"));
     assert_eq!(p["max_name"], json!("10"));
 }
@@ -332,7 +345,7 @@ async fn segment_aggregate_runner_count_field_missing_is_zero() {
 
     let events = sink.into_events(&plan);
     assert_eq!(events.len(), 1);
-    let p = events[0].payload.as_object().unwrap();
+    let p = payload_map(&events[0]);
     assert_eq!(p["count_visits"], json!(0));
 }
 
@@ -407,7 +420,7 @@ async fn segment_aggregate_runner_since_ignored_in_aggregation() {
 
     let events = sink.into_events(&plan);
     assert_eq!(events.len(), 1);
-    let p = events[0].payload.as_object().unwrap();
+    let p = payload_map(&events[0]);
     // If since were enforced, this would be 0; expected to count both
     assert_eq!(p["count"], json!(2));
 }
@@ -824,7 +837,7 @@ async fn segment_aggregate_runner_empty_results_default_zero() {
     // Use into_events to trigger default zero-output behavior when no rows matched
     let events = sink.into_events(&plan);
     assert_eq!(events.len(), 1);
-    let p = events[0].payload.as_object().unwrap();
+    let p = payload_map(&events[0]);
     assert_eq!(p["avg_amount"].as_f64().unwrap(), 0.0);
 }
 

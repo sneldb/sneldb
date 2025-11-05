@@ -3,6 +3,7 @@ use crate::command::handlers::query::merge::unordered::UnorderedMerger;
 use crate::command::types::Command;
 use crate::engine::core::read::result::{ColumnSpec, QueryResult, SelectionResult};
 use crate::engine::shard::manager::ShardManager;
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::SchemaRegistryFactory;
 use serde_json::json;
 
@@ -34,7 +35,14 @@ fn create_selection_result(
     columns: Vec<ColumnSpec>,
     rows: Vec<Vec<serde_json::Value>>,
 ) -> QueryResult {
-    QueryResult::Selection(SelectionResult { columns, rows })
+    let scalar_rows: Vec<Vec<ScalarValue>> = rows
+        .into_iter()
+        .map(|row| row.into_iter().map(ScalarValue::from).collect())
+        .collect();
+    QueryResult::Selection(SelectionResult {
+        columns,
+        rows: scalar_rows,
+    })
 }
 
 #[test]

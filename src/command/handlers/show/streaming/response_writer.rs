@@ -120,9 +120,9 @@ impl<'a, W: AsyncWrite + Unpin> ShowResponseWriter<'a, W> {
                     }
 
                     let columns = batch_arc.columns();
-                    let column_views: Vec<&[JsonValue]> = columns
+                    let column_views: Vec<Vec<JsonValue>> = columns
                         .iter()
-                        .map(|column| column.as_slice() as &[JsonValue])
+                        .map(|column| column.iter().map(|v| v.to_json()).collect())
                         .collect();
 
                     let mut valid_row_indices: Vec<usize> = Vec::new();
@@ -131,7 +131,9 @@ impl<'a, W: AsyncWrite + Unpin> ShowResponseWriter<'a, W> {
                     for row_idx in 0..batch_arc.len() {
                         if let Some(ref mut seen_ids_set) = self.seen_ids {
                             if let Some(idx) = self.event_id_idx {
-                                if let Some(id) = column_views[idx][row_idx].as_u64() {
+                                if let Some(id) =
+                                    column_views[idx].get(row_idx).and_then(|v| v.as_u64())
+                                {
                                     if is_materialized_frame {
                                         seen_ids_set.insert(id);
                                     } else if !seen_ids_set.insert(id) {

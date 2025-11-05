@@ -1,6 +1,6 @@
 use crate::engine::core::ZonePlan;
+use crate::engine::types::ScalarValue;
 use crate::shared::storage_header::{BinaryHeader, FileKind};
-use serde_json::Value;
 use std::collections::HashSet;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
@@ -43,19 +43,15 @@ impl FieldXorFilter {
         Ok(Self { inner: filter })
     }
 
-    pub fn value_to_string(value: &Value) -> Option<String> {
+    pub fn value_to_string(value: &ScalarValue) -> Option<String> {
         match value {
-            Value::String(s) => Some(s.clone()),
-            Value::Number(n) => {
-                if let Some(i) = n.as_i64() {
-                    Some(i.to_string())
-                } else if let Some(f) = n.as_f64() {
-                    Some(f.to_string())
-                } else {
-                    Some(n.to_string())
-                }
-            }
-            Value::Bool(b) => Some(b.to_string()),
+            ScalarValue::Utf8(s) => Some(s.clone()),
+            ScalarValue::Int64(i) => Some(i.to_string()),
+            ScalarValue::Timestamp(ts) => Some(ts.to_string()),
+            ScalarValue::Float64(f) => Some(f.to_string()),
+            ScalarValue::Boolean(b) => Some(b.to_string()),
+            // All JSON values are now Utf8 strings
+            ScalarValue::Utf8(s) => Some(s.clone()),
             _ => {
                 info!(
                     target: "sneldb::xorfilter",
@@ -71,7 +67,7 @@ impl FieldXorFilter {
         self.inner.contains(&h)
     }
 
-    pub fn contains_value(&self, value: &Value) -> bool {
+    pub fn contains_value(&self, value: &ScalarValue) -> bool {
         match Self::value_to_string(value) {
             Some(value_str) => {
                 let result = self.contains(&value_str);

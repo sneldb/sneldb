@@ -12,6 +12,7 @@ use crate::engine::core::read::result::ColumnSpec;
 use crate::engine::errors::QueryExecutionError;
 use crate::engine::query::streaming::context::StreamingContext;
 use crate::engine::query::streaming::merger::ShardFlowMerger;
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::{CommandFactory, QueryPlanFactory, SchemaRegistryFactory};
 
 async fn build_context(command: crate::command::types::Command) -> StreamingContext {
@@ -69,7 +70,8 @@ async fn build_handle(
         let pool = BatchPool::new(4).expect("pool");
         let mut builder = pool.acquire(schema_for_task);
         for row in rows {
-            builder.push_row(&row).expect("push row");
+            let scalar_row: Vec<ScalarValue> = row.into_iter().map(ScalarValue::from).collect();
+            builder.push_row(&scalar_row).expect("push row");
         }
         if builder.len() > 0 {
             let batch = builder.finish().expect("batch");

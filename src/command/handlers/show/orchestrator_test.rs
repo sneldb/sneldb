@@ -128,9 +128,10 @@ fn build_outcome_updates_entry_metrics() {
     let store = MaterializedStore::open(&entry.storage_path).expect("store");
     let mut sink = MaterializedSink::new(store, entry.schema.clone()).expect("materialized sink");
 
+    use crate::engine::types::ScalarValue;
     let batch = ColumnBatch::new(
         Arc::clone(&schema),
-        vec![vec![json!(1u64)], vec![json!(10u64)]],
+        vec![vec![ScalarValue::from(json!(1u64))], vec![ScalarValue::from(json!(10u64))]],
         1,
         None,
     )

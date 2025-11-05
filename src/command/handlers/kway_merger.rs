@@ -1,5 +1,5 @@
 use super::row_comparator::RowComparator;
-use serde_json::Value;
+use crate::engine::types::ScalarValue;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
@@ -8,7 +8,7 @@ use std::collections::BinaryHeap;
 /// Instead of cloning rows during the merge, this uses indices into the
 /// source arrays, significantly reducing memory allocations.
 pub struct KWayMerger<'a> {
-    shard_results: &'a [Vec<Vec<Value>>],
+    shard_results: &'a [Vec<Vec<ScalarValue>>],
     field: &'a str,
     ascending: bool,
     limit: usize,
@@ -18,13 +18,13 @@ pub struct KWayMerger<'a> {
 struct HeapEntry<'a> {
     shard_idx: usize,
     row_idx: usize,
-    shard_results: &'a [Vec<Vec<Value>>],
+    shard_results: &'a [Vec<Vec<ScalarValue>>],
     field: &'a str,
     ascending: bool,
 }
 
 impl<'a> HeapEntry<'a> {
-    fn get_row(&self) -> &Vec<Value> {
+    fn get_row(&self) -> &Vec<ScalarValue> {
         &self.shard_results[self.shard_idx][self.row_idx]
     }
 }
@@ -66,7 +66,7 @@ impl<'a> KWayMerger<'a> {
     /// * `ascending` - Sort direction
     /// * `limit` - Maximum number of results to return
     pub fn new(
-        shard_results: &'a [Vec<Vec<Value>>],
+        shard_results: &'a [Vec<Vec<ScalarValue>>],
         field: &'a str,
         ascending: bool,
         limit: usize,
@@ -82,7 +82,7 @@ impl<'a> KWayMerger<'a> {
     /// Performs the k-way merge and returns the merged results.
     ///
     /// Clones only the final selected rows, not all rows during processing.
-    pub fn merge(&self) -> Vec<Vec<Value>> {
+    pub fn merge(&self) -> Vec<Vec<ScalarValue>> {
         let mut heap: BinaryHeap<HeapEntry> = BinaryHeap::new();
 
         // Initialize heap with first row from each shard
@@ -127,10 +127,10 @@ impl<'a> KWayMerger<'a> {
 
     /// Applies offset and limit to the merged results.
     pub fn apply_pagination(
-        rows: Vec<Vec<Value>>,
+        rows: Vec<Vec<ScalarValue>>,
         offset: Option<u32>,
         limit: Option<u32>,
-    ) -> Vec<Vec<Value>> {
+    ) -> Vec<Vec<ScalarValue>> {
         let mut result = rows;
 
         // Apply offset

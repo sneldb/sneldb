@@ -9,6 +9,7 @@ use crate::engine::core::read::sink::{AggregateSink, ResultSink};
 use crate::engine::core::{MemTable, QueryCaches, QueryExecution, QueryPlan};
 use crate::engine::errors::QueryExecutionError;
 use crate::engine::schema::registry::SchemaRegistry;
+use crate::engine::types::ScalarValue;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -69,14 +70,15 @@ impl ExecutionEngine {
             .with_caches(&ctx.caches);
 
         let events = execution.run().await?;
-        let rows: Vec<Vec<serde_json::Value>> = events
+        let rows: Vec<Vec<ScalarValue>> = events
             .into_iter()
             .map(|e| {
+                let payload_json = e.payload_as_json_string();
                 vec![
-                    serde_json::json!(e.context_id),
-                    serde_json::json!(e.event_type),
-                    serde_json::json!(e.timestamp),
-                    e.payload,
+                    ScalarValue::Utf8(e.context_id),
+                    ScalarValue::Utf8(e.event_type),
+                    ScalarValue::Timestamp(e.timestamp as i64),
+                    ScalarValue::Utf8(payload_json),
                 ]
             })
             .collect();

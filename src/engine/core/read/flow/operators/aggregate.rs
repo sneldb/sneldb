@@ -7,7 +7,8 @@ use crate::engine::core::read::aggregate::plan::{AggregateOpSpec, AggregatePlan}
 use crate::engine::core::read::flow::{BatchSchema, FlowContext, FlowOperator, FlowOperatorError};
 use crate::engine::core::read::result::ColumnSpec;
 use crate::engine::core::read::sink::{AggregateSink, ResultSink};
-use serde_json::{Map, Value};
+use crate::engine::types::ScalarValue;
+use std::collections::BTreeMap;
 
 use super::super::{BatchReceiver, BatchSender};
 
@@ -54,13 +55,14 @@ impl FlowOperator for AggregateOp {
             let schema = batch_arc.schema();
             let column_names: Vec<String> =
                 schema.columns().iter().map(|c| c.name.clone()).collect();
-            let mut column_vecs: Vec<Vec<Value>> = Vec::with_capacity(schema.column_count());
+            let mut column_vecs: Vec<Vec<ScalarValue>> = Vec::with_capacity(schema.column_count());
             for col_idx in 0..schema.column_count() {
                 column_vecs.push(batch_arc.column(col_idx).map_err(|e| {
                     FlowOperatorError::Batch(format!("failed to read column: {}", e))
                 })?);
             }
-            let column_views: Vec<&[Value]> = column_vecs.iter().map(|v| v.as_slice()).collect();
+            let column_views: Vec<&[ScalarValue]> =
+                column_vecs.iter().map(|v| v.as_slice()).collect();
 
             for row_idx in 0..batch_arc.len() {
                 let event = event_from_row(
@@ -84,28 +86,26 @@ impl FlowOperator for AggregateOp {
         }
 
         let mut builder = ctx.pool().acquire(Arc::clone(&schema));
-        let mut row_values: Vec<Value> = Vec::with_capacity(schema.column_count());
+        let mut row_values: Vec<ScalarValue> = Vec::with_capacity(schema.column_count());
 
         for event in aggregated_events {
             row_values.clear();
             for column in schema.columns() {
-                let mut value = event.get_field(&column.name).unwrap_or(Value::Null);
+                let mut value = event
+                    .get_field_scalar(&column.name)
+                    .unwrap_or(ScalarValue::Null);
 
                 if let Some(group_by) = self.config.aggregate.group_by.as_ref() {
                     if group_by.iter().any(|g| g == &column.name) {
-                        if let Value::Object(map) = &event.payload {
-                            if let Some(v) = map.get(&column.name) {
-                                value = v.clone();
-                            }
+                        if let Some(v) = event.payload.get(&column.name) {
+                            value = v.clone();
                         }
                     }
                 }
 
                 if column.name == "bucket" {
-                    if let Value::Object(map) = &event.payload {
-                        if let Some(v) = map.get("bucket") {
-                            value = v.clone();
-                        }
+                    if let Some(v) = event.payload.get("bucket") {
+                        value = v.clone();
                     }
                 }
 
@@ -142,7 +142,7 @@ impl FlowOperator for AggregateOp {
 }
 
 fn event_from_row(
-    column_views: &[&[Value]],
+    column_views: &[&[ScalarValue]],
     column_names: &[String],
     row_idx: usize,
     default_event_type: &str,
@@ -152,35 +152,35 @@ fn event_from_row(
     let mut event_type = Some(default_event_type.to_string());
     let mut timestamp = 0u64;
     let mut event_id = None;
-    let mut payload = Map::new();
+    let mut payload = BTreeMap::new();
 
     for (idx, name) in column_names.iter().enumerate() {
         let value = column_views[idx]
             .get(row_idx)
             .cloned()
-            .unwrap_or(Value::Null);
+            .unwrap_or(ScalarValue::Null);
         match name.as_str() {
             "context_id" => {
                 context_id = match &value {
-                    Value::String(s) => s.clone(),
-                    Value::Number(n) => n.to_string(),
-                    Value::Bool(b) => b.to_string(),
-                    _ => value.to_string(),
+                    ScalarValue::Utf8(s) => s.clone(),
+                    ScalarValue::Int64(i) => i.to_string(),
+                    ScalarValue::Boolean(b) => b.to_string(),
+                    _ => value.to_string_repr(),
                 };
             }
             "event_type" => {
-                if let Value::String(s) = &value {
+                if let ScalarValue::Utf8(s) = &value {
                     event_type = Some(s.clone());
                 }
             }
             "timestamp" => {
-                timestamp = value_as_u64(&value).unwrap_or(0);
+                timestamp = scalar_as_u64(&value).unwrap_or(0);
             }
             "event_id" => {
-                event_id = value_as_u64(&value).map(EventId::from);
+                event_id = scalar_as_u64(&value).map(EventId::from);
             }
             _ => {
-                if !matches!(value, Value::Null) {
+                if !matches!(value, ScalarValue::Null) {
                     payload.insert(name.clone(), value);
                 }
             }
@@ -196,24 +196,40 @@ fn event_from_row(
             *synthetic_id = synthetic_id.saturating_add(1);
             id
         }),
-        payload: Value::Object(payload),
+        payload,
     };
 
     event
 }
 
-fn value_as_u64(value: &Value) -> Option<u64> {
+fn scalar_as_u64(value: &ScalarValue) -> Option<u64> {
     match value {
-        Value::Number(num) => {
-            if num.is_u64() {
-                num.as_u64()
-            } else if num.is_i64() {
-                num.as_i64().map(|v| v as u64)
+        ScalarValue::Int64(i) => {
+            if *i >= 0 {
+                Some(*i as u64)
             } else {
-                num.as_f64().map(|v| v as u64)
+                None
             }
         }
-        Value::String(s) => s.parse::<u64>().ok(),
+        ScalarValue::Timestamp(t) => {
+            if *t >= 0 {
+                Some(*t as u64)
+            } else {
+                None
+            }
+        }
+        ScalarValue::Utf8(s) => {
+            // Try parsing as u64, then i64, then f64
+            if let Ok(u) = s.parse::<u64>() {
+                Some(u)
+            } else if let Ok(i) = s.parse::<i64>() {
+                if i >= 0 { Some(i as u64) } else { None }
+            } else if let Ok(f) = s.parse::<f64>() {
+                if f >= 0.0 { Some(f as u64) } else { None }
+            } else {
+                None
+            }
+        }
         _ => None,
     }
 }

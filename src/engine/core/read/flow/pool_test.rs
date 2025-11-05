@@ -4,6 +4,7 @@ use serde_json::json;
 
 use super::{BatchError, BatchPool, BatchSchema};
 use crate::engine::core::read::result::ColumnSpec;
+use crate::engine::types::ScalarValue;
 
 fn make_schema(column_count: usize) -> Arc<BatchSchema> {
     let columns = (0..column_count)
@@ -28,7 +29,9 @@ fn pool_recycles_builders() {
 
     {
         let mut builder = pool.acquire(Arc::clone(&schema));
-        builder.push_row(&[json!(1_i64)]).expect("row stored");
+        builder
+            .push_row(&[ScalarValue::from(json!(1_i64))])
+            .expect("row stored");
         let batch = builder.finish().expect("batch builds");
         assert_eq!(batch.len(), 1);
         drop(batch);
@@ -38,6 +41,6 @@ fn pool_recycles_builders() {
     assert_eq!(builder.len(), 0);
     assert_eq!(builder.capacity(), 2);
     builder
-        .push_row(&[json!(2_i64)])
+        .push_row(&[ScalarValue::from(json!(2_i64))])
         .expect("reused builder still works");
 }

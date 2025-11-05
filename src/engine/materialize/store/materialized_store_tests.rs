@@ -24,13 +24,14 @@ fn build_schema() -> BatchSchema {
     .expect("valid schema")
 }
 
-fn batch_to_rows(batch: &ColumnBatch) -> Vec<Vec<Value>> {
+fn batch_to_rows(batch: &ColumnBatch) -> Vec<Vec<serde_json::Value>> {
+    use crate::engine::types::ScalarValue;
     let column_count = batch.schema().column_count();
-    let mut rows = vec![vec![Value::Null; column_count]; batch.len()];
+    let mut rows = vec![vec![serde_json::Value::Null; column_count]; batch.len()];
     for col_idx in 0..column_count {
         let values = batch.column(col_idx).expect("column access");
         for (row_idx, value) in values.iter().enumerate() {
-            rows[row_idx][col_idx] = value.clone();
+            rows[row_idx][col_idx] = value.to_json();
         }
     }
     rows
@@ -41,15 +42,16 @@ fn materialized_store_roundtrip() {
     let dir = tempdir().unwrap();
     let mut store = MaterializedStore::open(dir.path()).unwrap();
 
+    use crate::engine::types::ScalarValue;
     let schema = build_schema();
     let schema_arc = Arc::new(schema);
     let pool = BatchPool::new(16).unwrap();
     let mut builder = pool.acquire(Arc::clone(&schema_arc));
     builder
-        .push_row(&[json!(1_700_000_000_u64), json!("ctx-a"), json!(1001_u64)])
+        .push_row(&[ScalarValue::from(json!(1_700_000_000_u64)), ScalarValue::from(json!("ctx-a")), ScalarValue::from(json!(1001_u64))])
         .unwrap();
     builder
-        .push_row(&[json!(1_700_000_100_u64), json!("ctx-b"), json!(1002_u64)])
+        .push_row(&[ScalarValue::from(json!(1_700_000_100_u64)), ScalarValue::from(json!("ctx-b")), ScalarValue::from(json!(1002_u64))])
         .unwrap();
     let batch = builder.finish().unwrap();
 
@@ -79,10 +81,11 @@ fn manifest_persists_across_reopen() {
     let pool = BatchPool::new(8).unwrap();
 
     {
+        use crate::engine::types::ScalarValue;
         let mut store = MaterializedStore::open(dir.path()).unwrap();
         let mut builder = pool.acquire(Arc::clone(&schema));
         builder
-            .push_row(&[json!(1_700_000_500_u64), json!("ctx-c"), json!(42_u64)])
+            .push_row(&[ScalarValue::from(json!(1_700_000_500_u64)), ScalarValue::from(json!("ctx-c")), ScalarValue::from(json!(42_u64))])
             .unwrap();
         let batch = builder.finish().unwrap();
         let snapshots = batch_schema_to_snapshots(&schema);

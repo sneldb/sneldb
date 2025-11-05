@@ -1,6 +1,7 @@
 use super::PruneArgs;
 use super::temporal_pruner::TemporalPruner;
 use crate::command::types::CompareOp;
+use crate::engine::types::ScalarValue;
 use crate::engine::core::time::{
     temporal_calendar_index::TemporalCalendarIndex, zone_temporal_index::ZoneTemporalIndex,
 };
@@ -48,7 +49,7 @@ fn temporal_pruner_eq_hits_only_exact() {
     let artifacts = artifacts_for(&base_dir);
     let pruner = TemporalPruner { artifacts };
 
-    let val = json!(104u64);
+    let val = ScalarValue::from(json!(104u64));
     let args = PruneArgs {
         segment_id: "00001",
         uid,
@@ -60,7 +61,7 @@ fn temporal_pruner_eq_hits_only_exact() {
     assert_eq!(out.len(), 1);
     assert_eq!(out[0].zone_id, 1);
 
-    let val = json!(103u64);
+    let val = ScalarValue::from(json!(103u64));
     let args = PruneArgs {
         segment_id: "00001",
         uid,
@@ -91,7 +92,7 @@ fn temporal_pruner_range_overlaps() {
     let artifacts = artifacts_for(&base_dir);
     let pruner = TemporalPruner { artifacts };
 
-    let val = json!(140u64);
+    let val = ScalarValue::from(json!(140u64));
     for op in [CompareOp::Gt, CompareOp::Gte, CompareOp::Lt, CompareOp::Lte] {
         let args = PruneArgs {
             segment_id: "00002",
@@ -113,7 +114,7 @@ fn temporal_pruner_range_overlaps() {
     let out = pruner.apply_temporal_only(&args).unwrap();
     assert!(out.is_empty());
 
-    let val = json!(225u64);
+    let val = ScalarValue::from(json!(225u64));
     for op in [CompareOp::Gt, CompareOp::Gte, CompareOp::Lt, CompareOp::Lte] {
         let args = PruneArgs {
             segment_id: "00002",
@@ -140,7 +141,7 @@ fn temporal_pruner_non_time_column_noop() {
     let artifacts = artifacts_for(&base_dir);
     let pruner = TemporalPruner { artifacts };
 
-    let val = json!(10u64);
+    let val = ScalarValue::from(json!(10u64));
     let args = PruneArgs {
         segment_id: "00003",
         uid,
@@ -164,7 +165,7 @@ fn temporal_pruner_missing_value_or_op_returns_none() {
     let base_dir = tmp.path().to_path_buf();
     let artifacts = artifacts_for(&base_dir);
     let pruner = TemporalPruner { artifacts };
-    let val = json!(1u64);
+    let val = ScalarValue::from(json!(1u64));
 
     let args = PruneArgs {
         segment_id: "00004",
@@ -200,7 +201,7 @@ fn temporal_pruner_works_for_non_timestamp_temporal_field() {
     let pruner = TemporalPruner { artifacts };
 
     // Eq hits exact
-    let val = json!(1_500u64);
+    let val = ScalarValue::from(json!(1_500u64));
     let args = PruneArgs {
         segment_id: "00005",
         uid,
@@ -212,7 +213,7 @@ fn temporal_pruner_works_for_non_timestamp_temporal_field() {
     assert_eq!(out.iter().map(|z| z.zone_id).collect::<Vec<u32>>(), vec![7]);
 
     // Gt should include the zone due to max_ts > 1499
-    let val = json!(1_499u64);
+    let val = ScalarValue::from(json!(1_499u64));
     let args = PruneArgs {
         segment_id: "00005",
         uid,
@@ -244,7 +245,7 @@ fn temporal_pruner_handles_string_datetime_values() {
     let pruner = TemporalPruner { artifacts };
 
     // Use ISO-like string parsed as DateTime
-    let val = json!("2020-09-15T00:00:00Z");
+    let val = ScalarValue::from(json!("2020-09-15T00:00:00Z"));
     let args = PruneArgs {
         segment_id: "00006",
         uid,

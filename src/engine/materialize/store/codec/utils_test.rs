@@ -1,85 +1,86 @@
 use super::utils::{ByteEncoder, ValueExtractor};
 use crate::engine::materialize::MaterializationError;
+use crate::engine::types::ScalarValue;
 use serde_json::json;
 
 #[test]
 fn extract_u64_from_u64() {
-    assert_eq!(ValueExtractor::extract_u64(&json!(42_u64)), Some(42));
-    assert_eq!(ValueExtractor::extract_u64(&json!(0_u64)), Some(0));
+    assert_eq!(ValueExtractor::extract_u64(&ScalarValue::from(json!(42_u64))), Some(42));
+    assert_eq!(ValueExtractor::extract_u64(&ScalarValue::from(json!(0_u64))), Some(0));
     assert_eq!(
-        ValueExtractor::extract_u64(&json!(u64::MAX)),
+        ValueExtractor::extract_u64(&ScalarValue::from(json!(u64::MAX))),
         Some(u64::MAX)
     );
 }
 
 #[test]
 fn extract_u64_from_i64() {
-    assert_eq!(ValueExtractor::extract_u64(&json!(42_i64)), Some(42));
-    assert_eq!(ValueExtractor::extract_u64(&json!(0_i64)), Some(0));
-    assert_eq!(ValueExtractor::extract_u64(&json!(-1_i64)), None); // Negative
+    assert_eq!(ValueExtractor::extract_u64(&ScalarValue::from(json!(42_i64))), Some(42));
+    assert_eq!(ValueExtractor::extract_u64(&ScalarValue::from(json!(0_i64))), Some(0));
+    assert_eq!(ValueExtractor::extract_u64(&ScalarValue::from(json!(-1_i64))), None); // Negative
 }
 
 #[test]
 fn extract_u64_from_string() {
-    assert_eq!(ValueExtractor::extract_u64(&json!("42")), Some(42));
-    assert_eq!(ValueExtractor::extract_u64(&json!("0")), Some(0));
-    assert_eq!(ValueExtractor::extract_u64(&json!("999")), Some(999));
-    assert_eq!(ValueExtractor::extract_u64(&json!("not a number")), None);
+    assert_eq!(ValueExtractor::extract_u64(&ScalarValue::from(json!("42"))), Some(42));
+    assert_eq!(ValueExtractor::extract_u64(&ScalarValue::from(json!("0"))), Some(0));
+    assert_eq!(ValueExtractor::extract_u64(&ScalarValue::from(json!("999"))), Some(999));
+    assert_eq!(ValueExtractor::extract_u64(&ScalarValue::from(json!("not a number"))), None);
 }
 
 #[test]
 fn extract_u64_from_other_types() {
-    assert_eq!(ValueExtractor::extract_u64(&json!(null)), None);
-    assert_eq!(ValueExtractor::extract_u64(&json!(true)), None);
-    assert_eq!(ValueExtractor::extract_u64(&json!(3.14)), None);
-    assert_eq!(ValueExtractor::extract_u64(&json!([])), None);
-    assert_eq!(ValueExtractor::extract_u64(&json!({})), None);
+    assert_eq!(ValueExtractor::extract_u64(&ScalarValue::Null), None);
+    assert_eq!(ValueExtractor::extract_u64(&ScalarValue::from(json!(true))), None);
+    assert_eq!(ValueExtractor::extract_u64(&ScalarValue::from(json!(3.14))), None);
+    assert_eq!(ValueExtractor::extract_u64(&ScalarValue::from(json!([]))), None);
+    assert_eq!(ValueExtractor::extract_u64(&ScalarValue::from(json!({}))), None);
 }
 
 #[test]
 fn extract_i64_from_i64() {
-    assert_eq!(ValueExtractor::extract_i64(&json!(42_i64)), Some(42));
-    assert_eq!(ValueExtractor::extract_i64(&json!(-42_i64)), Some(-42));
-    assert_eq!(ValueExtractor::extract_i64(&json!(0_i64)), Some(0));
+    assert_eq!(ValueExtractor::extract_i64(&ScalarValue::from(json!(42_i64))), Some(42));
+    assert_eq!(ValueExtractor::extract_i64(&ScalarValue::from(json!(-42_i64))), Some(-42));
+    assert_eq!(ValueExtractor::extract_i64(&ScalarValue::from(json!(0_i64))), Some(0));
 }
 
 #[test]
 fn extract_i64_from_u64() {
-    assert_eq!(ValueExtractor::extract_i64(&json!(42_u64)), Some(42));
-    assert_eq!(ValueExtractor::extract_i64(&json!(0_u64)), Some(0));
+    assert_eq!(ValueExtractor::extract_i64(&ScalarValue::from(json!(42_u64))), Some(42));
+    assert_eq!(ValueExtractor::extract_i64(&ScalarValue::from(json!(0_u64))), Some(0));
 }
 
 #[test]
 fn extract_i64_from_string() {
-    assert_eq!(ValueExtractor::extract_i64(&json!("42")), Some(42));
-    assert_eq!(ValueExtractor::extract_i64(&json!("-42")), Some(-42));
-    assert_eq!(ValueExtractor::extract_i64(&json!("0")), Some(0));
-    assert_eq!(ValueExtractor::extract_i64(&json!("not a number")), None);
+    assert_eq!(ValueExtractor::extract_i64(&ScalarValue::from(json!("42"))), Some(42));
+    assert_eq!(ValueExtractor::extract_i64(&ScalarValue::from(json!("-42"))), Some(-42));
+    assert_eq!(ValueExtractor::extract_i64(&ScalarValue::from(json!("0"))), Some(0));
+    assert_eq!(ValueExtractor::extract_i64(&ScalarValue::from(json!("not a number"))), None);
 }
 
 #[test]
 fn extract_f64_from_f64() {
-    assert_eq!(ValueExtractor::extract_f64(&json!(3.14)), Some(3.14));
-    assert_eq!(ValueExtractor::extract_f64(&json!(-3.14)), Some(-3.14));
-    assert_eq!(ValueExtractor::extract_f64(&json!(0.0)), Some(0.0));
+    assert_eq!(ValueExtractor::extract_f64(&ScalarValue::from(json!(3.14))), Some(3.14));
+    assert_eq!(ValueExtractor::extract_f64(&ScalarValue::from(json!(-3.14))), Some(-3.14));
+    assert_eq!(ValueExtractor::extract_f64(&ScalarValue::from(json!(0.0))), Some(0.0));
 }
 
 #[test]
 fn extract_f64_from_string() {
-    assert_eq!(ValueExtractor::extract_f64(&json!("3.14")), Some(3.14));
-    assert_eq!(ValueExtractor::extract_f64(&json!("-3.14")), Some(-3.14));
-    assert_eq!(ValueExtractor::extract_f64(&json!("0.0")), Some(0.0));
-    assert_eq!(ValueExtractor::extract_f64(&json!("not a number")), None);
+    assert_eq!(ValueExtractor::extract_f64(&ScalarValue::from(json!("3.14"))), Some(3.14));
+    assert_eq!(ValueExtractor::extract_f64(&ScalarValue::from(json!("-3.14"))), Some(-3.14));
+    assert_eq!(ValueExtractor::extract_f64(&ScalarValue::from(json!("0.0"))), Some(0.0));
+    assert_eq!(ValueExtractor::extract_f64(&ScalarValue::from(json!("not a number"))), None);
 }
 
 #[test]
 fn extract_f64_from_other_types() {
     // json!(42) is a Number which can be converted to f64
-    assert_eq!(ValueExtractor::extract_f64(&json!(42)), Some(42.0));
-    assert_eq!(ValueExtractor::extract_f64(&json!(null)), None);
-    assert_eq!(ValueExtractor::extract_f64(&json!(true)), None);
-    assert_eq!(ValueExtractor::extract_f64(&json!([])), None);
-    assert_eq!(ValueExtractor::extract_f64(&json!({})), None);
+    assert_eq!(ValueExtractor::extract_f64(&ScalarValue::from(json!(42))), Some(42.0));
+    assert_eq!(ValueExtractor::extract_f64(&ScalarValue::Null), None);
+    assert_eq!(ValueExtractor::extract_f64(&ScalarValue::from(json!(true))), None);
+    assert_eq!(ValueExtractor::extract_f64(&ScalarValue::from(json!([]))), None);
+    assert_eq!(ValueExtractor::extract_f64(&ScalarValue::from(json!({}))), None);
 }
 
 #[test]

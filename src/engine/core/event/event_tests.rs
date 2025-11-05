@@ -1,21 +1,24 @@
 use crate::engine::core::{Event, EventId};
 use crate::engine::errors::StoreError;
+use crate::engine::types::ScalarValue;
 use serde_json::{Number, Value, json};
 use std::collections::HashSet;
 
 fn create_test_event() -> Event {
-    Event {
+    let mut event = Event {
         event_type: "test_event".to_string(),
         context_id: "test_context".to_string(),
         timestamp: 1234567890,
         id: EventId::from(99),
-        payload: json!({
-            "string_field": "value",
-            "number_field": 42,
-            "float_field": 3.14,
-            "bool_field": true
-        }),
-    }
+        payload: Default::default(),
+    };
+    event.set_payload_json(json!({
+        "string_field": "value",
+        "number_field": 42,
+        "float_field": 3.14,
+        "bool_field": true
+    }));
+    event
 }
 
 #[test]

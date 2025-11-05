@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::sync::Arc;
 
-use serde_json::Value;
+use crate::engine::types::ScalarValue;
 use tokio::task::JoinHandle;
 use tracing::error;
 
@@ -148,7 +148,7 @@ impl RowStream {
         }
     }
 
-    async fn next_row(&mut self) -> Result<Option<Vec<Value>>, String> {
+    async fn next_row(&mut self) -> Result<Option<Vec<ScalarValue>>, String> {
         loop {
             if let Some(batch) = self.current_batch.as_ref() {
                 if self.row_idx < batch.len() {
@@ -185,7 +185,7 @@ impl RowStream {
 
 struct HeapItem {
     shard_idx: usize,
-    row: Vec<Value>,
+    row: Vec<ScalarValue>,
     order_index: usize,
     ascending: bool,
 }
@@ -208,26 +208,17 @@ impl Ord for HeapItem {
     fn cmp(&self, other: &Self) -> Ordering {
         let lhs = &self.row[self.order_index];
         let rhs = &other.row[self.order_index];
-        let ord = compare_json_values(lhs, rhs).then_with(|| other.shard_idx.cmp(&self.shard_idx));
+        let ord =
+            compare_scalar_values(lhs, rhs).then_with(|| other.shard_idx.cmp(&self.shard_idx));
         if self.ascending { ord.reverse() } else { ord }
     }
 }
 
-fn compare_json_values(a: &Value, b: &Value) -> Ordering {
+fn compare_scalar_values(a: &ScalarValue, b: &ScalarValue) -> Ordering {
+    // Try u64 first (existing behavior)
     if let (Some(va), Some(vb)) = (a.as_u64(), b.as_u64()) {
         return va.cmp(&vb);
     }
-    if let (Some(va), Some(vb)) = (a.as_i64(), b.as_i64()) {
-        return va.cmp(&vb);
-    }
-    if let (Some(va), Some(vb)) = (a.as_f64(), b.as_f64()) {
-        return va.partial_cmp(&vb).unwrap_or(Ordering::Equal);
-    }
-    if let (Some(va), Some(vb)) = (a.as_bool(), b.as_bool()) {
-        return va.cmp(&vb);
-    }
-    if let (Some(va), Some(vb)) = (a.as_str(), b.as_str()) {
-        return va.cmp(vb);
-    }
-    a.to_string().cmp(&b.to_string())
+    // Use the efficient direct comparison method
+    a.compare(b)
 }

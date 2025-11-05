@@ -4,6 +4,7 @@ use crate::engine::shard::manager::ShardManager;
 use crate::engine::shard::message::ShardMessage;
 use crate::shared::response::JsonRenderer;
 use crate::test_helpers::factories::{CommandFactory, SchemaRegistryFactory};
+use serde_json::json;
 use tempfile::tempdir;
 use tokio::io::{AsyncReadExt, duplex};
 use tokio::sync::mpsc;
@@ -66,7 +67,7 @@ async fn test_store_handle_valid_event_is_routed() {
         .expect("no data");
 
     match result {
-        QueryResult::Selection(selection) => assert_eq!(selection.rows[0][3]["id"], 123),
+        QueryResult::Selection(selection) => assert_eq!(selection.rows[0][3].to_json()["id"], json!(123)),
         _ => panic!("Expected selection result, got {:?}", result),
     }
 }
@@ -133,7 +134,7 @@ async fn test_store_normalizes_datetime_rfc3339_to_epoch_seconds() {
     match result {
         QueryResult::Selection(selection) => {
             let payload = &selection.rows[0][3];
-            assert_eq!(payload["created_at"], serde_json::json!(expected));
+            assert_eq!(payload.to_json()["created_at"], serde_json::json!(expected));
         }
         _ => panic!("Expected selection result, got {:?}", result),
     }
@@ -242,7 +243,7 @@ async fn test_store_normalizes_datetime_integer_units() {
         match result {
             QueryResult::Selection(selection) => {
                 let payload = &selection.rows[0][3];
-                assert_eq!(payload["created_at"], serde_json::json!(expected));
+                assert_eq!(payload.to_json()["created_at"], serde_json::json!(expected));
             }
             _ => panic!("Expected selection result, got {:?}", result),
         }
@@ -308,7 +309,7 @@ async fn test_store_normalizes_date_string_to_midnight() {
     match result {
         QueryResult::Selection(selection) => {
             let payload = &selection.rows[0][3];
-            assert_eq!(payload["birthdate"], serde_json::json!(expected));
+            assert_eq!(payload.to_json()["birthdate"], serde_json::json!(expected));
         }
         _ => panic!("Expected selection result, got {:?}", result),
     }
@@ -368,7 +369,7 @@ async fn test_store_optional_datetime_null_passes() {
     match result {
         QueryResult::Selection(selection) => {
             let payload = &selection.rows[0][3];
-            assert!(payload.get("delivered_at").unwrap().is_null());
+            assert!(payload.to_json().get("delivered_at").unwrap().is_null());
         }
         _ => panic!("Expected selection result, got {:?}", result),
     }
@@ -662,7 +663,7 @@ async fn test_store_handle_accepts_datetime_string_field() {
         QueryResult::Selection(selection) => {
             assert_eq!(selection.rows.len(), 1);
             let payload = &selection.rows[0][3];
-            assert!(payload.get("created_at").is_some());
+            assert!(payload.to_json().get("created_at").is_some());
         }
         _ => panic!("Expected selection result, got {:?}", result),
     }
@@ -723,7 +724,7 @@ async fn test_store_handle_accepts_date_string_field() {
         QueryResult::Selection(selection) => {
             assert_eq!(selection.rows.len(), 1);
             let payload = &selection.rows[0][3];
-            assert!(payload.get("birthdate").is_some());
+            assert!(payload.to_json().get("birthdate").is_some());
         }
         _ => panic!("Expected selection result, got {:?}", result),
     }

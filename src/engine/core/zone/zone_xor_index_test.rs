@@ -1,4 +1,5 @@
 use crate::engine::core::zone::zone_xor_index::{ZoneXorFilterIndex, build_all_zxf_filtered};
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::{EventFactory, ZonePlanFactory};
 use serde_json::json;
 use std::collections::HashSet;
@@ -39,11 +40,11 @@ fn build_all_zxf_filtered_writes_file_and_filters_work() {
     let path = dir.path().join("u01_fruit.zxf");
     let idx = ZoneXorFilterIndex::load(&path).unwrap();
 
-    assert!(idx.contains_in_zone(0, &json!("apple")));
-    assert!(idx.contains_in_zone(0, &json!("banana")));
-    assert!(!idx.contains_in_zone(0, &json!("carrot")));
-    assert!(idx.contains_in_zone(1, &json!("carrot")));
-    assert!(idx.contains_in_zone(1, &json!("date")));
+    assert!(idx.contains_in_zone(0, &ScalarValue::from(json!("apple"))));
+    assert!(idx.contains_in_zone(0, &ScalarValue::from(json!("banana"))));
+    assert!(!idx.contains_in_zone(0, &ScalarValue::from(json!("carrot"))));
+    assert!(idx.contains_in_zone(1, &ScalarValue::from(json!("carrot"))));
+    assert!(idx.contains_in_zone(1, &ScalarValue::from(json!("date"))));
 }
 
 #[test]
@@ -84,16 +85,16 @@ fn zxf_filtered_handles_numeric_and_bool_values() {
 
     let path_n = dir.path().join("u02_n.zxf");
     let idx_n = ZoneXorFilterIndex::load(&path_n).unwrap();
-    assert!(idx_n.contains_in_zone(0, &json!(42)));
-    assert!(idx_n.contains_in_zone(1, &json!(7)));
-    assert!(!idx_n.contains_in_zone(0, &json!(7)));
+    assert!(idx_n.contains_in_zone(0, &ScalarValue::from(json!(42))));
+    assert!(idx_n.contains_in_zone(1, &ScalarValue::from(json!(7))));
+    assert!(!idx_n.contains_in_zone(0, &ScalarValue::from(json!(7))));
 
     let path_b = dir.path().join("u02_b.zxf");
     let idx_b = ZoneXorFilterIndex::load(&path_b).unwrap();
-    assert!(idx_b.contains_in_zone(0, &json!(true)));
-    assert!(idx_b.contains_in_zone(0, &json!(false))); // Zone 0 has both true and false
-    assert!(idx_b.contains_in_zone(1, &json!(true)));
-    assert!(idx_b.contains_in_zone(1, &json!(false))); // Zone 1 has both true and false
+    assert!(idx_b.contains_in_zone(0, &ScalarValue::from(json!(true))));
+    assert!(idx_b.contains_in_zone(0, &ScalarValue::from(json!(false)))); // Zone 0 has both true and false
+    assert!(idx_b.contains_in_zone(1, &ScalarValue::from(json!(true))));
+    assert!(idx_b.contains_in_zone(1, &ScalarValue::from(json!(false)))); // Zone 1 has both true and false
 }
 
 #[test]
@@ -131,7 +132,7 @@ fn zxf_zones_maybe_containing_multiple_zones() {
     build_all_zxf_filtered(&[z0, z1], dir.path(), &allowed).unwrap();
     let path = dir.path().join("u03_v.zxf");
     let idx = ZoneXorFilterIndex::load(&path).unwrap();
-    let zones = idx.zones_maybe_containing(&json!("X"));
+    let zones = idx.zones_maybe_containing(&ScalarValue::from(json!("X")));
     assert!(zones.contains(&0));
     assert!(zones.contains(&1));
 }

@@ -22,6 +22,7 @@ fn builds_selection_result_with_builder_and_simple_helper() {
         &[("country", "String"), ("amount", "Integer")],
         &[&[json!("US"), json!(10)], &[json!("DE"), json!(5)]],
     );
+    use crate::engine::types::ScalarValue;
     assert_eq!(sel2.columns[0].name, "country");
-    assert_eq!(sel2.rows[1][0], json!("DE"));
+    assert_eq!(sel2.rows[1][0], ScalarValue::from(json!("DE")));
 }

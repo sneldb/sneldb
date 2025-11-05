@@ -295,7 +295,7 @@ async fn test_compactor_merges_segments_successfully() {
             zone.zone_id
         );
         let timestamps: Vec<i64> = timestamp_snapshot
-            .into_json_values()
+            .into_scalar_values()
             .iter()
             .filter_map(|v| v.as_i64())
             .collect();
@@ -318,7 +318,7 @@ async fn test_compactor_merges_segments_successfully() {
             zone.zone_id
         );
         let purchases: Vec<f64> = purchase_snapshot
-            .into_json_values()
+            .into_scalar_values()
             .iter()
             .filter_map(|v| v.as_f64())
             .collect();

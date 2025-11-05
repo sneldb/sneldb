@@ -1,4 +1,5 @@
 use crate::engine::core::FieldXorFilter;
+use crate::engine::types::ScalarValue;
 use serde_json::Value;
 use serde_json::json;
 
@@ -34,6 +35,7 @@ impl FieldXorFilterFactory {
         let strings: Vec<String> = self
             .values
             .into_iter()
+            .map(|v| ScalarValue::from(v))
             .filter_map(|v| FieldXorFilter::value_to_string(&v))
             .collect();
 

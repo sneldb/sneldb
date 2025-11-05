@@ -64,7 +64,7 @@ fn event_sink_emits_typed_and_strings_and_nulls() {
     assert_eq!(events.len(), 1);
     let ev = &events[0];
 
-    let obj = ev.payload.as_object().expect("payload object");
+    let obj = &ev.payload;
     assert_eq!(obj.get("i").and_then(|v| v.as_i64()), Some(42));
     assert_eq!(obj.get("u").and_then(|v| v.as_u64()), Some(123));
     assert!((obj.get("f").and_then(|v| v.as_f64()).unwrap() - 1.25).abs() < 1e-9);
@@ -136,8 +136,8 @@ fn event_sink_on_row_builds_event_from_columns() {
     assert_eq!(e.event_type, "order");
     assert_eq!(e.context_id, "ctx-1");
     assert_eq!(e.timestamp, 3_000_000);
-    assert_eq!(e.payload["country"], json!("US"));
-    assert_eq!(e.payload["amount"], json!(42));
+    assert_eq!(e.payload_as_json()["country"], json!("US"));
+    assert_eq!(e.payload_as_json()["amount"], json!(42));
 }
 
 #[test]
