@@ -1,3 +1,5 @@
+use crate::engine::core::read::flow::ColumnBatch;
+use crate::engine::types::ScalarValue;
 use crate::shared::response::render::{Renderer, StreamingFormat};
 use crate::shared::response::types::{Response, ResponseBody};
 use serde::Serialize;
@@ -29,10 +31,11 @@ struct RowFrameNoClone<'a> {
     values: RowValuesNoClone<'a>,
 }
 
-// Serializes Values by reference without cloning
+// Serializes ScalarValues by converting to JSON values
 struct RowValuesNoClone<'a> {
     columns: &'a [&'a str],
-    values: &'a [&'a Value],
+    values: Vec<Value>,
+    _phantom: std::marker::PhantomData<&'a ()>,
 }
 
 impl<'a> Serialize for RowValuesNoClone<'a> {
@@ -44,7 +47,7 @@ impl<'a> Serialize for RowValuesNoClone<'a> {
         let mut map = serializer.serialize_map(Some(self.columns.len()))?;
         for (name, value) in self.columns.iter().zip(self.values.iter()) {
             map.serialize_key(name)?;
-            map.serialize_value(*value)?;
+            map.serialize_value(value)?;
         }
         map.end()
     }
@@ -66,7 +69,7 @@ struct BatchFrame<'a> {
 
 // Serializes batch rows as array of arrays
 struct BatchRows<'a> {
-    rows: &'a [Vec<&'a Value>],
+    rows: &'a [Vec<Value>],
 }
 
 impl<'a> Serialize for BatchRows<'a> {
@@ -95,19 +98,19 @@ impl Renderer for JsonRenderer {
         let estimated = estimate_json_size(response);
         let mut buf = Vec::with_capacity(estimated);
 
-        // Build results array
+        // Build results array - convert ScalarValue to JSON Value at render time
         let results = match &response.body {
             ResponseBody::Lines(lines) => lines.iter().map(|s| json!(s)).collect::<Vec<Value>>(),
-            ResponseBody::JsonArray(values) => values.clone(),
+            ResponseBody::ScalarArray(values) => values.iter().map(|v| v.to_json()).collect(),
             ResponseBody::Table { columns, rows } => {
                 let cols = columns
                     .iter()
                     .map(|(n, t)| json!({ "name": n, "type": t }))
                     .collect::<Vec<Value>>();
-                let row_vals = rows
+                let row_vals: Vec<Value> = rows
                     .iter()
-                    .map(|r| Value::Array(r.clone()))
-                    .collect::<Vec<Value>>();
+                    .map(|r| Value::Array(r.iter().map(|v| v.to_json()).collect()))
+                    .collect();
                 vec![json!({ "columns": cols, "rows": row_vals })]
             }
         };
@@ -132,7 +135,7 @@ impl Renderer for JsonRenderer {
         StreamingFormat::Json
     }
 
-    fn stream_schema_json(&self, columns: &[(String, String)], out: &mut Vec<u8>) {
+    fn stream_schema(&self, columns: &[(String, String)], out: &mut Vec<u8>) {
         out.clear();
 
         // Convert columns to ColumnRef slices
@@ -159,11 +162,16 @@ impl Renderer for JsonRenderer {
         out.push(b'\n');
     }
 
-    fn stream_row_json(&self, columns: &[&str], values: &[&Value], out: &mut Vec<u8>) {
+    fn stream_row(&self, columns: &[&str], values: &[ScalarValue], out: &mut Vec<u8>) {
         out.clear();
 
-        // Use RowValuesNoClone which serializes Values by reference without cloning
-        let row_values = RowValuesNoClone { columns, values };
+        // Convert ScalarValues to JSON Values at render time
+        let json_values: Vec<Value> = values.iter().map(|v| v.to_json()).collect();
+        let row_values = RowValuesNoClone {
+            columns,
+            values: json_values,
+            _phantom: std::marker::PhantomData,
+        };
 
         let frame = RowFrameNoClone {
             frame_type: "row",
@@ -181,13 +189,21 @@ impl Renderer for JsonRenderer {
         out.push(b'\n');
     }
 
-    fn stream_batch_json(&self, _columns: &[&str], batch: &[Vec<&Value>], out: &mut Vec<u8>) {
+    fn stream_batch(&self, _columns: &[&str], batch: &[Vec<ScalarValue>], out: &mut Vec<u8>) {
         out.clear();
+
+        // Convert ScalarValues to JSON Values at render time
+        let json_batch: Vec<Vec<Value>> = batch
+            .iter()
+            .map(|row| row.iter().map(|v| v.to_json()).collect())
+            .collect();
 
         // Serialize batch as array of arrays (more efficient than per-row objects)
         let batch_frame = BatchFrame {
             frame_type: "batch",
-            rows: BatchRows { rows: batch },
+            rows: BatchRows {
+                rows: &json_batch,
+            },
         };
 
         if sonic_rs::to_writer(&mut *out, &batch_frame).is_err() {
@@ -199,7 +215,13 @@ impl Renderer for JsonRenderer {
         out.push(b'\n');
     }
 
-    fn stream_end_json(&self, row_count: usize, out: &mut Vec<u8>) {
+    fn stream_column_batch(&self, _batch: &ColumnBatch, _out: &mut Vec<u8>) {
+        // For JSON, we need to convert ColumnBatch to rows of ScalarValues
+        // This is handled by the caller using stream_batch instead
+        unreachable!("stream_column_batch should not be called for JSON renderer")
+    }
+
+    fn stream_end(&self, row_count: usize, out: &mut Vec<u8>) {
         out.clear();
 
         let frame = EndFrame {
@@ -227,7 +249,7 @@ fn estimate_json_size(response: &Response) -> usize {
             // Each line: "string" + comma
             size += lines.len() * 50;
         }
-        ResponseBody::JsonArray(values) => {
+        ResponseBody::ScalarArray(values) => {
             // Rough estimate: 100 bytes per value
             size += values.len() * 100;
         }

@@ -2,6 +2,7 @@ use crate::command::types::Command;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
 use crate::engine::shard::message::ShardMessage;
+use crate::engine::types::ScalarValue;
 use crate::shared::response::render::Renderer;
 use crate::shared::response::{Response, StatusCode};
 use serde_json::{Value, json};
@@ -90,7 +91,8 @@ pub async fn handle<W: AsyncWrite + Unpin>(
             "Replay returned results"
         );
 
-        let json_rows: Vec<Value> = all_results
+        // Convert events to ScalarValue - serialize each event as JSON string
+        let scalar_rows: Vec<ScalarValue> = all_results
             .into_iter()
             .map(|event| {
                 let mut obj = serde_json::Map::new();
@@ -98,11 +100,13 @@ pub async fn handle<W: AsyncWrite + Unpin>(
                 obj.insert("event_type".to_string(), json!(event.event_type));
                 obj.insert("timestamp".to_string(), json!(event.timestamp));
                 obj.insert("payload".to_string(), event.payload_as_json());
-                Value::Object(obj)
+                let json_value = Value::Object(obj);
+                // Convert JSON Value to ScalarValue
+                ScalarValue::from(json_value)
             })
             .collect();
 
-        let resp = Response::ok_json(json_rows, count);
+        let resp = Response::ok_scalar_array(scalar_rows, count);
         writer.write_all(&renderer.render(&resp)).await
     }
 }

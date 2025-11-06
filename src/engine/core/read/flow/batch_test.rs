@@ -9,7 +9,7 @@ use arrow_array::{
     },
 };
 use arrow_schema::{DataType, Field, Schema, TimeUnit};
-use serde_json::{Value, json};
+use serde_json::json;
 
 use super::{BatchError, BatchPool, BatchSchema, ColumnBatch, ColumnBatchBuilder};
 use crate::engine::core::read::result::ColumnSpec;
@@ -328,7 +328,7 @@ fn column_batch_column_out_of_bounds() {
 }
 
 #[test]
-fn column_batch_lazy_json_conversion() {
+fn column_batch_direct_scalar_access() {
     let schema = make_schema();
     let columns: Vec<Vec<ScalarValue>> = vec![
         vec![ScalarValue::from(json!(1)), ScalarValue::from(json!(2))],
@@ -337,17 +337,17 @@ fn column_batch_lazy_json_conversion() {
     let batch =
         ColumnBatch::new(Arc::clone(&schema), columns, 2, None).expect("batch should be created");
 
-    // First access converts from Arrow
+    // Direct access to ScalarValue (no conversion needed)
     let col0 = batch.column(0).expect("column 0 should exist");
     assert_eq!(col0.len(), 2);
 
-    // Second access should use cache (but we can't directly verify that)
+    // Second access returns same data (direct access, no conversion)
     let col0_again = batch.column(0).expect("column 0 should exist again");
     assert_eq!(col0_again, col0);
 }
 
 #[test]
-fn column_batch_columns_caches_result() {
+fn column_batch_columns_direct_access() {
     let schema = make_schema();
     let columns: Vec<Vec<ScalarValue>> = vec![
         vec![ScalarValue::from(json!(1)), ScalarValue::from(json!(2))],
@@ -356,6 +356,7 @@ fn column_batch_columns_caches_result() {
     let batch =
         ColumnBatch::new(Arc::clone(&schema), columns, 2, None).expect("batch should be created");
 
+    // Direct access to ScalarValue columns (no conversion)
     let all_columns1 = batch.columns();
     let all_columns2 = batch.columns();
 
@@ -385,7 +386,7 @@ fn column_batch_detach() {
 }
 
 #[test]
-fn column_batch_record_batch_access() {
+fn column_batch_record_batch_conversion_on_demand() {
     let schema = make_schema();
     let columns: Vec<Vec<ScalarValue>> = vec![
         vec![ScalarValue::from(json!(1)), ScalarValue::from(json!(2))],
@@ -394,9 +395,19 @@ fn column_batch_record_batch_access() {
     let batch =
         ColumnBatch::new(Arc::clone(&schema), columns, 2, None).expect("batch should be created");
 
+    // Convert to Arrow on-demand (only at output boundary)
     let record_batch = batch.record_batch();
     assert_eq!(record_batch.num_rows(), 2);
     assert_eq!(record_batch.num_columns(), 2);
+
+    // Verify conversion worked correctly
+    let int_array = record_batch
+        .column(0)
+        .as_any()
+        .downcast_ref::<arrow_array::Int64Array>()
+        .expect("should be Int64Array");
+    assert_eq!(int_array.value(0), 1);
+    assert_eq!(int_array.value(1), 2);
 }
 
 // ==================== ColumnBatch Tests - Arrow Creation ====================
@@ -463,7 +474,7 @@ fn column_batch_from_record_batch() {
     assert_eq!(batch.len(), 2);
     assert_eq!(batch.schema().column_count(), 2);
 
-    // Test that we can access columns (lazy conversion)
+    // Test that we can access columns (converted from Arrow to ScalarValue)
     let col0 = batch.column(0).expect("column 0 should exist");
     assert_eq!(col0[0], ScalarValue::from(json!(10)));
     assert_eq!(col0[1], ScalarValue::from(json!(20)));
@@ -703,8 +714,7 @@ fn column_batch_int64_conversion_from_string() {
     let schema = Arc::new(
         BatchSchema::new(vec![ColumnSpecFactory::integer("id")]).expect("schema should be valid"),
     );
-    // String values are parsed when creating Arrow arrays, but cached JSON preserves original format
-    // When created from JSON, the original JSON values are cached and returned
+    // ScalarValue stores the original format directly
     let columns: Vec<Vec<ScalarValue>> = vec![vec![
         ScalarValue::from(json!("123")),
         ScalarValue::from(json!("456")),
@@ -712,12 +722,12 @@ fn column_batch_int64_conversion_from_string() {
     let batch = ColumnBatch::new(Arc::clone(&schema), columns.clone(), 2, None)
         .expect("batch should be created");
 
-    // The cached JSON values preserve the original string format
+    // ScalarValue preserves the original string format
     let col = batch.column(0).expect("column should exist");
     assert_eq!(col[0], ScalarValue::from(json!("123")));
     assert_eq!(col[1], ScalarValue::from(json!("456")));
 
-    // But the RecordBatch contains the converted numeric values
+    // When converting to Arrow RecordBatch, string values are parsed to integers
     let record_batch = batch.record_batch();
     let int_array = record_batch
         .column(0)
@@ -740,12 +750,12 @@ fn column_batch_float64_conversion_from_string() {
     let batch = ColumnBatch::new(Arc::clone(&schema), columns.clone(), 2, None)
         .expect("batch should be created");
 
-    // Cached JSON preserves original format
+    // ScalarValue preserves original format
     let col = batch.column(0).expect("column should exist");
     assert_eq!(col[0], ScalarValue::from(json!("1.5")));
     assert_eq!(col[1], ScalarValue::from(json!("2.7")));
 
-    // But RecordBatch contains converted float values
+    // When converting to Arrow RecordBatch, string values are parsed to floats
     let record_batch = batch.record_batch();
     let float_array = record_batch
         .column(0)
@@ -776,14 +786,14 @@ fn column_batch_boolean_conversion_from_string() {
     let batch = ColumnBatch::new(Arc::clone(&schema), columns.clone(), 4, None)
         .expect("batch should be created");
 
-    // Cached JSON preserves original format
+    // ScalarValue preserves original format
     let col = batch.column(0).expect("column should exist");
     assert_eq!(col[0], ScalarValue::from(json!("true")));
     assert_eq!(col[1], ScalarValue::from(json!("false")));
     assert_eq!(col[2], ScalarValue::from(json!("1")));
     assert_eq!(col[3], ScalarValue::from(json!("0")));
 
-    // But RecordBatch contains converted boolean values
+    // When converting to Arrow RecordBatch, string values are converted to booleans
     let record_batch = batch.record_batch();
     let bool_array = record_batch
         .column(0)
@@ -815,13 +825,13 @@ fn column_batch_boolean_conversion_from_number() {
     let batch = ColumnBatch::new(Arc::clone(&schema), columns.clone(), 3, None)
         .expect("batch should be created");
 
-    // Cached JSON preserves original number format
+    // ScalarValue preserves original number format
     let col = batch.column(0).expect("column should exist");
     assert_eq!(col[0], ScalarValue::from(json!(1)));
     assert_eq!(col[1], ScalarValue::from(json!(0)));
     assert_eq!(col[2], ScalarValue::from(json!(42)));
 
-    // But RecordBatch contains converted boolean values
+    // When converting to Arrow RecordBatch, numbers are converted to booleans
     let record_batch = batch.record_batch();
     let bool_array = record_batch
         .column(0)
@@ -845,12 +855,12 @@ fn column_batch_timestamp_conversion_from_string() {
     let batch = ColumnBatch::new(Arc::clone(&schema), columns.clone(), 2, None)
         .expect("batch should be created");
 
-    // Cached JSON preserves original string format
+    // ScalarValue preserves original string format
     let col = batch.column(0).expect("column should exist");
     assert_eq!(col[0], ScalarValue::from(json!("1000")));
     assert_eq!(col[1], ScalarValue::from(json!("2000")));
 
-    // But RecordBatch contains converted timestamp values
+    // When converting to Arrow RecordBatch, string values are parsed to timestamps
     let record_batch = batch.record_batch();
     let ts_array = record_batch
         .column(0)
@@ -866,7 +876,7 @@ fn column_batch_string_conversion_from_other_types() {
     let schema = Arc::new(
         BatchSchema::new(vec![ColumnSpecFactory::string("value")]).expect("schema should be valid"),
     );
-    // String arrays convert other types to strings when creating Arrow arrays
+    // ScalarValue stores original types directly
     let columns: Vec<Vec<ScalarValue>> = vec![vec![
         ScalarValue::from(json!(123)),
         ScalarValue::from(json!(true)),
@@ -875,13 +885,13 @@ fn column_batch_string_conversion_from_other_types() {
     let batch = ColumnBatch::new(Arc::clone(&schema), columns.clone(), 3, None)
         .expect("batch should be created");
 
-    // Cached JSON preserves original format
+    // ScalarValue preserves original format
     let col = batch.column(0).expect("column should exist");
     assert_eq!(col[0], ScalarValue::from(json!(123)));
     assert_eq!(col[1], ScalarValue::from(json!(true)));
     assert_eq!(col[2], ScalarValue::Null);
 
-    // But RecordBatch contains string values
+    // When converting to Arrow RecordBatch, other types are converted to strings
     let record_batch = batch.record_batch();
     let string_array = record_batch
         .column(0)
@@ -891,6 +901,88 @@ fn column_batch_string_conversion_from_other_types() {
     assert_eq!(string_array.value(0), "123");
     assert_eq!(string_array.value(1), "true");
     assert_eq!(record_batch.column(0).is_null(2), true);
+}
+
+// ==================== New ScalarValue-Only Features ====================
+
+#[test]
+fn column_batch_columns_ref_direct_access() {
+    let schema = make_schema();
+    let columns: Vec<Vec<ScalarValue>> = vec![
+        vec![ScalarValue::from(json!(1)), ScalarValue::from(json!(2))],
+        vec![ScalarValue::from(json!("a")), ScalarValue::from(json!("b"))],
+    ];
+    let batch =
+        ColumnBatch::new(Arc::clone(&schema), columns.clone(), 2, None).expect("batch should be created");
+
+    // Test columns_ref() for efficient access without cloning
+    let columns_ref = batch.columns_ref();
+    assert_eq!(columns_ref.len(), 2);
+    assert_eq!(columns_ref[0].len(), 2);
+    assert_eq!(columns_ref[1].len(), 2);
+    assert_eq!(columns_ref[0][0], ScalarValue::from(json!(1)));
+    assert_eq!(columns_ref[1][0], ScalarValue::from(json!("a")));
+}
+
+#[test]
+fn column_batch_to_record_batch_with_error_handling() {
+    let schema = make_schema();
+    let columns: Vec<Vec<ScalarValue>> = vec![
+        vec![ScalarValue::from(json!(1)), ScalarValue::from(json!(2))],
+        vec![ScalarValue::from(json!("a")), ScalarValue::from(json!("b"))],
+    ];
+    let batch =
+        ColumnBatch::new(Arc::clone(&schema), columns, 2, None).expect("batch should be created");
+
+    // Test to_record_batch() with proper error handling
+    let record_batch = batch.to_record_batch().expect("conversion should succeed");
+    assert_eq!(record_batch.num_rows(), 2);
+    assert_eq!(record_batch.num_columns(), 2);
+}
+
+#[test]
+fn column_batch_no_internal_arrow_conversion() {
+    let schema = make_schema();
+    let columns: Vec<Vec<ScalarValue>> = vec![
+        vec![ScalarValue::from(json!(1)), ScalarValue::from(json!(2))],
+        vec![ScalarValue::from(json!("a")), ScalarValue::from(json!("b"))],
+    ];
+    let batch =
+        ColumnBatch::new(Arc::clone(&schema), columns.clone(), 2, None).expect("batch should be created");
+
+    // Access columns multiple times - should be direct access, no conversion
+    let col0_1 = batch.column(0).expect("column 0 should exist");
+    let col0_2 = batch.column(0).expect("column 0 should exist again");
+
+    // Both should return the same data (direct access)
+    assert_eq!(col0_1, col0_2);
+    assert_eq!(col0_1, columns[0]);
+
+    // Access all columns - should be direct access
+    let all_cols = batch.columns();
+    assert_eq!(all_cols[0], columns[0]);
+    assert_eq!(all_cols[1], columns[1]);
+}
+
+#[test]
+fn column_batch_from_record_batch_converts_to_scalar() {
+    let schema = make_schema();
+    let record_batch = create_test_record_batch(&schema);
+
+    let batch = ColumnBatch::from_record_batch(Arc::clone(&schema), record_batch, None)
+        .expect("batch should be created from record batch");
+
+    // After conversion, data is stored as ScalarValue
+    let columns = batch.columns_ref();
+    assert_eq!(columns.len(), 2);
+    assert_eq!(columns[0][0], ScalarValue::from(json!(10)));
+    assert_eq!(columns[0][1], ScalarValue::from(json!(20)));
+    assert_eq!(columns[1][0], ScalarValue::from(json!("x")));
+    assert_eq!(columns[1][1], ScalarValue::from(json!("y")));
+
+    // Can convert back to Arrow on-demand
+    let record_batch_again = batch.to_record_batch().expect("should convert back");
+    assert_eq!(record_batch_again.num_rows(), 2);
 }
 
 // ==================== Error Display Tests ====================

@@ -50,15 +50,15 @@ impl From<hyper::StatusCode> for StatusCode {
         }
     }
 }
-use serde_json::Value;
+use crate::engine::types::ScalarValue;
 
 #[derive(Debug, Clone)]
 pub enum ResponseBody {
     Lines(Vec<String>),
-    JsonArray(Vec<Value>),
+    ScalarArray(Vec<ScalarValue>),
     Table {
         columns: Vec<(String, String)>,
-        rows: Vec<Vec<Value>>,
+        rows: Vec<Vec<ScalarValue>>,
     },
 }
 
@@ -80,16 +80,16 @@ impl Response {
         }
     }
 
-    pub fn ok_json(rows: Vec<Value>, count: usize) -> Self {
+    pub fn ok_scalar_array(rows: Vec<ScalarValue>, count: usize) -> Self {
         Self {
             status: StatusCode::Ok,
             count: count,
             message: "OK".to_string(),
-            body: ResponseBody::JsonArray(rows),
+            body: ResponseBody::ScalarArray(rows),
         }
     }
 
-    pub fn ok_table(columns: Vec<(String, String)>, rows: Vec<Vec<Value>>, count: usize) -> Self {
+    pub fn ok_table(columns: Vec<(String, String)>, rows: Vec<Vec<ScalarValue>>, count: usize) -> Self {
         Self {
             status: StatusCode::Ok,
             count,

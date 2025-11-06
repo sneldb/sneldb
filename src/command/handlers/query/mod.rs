@@ -17,11 +17,10 @@ use crate::engine::core::read::result::QueryResult;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
 use crate::shared::config::CONFIG;
+use crate::engine::types::ScalarValue;
 use crate::shared::response::ArrowStreamEncoder;
 use crate::shared::response::render::{Renderer, StreamingFormat};
 use crate::shared::response::{Response, StatusCode};
-use arrow_array::Array;
-use serde_json::Value as JsonValue;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
@@ -136,11 +135,8 @@ async fn format_and_write_result<W: AsyncWrite + Unpin>(
                 .map(|column| (column.name.clone(), column.logical_type.clone()))
                 .collect::<Vec<(String, String)>>();
 
-            let rows: Vec<Vec<serde_json::Value>> = table
-                .rows
-                .into_iter()
-                .map(|row| row.into_iter().map(|v| v.to_json()).collect())
-                .collect();
+            // Rows already contain ScalarValue - use directly
+            let rows: Vec<Vec<ScalarValue>> = table.rows;
             let count = rows.len();
 
             let resp = Response::ok_table(columns, rows, count);
@@ -155,11 +151,8 @@ async fn format_and_write_result<W: AsyncWrite + Unpin>(
                 .map(|column| (column.name.clone(), column.logical_type.clone()))
                 .collect::<Vec<(String, String)>>();
 
-            let rows: Vec<Vec<serde_json::Value>> = table
-                .rows
-                .into_iter()
-                .map(|row| row.into_iter().map(|v| v.to_json()).collect())
-                .collect();
+            // Rows already contain ScalarValue - use directly
+            let rows: Vec<Vec<ScalarValue>> = table.rows;
             let count = rows.len();
 
             let resp = Response::ok_table(columns, rows, count);
@@ -209,7 +202,7 @@ async fn write_streaming_response<W: AsyncWrite + Unpin>(
 
     match renderer.streaming_format() {
         StreamingFormat::Json => {
-            renderer.stream_schema_json(&column_metadata, &mut encode_buf);
+            renderer.stream_schema(&column_metadata, &mut encode_buf);
             writer.write_all(&encode_buf).await?;
             encode_buf.clear();
         }
@@ -255,43 +248,16 @@ async fn write_streaming_response<W: AsyncWrite + Unpin>(
 
                 match renderer.streaming_format() {
                     StreamingFormat::Arrow => {
-                        // Filter directly on Arrow arrays - no JSON conversion!
-                        let record_batch = batch_arc.record_batch();
+                        // Work with ScalarValue directly - Arrow conversion happens at output boundary
+                        let columns = batch_arc.columns_ref();
 
                         for row_idx in 0..batch_arc.len() {
-                            // Check event_id deduplication if needed (only convert that one column if necessary)
+                            // Check event_id deduplication using ScalarValue directly
                             if let Some(idx) = event_id_idx {
-                                let event_id_array = record_batch.column(idx);
-                                // Extract event_id value directly from Arrow array (zero JSON conversion!)
-                                let id = if let Some(int_array) = event_id_array
-                                    .as_any()
-                                    .downcast_ref::<arrow_array::Int64Array>(
-                                ) {
-                                    if !int_array.is_null(row_idx) {
-                                        Some(int_array.value(row_idx) as u64)
-                                    } else {
-                                        None
-                                    }
-                                } else if let Some(uint_array) = event_id_array
-                                    .as_any()
-                                    .downcast_ref::<arrow_array::UInt64Array>(
-                                ) {
-                                    if !uint_array.is_null(row_idx) {
-                                        Some(uint_array.value(row_idx))
-                                    } else {
-                                        None
-                                    }
-                                } else {
-                                    // Fallback: convert only this column to JSON (rare case)
-                                    match batch_arc.column(idx) {
-                                        Ok(event_id_col) => {
-                                            event_id_col.get(row_idx).and_then(|v| v.as_u64())
-                                        }
-                                        Err(_) => None,
-                                    }
-                                };
-
-                                if let Some(id) = id {
+                                if let Some(id) = columns[idx]
+                                    .get(row_idx)
+                                    .and_then(|v| v.as_u64())
+                                {
                                     if !seen_ids.insert(id) {
                                         continue;
                                     }
@@ -317,17 +283,14 @@ async fn write_streaming_response<W: AsyncWrite + Unpin>(
                         }
                     }
                     StreamingFormat::Json => {
-                        // For JSON format, convert ScalarValue to JsonValue for serialization
+                        // For JSON format, work with ScalarValue directly
                         let columns = batch_arc.columns();
-                        let column_views: Vec<Vec<JsonValue>> = columns
-                            .iter()
-                            .map(|column| column.iter().map(|v| v.to_json()).collect())
-                            .collect();
 
                         for row_idx in 0..batch_arc.len() {
                             if let Some(idx) = event_id_idx {
-                                if let Some(id) =
-                                    column_views[idx].get(row_idx).and_then(|v| v.as_u64())
+                                if let Some(id) = columns[idx]
+                                    .get(row_idx)
+                                    .and_then(|v| v.as_u64())
                                 {
                                     if !seen_ids.insert(id) {
                                         continue;
@@ -353,25 +316,25 @@ async fn write_streaming_response<W: AsyncWrite + Unpin>(
                             emitted += 1;
                         }
 
-                        // Serialize JSON immediately (column_views is in scope here)
+                        // Serialize using ScalarValue directly
                         if batch_size > 0 && valid_row_indices.len() > 0 {
-                            let batch_rows: Vec<Vec<&JsonValue>> = valid_row_indices
+                            let batch_rows: Vec<Vec<ScalarValue>> = valid_row_indices
                                 .iter()
                                 .map(|&row_idx| {
                                     (0..column_names.len())
-                                        .map(|col_idx| &column_views[col_idx][row_idx])
+                                        .map(|col_idx| columns[col_idx][row_idx].clone())
                                         .collect()
                                 })
                                 .collect();
-                            renderer.stream_batch_json(&column_names, &batch_rows, &mut encode_buf);
+                            renderer.stream_batch(&column_names, &batch_rows, &mut encode_buf);
                             writer.write_all(&encode_buf).await?;
                             encode_buf.clear();
                         } else {
                             for &row_idx in &valid_row_indices {
-                                let row_refs: Vec<&JsonValue> = (0..column_names.len())
-                                    .map(|col_idx| &column_views[col_idx][row_idx])
+                                let row_values: Vec<ScalarValue> = (0..column_names.len())
+                                    .map(|col_idx| columns[col_idx][row_idx].clone())
                                     .collect();
-                                renderer.stream_row_json(&column_names, &row_refs, &mut encode_buf);
+                                renderer.stream_row(&column_names, &row_values, &mut encode_buf);
                                 writer.write_all(&encode_buf).await?;
                                 encode_buf.clear();
                             }
@@ -425,7 +388,7 @@ async fn write_streaming_response<W: AsyncWrite + Unpin>(
 
     match renderer.streaming_format() {
         StreamingFormat::Json => {
-            renderer.stream_end_json(emitted, &mut encode_buf);
+            renderer.stream_end(emitted, &mut encode_buf);
             writer.write_all(&encode_buf).await?;
             encode_buf.clear();
         }
