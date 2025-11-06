@@ -24,13 +24,15 @@ fn build_schema_with_types(types: Vec<(&str, &str)>) -> (Arc<BatchSchema>, Vec<S
 }
 
 fn build_batch(schema: &Arc<BatchSchema>, rows: Vec<Vec<Value>>) -> ColumnBatch {
+    use crate::engine::types::ScalarValue;
     // Use capacity larger than needed for large batch tests
     let capacity = rows.len().max(1000);
     let pool = BatchPool::new(capacity).unwrap();
     let mut builder = pool.acquire(Arc::clone(schema));
 
     for row in rows {
-        builder.push_row(&row).unwrap();
+        let scalar_row: Vec<ScalarValue> = row.into_iter().map(ScalarValue::from).collect();
+        builder.push_row(&scalar_row).unwrap();
     }
 
     builder.finish().unwrap()

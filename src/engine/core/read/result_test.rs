@@ -2,6 +2,7 @@ use crate::command::types::TimeGranularity;
 use crate::engine::core::read::aggregate::partial::AggState;
 use crate::engine::core::read::aggregate::plan::AggregateOpSpec;
 use crate::engine::core::read::result::QueryResult;
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::{
     AggregateResultFactory, ColumnSpecFactory, GroupKeyFactory, SelectionResultFactory,
 };
@@ -30,8 +31,8 @@ fn selection_merge_and_finalize_appends_rows_and_keeps_columns() {
     assert_eq!(table.columns[0].name, "a");
     assert_eq!(table.columns[1].logical_type, "Integer");
     assert_eq!(table.rows.len(), 2);
-    assert_eq!(table.rows[0][0], json!("x"));
-    assert_eq!(table.rows[1][1], json!(2));
+    assert_eq!(table.rows[0][0], ScalarValue::from(json!("x")));
+    assert_eq!(table.rows[1][1], ScalarValue::from(json!(2)));
 }
 
 #[test]
@@ -179,24 +180,24 @@ fn aggregate_finalize_outputs_rows_matching_group_keys_and_states() {
         let country = row[idx("country")].as_str().unwrap();
         if country == "US" {
             seen_us = true;
-            assert_eq!(row[idx("bucket")], json!(1725148800i64));
-            assert_eq!(row[idx("count")], json!(3));
-            assert_eq!(row[idx("count_visits")], json!(3));
-            assert_eq!(row[idx("count_unique_user")], json!(2));
-            assert_eq!(row[idx("total_amount")], json!(60));
+            assert_eq!(row[idx("bucket")], ScalarValue::from(json!(1725148800i64)));
+            assert_eq!(row[idx("count")], ScalarValue::from(json!(3)));
+            assert_eq!(row[idx("count_visits")], ScalarValue::from(json!(3)));
+            assert_eq!(row[idx("count_unique_user")], ScalarValue::from(json!(2)));
+            assert_eq!(row[idx("total_amount")], ScalarValue::from(json!(60)));
             assert_eq!(row[idx("avg_amount")].as_f64().unwrap(), 20.0);
-            assert_eq!(row[idx("min_name")], json!("amy"));
-            assert_eq!(row[idx("max_name")], json!("zoe"));
+            assert_eq!(row[idx("min_name")], ScalarValue::from(json!("amy")));
+            assert_eq!(row[idx("max_name")], ScalarValue::from(json!("zoe")));
         } else if country == "DE" {
             seen_de = true;
-            assert_eq!(row[idx("bucket")], json!(1725148800i64));
-            assert_eq!(row[idx("count")], json!(2));
-            assert_eq!(row[idx("count_visits")], json!(2));
-            assert_eq!(row[idx("count_unique_user")], json!(1));
-            assert_eq!(row[idx("total_amount")], json!(15));
+            assert_eq!(row[idx("bucket")], ScalarValue::from(json!(1725148800i64)));
+            assert_eq!(row[idx("count")], ScalarValue::from(json!(2)));
+            assert_eq!(row[idx("count_visits")], ScalarValue::from(json!(2)));
+            assert_eq!(row[idx("count_unique_user")], ScalarValue::from(json!(1)));
+            assert_eq!(row[idx("total_amount")], ScalarValue::from(json!(15)));
             assert_eq!(row[idx("avg_amount")].as_f64().unwrap(), 7.5);
-            assert_eq!(row[idx("min_name")], json!(1));
-            assert_eq!(row[idx("max_name")], json!(9));
+            assert_eq!(row[idx("min_name")], ScalarValue::from(json!(1)));
+            assert_eq!(row[idx("max_name")], ScalarValue::from(json!(9)));
         }
     }
     assert!(seen_us && seen_de);
@@ -266,12 +267,12 @@ fn aggregate_merge_combines_groups_and_merges_states() {
     assert_eq!(table.rows.len(), 1);
     let row = &table.rows[0];
     // CountAll merged: 2 + 3 => 5
-    assert_eq!(row[idx("count")], json!(5));
+    assert_eq!(row[idx("count")], ScalarValue::from(json!(5)));
     // Avg merged: (10/2) and (30/3) => combined (40/5) => 8.0
     assert!((row[idx("avg_amount")].as_f64().unwrap() - 8.0).abs() < 1e-9);
     // Min merged: min("adam", "bob") => "adam"; Max merged: max("max","zoe") => "zoe"
-    assert_eq!(row[idx("min_name")], json!("adam"));
-    assert_eq!(row[idx("max_name")], json!("zoe"));
+    assert_eq!(row[idx("min_name")], ScalarValue::from(json!("adam")));
+    assert_eq!(row[idx("max_name")], ScalarValue::from(json!("zoe")));
 }
 
 #[test]
@@ -311,5 +312,5 @@ fn query_result_merge_and_finalize_routes_variants() {
     agga.merge(aggb);
     let t2 = agga.finalize_table();
     assert_eq!(t2.rows.len(), 1);
-    assert_eq!(t2.rows[0][0], json!(2));
+    assert_eq!(t2.rows[0][0], ScalarValue::from(json!(2)));
 }

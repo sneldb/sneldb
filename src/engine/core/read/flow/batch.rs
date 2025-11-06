@@ -3,9 +3,9 @@ use std::sync::{Arc, Mutex};
 
 use arrow_array::{Array, ArrayRef, RecordBatch};
 use arrow_schema::{DataType, TimeUnit};
-use serde_json::{Number, Value};
 
 use crate::engine::core::read::result::ColumnSpec;
+use crate::engine::types::ScalarValue;
 use crate::shared::response::arrow::build_arrow_schema;
 
 use super::pool::BatchPoolInner;
@@ -51,8 +51,8 @@ pub struct ColumnBatch {
     schema: Arc<BatchSchema>,
     // Store Arrow RecordBatch as the primary internal format for performance
     record_batch: RecordBatch,
-    // Lazy JSON conversion cache (None until first access, thread-safe)
-    json_columns: Arc<Mutex<Option<Vec<Vec<Value>>>>>,
+    // Lazy ScalarValue conversion cache (None until first access, thread-safe)
+    scalar_columns: Arc<Mutex<Option<Vec<Vec<ScalarValue>>>>>,
     pool: Option<Arc<BatchPoolInner>>,
 }
 
@@ -73,15 +73,15 @@ impl ColumnBatch {
         Ok(Self {
             schema,
             record_batch,
-            json_columns: Arc::new(Mutex::new(None)),
+            scalar_columns: Arc::new(Mutex::new(None)),
             pool,
         })
     }
 
-    /// Create a ColumnBatch from JSON Values (backward compatibility, converts to Arrow internally)
+    /// Create a ColumnBatch from ScalarValues (backward compatibility, converts to Arrow internally)
     pub(crate) fn new(
         schema: Arc<BatchSchema>,
-        columns: Vec<Vec<Value>>,
+        columns: Vec<Vec<ScalarValue>>,
         len: usize,
         pool: Option<Arc<BatchPoolInner>>,
     ) -> Result<Self, BatchError> {
@@ -102,7 +102,7 @@ impl ColumnBatch {
             }
         }
 
-        // Convert JSON Values to Arrow RecordBatch
+        // Convert ScalarValues to Arrow RecordBatch
         let arrow_schema = build_arrow_schema(&schema).map_err(|e| {
             BatchError::InvalidSchema(format!("Failed to build Arrow schema: {}", e))
         })?;
@@ -113,14 +113,14 @@ impl ColumnBatch {
             let values = &columns[col_idx];
 
             let array = match data_type {
-                DataType::Int64 => build_int64_array_from_values(values),
-                DataType::Float64 => build_float64_array_from_values(values),
-                DataType::Boolean => build_bool_array_from_values(values),
+                DataType::Int64 => build_int64_array_from_scalars(values),
+                DataType::Float64 => build_float64_array_from_scalars(values),
+                DataType::Boolean => build_bool_array_from_scalars(values),
                 DataType::Timestamp(TimeUnit::Millisecond, _) => {
-                    build_timestamp_array_from_values(values)
+                    build_timestamp_array_from_scalars(values)
                 }
-                DataType::LargeUtf8 => build_string_array_from_values(values),
-                _ => build_string_array_from_values(values),
+                DataType::LargeUtf8 => build_string_array_from_scalars(values),
+                _ => build_string_array_from_scalars(values),
             };
             arrays.push(array);
         }
@@ -132,7 +132,7 @@ impl ColumnBatch {
         Ok(Self {
             schema,
             record_batch,
-            json_columns: Arc::new(Mutex::new(Some(columns))), // Cache the JSON for pool recycling
+            scalar_columns: Arc::new(Mutex::new(Some(columns))), // Cache the scalars for pool recycling
             pool,
         })
     }
@@ -154,16 +154,16 @@ impl ColumnBatch {
         self.record_batch.num_rows() == 0
     }
 
-    /// Get a column as JSON Values (lazy conversion from Arrow)
-    /// Returns a Vec that can be borrowed as &[Value]
-    pub fn column(&self, idx: usize) -> Result<Vec<Value>, BatchError> {
+    /// Get a column as ScalarValues (lazy conversion from Arrow)
+    /// Returns a Vec that can be borrowed as &[ScalarValue]
+    pub fn column(&self, idx: usize) -> Result<Vec<ScalarValue>, BatchError> {
         if idx >= self.record_batch.num_columns() {
             return Err(BatchError::ColumnOutOfBounds(idx));
         }
 
         // Check cache first - only convert this specific column if not cached
         {
-            let cached = self.json_columns.lock().unwrap();
+            let cached = self.scalar_columns.lock().unwrap();
             if let Some(ref columns) = *cached {
                 if idx < columns.len() && columns[idx].len() == self.record_batch.num_rows() {
                     return Ok(columns[idx].clone());
@@ -178,11 +178,11 @@ impl ColumnBatch {
             .columns()
             .get(idx)
             .ok_or(BatchError::ColumnOutOfBounds(idx))?;
-        let values = array_to_json_values(array, column_spec.logical_type.as_str());
+        let values = array_to_scalar_values(array, column_spec.logical_type.as_str());
 
         // Update cache - initialize if needed, then cache this column
         {
-            let mut cached = self.json_columns.lock().unwrap();
+            let mut cached = self.scalar_columns.lock().unwrap();
             // Initialize cache if None
             if cached.is_none() {
                 *cached = Some(Vec::with_capacity(self.record_batch.num_columns()));
@@ -200,8 +200,8 @@ impl ColumnBatch {
         Ok(values)
     }
 
-    /// Get a row as JSON Values (lazy conversion from Arrow)
-    pub fn row(&self, idx: usize) -> Result<Vec<Value>, BatchError> {
+    /// Get a row as ScalarValues (lazy conversion from Arrow)
+    pub fn row(&self, idx: usize) -> Result<Vec<ScalarValue>, BatchError> {
         if idx >= self.record_batch.num_rows() {
             return Err(BatchError::RowOutOfBounds {
                 index: idx,
@@ -213,18 +213,18 @@ impl ColumnBatch {
         for col_idx in 0..self.record_batch.num_columns() {
             let array = self.record_batch.column(col_idx);
             let column_spec = &self.schema.columns()[col_idx];
-            let value = array_value_at(array, idx, column_spec.logical_type.as_str())
-                .unwrap_or(Value::Null);
+            let value = array_scalar_at(array, idx, column_spec.logical_type.as_str())
+                .unwrap_or(ScalarValue::Null);
             row.push(value);
         }
         Ok(row)
     }
 
-    /// Get all columns as JSON Values (lazy conversion, caches result)
-    pub fn columns(&self) -> Vec<Vec<Value>> {
+    /// Get all columns as ScalarValues (lazy conversion, caches result)
+    pub fn columns(&self) -> Vec<Vec<ScalarValue>> {
         // Check cache first
         {
-            let cached = self.json_columns.lock().unwrap();
+            let cached = self.scalar_columns.lock().unwrap();
             if let Some(ref columns) = *cached {
                 if columns.len() == self.record_batch.num_columns() {
                     return columns.clone();
@@ -237,13 +237,13 @@ impl ColumnBatch {
         for col_idx in 0..self.record_batch.num_columns() {
             let array = self.record_batch.column(col_idx);
             let column_spec = &self.schema.columns()[col_idx];
-            let values = array_to_json_values(array, column_spec.logical_type.as_str());
+            let values = array_to_scalar_values(array, column_spec.logical_type.as_str());
             columns.push(values);
         }
 
         // Cache the result
         {
-            let mut cached = self.json_columns.lock().unwrap();
+            let mut cached = self.scalar_columns.lock().unwrap();
             *cached = Some(columns.clone());
         }
 
@@ -253,9 +253,9 @@ impl ColumnBatch {
     // Note: columns_iter() removed - use columns() and convert to slices as needed
     // The iterator pattern is incompatible with owned Vec return from columns()
 
-    pub fn detach(mut self) -> (Arc<BatchSchema>, Vec<Vec<Value>>) {
+    pub fn detach(mut self) -> (Arc<BatchSchema>, Vec<Vec<ScalarValue>>) {
         self.pool = None;
-        let columns = self.columns(); // Convert to JSON
+        let columns = self.columns(); // Convert to ScalarValues
         (Arc::clone(&self.schema), columns)
     }
 }
@@ -263,9 +263,9 @@ impl ColumnBatch {
 impl Drop for ColumnBatch {
     fn drop(&mut self) {
         if let Some(pool) = self.pool.take() {
-            // Convert to JSON for pool recycling (if needed)
+            // Convert to ScalarValues for pool recycling (if needed)
             let columns = {
-                let mut cached = self.json_columns.lock().unwrap();
+                let mut cached = self.scalar_columns.lock().unwrap();
                 cached.take().unwrap_or_else(|| self.columns())
             };
             pool.recycle(Arc::clone(&self.schema), columns);
@@ -276,7 +276,7 @@ impl Drop for ColumnBatch {
 #[derive(Debug)]
 pub struct ColumnBatchBuilder {
     schema: Arc<BatchSchema>,
-    columns: Vec<Vec<Value>>,
+    columns: Vec<Vec<ScalarValue>>,
     len: usize,
     capacity: usize,
     pool: Option<Arc<BatchPoolInner>>,
@@ -285,7 +285,7 @@ pub struct ColumnBatchBuilder {
 impl ColumnBatchBuilder {
     pub(crate) fn new(
         schema: Arc<BatchSchema>,
-        columns: Vec<Vec<Value>>,
+        columns: Vec<Vec<ScalarValue>>,
         capacity: usize,
         pool: Option<Arc<BatchPoolInner>>,
     ) -> Self {
@@ -314,7 +314,7 @@ impl ColumnBatchBuilder {
         self.capacity
     }
 
-    pub fn push_row(&mut self, values: &[Value]) -> Result<(), BatchError> {
+    pub fn push_row(&mut self, values: &[ScalarValue]) -> Result<(), BatchError> {
         if self.len >= self.capacity {
             return Err(BatchError::BatchFull(self.capacity));
         }
@@ -439,27 +439,18 @@ fn logical_to_arrow_type(logical_type: &str) -> DataType {
     }
 }
 
-// Convert JSON Values to Arrow arrays (used when creating from JSON)
+// Convert ScalarValues to Arrow arrays (used when creating from ScalarValues)
 use arrow_array::builder::{
     BooleanBuilder, Float64Builder, Int64Builder, LargeStringBuilder, TimestampMillisecondBuilder,
 };
 
-fn build_int64_array_from_values(values: &[Value]) -> ArrayRef {
+fn build_int64_array_from_scalars(values: &[ScalarValue]) -> ArrayRef {
     let mut builder = Int64Builder::with_capacity(values.len());
     for value in values {
         match value {
-            Value::Number(num) => {
-                // Fast path: direct number extraction (most common case)
-                if let Some(i) = num.as_i64() {
-                    builder.append_value(i);
-                } else if let Some(u) = num.as_u64() {
-                    builder.append_value(u as i64);
-                } else {
-                    builder.append_null();
-                }
-            }
-            Value::String(s) => {
-                // Slow path: string parsing (rare)
+            ScalarValue::Int64(i) => builder.append_value(*i),
+            ScalarValue::Timestamp(t) => builder.append_value(*t),
+            ScalarValue::Utf8(s) => {
                 if let Ok(i) = s.parse::<i64>() {
                     builder.append_value(i);
                 } else {
@@ -472,20 +463,12 @@ fn build_int64_array_from_values(values: &[Value]) -> ArrayRef {
     Arc::new(builder.finish())
 }
 
-fn build_float64_array_from_values(values: &[Value]) -> ArrayRef {
+fn build_float64_array_from_scalars(values: &[ScalarValue]) -> ArrayRef {
     let mut builder = Float64Builder::with_capacity(values.len());
     for value in values {
         match value {
-            Value::Number(num) => {
-                // Fast path: direct number extraction (most common case)
-                if let Some(f) = num.as_f64() {
-                    builder.append_value(f);
-                } else {
-                    builder.append_null();
-                }
-            }
-            Value::String(s) => {
-                // Slow path: string parsing (rare)
+            ScalarValue::Float64(f) => builder.append_value(*f),
+            ScalarValue::Utf8(s) => {
                 if let Ok(f) = s.parse::<f64>() {
                     builder.append_value(f);
                 } else {
@@ -498,47 +481,30 @@ fn build_float64_array_from_values(values: &[Value]) -> ArrayRef {
     Arc::new(builder.finish())
 }
 
-fn build_bool_array_from_values(values: &[Value]) -> ArrayRef {
+fn build_bool_array_from_scalars(values: &[ScalarValue]) -> ArrayRef {
     let mut builder = BooleanBuilder::with_capacity(values.len());
     for value in values {
         match value {
-            Value::Bool(b) => builder.append_value(*b),
-            Value::String(s) => match s.to_ascii_lowercase().as_str() {
+            ScalarValue::Boolean(b) => builder.append_value(*b),
+            ScalarValue::Utf8(s) => match s.to_ascii_lowercase().as_str() {
                 "true" | "1" => builder.append_value(true),
                 "false" | "0" => builder.append_value(false),
                 _ => builder.append_null(),
             },
-            Value::Number(num) => {
-                if let Some(n) = num.as_i64() {
-                    builder.append_value(n != 0);
-                } else if let Some(n) = num.as_u64() {
-                    builder.append_value(n != 0);
-                } else {
-                    builder.append_null();
-                }
-            }
+            ScalarValue::Int64(i) => builder.append_value(*i != 0),
             _ => builder.append_null(),
         }
     }
     Arc::new(builder.finish())
 }
 
-fn build_timestamp_array_from_values(values: &[Value]) -> ArrayRef {
+fn build_timestamp_array_from_scalars(values: &[ScalarValue]) -> ArrayRef {
     let mut builder = TimestampMillisecondBuilder::with_capacity(values.len());
     for value in values {
         match value {
-            Value::Number(num) => {
-                // Fast path: direct number extraction (most common case)
-                if let Some(i) = num.as_i64() {
-                    builder.append_value(i);
-                } else if let Some(u) = num.as_u64() {
-                    builder.append_value(u as i64);
-                } else {
-                    builder.append_null();
-                }
-            }
-            Value::String(s) => {
-                // Slow path: string parsing (rare)
+            ScalarValue::Timestamp(t) => builder.append_value(*t),
+            ScalarValue::Int64(i) => builder.append_value(*i),
+            ScalarValue::Utf8(s) => {
                 if let Ok(i) = s.parse::<i64>() {
                     builder.append_value(i);
                 } else {
@@ -551,14 +517,14 @@ fn build_timestamp_array_from_values(values: &[Value]) -> ArrayRef {
     Arc::new(builder.finish())
 }
 
-fn build_string_array_from_values(values: &[Value]) -> ArrayRef {
+fn build_string_array_from_scalars(values: &[ScalarValue]) -> ArrayRef {
     let mut builder = LargeStringBuilder::with_capacity(values.len(), values.len() * 8);
     for value in values {
         match value {
-            Value::Null => builder.append_null(),
-            Value::String(s) => builder.append_value(s),
+            ScalarValue::Null => builder.append_null(),
+            ScalarValue::Utf8(s) => builder.append_value(s),
             other => {
-                let string = other.to_string();
+                let string = other.to_string_repr();
                 builder.append_value(string.as_str());
             }
         }
@@ -566,35 +532,8 @@ fn build_string_array_from_values(values: &[Value]) -> ArrayRef {
     Arc::new(builder.finish())
 }
 
-fn extract_i64(value: &Value) -> Option<i64> {
-    match value {
-        Value::Number(num) => num.as_i64().or_else(|| num.as_u64().map(|u| u as i64)),
-        Value::String(s) => s.parse::<i64>().ok(),
-        _ => None,
-    }
-}
-
-fn extract_u64(value: &Value) -> Option<u64> {
-    match value {
-        Value::Number(num) => num.as_u64().or_else(|| {
-            num.as_i64()
-                .and_then(|i| if i >= 0 { Some(i as u64) } else { None })
-        }),
-        Value::String(s) => s.parse::<u64>().ok(),
-        _ => None,
-    }
-}
-
-fn extract_f64(value: &Value) -> Option<f64> {
-    match value {
-        Value::Number(num) => num.as_f64(),
-        Value::String(s) => s.parse::<f64>().ok(),
-        _ => None,
-    }
-}
-
-// Convert Arrow arrays to JSON Values (used for lazy conversion)
-fn array_to_json_values(array: &ArrayRef, logical_type: &str) -> Vec<Value> {
+// Convert Arrow arrays to ScalarValues (used for lazy conversion)
+fn array_to_scalar_values(array: &ArrayRef, logical_type: &str) -> Vec<ScalarValue> {
     let len = array.len();
     let mut values = Vec::with_capacity(len);
 
@@ -603,19 +542,16 @@ fn array_to_json_values(array: &ArrayRef, logical_type: &str) -> Vec<Value> {
             if let Some(int_array) = array.as_any().downcast_ref::<arrow_array::Int64Array>() {
                 for i in 0..len {
                     if int_array.is_null(i) {
-                        values.push(Value::Null);
+                        values.push(ScalarValue::Null);
                     } else {
-                        values.push(Value::Number(Number::from(int_array.value(i))));
+                        values.push(ScalarValue::Int64(int_array.value(i)));
                     }
                 }
             } else {
                 // Fallback: convert to string
                 for i in 0..len {
-                    values.push(Value::String(
-                        array_value_at(array, i, logical_type)
-                            .unwrap_or(Value::Null)
-                            .to_string(),
-                    ));
+                    let val = array_scalar_at(array, i, logical_type).unwrap_or(ScalarValue::Null);
+                    values.push(val);
                 }
             }
         }
@@ -623,22 +559,15 @@ fn array_to_json_values(array: &ArrayRef, logical_type: &str) -> Vec<Value> {
             if let Some(float_array) = array.as_any().downcast_ref::<arrow_array::Float64Array>() {
                 for i in 0..len {
                     if float_array.is_null(i) {
-                        values.push(Value::Null);
+                        values.push(ScalarValue::Null);
                     } else {
-                        if let Some(num) = Number::from_f64(float_array.value(i)) {
-                            values.push(Value::Number(num));
-                        } else {
-                            values.push(Value::Null);
-                        }
+                        values.push(ScalarValue::Float64(float_array.value(i)));
                     }
                 }
             } else {
                 for i in 0..len {
-                    values.push(Value::String(
-                        array_value_at(array, i, logical_type)
-                            .unwrap_or(Value::Null)
-                            .to_string(),
-                    ));
+                    let val = array_scalar_at(array, i, logical_type).unwrap_or(ScalarValue::Null);
+                    values.push(val);
                 }
             }
         }
@@ -646,18 +575,15 @@ fn array_to_json_values(array: &ArrayRef, logical_type: &str) -> Vec<Value> {
             if let Some(bool_array) = array.as_any().downcast_ref::<arrow_array::BooleanArray>() {
                 for i in 0..len {
                     if bool_array.is_null(i) {
-                        values.push(Value::Null);
+                        values.push(ScalarValue::Null);
                     } else {
-                        values.push(Value::Bool(bool_array.value(i)));
+                        values.push(ScalarValue::Boolean(bool_array.value(i)));
                     }
                 }
             } else {
                 for i in 0..len {
-                    values.push(Value::String(
-                        array_value_at(array, i, logical_type)
-                            .unwrap_or(Value::Null)
-                            .to_string(),
-                    ));
+                    let val = array_scalar_at(array, i, logical_type).unwrap_or(ScalarValue::Null);
+                    values.push(val);
                 }
             }
         }
@@ -668,18 +594,17 @@ fn array_to_json_values(array: &ArrayRef, logical_type: &str) -> Vec<Value> {
             {
                 for i in 0..len {
                     if ts_array.is_null(i) {
-                        values.push(Value::Null);
+                        values.push(ScalarValue::Null);
                     } else {
-                        values.push(Value::Number(Number::from(ts_array.value(i))));
+                        // Store as Int64 for consistency with json!(value) which creates Int64
+                        // This allows tests comparing ScalarValue::from(json!(ts)) to work correctly
+                        values.push(ScalarValue::Int64(ts_array.value(i)));
                     }
                 }
             } else {
                 for i in 0..len {
-                    values.push(Value::String(
-                        array_value_at(array, i, logical_type)
-                            .unwrap_or(Value::Null)
-                            .to_string(),
-                    ));
+                    let val = array_scalar_at(array, i, logical_type).unwrap_or(ScalarValue::Null);
+                    values.push(val);
                 }
             }
         }
@@ -691,18 +616,15 @@ fn array_to_json_values(array: &ArrayRef, logical_type: &str) -> Vec<Value> {
             {
                 for i in 0..len {
                     if string_array.is_null(i) {
-                        values.push(Value::Null);
+                        values.push(ScalarValue::Null);
                     } else {
-                        values.push(Value::String(string_array.value(i).to_string()));
+                        values.push(ScalarValue::Utf8(string_array.value(i).to_string()));
                     }
                 }
             } else {
                 for i in 0..len {
-                    values.push(Value::String(
-                        array_value_at(array, i, logical_type)
-                            .unwrap_or(Value::Null)
-                            .to_string(),
-                    ));
+                    let val = array_scalar_at(array, i, logical_type).unwrap_or(ScalarValue::Null);
+                    values.push(val);
                 }
             }
         }
@@ -711,29 +633,29 @@ fn array_to_json_values(array: &ArrayRef, logical_type: &str) -> Vec<Value> {
     values
 }
 
-fn array_value_at(array: &ArrayRef, idx: usize, logical_type: &str) -> Option<Value> {
+fn array_scalar_at(array: &ArrayRef, idx: usize, logical_type: &str) -> Option<ScalarValue> {
     if array.is_null(idx) {
-        return Some(Value::Null);
+        return Some(ScalarValue::Null);
     }
 
     match logical_type {
         "Integer" | "Number" => {
             if let Some(int_array) = array.as_any().downcast_ref::<arrow_array::Int64Array>() {
-                Some(Value::Number(Number::from(int_array.value(idx))))
+                Some(ScalarValue::Int64(int_array.value(idx)))
             } else {
                 None
             }
         }
         "Float" => {
             if let Some(float_array) = array.as_any().downcast_ref::<arrow_array::Float64Array>() {
-                Number::from_f64(float_array.value(idx)).map(Value::Number)
+                Some(ScalarValue::Float64(float_array.value(idx)))
             } else {
                 None
             }
         }
         "Boolean" => {
             if let Some(bool_array) = array.as_any().downcast_ref::<arrow_array::BooleanArray>() {
-                Some(Value::Bool(bool_array.value(idx)))
+                Some(ScalarValue::Boolean(bool_array.value(idx)))
             } else {
                 None
             }
@@ -743,7 +665,8 @@ fn array_value_at(array: &ArrayRef, idx: usize, logical_type: &str) -> Option<Va
                 .as_any()
                 .downcast_ref::<arrow_array::TimestampMillisecondArray>()
             {
-                Some(Value::Number(Number::from(ts_array.value(idx))))
+                // Store as Int64 for consistency with json!(value) which creates Int64
+                Some(ScalarValue::Int64(ts_array.value(idx)))
             } else {
                 None
             }
@@ -753,7 +676,7 @@ fn array_value_at(array: &ArrayRef, idx: usize, logical_type: &str) -> Option<Va
                 .as_any()
                 .downcast_ref::<arrow_array::LargeStringArray>()
             {
-                Some(Value::String(string_array.value(idx).to_string()))
+                Some(ScalarValue::Utf8(string_array.value(idx).to_string()))
             } else {
                 None
             }

@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
-use serde_json::Value;
-
 use crate::engine::core::Event;
 use crate::engine::core::read::flow::{BatchSchema, FlowContext, FlowOperatorError, FlowSource};
+use crate::engine::types::ScalarValue;
 
 use super::super::BatchSender;
 
@@ -34,12 +33,15 @@ impl FlowSource for SegmentSource {
         }
 
         let mut builder = ctx.pool().acquire(Arc::clone(&self.config.schema));
-        let mut row_values: Vec<Value> = Vec::with_capacity(self.config.schema.column_count());
+        let mut row_values: Vec<ScalarValue> =
+            Vec::with_capacity(self.config.schema.column_count());
 
         for event in self.config.events.into_iter() {
             row_values.clear();
             for column in self.config.schema.columns() {
-                let value = event.get_field(&column.name).unwrap_or(Value::Null);
+                let value = event
+                    .get_field_scalar(&column.name)
+                    .unwrap_or(ScalarValue::Null);
                 row_values.push(value);
             }
 

@@ -5,6 +5,7 @@ use crate::engine::core::time::ZoneTemporalIndex;
 use crate::engine::core::zone::rlte_index::RlteIndex;
 use crate::engine::core::zone::zone_xor_index::ZoneXorFilterIndex;
 use crate::engine::core::{FieldXorFilter, ZoneIndex, ZoneMeta, ZonePlanner, ZoneWriter};
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::{EventFactory, SchemaRegistryFactory};
 use serde_json::json;
 
@@ -99,9 +100,9 @@ async fn test_zone_writer_creates_all_outputs_correctly() {
         // Check that at least some zones contain expected values
         let mut found_zones = 0;
         for zone_id in 0..plans.len() {
-            if zxf.contains_in_zone(zone_id as u32, &json!("abc"))
-                || zxf.contains_in_zone(zone_id as u32, &json!("xyz"))
-                || zxf.contains_in_zone(zone_id as u32, &json!("def"))
+            if zxf.contains_in_zone(zone_id as u32, &ScalarValue::from(json!("abc")))
+                || zxf.contains_in_zone(zone_id as u32, &ScalarValue::from(json!("xyz")))
+                || zxf.contains_in_zone(zone_id as u32, &ScalarValue::from(json!("def")))
             {
                 found_zones += 1;
             }
@@ -221,12 +222,7 @@ async fn test_zone_writer_skips_surf_for_datetime_and_builds_for_amount() {
         let zti = ZoneTemporalIndex::load_for_field(&uid, "ts", zp.id, segment_dir)
             .expect("load zti from slab");
         if let Some(ev) = zp.events.get(0) {
-            if let Some(ts) = ev
-                .payload
-                .as_object()
-                .and_then(|o| o.get("ts"))
-                .and_then(|v| v.as_u64())
-            {
+            if let Some(ts) = ev.payload.get("ts").and_then(|v| v.as_u64()) {
                 assert!(zti.contains_ts(ts as i64));
             }
         }

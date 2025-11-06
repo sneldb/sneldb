@@ -1,4 +1,5 @@
 use crate::engine::core::{EventId, ZoneCursor};
+use crate::engine::types::ScalarValue;
 use serde_json::{Number, Value};
 use std::collections::HashMap;
 
@@ -8,22 +9,22 @@ fn test_zone_cursor_navigation() {
     payload_fields.insert(
         "plan".to_string(),
         vec![
-            Value::String("free".to_string()),
-            Value::String("pro".to_string()),
+            ScalarValue::from(Value::String("free".to_string())),
+            ScalarValue::from(Value::String("pro".to_string())),
         ],
     );
     payload_fields.insert(
         "region".to_string(),
         vec![
-            Value::String("eu".to_string()),
-            Value::String("us".to_string()),
+            ScalarValue::from(Value::String("eu".to_string())),
+            ScalarValue::from(Value::String("us".to_string())),
         ],
     );
     payload_fields.insert(
         "score".to_string(),
         vec![
-            Value::Number(Number::from(10)),
-            Value::Number(Number::from(20)),
+            ScalarValue::from(Value::Number(Number::from(10))),
+            ScalarValue::from(Value::Number(Number::from(20))),
         ],
     );
 
@@ -52,11 +53,11 @@ fn test_zone_cursor_navigation() {
     assert_eq!(row1.event_id.raw(), 1);
     assert_eq!(
         row1.payload.get("plan").unwrap(),
-        &Value::String("free".into())
+        &ScalarValue::from(Value::String("free".into()))
     );
     assert_eq!(
         row1.payload.get("region").unwrap(),
-        &Value::String("eu".into())
+        &ScalarValue::from(Value::String("eu".into()))
     );
     assert_eq!(row1.payload.get("score").and_then(|v| v.as_i64()), Some(10));
 
@@ -71,11 +72,11 @@ fn test_zone_cursor_navigation() {
     assert_eq!(row2.event_id.raw(), 2);
     assert_eq!(
         row2.payload.get("plan").unwrap(),
-        &Value::String("pro".into())
+        &ScalarValue::from(Value::String("pro".into()))
     );
     assert_eq!(
         row2.payload.get("region").unwrap(),
-        &Value::String("us".into())
+        &ScalarValue::from(Value::String("us".into()))
     );
     assert_eq!(row2.payload.get("score").and_then(|v| v.as_i64()), Some(20));
 

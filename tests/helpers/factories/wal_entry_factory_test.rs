@@ -8,7 +8,7 @@ fn creates_wal_entry_with_defaults() {
     assert_eq!(entry.context_id, "ctx1");
     assert_eq!(entry.timestamp, 123456);
     assert_eq!(entry.event_type, "test_event");
-    assert_eq!(entry.payload, json!({ "key": "value" }));
+    assert_eq!(entry.payload_as_json(), json!({ "key": "value" }));
 }
 
 #[test]
@@ -23,7 +23,7 @@ fn creates_wal_entry_with_overrides() {
     assert_eq!(entry.context_id, "ctx99");
     assert_eq!(entry.timestamp, 987654);
     assert_eq!(entry.event_type, "custom_event");
-    assert_eq!(entry.payload, json!({ "custom": "data" }));
+    assert_eq!(entry.payload_as_json(), json!({ "custom": "data" }));
 }
 
 #[test]
@@ -36,7 +36,7 @@ fn creates_multiple_wal_entries() {
         assert!(entry.timestamp >= 123456);
         assert_eq!(entry.event_type, "test_event");
 
-        let payload = entry.payload.as_object().unwrap();
-        assert_eq!(payload.get("index").unwrap(), &json!(i));
+        let payload_json = entry.payload_as_json();
+        assert_eq!(payload_json.get("index"), Some(&json!(i)));
     }
 }

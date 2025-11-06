@@ -5,11 +5,12 @@ use tokio::sync::mpsc::error::TrySendError;
 
 use super::{BatchPool, BatchSchema, FlowChannel, FlowMetrics};
 use crate::engine::core::read::result::ColumnSpec;
+use crate::engine::types::ScalarValue;
 
 fn build_batch(schema: &Arc<BatchSchema>, pool: &BatchPool, value: i64) -> super::ColumnBatch {
     let mut builder = pool.acquire(Arc::clone(schema));
     builder
-        .push_row(&[json!(value)])
+        .push_row(&[ScalarValue::from(json!(value))])
         .expect("row fits in batch");
     builder.finish().expect("batch builds")
 }

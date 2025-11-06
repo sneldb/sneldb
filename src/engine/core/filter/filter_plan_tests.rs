@@ -41,9 +41,10 @@ async fn builds_filters_with_context_and_timestamp_and_where_clause() {
         HashSet::from(["context_id", "event_type", "timestamp", "ip", "device"])
     );
 
+    use crate::engine::types::ScalarValue;
     let ip_plan = plans.iter().find(|f| f.column == "ip").unwrap();
     assert_eq!(ip_plan.operation, Some(CompareOp::Eq));
-    assert_eq!(ip_plan.value, Some(json!("127.0.0.1")));
+    assert_eq!(ip_plan.value, Some(ScalarValue::from(json!("127.0.0.1"))));
     assert_eq!(ip_plan.priority, 2);
 }
 
@@ -295,7 +296,7 @@ async fn temporal_where_literal_string_normalized_to_epoch() {
     let p = plans.iter().find(|p| p.column == "created_at").unwrap();
     assert_eq!(p.operation, Some(CompareOp::Gte));
     let v = p.value.as_ref().unwrap();
-    assert!(v.is_number(), "expected normalized epoch seconds number");
+    assert!(v.as_i64().is_some() || v.as_u64().is_some() || v.as_f64().is_some(), "expected normalized epoch seconds number");
     assert_eq!(v.as_i64().unwrap(), 1_735_689_600); // 2025-01-01T00:00:00Z
 }
 
@@ -327,7 +328,7 @@ async fn date_where_literal_string_normalized_to_epoch_midnight() {
     let p = plans.iter().find(|p| p.column == "due_date").unwrap();
     assert_eq!(p.operation, Some(CompareOp::Eq));
     let v = p.value.as_ref().unwrap();
-    assert!(v.is_number(), "expected normalized epoch seconds number");
+    assert!(v.as_i64().is_some() || v.as_u64().is_some() || v.as_f64().is_some(), "expected normalized epoch seconds number");
     assert_eq!(v.as_i64().unwrap(), 1_735_776_000); // 2025-01-02T00:00:00Z
 }
 
@@ -355,7 +356,7 @@ async fn non_temporal_where_literal_kept_as_string() {
     let p = plans.iter().find(|p| p.column == "name").unwrap();
     assert_eq!(p.operation, Some(CompareOp::Eq));
     let v = p.value.as_ref().unwrap();
-    assert!(v.is_string());
+    assert!(v.as_str().is_some());
     assert_eq!(v.as_str().unwrap(), "A");
 }
 

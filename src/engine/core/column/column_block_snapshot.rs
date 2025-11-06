@@ -8,7 +8,7 @@ use arrow_schema::{DataType, TimeUnit};
 
 use crate::engine::core::column::column_values::ColumnValues;
 use crate::engine::core::column::format::PhysicalType;
-use serde_json::{Number, Value};
+use crate::engine::types::ScalarValue;
 
 #[derive(Clone, Debug)]
 pub struct ColumnBlockSnapshot {
@@ -62,13 +62,9 @@ impl ColumnBlockSnapshot {
         Self::values_to_strings(phys, &values)
     }
 
-    pub fn to_json_values(&self) -> Vec<Value> {
-        Self::values_to_json(self.phys, &self.values)
-    }
-
-    pub fn into_json_values(self) -> Vec<Value> {
+    pub fn into_scalar_values(self) -> Vec<ScalarValue> {
         let ColumnBlockSnapshot { phys, values } = self;
-        Self::values_to_json(phys, &values)
+        Self::values_to_scalar(phys, &values)
     }
 
     /// Convert directly to Arrow array, bypassing JSON Values for better performance.
@@ -130,53 +126,54 @@ impl ColumnBlockSnapshot {
         out
     }
 
-    fn values_to_json(phys: PhysicalType, values: &ColumnValues) -> Vec<Value> {
+    fn values_to_scalar(phys: PhysicalType, values: &ColumnValues) -> Vec<ScalarValue> {
         let len = values.len();
         let mut out = Vec::with_capacity(len);
         match phys {
             PhysicalType::I64 => {
                 for idx in 0..len {
                     match values.get_i64_at(idx) {
-                        Some(v) => out.push(Value::Number(Number::from(v))),
-                        None => out.push(Value::Null),
+                        Some(v) => out.push(ScalarValue::Int64(v)),
+                        None => out.push(ScalarValue::Null),
                     }
                 }
             }
             PhysicalType::U64 => {
                 for idx in 0..len {
                     match values.get_u64_at(idx) {
-                        Some(v) => out.push(Value::Number(Number::from(v))),
-                        None => out.push(Value::Null),
+                        Some(v) => {
+                            out.push(
+                                i64::try_from(v)
+                                    .map(ScalarValue::Int64)
+                                    .unwrap_or_else(|_| ScalarValue::Utf8(v.to_string())),
+                            );
+                        }
+                        None => out.push(ScalarValue::Null),
                     }
                 }
             }
             PhysicalType::F64 => {
                 for idx in 0..len {
                     match values.get_f64_at(idx) {
-                        Some(v) => match Number::from_f64(v) {
-                            Some(num) => out.push(Value::Number(num)),
-                            None => out.push(Value::Null),
-                        },
-                        None => out.push(Value::Null),
+                        Some(v) => out.push(ScalarValue::Float64(v)),
+                        None => out.push(ScalarValue::Null),
                     }
                 }
             }
             PhysicalType::Bool => {
                 for idx in 0..len {
                     match values.get_bool_at(idx) {
-                        Some(b) => out.push(Value::Bool(b)),
-                        None => out.push(Value::Null),
+                        Some(b) => out.push(ScalarValue::Boolean(b)),
+                        None => out.push(ScalarValue::Null),
                     }
                 }
             }
             _ => {
                 for idx in 0..len {
-                    out.push(
-                        values
-                            .get_str_at(idx)
-                            .map(|s| Value::String(s.to_string()))
-                            .unwrap_or(Value::Null),
-                    );
+                    match values.get_str_at(idx) {
+                        Some(s) => out.push(ScalarValue::Utf8(s.to_string())),
+                        None => out.push(ScalarValue::Null),
+                    }
                 }
             }
         }

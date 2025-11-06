@@ -83,13 +83,10 @@ impl GroupKey {
             let ts = if time_field == "timestamp" {
                 event.timestamp
             } else {
-                event
-                    .payload
-                    .as_object()
-                    .and_then(|m| m.get(time_field))
-                    .and_then(|v| v.as_i64())
-                    .map(|v| v as u64)
-                    .unwrap_or(0)
+                match event.payload.get(time_field) {
+                    Some(value) => value.as_u64().unwrap_or(0),
+                    None => 0,
+                }
             };
             bucket_val = Some(bucket_of(ts, gr));
         }

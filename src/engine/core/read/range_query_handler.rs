@@ -1,6 +1,6 @@
 use crate::command::types::CompareOp;
 use crate::engine::core::{CandidateZone, FieldXorFilter, QueryCaches};
-use serde_json::Value;
+use crate::engine::types::ScalarValue;
 use tracing::{info, warn};
 
 /// Handles range-based zone pruning using XOR filters
@@ -39,7 +39,7 @@ impl RangeQueryHandler {
     /// Returns a list of candidate zones for a given range query
     pub fn handle_range_query(
         &self,
-        value: &Value,
+        value: &ScalarValue,
         operation: &CompareOp,
     ) -> Option<Vec<CandidateZone>> {
         match operation {
@@ -60,7 +60,11 @@ impl RangeQueryHandler {
         }
     }
 
-    fn handle_greater_than(&self, value: &Value, _inclusive: bool) -> Option<Vec<CandidateZone>> {
+    fn handle_greater_than(
+        &self,
+        value: &ScalarValue,
+        _inclusive: bool,
+    ) -> Option<Vec<CandidateZone>> {
         info!(
             target: "sneldb::query::range",
             "Range query (>) - value: {:?}, segment: {}",
@@ -78,7 +82,11 @@ impl RangeQueryHandler {
         })
     }
 
-    fn handle_less_than(&self, value: &Value, _inclusive: bool) -> Option<Vec<CandidateZone>> {
+    fn handle_less_than(
+        &self,
+        value: &ScalarValue,
+        _inclusive: bool,
+    ) -> Option<Vec<CandidateZone>> {
         info!(
             target: "sneldb::query::range",
             "Range query (<) - value: {:?}, segment: {}",

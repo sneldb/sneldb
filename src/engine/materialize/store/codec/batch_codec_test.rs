@@ -6,6 +6,7 @@ use crate::engine::materialize::store::codec::batch_schema_to_snapshots;
 use crate::engine::materialize::store::frame::data::FrameData;
 use crate::engine::materialize::store::frame::header::FrameHeader;
 use crate::engine::materialize::store::frame::metadata::StoredFrameMeta;
+use crate::engine::types::ScalarValue;
 use crc32fast::Hasher as Crc32Hasher;
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -29,7 +30,7 @@ fn build_batch(schema: &Arc<BatchSchema>, rows: Vec<(u64, u64)>) -> ColumnBatch 
     let mut builder = pool.acquire(Arc::clone(schema));
 
     for (ts, id) in rows {
-        builder.push_row(&[json!(ts), json!(id)]).unwrap();
+        builder.push_row(&[ScalarValue::from(json!(ts)), ScalarValue::from(json!(id))]).unwrap();
     }
 
     builder.finish().unwrap()
@@ -101,10 +102,10 @@ fn encode_decode_roundtrip() {
     let decoded = codec.decode(&meta, frame_data).unwrap();
 
     assert_eq!(decoded.len(), original.len());
-    assert_eq!(decoded.column(0).unwrap()[0], json!(1700000000_u64));
-    assert_eq!(decoded.column(0).unwrap()[1], json!(1700000001_u64));
-    assert_eq!(decoded.column(1).unwrap()[0], json!(1_u64));
-    assert_eq!(decoded.column(1).unwrap()[1], json!(2_u64));
+    assert_eq!(decoded.column(0).unwrap()[0], ScalarValue::from(json!(1700000000_u64)));
+    assert_eq!(decoded.column(0).unwrap()[1], ScalarValue::from(json!(1700000001_u64)));
+    assert_eq!(decoded.column(1).unwrap()[0], ScalarValue::from(json!(1_u64)));
+    assert_eq!(decoded.column(1).unwrap()[1], ScalarValue::from(json!(2_u64)));
 }
 
 #[test]
@@ -126,8 +127,8 @@ fn encode_decode_handles_null_values() {
 
     let pool = BatchPool::new(100).unwrap();
     let mut builder = pool.acquire(Arc::clone(&schema));
-    builder.push_row(&[json!(1000_u64), json!(1)]).unwrap();
-    builder.push_row(&[json!(2000_u64), Value::Null]).unwrap();
+    builder.push_row(&[ScalarValue::from(json!(1000_u64)), ScalarValue::from(json!(1))]).unwrap();
+    builder.push_row(&[ScalarValue::from(json!(2000_u64)), ScalarValue::Null]).unwrap();
     let original = builder.finish().unwrap();
 
     let codec = Lz4BatchCodec::default();
@@ -172,7 +173,7 @@ fn encode_decode_handles_null_values() {
     let decoded = codec.decode(&meta, frame_data).unwrap();
 
     assert_eq!(decoded.len(), 2);
-    assert_eq!(decoded.column(0).unwrap()[0], json!(1000_u64));
+    assert_eq!(decoded.column(0).unwrap()[0], ScalarValue::from(json!(1000_u64)));
     assert!(decoded.column(1).unwrap()[1].is_null());
 }
 
@@ -211,14 +212,15 @@ fn encode_decode_handles_all_types() {
 
     let pool = BatchPool::new(100).unwrap();
     let mut builder = pool.acquire(Arc::clone(&schema));
+    use crate::engine::types::ScalarValue;
     builder
         .push_row(&[
-            json!(1000_u64),
-            json!(42),
-            json!(19.99),
-            json!(true),
-            json!("product"),
-            json!({"category": "electronics"}),
+            ScalarValue::from(json!(1000_u64)),
+            ScalarValue::from(json!(42)),
+            ScalarValue::from(json!(19.99)),
+            ScalarValue::from(json!(true)),
+            ScalarValue::from(json!("product")),
+            ScalarValue::from(json!({"category": "electronics"})),
         ])
         .unwrap();
     let original = builder.finish().unwrap();
@@ -265,10 +267,10 @@ fn encode_decode_handles_all_types() {
     let decoded = codec.decode(&meta, frame_data).unwrap();
 
     assert_eq!(decoded.len(), 1);
-    assert_eq!(decoded.column(0).unwrap()[0], json!(1000_u64));
-    assert_eq!(decoded.column(1).unwrap()[0], json!(42));
-    assert_eq!(decoded.column(3).unwrap()[0], json!(true));
-    assert_eq!(decoded.column(4).unwrap()[0], json!("product"));
+    assert_eq!(decoded.column(0).unwrap()[0], ScalarValue::from(json!(1000_u64)));
+    assert_eq!(decoded.column(1).unwrap()[0], ScalarValue::from(json!(42)));
+    assert_eq!(decoded.column(3).unwrap()[0], ScalarValue::from(json!(true)));
+    assert_eq!(decoded.column(4).unwrap()[0], ScalarValue::from(json!("product")));
 }
 
 #[test]
@@ -339,7 +341,7 @@ fn encode_compresses_data() {
     let mut builder = pool.acquire(Arc::clone(&schema));
     // Create data that should compress well
     let repeated = "x".repeat(1000);
-    builder.push_row(&[json!(repeated)]).unwrap();
+    builder.push_row(&[ScalarValue::from(json!(repeated))]).unwrap();
     let batch = builder.finish().unwrap();
 
     let codec = Lz4BatchCodec::default();

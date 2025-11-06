@@ -97,7 +97,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
                 obj.insert("context_id".to_string(), json!(event.context_id));
                 obj.insert("event_type".to_string(), json!(event.event_type));
                 obj.insert("timestamp".to_string(), json!(event.timestamp));
-                obj.insert("payload".to_string(), event.payload);
+                obj.insert("payload".to_string(), event.payload_as_json());
                 Value::Object(obj)
             })
             .collect();

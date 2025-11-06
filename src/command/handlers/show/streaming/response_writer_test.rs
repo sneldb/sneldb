@@ -33,9 +33,10 @@ fn build_schema() -> Arc<BatchSchema> {
 }
 
 fn build_batch(schema: Arc<BatchSchema>, rows: &[(u64, u64, &str)]) -> Arc<ColumnBatch> {
-    let timestamps: Vec<Value> = rows.iter().map(|(ts, _, _)| json!(ts)).collect();
-    let event_ids: Vec<Value> = rows.iter().map(|(_, id, _)| json!(id)).collect();
-    let values: Vec<Value> = rows.iter().map(|(_, _, v)| json!(v)).collect();
+    use crate::engine::types::ScalarValue;
+    let timestamps: Vec<ScalarValue> = rows.iter().map(|(ts, _, _)| ScalarValue::from(json!(ts))).collect();
+    let event_ids: Vec<ScalarValue> = rows.iter().map(|(_, id, _)| ScalarValue::from(json!(id))).collect();
+    let values: Vec<ScalarValue> = rows.iter().map(|(_, _, v)| ScalarValue::from(json!(v))).collect();
 
     Arc::new(
         ColumnBatch::new(
@@ -222,7 +223,7 @@ async fn writes_arrow_format_with_limit() {
         &renderer,
         Arc::clone(&schema),
         0,
-        true, // has_watermark_filtering = true means no deduplication
+        true,    // has_watermark_filtering = true means no deduplication
         Some(3), // limit to 3 rows
         None,
     )
@@ -336,9 +337,10 @@ async fn writes_arrow_format_with_u64_event_ids() {
         (1u64, 1000000000000u64, "first"),
         (2u64, 1000000000001u64, "second"),
     ];
-    let timestamps: Vec<Value> = rows.iter().map(|(ts, _, _)| json!(*ts)).collect();
-    let event_ids: Vec<Value> = rows.iter().map(|(_, id, _)| json!(*id)).collect();
-    let values: Vec<Value> = rows.iter().map(|(_, _, v)| json!(*v)).collect();
+    use crate::engine::types::ScalarValue;
+    let timestamps: Vec<ScalarValue> = rows.iter().map(|(ts, _, _)| ScalarValue::from(json!(*ts))).collect();
+    let event_ids: Vec<ScalarValue> = rows.iter().map(|(_, id, _)| ScalarValue::from(json!(*id))).collect();
+    let values: Vec<ScalarValue> = rows.iter().map(|(_, _, v)| ScalarValue::from(json!(*v))).collect();
 
     let batch = Arc::new(
         ColumnBatch::new(
@@ -385,13 +387,14 @@ async fn writes_arrow_format_with_u64_event_ids() {
 
     // Event ID column might be Int64Array or UInt64Array depending on values
     let event_id_array = record.column(1);
-    let event_id_value = if let Some(int_array) = event_id_array.as_any().downcast_ref::<Int64Array>() {
-        int_array.value(0) as u64
-    } else if let Some(uint_array) = event_id_array.as_any().downcast_ref::<UInt64Array>() {
-        uint_array.value(0)
-    } else {
-        panic!("event_id should be Int64Array or UInt64Array");
-    };
+    let event_id_value =
+        if let Some(int_array) = event_id_array.as_any().downcast_ref::<Int64Array>() {
+            int_array.value(0) as u64
+        } else if let Some(uint_array) = event_id_array.as_any().downcast_ref::<UInt64Array>() {
+            uint_array.value(0)
+        } else {
+            panic!("event_id should be Int64Array or UInt64Array");
+        };
 
     assert_eq!(event_id_value, 1000000000000u64);
 
@@ -407,13 +410,8 @@ async fn writes_arrow_format_handles_empty_batches() {
 
     // Create empty batch
     let empty_batch = Arc::new(
-        ColumnBatch::new(
-            Arc::clone(&schema),
-            vec![vec![], vec![], vec![]],
-            0,
-            None,
-        )
-        .expect("empty batch"),
+        ColumnBatch::new(Arc::clone(&schema), vec![vec![], vec![], vec![]], 0, None)
+            .expect("empty batch"),
     );
 
     let batch = build_batch(schema.clone(), &[(1, 1, "data")]);
@@ -467,7 +465,10 @@ async fn writes_arrow_format_optimizes_contiguous_row_indices() {
     let stream = QueryBatchStream::new(Arc::clone(&schema), stream_receiver, Vec::new());
 
     // Create a batch with all rows valid (no filtering)
-    let batch = build_batch(Arc::clone(&schema), &[(1, 1, "a"), (2, 2, "b"), (3, 3, "c")]);
+    let batch = build_batch(
+        Arc::clone(&schema),
+        &[(1, 1, "a"), (2, 2, "b"), (3, 3, "c")],
+    );
 
     let send_task = tokio::spawn(async move {
         stream_sender

@@ -12,5 +12,5 @@ fn test_event_factory() {
 
     assert_eq!(event.event_type, "login");
     assert_eq!(event.context_id, "ctx42");
-    assert_eq!(event.payload["age"], 30);
+    assert_eq!(event.payload_as_json()["age"], json!(30));
 }

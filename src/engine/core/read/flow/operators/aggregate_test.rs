@@ -7,6 +7,7 @@ use crate::engine::core::read::flow::{
     BatchPool, BatchSchema, FlowChannel, FlowContext, FlowMetrics, FlowOperator, FlowTelemetry,
 };
 use crate::engine::core::read::result::ColumnSpec;
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::{CommandFactory, QueryPlanFactory, SchemaRegistryFactory};
 
 use super::{AggregateOp, AggregateOpConfig};
@@ -97,7 +98,12 @@ async fn aggregate_op_computes_count_and_total() {
     ];
     for (context, value, ts, event_id) in rows {
         builder
-            .push_row(&[json!(context), json!(value), json!(ts), json!(event_id)])
+            .push_row(&[
+                ScalarValue::from(json!(context)),
+                ScalarValue::from(json!(value)),
+                ScalarValue::from(json!(ts)),
+                ScalarValue::from(json!(event_id)),
+            ])
             .unwrap();
     }
     let batch = builder.finish().unwrap();
@@ -136,8 +142,8 @@ async fn aggregate_op_computes_count_and_total() {
     assert_eq!(
         results,
         vec![
-            (json!("ctx1"), json!(2), json!(25)),
-            (json!("ctx2"), json!(1), json!(7))
+            (ScalarValue::from(json!("ctx1")), ScalarValue::from(json!(2)), ScalarValue::from(json!(25))),
+            (ScalarValue::from(json!("ctx2")), ScalarValue::from(json!(1)), ScalarValue::from(json!(7)))
         ]
     );
 }

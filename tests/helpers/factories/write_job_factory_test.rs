@@ -1,3 +1,4 @@
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::WriteJobFactory;
 
 #[test]
@@ -12,7 +13,7 @@ fn builds_single_write_job_with_expected_fields() {
     assert_eq!(job.key.0, "login");
     assert_eq!(job.key.1, "device");
     assert_eq!(job.zone_id, 42);
-    assert_eq!(job.value, "laptop");
+    assert_eq!(job.value, ScalarValue::Utf8("laptop".to_string()));
     assert!(job.path.ends_with("test.col"));
 }
 
@@ -27,6 +28,6 @@ fn builds_many_jobs_from_values() {
     assert_eq!(jobs[0].key.0, "signup");
     assert_eq!(jobs[0].key.1, "ip");
     assert_eq!(jobs[0].zone_id, 7);
-    assert_eq!(jobs[0].value, "1.1.1.1");
-    assert_eq!(jobs[1].value, "2.2.2.2");
+    assert_eq!(jobs[0].value, ScalarValue::Utf8("1.1.1.1".to_string()));
+    assert_eq!(jobs[1].value, ScalarValue::Utf8("2.2.2.2".to_string()));
 }

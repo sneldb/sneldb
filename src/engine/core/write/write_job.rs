@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::engine::core::{ColumnKey, Event, UidResolver, ZonePlan};
-use serde_json::Value;
+use crate::engine::types::ScalarValue;
 use tracing::{error, info};
 
 #[derive(Debug, Clone)]
@@ -9,7 +9,7 @@ pub struct WriteJob {
     pub key: ColumnKey,
     pub zone_id: u32,
     pub path: PathBuf,
-    pub value: Value,
+    pub value: ScalarValue,
 }
 
 impl WriteJob {
@@ -30,17 +30,16 @@ impl WriteJob {
         for zone_plan in zone_plans {
             // Optimization: collect all field names once per zone
             // This is required for columnar storage - all columns must have same row count
-            let mut all_fields = std::collections::HashSet::new();
+            let mut all_fields: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
             all_fields.insert("context_id".to_string());
             all_fields.insert("event_type".to_string());
             all_fields.insert("timestamp".to_string());
             all_fields.insert("event_id".to_string());
 
             for event in &zone_plan.events {
-                if let Some(obj) = event.payload.as_object() {
-                    for key in obj.keys() {
-                        all_fields.insert(key.clone());
-                    }
+                for key in event.payload.keys() {
+                    all_fields.insert(key.clone());
                 }
             }
 
@@ -85,7 +84,7 @@ impl WriteJob {
         };
 
         for field in fields {
-            let value = event.get_field(field).unwrap_or(Value::Null);
+            let value = event.get_field_scalar(field).unwrap_or(ScalarValue::Null);
             let path = segment_dir.join(format!("{}_{}.col", uid, field));
             let key = (event_type.clone(), field.clone());
 

@@ -501,11 +501,12 @@ mod tests {
         .expect("schema");
         let schema_arc = Arc::new(schema);
 
+        use crate::engine::types::ScalarValue;
         let rows = vec![(json!(1), json!("alpha")), (json!(2), json!("beta"))];
 
         let columns = vec![
-            rows.iter().map(|(id, _)| id.clone()).collect::<Vec<_>>(),
-            rows.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>(),
+            rows.iter().map(|(id, _)| ScalarValue::from(id.clone())).collect::<Vec<_>>(),
+            rows.iter().map(|(_, v)| ScalarValue::from(v.clone())).collect::<Vec<_>>(),
         ];
 
         let batch = ColumnBatch::new(Arc::clone(&schema_arc), columns, rows.len(), None)

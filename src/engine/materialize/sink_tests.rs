@@ -37,10 +37,11 @@ fn sink_appends_and_tracks_stats() {
     assert_eq!(sink.total_rows(), 0);
     assert_eq!(sink.high_water_mark(), HighWaterMark::default());
 
+    use crate::engine::types::ScalarValue;
     let pool = BatchPool::new(8).unwrap();
     let mut builder = pool.acquire(Arc::clone(&schema_arc));
     builder
-        .push_row(&[json!(1_700_000_000_u64), json!("ctx"), json!(123_u64)])
+        .push_row(&[ScalarValue::from(json!(1_700_000_000_u64)), ScalarValue::from(json!("ctx")), ScalarValue::from(json!(123_u64))])
         .unwrap();
     let batch = builder.finish().unwrap();
 
@@ -63,11 +64,12 @@ fn sink_rejects_schema_mismatch_with_existing_frames() {
     let schema = build_schema();
     let schema_arc = Arc::new(schema);
 
+    use crate::engine::types::ScalarValue;
     let mut sink = MaterializedSink::from_batch_schema(store, &schema_arc).unwrap();
     let pool = BatchPool::new(4).unwrap();
     let mut builder = pool.acquire(Arc::clone(&schema_arc));
     builder
-        .push_row(&[json!(1_700_000_000_u64), json!("ctx"), json!(1_u64)])
+        .push_row(&[ScalarValue::from(json!(1_700_000_000_u64)), ScalarValue::from(json!("ctx")), ScalarValue::from(json!(1_u64))])
         .unwrap();
     sink.append(&builder.finish().unwrap()).unwrap();
     let store = sink.into_store();
@@ -105,11 +107,12 @@ fn sink_rejects_mismatched_batch_schema() {
         },
     ])
     .expect("valid schema");
+    use crate::engine::types::ScalarValue;
     let mismatched_arc = Arc::new(mismatched_schema);
     let pool = BatchPool::new(4).unwrap();
     let mut builder = pool.acquire(Arc::clone(&mismatched_arc));
     builder
-        .push_row(&[json!(1_700_000_000_u64), json!("ctx"), json!("id")])
+        .push_row(&[ScalarValue::from(json!(1_700_000_000_u64)), ScalarValue::from(json!("ctx")), ScalarValue::from(json!("id"))])
         .unwrap();
     let batch = builder.finish().unwrap();
 

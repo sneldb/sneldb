@@ -10,7 +10,7 @@ use crate::shared::response::render::Renderer;
 use crate::shared::response::{Response, StatusCode};
 // time parsing utilities are used via schema normalizer
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio::sync::RwLock;
@@ -106,7 +106,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
         return write_error(writer, renderer, StatusCode::BadRequest, &e).await;
     }
 
-    let event = Event {
+    let mut event = Event {
         timestamp: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -114,8 +114,9 @@ pub async fn handle<W: AsyncWrite + Unpin>(
         event_type: event_type.clone(),
         context_id: context_id.clone(),
         id: EventId::default(),
-        payload: normalized_payload,
+        payload: BTreeMap::new(),
     };
+    event.set_payload_json(normalized_payload);
 
     let shard = shard_manager.get_shard(context_id);
     debug!(

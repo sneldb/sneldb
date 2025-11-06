@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 
 use crate::engine::core::column::format::PhysicalType;
 use crate::engine::core::{ColumnKey, WriteJob};
-use serde_json::Value;
+use crate::engine::types::ScalarValue;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 
 pub struct ColumnGroupBuilder {
     // Accumulate raw string values per (column, zone); we'll assemble typed blocks in finish()
@@ -33,11 +34,15 @@ impl ColumnGroupBuilder {
             .entry((job.key.clone(), job.zone_id))
             .or_insert_with(|| Vec::new());
         let s = match &job.value {
-            Value::String(s) => s.clone(),
-            Value::Number(n) => n.to_string(),
-            Value::Bool(b) => b.to_string(),
-            Value::Null => String::new(),
-            other => other.to_string(),
+            ScalarValue::Utf8(s) => s.clone(),
+            ScalarValue::Int64(i) => i.to_string(),
+            ScalarValue::Timestamp(ts) => ts.to_string(),
+            ScalarValue::Float64(f) => f.to_string(),
+            ScalarValue::Boolean(b) => b.to_string(),
+            ScalarValue::Null => String::new(),
+            // Complex JSON already serialized as Utf8 string
+            ScalarValue::Utf8(s) => s.clone(),
+            ScalarValue::Binary(bytes) => BASE64_STANDARD.encode(bytes),
         };
         values.push(s);
     }

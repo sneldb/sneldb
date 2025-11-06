@@ -1,5 +1,6 @@
 use crate::command::types::{Command, CompareOp, Expr};
 use crate::engine::core::{ConditionEvaluator, LogicalCondition, LogicalOp, QueryPlan};
+use crate::engine::types::ScalarValue;
 // use crate::engine::schema::FieldType; // no longer needed
 use crate::shared::time::{TimeKind, TimeParser};
 use tracing::info;
@@ -20,19 +21,21 @@ impl ConditionEvaluatorBuilder {
     pub fn add_where_clause(&mut self, where_clause: &Expr) {
         match where_clause {
             Expr::Compare { field, op, value } => {
+                // Convert JSON Value to ScalarValue immediately - no serde_json in core
+                let scalar_value = ScalarValue::from(value.clone());
+
                 // Best-effort: try to parse any string temporal literal to epoch seconds
-                let parsed_temporal = match value {
-                    serde_json::Value::String(s) => {
-                        TimeParser::parse_str_to_epoch_seconds(s, TimeKind::DateTime)
-                            .or_else(|| TimeParser::parse_str_to_epoch_seconds(s, TimeKind::Date))
-                    }
-                    _ => None,
+                let parsed_temporal = if let ScalarValue::Utf8(s) = &scalar_value {
+                    TimeParser::parse_str_to_epoch_seconds(s, TimeKind::DateTime)
+                        .or_else(|| TimeParser::parse_str_to_epoch_seconds(s, TimeKind::Date))
+                } else {
+                    None
                 };
 
                 if let Some(parsed) = parsed_temporal {
                     self.evaluator
                         .add_numeric_condition(field.clone(), op.clone().into(), parsed);
-                } else if let Some(num_value) = value.as_f64().map(|n| n as i64) {
+                } else if let Some(num_value) = scalar_value.as_i64() {
                     info!(
                         target: "sneldb::evaluator",
                         "Adding numeric condition: {} {:?} {}",
@@ -43,7 +46,7 @@ impl ConditionEvaluatorBuilder {
                         op.clone().into(),
                         num_value,
                     );
-                } else if let Some(str_value) = value.as_str() {
+                } else if let Some(str_value) = scalar_value.as_str() {
                     info!(target: "sneldb::evaluator", "Adding string condition: {} {:?} '{}'", field, op, str_value);
                     self.evaluator.add_string_condition(
                         field.clone(),

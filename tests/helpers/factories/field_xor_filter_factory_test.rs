@@ -1,3 +1,4 @@
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::FieldXorFilterFactory;
 use serde_json::json;
 
@@ -10,10 +11,10 @@ fn builds_filter_and_checks_membership() {
         .build();
 
     // These should exist
-    assert!(filter.contains_value(&json!("apple")));
-    assert!(filter.contains_value(&json!("banana")));
-    assert!(filter.contains_value(&json!(42)));
-    assert!(filter.contains_value(&json!(true)));
-    assert!(filter.contains_value(&json!("kiwi")));
-    assert!(filter.contains_value(&json!(100)));
+    assert!(filter.contains_value(&ScalarValue::from(json!("apple"))));
+    assert!(filter.contains_value(&ScalarValue::from(json!("banana"))));
+    assert!(filter.contains_value(&ScalarValue::from(json!(42))));
+    assert!(filter.contains_value(&ScalarValue::from(json!(true))));
+    assert!(filter.contains_value(&ScalarValue::from(json!("kiwi"))));
+    assert!(filter.contains_value(&ScalarValue::from(json!(100))));
 }

@@ -1,12 +1,13 @@
 use super::kway_merger::KWayMerger;
+use crate::engine::types::ScalarValue;
 use serde_json::json;
 
-fn make_row(context: &str, event: &str, timestamp: u64, value: u64) -> Vec<serde_json::Value> {
+fn make_row(context: &str, event: &str, timestamp: u64, value: u64) -> Vec<ScalarValue> {
     vec![
-        json!(context),
-        json!(event),
-        json!(timestamp),
-        json!({"value": value}),
+        ScalarValue::from(json!(context)),
+        ScalarValue::from(json!(event)),
+        ScalarValue::from(json!(timestamp)),
+        ScalarValue::from(json!({"value": value})),
     ]
 }
 
@@ -29,12 +30,12 @@ fn merges_two_sorted_shards_ascending() {
     let result = merger.merge();
 
     assert_eq!(result.len(), 6);
-    assert_eq!(result[0][2], 1000);
-    assert_eq!(result[1][2], 2000);
-    assert_eq!(result[2][2], 3000);
-    assert_eq!(result[3][2], 4000);
-    assert_eq!(result[4][2], 5000);
-    assert_eq!(result[5][2], 6000);
+    assert_eq!(result[0][2].as_u64(), Some(1000));
+    assert_eq!(result[1][2].as_u64(), Some(2000));
+    assert_eq!(result[2][2].as_u64(), Some(3000));
+    assert_eq!(result[3][2].as_u64(), Some(4000));
+    assert_eq!(result[4][2].as_u64(), Some(5000));
+    assert_eq!(result[5][2].as_u64(), Some(6000));
 }
 
 #[test]
@@ -56,12 +57,12 @@ fn merges_two_sorted_shards_descending() {
     let result = merger.merge();
 
     assert_eq!(result.len(), 6);
-    assert_eq!(result[0][2], 6000);
-    assert_eq!(result[1][2], 5000);
-    assert_eq!(result[2][2], 4000);
-    assert_eq!(result[3][2], 3000);
-    assert_eq!(result[4][2], 2000);
-    assert_eq!(result[5][2], 1000);
+    assert_eq!(result[0][2].as_u64(), Some(6000));
+    assert_eq!(result[1][2].as_u64(), Some(5000));
+    assert_eq!(result[2][2].as_u64(), Some(4000));
+    assert_eq!(result[3][2].as_u64(), Some(3000));
+    assert_eq!(result[4][2].as_u64(), Some(2000));
+    assert_eq!(result[5][2].as_u64(), Some(1000));
 }
 
 #[test]
@@ -83,33 +84,33 @@ fn respects_limit() {
     let result = merger.merge();
 
     assert_eq!(result.len(), 3);
-    assert_eq!(result[0][2], 1000);
-    assert_eq!(result[1][2], 2000);
-    assert_eq!(result[2][2], 3000);
+    assert_eq!(result[0][2].as_u64(), Some(1000));
+    assert_eq!(result[1][2].as_u64(), Some(2000));
+    assert_eq!(result[2][2].as_u64(), Some(3000));
 }
 
 #[test]
 fn handles_empty_shards() {
-    let shard0: Vec<Vec<serde_json::Value>> = vec![];
+    let shard0: Vec<Vec<ScalarValue>> = vec![];
     let shard1 = vec![
         make_row("ctx", "click", 1000, 10),
         make_row("ctx", "click", 2000, 20),
     ];
-    let shard2: Vec<Vec<serde_json::Value>> = vec![];
+    let shard2: Vec<Vec<ScalarValue>> = vec![];
 
     let shards = vec![shard0, shard1, shard2];
     let merger = KWayMerger::new(&shards, "timestamp", true, 100);
     let result = merger.merge();
 
     assert_eq!(result.len(), 2);
-    assert_eq!(result[0][2], 1000);
-    assert_eq!(result[1][2], 2000);
+    assert_eq!(result[0][2].as_u64(), Some(1000));
+    assert_eq!(result[1][2].as_u64(), Some(2000));
 }
 
 #[test]
 fn handles_all_empty_shards() {
-    let shard0: Vec<Vec<serde_json::Value>> = vec![];
-    let shard1: Vec<Vec<serde_json::Value>> = vec![];
+    let shard0: Vec<Vec<ScalarValue>> = vec![];
+    let shard1: Vec<Vec<ScalarValue>> = vec![];
 
     let shards = vec![shard0, shard1];
     let merger = KWayMerger::new(&shards, "timestamp", true, 100);
@@ -148,7 +149,7 @@ fn merges_many_shards() {
 
     assert_eq!(result.len(), 5);
     for i in 0..5 {
-        assert_eq!(result[i][2], (i as u64 + 1) * 1000);
+        assert_eq!(result[i][2].as_u64(), Some((i as u64 + 1) * 1000));
     }
 }
 
@@ -169,10 +170,14 @@ fn merges_by_payload_field() {
     let result = merger.merge();
 
     assert_eq!(result.len(), 4);
-    assert_eq!(result[0][3]["value"], 10);
-    assert_eq!(result[1][3]["value"], 20);
-    assert_eq!(result[2][3]["value"], 30);
-    assert_eq!(result[3][3]["value"], 40);
+    let payload0 = result[0][3].to_json();
+    let payload1 = result[1][3].to_json();
+    let payload2 = result[2][3].to_json();
+    let payload3 = result[3][3].to_json();
+    assert_eq!(payload0.get("value"), Some(&json!(10)));
+    assert_eq!(payload1.get("value"), Some(&json!(20)));
+    assert_eq!(payload2.get("value"), Some(&json!(30)));
+    assert_eq!(payload3.get("value"), Some(&json!(40)));
 }
 
 #[test]
@@ -193,10 +198,10 @@ fn handles_duplicate_values() {
 
     assert_eq!(result.len(), 4);
     // Duplicates should be preserved
-    assert_eq!(result[0][2], 1000);
-    assert_eq!(result[1][2], 1000);
-    assert_eq!(result[2][2], 2000);
-    assert_eq!(result[3][2], 2000);
+    assert_eq!(result[0][2].as_u64(), Some(1000));
+    assert_eq!(result[1][2].as_u64(), Some(1000));
+    assert_eq!(result[2][2].as_u64(), Some(2000));
+    assert_eq!(result[3][2].as_u64(), Some(2000));
 }
 
 #[test]
@@ -212,9 +217,9 @@ fn apply_pagination_with_offset() {
     let result = KWayMerger::apply_pagination(rows, Some(2), None);
 
     assert_eq!(result.len(), 3);
-    assert_eq!(result[0][2], 3000);
-    assert_eq!(result[1][2], 4000);
-    assert_eq!(result[2][2], 5000);
+    assert_eq!(result[0][2].as_u64(), Some(3000));
+    assert_eq!(result[1][2].as_u64(), Some(4000));
+    assert_eq!(result[2][2].as_u64(), Some(5000));
 }
 
 #[test]
@@ -230,9 +235,9 @@ fn apply_pagination_with_limit() {
     let result = KWayMerger::apply_pagination(rows, None, Some(3));
 
     assert_eq!(result.len(), 3);
-    assert_eq!(result[0][2], 1000);
-    assert_eq!(result[1][2], 2000);
-    assert_eq!(result[2][2], 3000);
+    assert_eq!(result[0][2].as_u64(), Some(1000));
+    assert_eq!(result[1][2].as_u64(), Some(2000));
+    assert_eq!(result[2][2].as_u64(), Some(3000));
 }
 
 #[test]
@@ -248,8 +253,8 @@ fn apply_pagination_with_both() {
     let result = KWayMerger::apply_pagination(rows, Some(1), Some(2));
 
     assert_eq!(result.len(), 2);
-    assert_eq!(result[0][2], 2000);
-    assert_eq!(result[1][2], 3000);
+    assert_eq!(result[0][2].as_u64(), Some(2000));
+    assert_eq!(result[1][2].as_u64(), Some(3000));
 }
 
 #[test]
@@ -339,6 +344,6 @@ fn merges_with_varying_shard_sizes() {
 
     assert_eq!(result.len(), 6);
     for i in 0..6 {
-        assert_eq!(result[i][2], (i as u64 + 1) * 1000);
+        assert_eq!(result[i][2].as_u64(), Some((i as u64 + 1) * 1000));
     }
 }

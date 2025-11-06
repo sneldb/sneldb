@@ -1,7 +1,7 @@
+use crate::engine::materialize::MaterializationError;
+use crate::engine::types::ScalarValue;
 use serde_json::{Number, Value};
 use sonic_rs;
-
-use crate::engine::materialize::MaterializationError;
 
 use super::utils::{ByteEncoder, ValueExtractor};
 
@@ -9,7 +9,7 @@ pub struct ValueCodec;
 
 impl ValueCodec {
     pub fn encode_value(
-        value: &Value,
+        value: &ScalarValue,
         logical_type: &str,
         buffer: &mut Vec<u8>,
     ) -> Result<(), MaterializationError> {
@@ -20,14 +20,14 @@ impl ValueCodec {
                 } else if let Some(num) = ValueExtractor::extract_u64(value) {
                     buffer.extend_from_slice(&(num as i64).to_le_bytes());
                 } else {
-                    Self::encode_json_value(value, buffer)?;
+                    Self::encode_json_value(&value.to_json(), buffer)?;
                 }
             }
             "Float" => {
                 if let Some(f) = ValueExtractor::extract_f64(value) {
                     buffer.extend_from_slice(&f.to_le_bytes());
                 } else {
-                    Self::encode_json_value(value, buffer)?;
+                    Self::encode_json_value(&value.to_json(), buffer)?;
                 }
             }
             "Boolean" => {
@@ -39,24 +39,21 @@ impl ValueCodec {
                     } else if s.eq_ignore_ascii_case("false") {
                         0u8
                     } else {
-                        Self::encode_json_value(value, buffer)?;
+                        Self::encode_json_value(&value.to_json(), buffer)?;
                         return Ok(());
                     }
                 } else {
-                    Self::encode_json_value(value, buffer)?;
+                    Self::encode_json_value(&value.to_json(), buffer)?;
                     return Ok(());
                 };
                 buffer.push(byte);
             }
             "String" => {
-                let s = value
-                    .as_str()
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| value.to_string());
+                let s = value.as_str().map(|s| s.to_string()).unwrap_or_else(|| value.to_json().to_string());
                 ByteEncoder::encode_bytes(s.as_bytes(), buffer);
             }
             _ => {
-                Self::encode_json_value(value, buffer)?;
+                Self::encode_json_value(&value.to_json(), buffer)?;
             }
         }
         Ok(())

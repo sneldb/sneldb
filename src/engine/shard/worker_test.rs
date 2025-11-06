@@ -80,11 +80,12 @@ async fn test_store_flush_query_lifecycle() {
     let table = result.finalize_table();
     assert_eq!(table.rows.len(), 1);
     let row = &table.rows[0];
+    use crate::engine::types::ScalarValue;
     // Selection rows: [context_id, event_type, timestamp, payload]
-    assert_eq!(row[0], serde_json::json!("ctx-42"));
-    assert_eq!(row[1], serde_json::json!("payment"));
-    assert_eq!(row[3]["user_id"], serde_json::json!("max"));
-    assert_eq!(row[3]["amount"], serde_json::json!(100));
+    assert_eq!(row[0], ScalarValue::from(serde_json::json!("ctx-42")));
+    assert_eq!(row[1], ScalarValue::from(serde_json::json!("payment")));
+    assert_eq!(row[3].to_json()["user_id"], serde_json::json!("max"));
+    assert_eq!(row[3].to_json()["amount"], serde_json::json!(100));
 }
 
 #[tokio::test]

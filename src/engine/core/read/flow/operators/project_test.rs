@@ -54,8 +54,9 @@ async fn project_op_reorders_and_drops_columns() {
 
     let mut builder = ctx.pool().acquire(input_schema.clone());
     for idx in 0..3 {
+        use crate::engine::types::ScalarValue;
         builder
-            .push_row(&[json!(idx), json!(format!("s{}", idx)), json!(idx * 10)])
+            .push_row(&[ScalarValue::from(json!(idx)), ScalarValue::from(json!(format!("s{}", idx))), ScalarValue::from(json!(idx * 10))])
             .unwrap();
     }
     let batch = builder.finish().unwrap();
@@ -76,12 +77,13 @@ async fn project_op_reorders_and_drops_columns() {
         }
     }
 
+    use crate::engine::types::ScalarValue;
     assert_eq!(
         rows,
         vec![
-            (json!(0), json!(0)),
-            (json!(10), json!(1)),
-            (json!(20), json!(2)),
+            (ScalarValue::from(json!(0)), ScalarValue::from(json!(0))),
+            (ScalarValue::from(json!(10)), ScalarValue::from(json!(1))),
+            (ScalarValue::from(json!(20)), ScalarValue::from(json!(2))),
         ]
     );
 }

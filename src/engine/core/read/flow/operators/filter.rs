@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
-use serde_json::Value;
-
 use crate::engine::core::read::flow::{FlowContext, FlowOperator, FlowOperatorError};
+use crate::engine::types::ScalarValue;
 
 use super::super::{BatchReceiver, BatchSender};
 
-pub type FilterPredicate = Arc<dyn Fn(&[&Value]) -> bool + Send + Sync>;
+pub type FilterPredicate = Arc<dyn Fn(&[&ScalarValue]) -> bool + Send + Sync>;
 
 pub struct FilterOp {
     predicate: FilterPredicate,
@@ -34,23 +33,24 @@ impl FlowOperator for FilterOp {
             let mut builder = ctx.pool().acquire(Arc::clone(&schema));
             let column_count = schema.column_count();
 
-            let mut row_values: Vec<Value> = Vec::with_capacity(column_count);
+            let mut row_values: Vec<ScalarValue> = Vec::with_capacity(column_count);
 
-            let mut column_vecs: Vec<Vec<Value>> = Vec::with_capacity(column_count);
+            let mut column_vecs: Vec<Vec<ScalarValue>> = Vec::with_capacity(column_count);
             for col_idx in 0..column_count {
                 column_vecs.push(batch_arc.column(col_idx).map_err(|e| {
                     FlowOperatorError::Batch(format!("failed to read column: {}", e))
                 })?);
             }
-            let column_views: Vec<&[Value]> = column_vecs.iter().map(|v| v.as_slice()).collect();
+            let column_views: Vec<&[ScalarValue]> =
+                column_vecs.iter().map(|v| v.as_slice()).collect();
 
             for row_idx in 0..batch_arc.len() {
                 row_values.clear();
                 for col in &column_views {
-                    row_values.push(col.get(row_idx).cloned().unwrap_or(Value::Null));
+                    row_values.push(col.get(row_idx).cloned().unwrap_or(ScalarValue::Null));
                 }
 
-                let row_refs: Vec<&Value> = row_values.iter().collect();
+                let row_refs: Vec<&ScalarValue> = row_values.iter().collect();
 
                 if (self.predicate)(&row_refs) {
                     builder

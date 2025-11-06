@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 
 use super::{BatchError, BatchPool, BatchSchema, ColumnBatch, ColumnBatchBuilder};
 use crate::engine::core::read::result::ColumnSpec;
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::ColumnSpecFactory;
 
 fn make_schema() -> Arc<BatchSchema> {
@@ -151,7 +152,13 @@ fn schema_is_compatible_with_different_column_count() {
 #[test]
 fn column_batch_validates_lengths() {
     let schema = make_schema();
-    let columns = vec![vec![json!(1)], vec![json!("alpha"), json!("beta")]];
+    let columns: Vec<Vec<ScalarValue>> = vec![
+        vec![ScalarValue::from(json!(1))],
+        vec![
+            ScalarValue::from(json!("alpha")),
+            ScalarValue::from(json!("beta")),
+        ],
+    ];
     let err = ColumnBatch::new(Arc::clone(&schema), columns, 1, None)
         .expect_err("length mismatch should error");
 
@@ -168,7 +175,7 @@ fn column_batch_validates_lengths() {
 #[test]
 fn column_batch_validates_column_count() {
     let schema = make_schema();
-    let columns = vec![vec![json!(1)]]; // Only one column, schema has two
+    let columns: Vec<Vec<ScalarValue>> = vec![vec![ScalarValue::from(json!(1))]]; // Only one column, schema has two
     let err = ColumnBatch::new(Arc::clone(&schema), columns, 1, None)
         .expect_err("column count mismatch should error");
 
@@ -184,9 +191,17 @@ fn column_batch_validates_column_count() {
 #[test]
 fn column_batch_from_json_basic() {
     let schema = make_schema();
-    let columns = vec![
-        vec![json!(1), json!(2), json!(3)],
-        vec![json!("a"), json!("b"), json!("c")],
+    let columns: Vec<Vec<ScalarValue>> = vec![
+        vec![
+            ScalarValue::from(json!(1)),
+            ScalarValue::from(json!(2)),
+            ScalarValue::from(json!(3)),
+        ],
+        vec![
+            ScalarValue::from(json!("a")),
+            ScalarValue::from(json!("b")),
+            ScalarValue::from(json!("c")),
+        ],
     ];
     let batch =
         ColumnBatch::new(Arc::clone(&schema), columns, 3, None).expect("batch should be created");
@@ -199,7 +214,7 @@ fn column_batch_from_json_basic() {
 #[test]
 fn column_batch_empty_batch() {
     let schema = make_schema();
-    let columns = vec![vec![], vec![]];
+    let columns: Vec<Vec<ScalarValue>> = vec![vec![], vec![]];
     let batch = ColumnBatch::new(Arc::clone(&schema), columns, 0, None)
         .expect("empty batch should be created");
 
@@ -210,12 +225,18 @@ fn column_batch_empty_batch() {
 #[test]
 fn column_batch_all_data_types() {
     let schema = make_multi_type_schema();
-    let columns = vec![
-        vec![json!(1), json!(2)],
-        vec![json!(1.5), json!(2.7)],
-        vec![json!(true), json!(false)],
-        vec![json!(1000), json!(2000)],
-        vec![json!("a"), json!("b")],
+    let columns: Vec<Vec<ScalarValue>> = vec![
+        vec![ScalarValue::from(json!(1)), ScalarValue::from(json!(2))],
+        vec![ScalarValue::from(json!(1.5)), ScalarValue::from(json!(2.7))],
+        vec![
+            ScalarValue::from(json!(true)),
+            ScalarValue::from(json!(false)),
+        ],
+        vec![
+            ScalarValue::from(json!(1000)),
+            ScalarValue::from(json!(2000)),
+        ],
+        vec![ScalarValue::from(json!("a")), ScalarValue::from(json!("b"))],
     ];
 
     let batch =
@@ -225,50 +246,61 @@ fn column_batch_all_data_types() {
 
     // Test column access
     let col0 = batch.column(0).expect("column 0 should exist");
-    assert_eq!(col0[0], json!(1));
-    assert_eq!(col0[1], json!(2));
+    assert_eq!(col0[0], ScalarValue::from(json!(1)));
+    assert_eq!(col0[1], ScalarValue::from(json!(2)));
 
     let col1 = batch.column(1).expect("column 1 should exist");
-    assert_eq!(col1[0], json!(1.5));
+    assert_eq!(col1[0], ScalarValue::from(json!(1.5)));
 
     let col2 = batch.column(2).expect("column 2 should exist");
-    assert_eq!(col2[0], json!(true));
-    assert_eq!(col2[1], json!(false));
+    assert_eq!(col2[0], ScalarValue::from(json!(true)));
+    assert_eq!(col2[1], ScalarValue::from(json!(false)));
 
     let col3 = batch.column(3).expect("column 3 should exist");
-    assert_eq!(col3[0], json!(1000));
+    assert_eq!(col3[0], ScalarValue::from(json!(1000)));
 
     let col4 = batch.column(4).expect("column 4 should exist");
-    assert_eq!(col4[0], json!("a"));
+    assert_eq!(col4[0], ScalarValue::from(json!("a")));
 }
 
 #[test]
 fn column_batch_row_access() {
     let schema = make_schema();
-    let columns = vec![
-        vec![json!(1), json!(2), json!(3)],
-        vec![json!("a"), json!("b"), json!("c")],
+    let columns: Vec<Vec<ScalarValue>> = vec![
+        vec![
+            ScalarValue::from(json!(1)),
+            ScalarValue::from(json!(2)),
+            ScalarValue::from(json!(3)),
+        ],
+        vec![
+            ScalarValue::from(json!("a")),
+            ScalarValue::from(json!("b")),
+            ScalarValue::from(json!("c")),
+        ],
     ];
     let batch =
         ColumnBatch::new(Arc::clone(&schema), columns, 3, None).expect("batch should be created");
 
     let row0 = batch.row(0).expect("row 0 should exist");
-    assert_eq!(row0[0], json!(1));
-    assert_eq!(row0[1], json!("a"));
+    assert_eq!(row0[0], ScalarValue::from(json!(1)));
+    assert_eq!(row0[1], ScalarValue::from(json!("a")));
 
     let row1 = batch.row(1).expect("row 1 should exist");
-    assert_eq!(row1[0], json!(2));
-    assert_eq!(row1[1], json!("b"));
+    assert_eq!(row1[0], ScalarValue::from(json!(2)));
+    assert_eq!(row1[1], ScalarValue::from(json!("b")));
 
     let row2 = batch.row(2).expect("row 2 should exist");
-    assert_eq!(row2[0], json!(3));
-    assert_eq!(row2[1], json!("c"));
+    assert_eq!(row2[0], ScalarValue::from(json!(3)));
+    assert_eq!(row2[1], ScalarValue::from(json!("c")));
 }
 
 #[test]
 fn column_batch_row_out_of_bounds() {
     let schema = make_schema();
-    let columns = vec![vec![json!(1)], vec![json!("a")]];
+    let columns: Vec<Vec<ScalarValue>> = vec![
+        vec![ScalarValue::from(json!(1))],
+        vec![ScalarValue::from(json!("a"))],
+    ];
     let batch =
         ColumnBatch::new(Arc::clone(&schema), columns, 1, None).expect("batch should be created");
 
@@ -282,7 +314,10 @@ fn column_batch_row_out_of_bounds() {
 #[test]
 fn column_batch_column_out_of_bounds() {
     let schema = make_schema();
-    let columns = vec![vec![json!(1)], vec![json!("a")]];
+    let columns: Vec<Vec<ScalarValue>> = vec![
+        vec![ScalarValue::from(json!(1))],
+        vec![ScalarValue::from(json!("a"))],
+    ];
     let batch =
         ColumnBatch::new(Arc::clone(&schema), columns, 1, None).expect("batch should be created");
 
@@ -295,7 +330,10 @@ fn column_batch_column_out_of_bounds() {
 #[test]
 fn column_batch_lazy_json_conversion() {
     let schema = make_schema();
-    let columns = vec![vec![json!(1), json!(2)], vec![json!("a"), json!("b")]];
+    let columns: Vec<Vec<ScalarValue>> = vec![
+        vec![ScalarValue::from(json!(1)), ScalarValue::from(json!(2))],
+        vec![ScalarValue::from(json!("a")), ScalarValue::from(json!("b"))],
+    ];
     let batch =
         ColumnBatch::new(Arc::clone(&schema), columns, 2, None).expect("batch should be created");
 
@@ -311,7 +349,10 @@ fn column_batch_lazy_json_conversion() {
 #[test]
 fn column_batch_columns_caches_result() {
     let schema = make_schema();
-    let columns = vec![vec![json!(1), json!(2)], vec![json!("a"), json!("b")]];
+    let columns: Vec<Vec<ScalarValue>> = vec![
+        vec![ScalarValue::from(json!(1)), ScalarValue::from(json!(2))],
+        vec![ScalarValue::from(json!("a")), ScalarValue::from(json!("b"))],
+    ];
     let batch =
         ColumnBatch::new(Arc::clone(&schema), columns, 2, None).expect("batch should be created");
 
@@ -327,7 +368,10 @@ fn column_batch_columns_caches_result() {
 #[test]
 fn column_batch_detach() {
     let schema = make_schema();
-    let columns = vec![vec![json!(1), json!(2)], vec![json!("a"), json!("b")]];
+    let columns: Vec<Vec<ScalarValue>> = vec![
+        vec![ScalarValue::from(json!(1)), ScalarValue::from(json!(2))],
+        vec![ScalarValue::from(json!("a")), ScalarValue::from(json!("b"))],
+    ];
     let batch = ColumnBatch::new(Arc::clone(&schema), columns.clone(), 2, None)
         .expect("batch should be created");
 
@@ -335,6 +379,7 @@ fn column_batch_detach() {
 
     assert_eq!(detached_schema.column_count(), 2);
     assert_eq!(detached_columns.len(), 2);
+    // Note: detached_columns is Vec<Vec<ScalarValue>> and columns is Vec<Vec<ScalarValue>>, so comparison works
     assert_eq!(detached_columns[0], columns[0]);
     assert_eq!(detached_columns[1], columns[1]);
 }
@@ -342,7 +387,10 @@ fn column_batch_detach() {
 #[test]
 fn column_batch_record_batch_access() {
     let schema = make_schema();
-    let columns = vec![vec![json!(1), json!(2)], vec![json!("a"), json!("b")]];
+    let columns: Vec<Vec<ScalarValue>> = vec![
+        vec![ScalarValue::from(json!(1)), ScalarValue::from(json!(2))],
+        vec![ScalarValue::from(json!("a")), ScalarValue::from(json!("b"))],
+    ];
     let batch =
         ColumnBatch::new(Arc::clone(&schema), columns, 2, None).expect("batch should be created");
 
@@ -417,12 +465,12 @@ fn column_batch_from_record_batch() {
 
     // Test that we can access columns (lazy conversion)
     let col0 = batch.column(0).expect("column 0 should exist");
-    assert_eq!(col0[0], json!(10));
-    assert_eq!(col0[1], json!(20));
+    assert_eq!(col0[0], ScalarValue::from(json!(10)));
+    assert_eq!(col0[1], ScalarValue::from(json!(20)));
 
     let col1 = batch.column(1).expect("column 1 should exist");
-    assert_eq!(col1[0], json!("x"));
-    assert_eq!(col1[1], json!("y"));
+    assert_eq!(col1[0], ScalarValue::from(json!("x")));
+    assert_eq!(col1[1], ScalarValue::from(json!("y")));
 }
 
 #[test]
@@ -475,11 +523,26 @@ fn column_batch_from_record_batch_all_types() {
     assert_eq!(batch.len(), 2);
 
     // Test all columns
-    assert_eq!(batch.column(0).expect("col 0")[0], json!(1));
-    assert_eq!(batch.column(1).expect("col 1")[0], json!(1.5));
-    assert_eq!(batch.column(2).expect("col 2")[0], json!(true));
-    assert_eq!(batch.column(3).expect("col 3")[0], json!(1000));
-    assert_eq!(batch.column(4).expect("col 4")[0], json!("a"));
+    assert_eq!(
+        batch.column(0).expect("col 0")[0],
+        ScalarValue::from(json!(1))
+    );
+    assert_eq!(
+        batch.column(1).expect("col 1")[0],
+        ScalarValue::from(json!(1.5))
+    );
+    assert_eq!(
+        batch.column(2).expect("col 2")[0],
+        ScalarValue::from(json!(true))
+    );
+    assert_eq!(
+        batch.column(3).expect("col 3")[0],
+        ScalarValue::from(json!(1000))
+    );
+    assert_eq!(
+        batch.column(4).expect("col 4")[0],
+        ScalarValue::from(json!("a"))
+    );
 }
 
 #[test]
@@ -502,12 +565,12 @@ fn column_batch_from_record_batch_with_nulls() {
         .expect("batch should be created");
 
     let col = batch.column(0).expect("column should exist");
-    assert_eq!(col[0], json!(1));
-    assert_eq!(col[1], Value::Null);
-    assert_eq!(col[2], json!(3));
+    assert_eq!(col[0], ScalarValue::from(json!(1)));
+    assert_eq!(col[1], ScalarValue::Null);
+    assert_eq!(col[2], ScalarValue::from(json!(3)));
 
     let row1 = batch.row(1).expect("row 1 should exist");
-    assert_eq!(row1[0], Value::Null);
+    assert_eq!(row1[0], ScalarValue::Null);
 }
 
 // ==================== ColumnBatchBuilder Tests ====================
@@ -519,10 +582,16 @@ fn builder_push_row_and_finalize() {
     let mut builder = pool.acquire(Arc::clone(&schema));
 
     builder
-        .push_row(&[json!(7_i64), json!("seven")])
+        .push_row(&[
+            ScalarValue::from(json!(7_i64)),
+            ScalarValue::from(json!("seven")),
+        ])
         .expect("first row stores");
     builder
-        .push_row(&[json!(42_i64), json!("forty-two")])
+        .push_row(&[
+            ScalarValue::from(json!(42_i64)),
+            ScalarValue::from(json!("forty-two")),
+        ])
         .expect("second row stores");
 
     assert_eq!(builder.len(), 2);
@@ -533,8 +602,8 @@ fn builder_push_row_and_finalize() {
     assert_eq!(batch.schema().column_count(), 2);
 
     let row = batch.row(1).expect("row available");
-    assert_eq!(row[0], json!(42_i64));
-    assert_eq!(row[1], json!("forty-two"));
+    assert_eq!(row[0], ScalarValue::from(json!(42_i64)));
+    assert_eq!(row[1], ScalarValue::from(json!("forty-two")));
 }
 
 #[test]
@@ -548,10 +617,16 @@ fn builder_respects_capacity() {
     );
 
     builder
-        .push_row(&[json!(1_i64), json!("one")])
+        .push_row(&[
+            ScalarValue::from(json!(1_i64)),
+            ScalarValue::from(json!("one")),
+        ])
         .expect("first row stores");
     let err = builder
-        .push_row(&[json!(2_i64), json!("two")])
+        .push_row(&[
+            ScalarValue::from(json!(2_i64)),
+            ScalarValue::from(json!("two")),
+        ])
         .expect_err("capacity exceeded");
 
     assert!(matches!(err, BatchError::BatchFull(1)));
@@ -564,7 +639,7 @@ fn builder_push_row_validates_column_count() {
         ColumnBatchBuilder::new(Arc::clone(&schema), vec![Vec::new(), Vec::new()], 10, None);
 
     let err = builder
-        .push_row(&[json!(1)]) // Only 1 value, but schema has 2 columns
+        .push_row(&[ScalarValue::from(json!(1))]) // Only 1 value, but schema has 2 columns
         .expect_err("column count mismatch should error");
 
     assert!(matches!(
@@ -583,7 +658,7 @@ fn builder_clear() {
         ColumnBatchBuilder::new(Arc::clone(&schema), vec![Vec::new(), Vec::new()], 10, None);
 
     builder
-        .push_row(&[json!(1), json!("a")])
+        .push_row(&[ScalarValue::from(json!(1)), ScalarValue::from(json!("a"))])
         .expect("row should be added");
     assert_eq!(builder.len(), 1);
 
@@ -593,7 +668,7 @@ fn builder_clear() {
 
     // Should be able to push again after clear
     builder
-        .push_row(&[json!(2), json!("b")])
+        .push_row(&[ScalarValue::from(json!(2)), ScalarValue::from(json!("b"))])
         .expect("row should be added after clear");
     assert_eq!(builder.len(), 1);
 }
@@ -630,14 +705,17 @@ fn column_batch_int64_conversion_from_string() {
     );
     // String values are parsed when creating Arrow arrays, but cached JSON preserves original format
     // When created from JSON, the original JSON values are cached and returned
-    let columns = vec![vec![json!("123"), json!("456")]];
+    let columns: Vec<Vec<ScalarValue>> = vec![vec![
+        ScalarValue::from(json!("123")),
+        ScalarValue::from(json!("456")),
+    ]];
     let batch = ColumnBatch::new(Arc::clone(&schema), columns.clone(), 2, None)
         .expect("batch should be created");
 
     // The cached JSON values preserve the original string format
     let col = batch.column(0).expect("column should exist");
-    assert_eq!(col[0], json!("123"));
-    assert_eq!(col[1], json!("456"));
+    assert_eq!(col[0], ScalarValue::from(json!("123")));
+    assert_eq!(col[1], ScalarValue::from(json!("456")));
 
     // But the RecordBatch contains the converted numeric values
     let record_batch = batch.record_batch();
@@ -655,14 +733,17 @@ fn column_batch_float64_conversion_from_string() {
     let schema = Arc::new(
         BatchSchema::new(vec![ColumnSpecFactory::float("score")]).expect("schema should be valid"),
     );
-    let columns = vec![vec![json!("1.5"), json!("2.7")]];
+    let columns: Vec<Vec<ScalarValue>> = vec![vec![
+        ScalarValue::from(json!("1.5")),
+        ScalarValue::from(json!("2.7")),
+    ]];
     let batch = ColumnBatch::new(Arc::clone(&schema), columns.clone(), 2, None)
         .expect("batch should be created");
 
     // Cached JSON preserves original format
     let col = batch.column(0).expect("column should exist");
-    assert_eq!(col[0], json!("1.5"));
-    assert_eq!(col[1], json!("2.7"));
+    assert_eq!(col[0], ScalarValue::from(json!("1.5")));
+    assert_eq!(col[1], ScalarValue::from(json!("2.7")));
 
     // But RecordBatch contains converted float values
     let record_batch = batch.record_batch();
@@ -686,16 +767,21 @@ fn column_batch_boolean_conversion_from_string() {
         ])
         .expect("schema should be valid"),
     );
-    let columns = vec![vec![json!("true"), json!("false"), json!("1"), json!("0")]];
+    let columns: Vec<Vec<ScalarValue>> = vec![vec![
+        ScalarValue::from(json!("true")),
+        ScalarValue::from(json!("false")),
+        ScalarValue::from(json!("1")),
+        ScalarValue::from(json!("0")),
+    ]];
     let batch = ColumnBatch::new(Arc::clone(&schema), columns.clone(), 4, None)
         .expect("batch should be created");
 
     // Cached JSON preserves original format
     let col = batch.column(0).expect("column should exist");
-    assert_eq!(col[0], json!("true"));
-    assert_eq!(col[1], json!("false"));
-    assert_eq!(col[2], json!("1"));
-    assert_eq!(col[3], json!("0"));
+    assert_eq!(col[0], ScalarValue::from(json!("true")));
+    assert_eq!(col[1], ScalarValue::from(json!("false")));
+    assert_eq!(col[2], ScalarValue::from(json!("1")));
+    assert_eq!(col[3], ScalarValue::from(json!("0")));
 
     // But RecordBatch contains converted boolean values
     let record_batch = batch.record_batch();
@@ -721,15 +807,19 @@ fn column_batch_boolean_conversion_from_number() {
         ])
         .expect("schema should be valid"),
     );
-    let columns = vec![vec![json!(1), json!(0), json!(42)]];
+    let columns: Vec<Vec<ScalarValue>> = vec![vec![
+        ScalarValue::from(json!(1)),
+        ScalarValue::from(json!(0)),
+        ScalarValue::from(json!(42)),
+    ]];
     let batch = ColumnBatch::new(Arc::clone(&schema), columns.clone(), 3, None)
         .expect("batch should be created");
 
     // Cached JSON preserves original number format
     let col = batch.column(0).expect("column should exist");
-    assert_eq!(col[0], json!(1));
-    assert_eq!(col[1], json!(0));
-    assert_eq!(col[2], json!(42));
+    assert_eq!(col[0], ScalarValue::from(json!(1)));
+    assert_eq!(col[1], ScalarValue::from(json!(0)));
+    assert_eq!(col[2], ScalarValue::from(json!(42)));
 
     // But RecordBatch contains converted boolean values
     let record_batch = batch.record_batch();
@@ -748,14 +838,17 @@ fn column_batch_timestamp_conversion_from_string() {
     let schema = Arc::new(
         BatchSchema::new(vec![ColumnSpecFactory::timestamp("ts")]).expect("schema should be valid"),
     );
-    let columns = vec![vec![json!("1000"), json!("2000")]];
+    let columns: Vec<Vec<ScalarValue>> = vec![vec![
+        ScalarValue::from(json!("1000")),
+        ScalarValue::from(json!("2000")),
+    ]];
     let batch = ColumnBatch::new(Arc::clone(&schema), columns.clone(), 2, None)
         .expect("batch should be created");
 
     // Cached JSON preserves original string format
     let col = batch.column(0).expect("column should exist");
-    assert_eq!(col[0], json!("1000"));
-    assert_eq!(col[1], json!("2000"));
+    assert_eq!(col[0], ScalarValue::from(json!("1000")));
+    assert_eq!(col[1], ScalarValue::from(json!("2000")));
 
     // But RecordBatch contains converted timestamp values
     let record_batch = batch.record_batch();
@@ -774,15 +867,19 @@ fn column_batch_string_conversion_from_other_types() {
         BatchSchema::new(vec![ColumnSpecFactory::string("value")]).expect("schema should be valid"),
     );
     // String arrays convert other types to strings when creating Arrow arrays
-    let columns = vec![vec![json!(123), json!(true), json!(null)]];
+    let columns: Vec<Vec<ScalarValue>> = vec![vec![
+        ScalarValue::from(json!(123)),
+        ScalarValue::from(json!(true)),
+        ScalarValue::Null,
+    ]];
     let batch = ColumnBatch::new(Arc::clone(&schema), columns.clone(), 3, None)
         .expect("batch should be created");
 
     // Cached JSON preserves original format
     let col = batch.column(0).expect("column should exist");
-    assert_eq!(col[0], json!(123));
-    assert_eq!(col[1], json!(true));
-    assert_eq!(col[2], Value::Null);
+    assert_eq!(col[0], ScalarValue::from(json!(123)));
+    assert_eq!(col[1], ScalarValue::from(json!(true)));
+    assert_eq!(col[2], ScalarValue::Null);
 
     // But RecordBatch contains string values
     let record_batch = batch.record_batch();

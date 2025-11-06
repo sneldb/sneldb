@@ -121,9 +121,9 @@ fn builds_jobs_with_empty_strings_for_missing_fields() {
     );
 
     // Missing field now recorded as explicit null in typed pipeline
-    let country_values: HashSet<_> = country_jobs.iter().map(|j| j.value.clone()).collect();
+    let country_values: Vec<_> = country_jobs.iter().map(|j| j.value.to_json()).collect();
     assert!(
-        country_values.contains(&json!("US")),
+        country_values.contains(&serde_json::json!("US")),
         "Should have US value"
     );
     assert!(

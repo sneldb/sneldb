@@ -27,13 +27,14 @@ fn build_schema() -> BatchSchema {
     .expect("valid schema")
 }
 
-fn batch_to_rows(batch: &crate::engine::core::read::flow::ColumnBatch) -> Vec<Vec<Value>> {
+fn batch_to_rows(batch: &crate::engine::core::read::flow::ColumnBatch) -> Vec<Vec<serde_json::Value>> {
+    use crate::engine::types::ScalarValue;
     let column_count = batch.schema().column_count();
-    let mut rows = vec![vec![Value::Null; column_count]; batch.len()];
+    let mut rows = vec![vec![serde_json::Value::Null; column_count]; batch.len()];
     for col_idx in 0..column_count {
         let values = batch.column(col_idx).expect("column access");
         for (row_idx, value) in values.iter().enumerate() {
-            rows[row_idx][col_idx] = value.clone();
+            rows[row_idx][col_idx] = value.to_json();
         }
     }
     rows
@@ -47,13 +48,14 @@ async fn materialized_source_streams_frames() {
     let schema_arc = Arc::new(schema);
     let mut sink = MaterializedSink::from_batch_schema(store, &schema_arc).unwrap();
 
+    use crate::engine::types::ScalarValue;
     let pool = BatchPool::new(8).unwrap();
     let mut builder = pool.acquire(Arc::clone(&schema_arc));
     builder
-        .push_row(&[json!(1_700_000_000_u64), json!("ctx-a"), json!(1_u64)])
+        .push_row(&[ScalarValue::from(json!(1_700_000_000_u64)), ScalarValue::from(json!("ctx-a")), ScalarValue::from(json!(1_u64))])
         .unwrap();
     builder
-        .push_row(&[json!(1_700_000_050_u64), json!("ctx-b"), json!(2_u64)])
+        .push_row(&[ScalarValue::from(json!(1_700_000_050_u64)), ScalarValue::from(json!("ctx-b")), ScalarValue::from(json!(2_u64))])
         .unwrap();
     sink.append(&builder.finish().unwrap()).unwrap();
     drop(sink);

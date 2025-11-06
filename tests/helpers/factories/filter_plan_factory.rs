@@ -1,12 +1,12 @@
 use crate::command::types::CompareOp;
 use crate::engine::core::FilterPlan;
-use serde_json::Value;
+use crate::engine::types::ScalarValue;
 
 /// Factory for creating `FilterPlan` objects in tests
 pub struct FilterPlanFactory {
     column: String,
     operation: Option<CompareOp>,
-    value: Option<Value>,
+    value: Option<ScalarValue>,
     priority: u32,
     uid: Option<String>,
 }
@@ -32,8 +32,8 @@ impl FilterPlanFactory {
         self
     }
 
-    pub fn with_value(mut self, value: Value) -> Self {
-        self.value = Some(value);
+    pub fn with_value(mut self, value: impl Into<ScalarValue>) -> Self {
+        self.value = Some(value.into());
         self
     }
 

@@ -1,10 +1,11 @@
 use super::value_codec::ValueCodec;
 use crate::engine::materialize::MaterializationError;
+use crate::engine::types::ScalarValue;
 use serde_json::{Number, Value, json};
 
 #[test]
 fn encode_decode_timestamp_roundtrip() {
-    let value = json!(1700000000_i64);
+    let value = ScalarValue::from(json!(1700000000_i64));
     let mut buffer = Vec::new();
 
     ValueCodec::encode_value(&value, "Timestamp", &mut buffer).unwrap();
@@ -25,11 +26,12 @@ fn encode_decode_integer_roundtrip() {
     ];
 
     for value in test_cases {
+        let scalar_value = ScalarValue::from(value);
         let mut buffer = Vec::new();
-        ValueCodec::encode_value(&value, "Integer", &mut buffer).unwrap();
+        ValueCodec::encode_value(&scalar_value, "Integer", &mut buffer).unwrap();
         let (decoded, remaining) = ValueCodec::decode_value_fast(&buffer, "Integer").unwrap();
 
-        assert_eq!(decoded, value);
+        assert_eq!(decoded, scalar_value.to_json());
         assert!(remaining.is_empty());
     }
 }
@@ -45,11 +47,12 @@ fn encode_decode_float_roundtrip() {
     ];
 
     for value in test_cases {
+        let scalar_value = ScalarValue::from(value);
         let mut buffer = Vec::new();
-        ValueCodec::encode_value(&value, "Float", &mut buffer).unwrap();
+        ValueCodec::encode_value(&scalar_value, "Float", &mut buffer).unwrap();
         let (decoded, remaining) = ValueCodec::decode_value_fast(&buffer, "Float").unwrap();
 
-        if let (Some(orig), Some(dec)) = (value.as_f64(), decoded.as_f64()) {
+        if let (Some(orig), Some(dec)) = (scalar_value.as_f64(), decoded.as_f64()) {
             // Allow for floating point precision differences
             assert!((orig - dec).abs() < 1e-10);
         } else {
@@ -64,11 +67,12 @@ fn encode_decode_boolean_roundtrip() {
     let test_cases = vec![json!(true), json!(false)];
 
     for value in test_cases {
+        let scalar_value = ScalarValue::from(value);
         let mut buffer = Vec::new();
-        ValueCodec::encode_value(&value, "Boolean", &mut buffer).unwrap();
+        ValueCodec::encode_value(&scalar_value, "Boolean", &mut buffer).unwrap();
         let (decoded, remaining) = ValueCodec::decode_value_fast(&buffer, "Boolean").unwrap();
 
-        assert_eq!(decoded, value);
+        assert_eq!(decoded, scalar_value.to_json());
         assert!(remaining.is_empty());
     }
 }
@@ -85,11 +89,12 @@ fn encode_decode_string_roundtrip() {
     ];
 
     for value in test_cases {
+        let scalar_value = ScalarValue::from(value);
         let mut buffer = Vec::new();
-        ValueCodec::encode_value(&value, "String", &mut buffer).unwrap();
+        ValueCodec::encode_value(&scalar_value, "String", &mut buffer).unwrap();
         let (decoded, remaining) = ValueCodec::decode_value_fast(&buffer, "String").unwrap();
 
-        assert_eq!(decoded, value);
+        assert_eq!(decoded, scalar_value.to_json());
         assert!(remaining.is_empty());
     }
 }
@@ -107,11 +112,12 @@ fn encode_decode_json_roundtrip() {
     ];
 
     for value in test_cases {
+        let scalar_value = ScalarValue::from(value);
         let mut buffer = Vec::new();
-        ValueCodec::encode_value(&value, "JSON", &mut buffer).unwrap();
+        ValueCodec::encode_value(&scalar_value, "JSON", &mut buffer).unwrap();
         let (decoded, remaining) = ValueCodec::decode_value_fast(&buffer, "JSON").unwrap();
 
-        assert_eq!(decoded, value);
+        assert_eq!(decoded, scalar_value.to_json());
         assert!(remaining.is_empty());
     }
 }
@@ -119,19 +125,19 @@ fn encode_decode_json_roundtrip() {
 #[test]
 fn encode_boolean_from_string() {
     let mut buffer = Vec::new();
-    ValueCodec::encode_value(&json!("true"), "Boolean", &mut buffer).unwrap();
+    ValueCodec::encode_value(&ScalarValue::from(json!("true")), "Boolean", &mut buffer).unwrap();
     let (decoded, _) = ValueCodec::decode_value_fast(&buffer, "Boolean").unwrap();
     assert_eq!(decoded, json!(true));
 
     let mut buffer = Vec::new();
-    ValueCodec::encode_value(&json!("false"), "Boolean", &mut buffer).unwrap();
+    ValueCodec::encode_value(&ScalarValue::from(json!("false")), "Boolean", &mut buffer).unwrap();
     let (decoded, _) = ValueCodec::decode_value_fast(&buffer, "Boolean").unwrap();
     assert_eq!(decoded, json!(false));
 }
 
 #[test]
 fn encode_integer_from_u64() {
-    let value = json!(42_u64);
+    let value = ScalarValue::from(json!(42_u64));
     let mut buffer = Vec::new();
 
     ValueCodec::encode_value(&value, "Integer", &mut buffer).unwrap();
@@ -178,13 +184,14 @@ fn encode_decode_multiple_values() {
 
     let mut buffer = Vec::new();
     for (value, logical_type) in &values {
-        ValueCodec::encode_value(value, logical_type, &mut buffer).unwrap();
+        let scalar_value = ScalarValue::from(value.clone());
+        ValueCodec::encode_value(&scalar_value, logical_type, &mut buffer).unwrap();
     }
 
     let mut cursor = buffer.as_slice();
     for (expected, logical_type) in &values {
         let (decoded, remaining) = ValueCodec::decode_value_fast(cursor, logical_type).unwrap();
-        assert_eq!(&decoded, expected);
+        assert_eq!(&decoded, &ScalarValue::from(expected.clone()).to_json());
         cursor = remaining;
     }
     assert!(cursor.is_empty());
@@ -192,18 +199,18 @@ fn encode_decode_multiple_values() {
 
 #[test]
 fn encode_fallback_to_json_for_invalid_types() {
-    let value = json!({"nested": {"object": true}});
+    let value = ScalarValue::from(json!({"nested": {"object": true}}));
     let mut buffer = Vec::new();
 
     ValueCodec::encode_value(&value, "Integer", &mut buffer).unwrap(); // Should fallback to JSON
     let (decoded, _) = ValueCodec::decode_value_fast(&buffer, "JSON").unwrap();
 
-    assert_eq!(decoded, value);
+    assert_eq!(decoded, value.to_json());
 }
 
 #[test]
 fn encode_string_from_non_string_value() {
-    let value = json!(42); // Number, not string
+    let value = ScalarValue::from(json!(42)); // Number, not string
     let mut buffer = Vec::new();
 
     ValueCodec::encode_value(&value, "String", &mut buffer).unwrap();
@@ -215,11 +222,11 @@ fn encode_string_from_non_string_value() {
 
 #[test]
 fn decode_unknown_type_falls_back_to_json() {
-    let value = json!({"test": "data"});
+    let value = ScalarValue::from(json!({"test": "data"}));
     let mut buffer = Vec::new();
 
     ValueCodec::encode_value(&value, "JSON", &mut buffer).unwrap();
     let (decoded, _) = ValueCodec::decode_value_fast(&buffer, "UnknownType").unwrap();
 
-    assert_eq!(decoded, value);
+    assert_eq!(decoded, value.to_json());
 }

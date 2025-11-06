@@ -4,11 +4,11 @@ use std::io::{Error, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 
 use memmap2::MmapOptions;
-use serde_json::Value;
 use tracing::{debug, info, warn};
 use xorf::{BinaryFuse8, Filter};
 
 use crate::engine::core::ZonePlan;
+use crate::engine::types::ScalarValue;
 use crate::shared::storage_header::{BinaryHeader, FileKind, open_and_header_offset};
 
 #[derive(Debug, Clone)]
@@ -32,7 +32,7 @@ impl ZoneXorFilterIndex {
         self.filters.insert(zone_id, filter);
     }
 
-    pub fn contains_in_zone(&self, zone_id: u32, value: &Value) -> bool {
+    pub fn contains_in_zone(&self, zone_id: u32, value: &ScalarValue) -> bool {
         let Some(filter) = self.filters.get(&zone_id) else {
             return false;
         };
@@ -45,7 +45,7 @@ impl ZoneXorFilterIndex {
         }
     }
 
-    pub fn zones_maybe_containing(&self, value: &Value) -> Vec<u32> {
+    pub fn zones_maybe_containing(&self, value: &ScalarValue) -> Vec<u32> {
         let Some(s) = value_to_string(value) else {
             return Vec::new();
         };
@@ -214,15 +214,15 @@ fn parse_uid_field_from_filename(path: &Path) -> (String, String) {
     (String::new(), String::new())
 }
 
-fn value_to_string(value: &Value) -> Option<String> {
+fn value_to_string(value: &ScalarValue) -> Option<String> {
     match value {
-        Value::String(s) => Some(s.clone()),
-        Value::Number(n) => n
-            .as_i64()
-            .map(|i| i.to_string())
-            .or_else(|| n.as_f64().map(|f| f.to_string()))
-            .or_else(|| Some(n.to_string())),
-        Value::Bool(b) => Some(b.to_string()),
+        ScalarValue::Utf8(s) => Some(s.clone()),
+        ScalarValue::Int64(i) => Some(i.to_string()),
+        ScalarValue::Timestamp(ts) => Some(ts.to_string()),
+        ScalarValue::Float64(f) => Some(f.to_string()),
+        ScalarValue::Boolean(b) => Some(b.to_string()),
+        // All JSON values are now Utf8 strings
+        ScalarValue::Utf8(s) => Some(s.clone()),
         _ => None,
     }
 }
@@ -243,10 +243,8 @@ pub fn build_all_zxf_filtered(
     let mut all_fields: std::collections::HashSet<String> = std::collections::HashSet::new();
     for z in zone_plans {
         for e in &z.events {
-            if let Some(obj) = e.payload.as_object() {
-                for k in obj.keys() {
-                    all_fields.insert(k.clone());
-                }
+            for k in e.payload.keys() {
+                all_fields.insert(k.clone());
             }
         }
     }

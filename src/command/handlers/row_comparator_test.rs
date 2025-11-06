@@ -1,9 +1,15 @@
 use super::row_comparator::RowComparator;
+use crate::engine::types::ScalarValue;
 use serde_json::{Value, json};
 use std::cmp::Ordering;
 
-fn make_row(context: &str, event: &str, timestamp: u64, payload: Value) -> Vec<Value> {
-    vec![json!(context), json!(event), json!(timestamp), payload]
+fn make_row(context: &str, event: &str, timestamp: u64, payload: Value) -> Vec<ScalarValue> {
+    vec![
+        ScalarValue::from(json!(context)),
+        ScalarValue::from(json!(event)),
+        ScalarValue::from(json!(timestamp)),
+        ScalarValue::from(payload),
+    ]
 }
 
 #[test]
@@ -180,9 +186,9 @@ fn sort_by_field_ascending() {
 
     RowComparator::sort_by_field(&mut rows, "score", true);
 
-    assert_eq!(rows[0][3]["score"], 10);
-    assert_eq!(rows[1][3]["score"], 20);
-    assert_eq!(rows[2][3]["score"], 30);
+    assert_eq!(rows[0][3].to_json()["score"], json!(10));
+    assert_eq!(rows[1][3].to_json()["score"], json!(20));
+    assert_eq!(rows[2][3].to_json()["score"], json!(30));
 }
 
 #[test]
@@ -195,9 +201,9 @@ fn sort_by_field_descending() {
 
     RowComparator::sort_by_field(&mut rows, "score", false);
 
-    assert_eq!(rows[0][3]["score"], 30);
-    assert_eq!(rows[1][3]["score"], 20);
-    assert_eq!(rows[2][3]["score"], 10);
+    assert_eq!(rows[0][3].to_json()["score"], json!(30));
+    assert_eq!(rows[1][3].to_json()["score"], json!(20));
+    assert_eq!(rows[2][3].to_json()["score"], json!(10));
 }
 
 #[test]
@@ -210,9 +216,9 @@ fn sort_by_timestamp() {
 
     RowComparator::sort_by_field(&mut rows, "timestamp", true);
 
-    assert_eq!(rows[0][2], 1000);
-    assert_eq!(rows[1][2], 2000);
-    assert_eq!(rows[2][2], 3000);
+    assert_eq!(rows[0][2].as_u64(), Some(1000));
+    assert_eq!(rows[1][2].as_u64(), Some(2000));
+    assert_eq!(rows[2][2].as_u64(), Some(3000));
 }
 
 #[test]
@@ -225,14 +231,14 @@ fn sort_by_context_id() {
 
     RowComparator::sort_by_field(&mut rows, "context_id", true);
 
-    assert_eq!(rows[0][0], "ctx-a");
-    assert_eq!(rows[1][0], "ctx-b");
-    assert_eq!(rows[2][0], "ctx-c");
+    assert_eq!(rows[0][0].as_str(), Some("ctx-a"));
+    assert_eq!(rows[1][0].as_str(), Some("ctx-b"));
+    assert_eq!(rows[2][0].as_str(), Some("ctx-c"));
 }
 
 #[test]
 fn sort_empty_list() {
-    let mut rows: Vec<Vec<Value>> = vec![];
+    let mut rows: Vec<Vec<ScalarValue>> = vec![];
     RowComparator::sort_by_field(&mut rows, "timestamp", true);
     assert_eq!(rows.len(), 0);
 }
@@ -255,10 +261,10 @@ fn sort_with_duplicate_values() {
 
     RowComparator::sort_by_field(&mut rows, "priority", true);
 
-    assert_eq!(rows[0][3]["priority"], 1);
-    assert_eq!(rows[1][3]["priority"], 1);
-    assert_eq!(rows[2][3]["priority"], 2);
-    assert_eq!(rows[3][3]["priority"], 2);
+    assert_eq!(rows[0][3].to_json()["priority"], json!(1));
+    assert_eq!(rows[1][3].to_json()["priority"], json!(1));
+    assert_eq!(rows[2][3].to_json()["priority"], json!(2));
+    assert_eq!(rows[3][3].to_json()["priority"], json!(2));
 }
 
 #[test]
@@ -317,9 +323,10 @@ fn handles_empty_payload() {
 
 #[test]
 fn timestamp_with_mixed_types() {
+    use crate::engine::types::ScalarValue;
     // Test when timestamp is provided as different numeric types
-    let row1 = vec![json!("ctx"), json!("click"), json!(1000_u64), json!({})];
-    let row2 = vec![json!("ctx"), json!("click"), json!(2000_i64), json!({})];
+    let row1 = vec![ScalarValue::from(json!("ctx")), ScalarValue::from(json!("click")), ScalarValue::from(json!(1000_u64)), ScalarValue::from(json!({}))];
+    let row2 = vec![ScalarValue::from(json!("ctx")), ScalarValue::from(json!("click")), ScalarValue::from(json!(2000_i64)), ScalarValue::from(json!({}))];
 
     assert_eq!(
         RowComparator::compare(&row1, &row2, "timestamp"),

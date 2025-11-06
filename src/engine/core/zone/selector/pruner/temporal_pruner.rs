@@ -3,6 +3,7 @@ use crate::engine::core::CandidateZone;
 use crate::engine::core::time::temporal_traits::FieldIndex;
 use crate::engine::core::zone::selector::pruner::PruneArgs;
 use crate::engine::core::zone::zone_artifacts::ZoneArtifacts;
+use crate::engine::types::ScalarValue;
 use crate::shared::time::{TimeKind, TimeParser};
 
 pub struct TemporalPruner<'a> {
@@ -24,8 +25,18 @@ impl<'a> TemporalPruner<'a> {
         };
         let is_timestamp = column == "timestamp";
         let ts = match value {
-            serde_json::Value::Number(n) => n.as_u64().unwrap_or(0),
-            serde_json::Value::String(s) => {
+            ScalarValue::Int64(i) => (*i).max(0) as u64,
+            ScalarValue::Timestamp(t) => (*t).max(0) as u64,
+            ScalarValue::Utf8(s) => {
+                if let Some(parsed) = TimeParser::parse_str_to_epoch_seconds(s, TimeKind::DateTime)
+                {
+                    parsed.max(0) as u64
+                } else {
+                    s.parse::<u64>().ok().unwrap_or(0)
+                }
+            }
+            // JSON numbers and strings are now Utf8 - parse from string
+            ScalarValue::Utf8(s) => {
                 if let Some(parsed) = TimeParser::parse_str_to_epoch_seconds(s, TimeKind::DateTime)
                 {
                     parsed.max(0) as u64

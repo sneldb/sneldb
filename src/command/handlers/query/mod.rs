@@ -136,7 +136,11 @@ async fn format_and_write_result<W: AsyncWrite + Unpin>(
                 .map(|column| (column.name.clone(), column.logical_type.clone()))
                 .collect::<Vec<(String, String)>>();
 
-            let rows = table.rows;
+            let rows: Vec<Vec<serde_json::Value>> = table
+                .rows
+                .into_iter()
+                .map(|row| row.into_iter().map(|v| v.to_json()).collect())
+                .collect();
             let count = rows.len();
 
             let resp = Response::ok_table(columns, rows, count);
@@ -151,7 +155,11 @@ async fn format_and_write_result<W: AsyncWrite + Unpin>(
                 .map(|column| (column.name.clone(), column.logical_type.clone()))
                 .collect::<Vec<(String, String)>>();
 
-            let rows = table.rows;
+            let rows: Vec<Vec<serde_json::Value>> = table
+                .rows
+                .into_iter()
+                .map(|row| row.into_iter().map(|v| v.to_json()).collect())
+                .collect();
             let count = rows.len();
 
             let resp = Response::ok_table(columns, rows, count);
@@ -309,16 +317,18 @@ async fn write_streaming_response<W: AsyncWrite + Unpin>(
                         }
                     }
                     StreamingFormat::Json => {
-                        // For JSON format, need JSON Values for serialization
+                        // For JSON format, convert ScalarValue to JsonValue for serialization
                         let columns = batch_arc.columns();
-                        let column_views: Vec<&[JsonValue]> = columns
+                        let column_views: Vec<Vec<JsonValue>> = columns
                             .iter()
-                            .map(|column| column.as_slice() as &[JsonValue])
+                            .map(|column| column.iter().map(|v| v.to_json()).collect())
                             .collect();
 
                         for row_idx in 0..batch_arc.len() {
                             if let Some(idx) = event_id_idx {
-                                if let Some(id) = column_views[idx][row_idx].as_u64() {
+                                if let Some(id) =
+                                    column_views[idx].get(row_idx).and_then(|v| v.as_u64())
+                                {
                                     if !seen_ids.insert(id) {
                                         continue;
                                     }
@@ -494,10 +504,11 @@ mod tests {
         let metrics = FlowMetrics::new();
         let (sender, receiver) = FlowChannel::bounded(4, Arc::clone(&metrics));
 
+        use crate::engine::types::ScalarValue;
         let mut builder = BatchPool::new(4)
             .expect("pool")
             .acquire(Arc::clone(&schema));
-        let row1 = vec![json!("ctx-stream"), json!(42u64)];
+        let row1 = vec![ScalarValue::from(json!("ctx-stream")), ScalarValue::from(json!(42u64))];
         builder.push_row(&row1).expect("push row should succeed");
         let batch = builder.finish().expect("batch finish");
         sender.send(Arc::new(batch)).await.expect("send batch");

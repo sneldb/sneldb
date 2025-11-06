@@ -3,8 +3,9 @@ use crate::command::handlers::query::merge::ordered::OrderedMerger;
 use crate::command::types::Command;
 use crate::engine::core::read::result::{ColumnSpec, QueryResult, SelectionResult};
 use crate::engine::shard::manager::ShardManager;
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::SchemaRegistryFactory;
-use serde_json::json;
+use serde_json::{json, Value as JsonValue};
 
 fn create_context() -> QueryContext<'static> {
     let command = Box::leak(Box::new(Command::Query {
@@ -34,7 +35,14 @@ fn create_selection_result(
     columns: Vec<ColumnSpec>,
     rows: Vec<Vec<serde_json::Value>>,
 ) -> QueryResult {
-    QueryResult::Selection(SelectionResult { columns, rows })
+    let scalar_rows: Vec<Vec<ScalarValue>> = rows
+        .into_iter()
+        .map(|row| row.into_iter().map(ScalarValue::from).collect())
+        .collect();
+    QueryResult::Selection(SelectionResult {
+        columns,
+        rows: scalar_rows,
+    })
 }
 
 #[test]
@@ -106,10 +114,14 @@ fn merge_combines_sorted_results_ascending() {
     match result {
         QueryResult::Selection(sel) => {
             assert_eq!(sel.rows.len(), 4);
-            assert_eq!(sel.rows[0][3].get("value"), Some(&json!(10)));
-            assert_eq!(sel.rows[1][3].get("value"), Some(&json!(20)));
-            assert_eq!(sel.rows[2][3].get("value"), Some(&json!(30)));
-            assert_eq!(sel.rows[3][3].get("value"), Some(&json!(40)));
+            let payload0 = sel.rows[0][3].to_json();
+            let payload1 = sel.rows[1][3].to_json();
+            let payload2 = sel.rows[2][3].to_json();
+            let payload3 = sel.rows[3][3].to_json();
+            assert_eq!(payload0.get("value"), Some(&json!(10)));
+            assert_eq!(payload1.get("value"), Some(&json!(20)));
+            assert_eq!(payload2.get("value"), Some(&json!(30)));
+            assert_eq!(payload3.get("value"), Some(&json!(40)));
         }
         _ => panic!("Expected Selection result"),
     }
@@ -185,10 +197,14 @@ fn merge_combines_sorted_results_descending() {
     match result {
         QueryResult::Selection(sel) => {
             assert_eq!(sel.rows.len(), 4);
-            assert_eq!(sel.rows[0][3].get("value"), Some(&json!(40)));
-            assert_eq!(sel.rows[1][3].get("value"), Some(&json!(30)));
-            assert_eq!(sel.rows[2][3].get("value"), Some(&json!(20)));
-            assert_eq!(sel.rows[3][3].get("value"), Some(&json!(10)));
+            let payload0 = sel.rows[0][3].to_json();
+            let payload1 = sel.rows[1][3].to_json();
+            let payload2 = sel.rows[2][3].to_json();
+            let payload3 = sel.rows[3][3].to_json();
+            assert_eq!(payload0.get("value"), Some(&json!(40)));
+            assert_eq!(payload1.get("value"), Some(&json!(30)));
+            assert_eq!(payload2.get("value"), Some(&json!(20)));
+            assert_eq!(payload3.get("value"), Some(&json!(10)));
         }
         _ => panic!("Expected Selection result"),
     }
@@ -263,8 +279,10 @@ fn merge_applies_limit() {
     match result {
         QueryResult::Selection(sel) => {
             assert_eq!(sel.rows.len(), 2);
-            assert_eq!(sel.rows[0][3].get("value"), Some(&json!(10)));
-            assert_eq!(sel.rows[1][3].get("value"), Some(&json!(20)));
+            let payload0 = sel.rows[0][3].to_json();
+            let payload1 = sel.rows[1][3].to_json();
+            assert_eq!(payload0.get("value"), Some(&json!(10)));
+            assert_eq!(payload1.get("value"), Some(&json!(20)));
         }
         _ => panic!("Expected Selection result"),
     }
@@ -339,9 +357,12 @@ fn merge_applies_offset() {
     match result {
         QueryResult::Selection(sel) => {
             assert_eq!(sel.rows.len(), 3);
-            assert_eq!(sel.rows[0][3].get("value"), Some(&json!(20)));
-            assert_eq!(sel.rows[1][3].get("value"), Some(&json!(30)));
-            assert_eq!(sel.rows[2][3].get("value"), Some(&json!(40)));
+            let payload0 = sel.rows[0][3].to_json();
+            let payload1 = sel.rows[1][3].to_json();
+            let payload2 = sel.rows[2][3].to_json();
+            assert_eq!(payload0.get("value"), Some(&json!(20)));
+            assert_eq!(payload1.get("value"), Some(&json!(30)));
+            assert_eq!(payload2.get("value"), Some(&json!(40)));
         }
         _ => panic!("Expected Selection result"),
     }
@@ -416,8 +437,10 @@ fn merge_applies_limit_and_offset() {
     match result {
         QueryResult::Selection(sel) => {
             assert_eq!(sel.rows.len(), 2);
-            assert_eq!(sel.rows[0][3].get("value"), Some(&json!(20)));
-            assert_eq!(sel.rows[1][3].get("value"), Some(&json!(30)));
+            let payload0 = sel.rows[0][3].to_json();
+            let payload1 = sel.rows[1][3].to_json();
+            assert_eq!(payload0.get("value"), Some(&json!(20)));
+            assert_eq!(payload1.get("value"), Some(&json!(30)));
         }
         _ => panic!("Expected Selection result"),
     }

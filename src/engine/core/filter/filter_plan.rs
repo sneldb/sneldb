@@ -2,8 +2,9 @@ use crate::command::types::{Command, CompareOp, Expr};
 use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::engine::schema::FieldType;
 use crate::engine::schema::registry::{MiniSchema, SchemaRegistry};
+use crate::engine::types::ScalarValue;
 use crate::shared::time::{TimeKind, TimeParser};
-use serde_json::{Number, Value};
+use serde_json::{Number, Value as JsonValue};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -13,7 +14,7 @@ use tracing::{debug, info};
 pub struct FilterPlan {
     pub column: String,
     pub operation: Option<CompareOp>,
-    pub value: Option<Value>,
+    pub value: Option<ScalarValue>,
     pub priority: u32,
     pub uid: Option<String>,
     pub index_strategy: Option<IndexStrategy>,
@@ -169,7 +170,9 @@ impl FilterPlan {
                     .unwrap_or(false);
 
                 if is_temporal {
-                    if let Value::String(s) = value.clone() {
+                    // Convert to ScalarValue first, then check if it's a string
+                    let scalar_value = ScalarValue::from(value.clone());
+                    if let ScalarValue::Utf8(s) = &scalar_value {
                         let kind = match schema.field_type(field) {
                             Some(FieldType::Date) => TimeKind::Date,
                             Some(FieldType::Optional(inner)) => {
@@ -181,11 +184,12 @@ impl FilterPlan {
                             }
                             _ => TimeKind::DateTime,
                         };
-                        if let Some(parsed) = TimeParser::parse_str_to_epoch_seconds(&s, kind) {
+                        if let Some(parsed) = TimeParser::parse_str_to_epoch_seconds(s, kind) {
+                            // Return as JSON number for Expr compatibility
                             return Expr::Compare {
                                 field: field.clone(),
                                 op: op.clone(),
-                                value: Value::Number(Number::from(parsed)),
+                                value: JsonValue::Number(Number::from(parsed)),
                             };
                         }
                     }
@@ -236,7 +240,7 @@ impl FilterPlan {
         let plan = FilterPlan {
             column: "event_type".to_string(),
             operation: Some(CompareOp::Eq),
-            value: Some(Value::String(event_type.to_string())),
+            value: Some(ScalarValue::Utf8(event_type.to_string())),
             priority: 0,
             uid: event_type_uid.clone(),
             index_strategy: None,
@@ -250,7 +254,7 @@ impl FilterPlan {
         filter_plans: &mut FilterPlanSet,
     ) {
         debug!(target: "query::filter", value = ?context_id, "Adding context_id filter");
-        let value = context_id.as_ref().map(|id| Value::String(id.clone()));
+        let value = context_id.as_ref().map(|id| ScalarValue::Utf8(id.clone()));
         let plan = FilterPlan {
             column: "context_id".to_string(),
             operation: Some(CompareOp::Eq),
@@ -274,7 +278,7 @@ impl FilterPlan {
         let plan = FilterPlan {
             column: time_field.to_string(),
             operation: Some(CompareOp::Gte),
-            value: since.as_ref().map(|s| Value::String(s.clone())),
+            value: since.as_ref().map(|s| ScalarValue::Utf8(s.clone())),
             priority: 1,
             uid: event_type_uid.clone(),
             index_strategy: None,
@@ -298,13 +302,7 @@ impl FilterPlan {
                     "Adding where clause filter"
                 );
                 // Normalize temporal literals: if value is string and field is temporal, convert to epoch seconds
-                let normalized_value = match value {
-                    Value::String(s) => {
-                        // We don't have registry context here; rely on runtime pruners. Keep as-is.
-                        Value::String(s.clone())
-                    }
-                    _ => value.clone(),
-                };
+                let normalized_value = ScalarValue::from(value.clone());
                 // For where-clause filters, allow multiple entries for the same column
                 // (e.g., plan = "pro" OR plan = "premium") so each branch gets its own step.
                 filter_plans.push(FilterPlan {
@@ -341,7 +339,9 @@ impl FilterPlan {
                 return true;
             }
             match (&fp.operation, &fp.value) {
-                (Some(CompareOp::Gte), Some(Value::String(s))) if since.as_deref() == Some(s) => {
+                (Some(CompareOp::Gte), Some(ScalarValue::Utf8(s)))
+                    if since.as_deref() == Some(s.as_str()) =>
+                {
                     false
                 }
                 _ => true,

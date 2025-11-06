@@ -17,5 +17,8 @@ fn test_zone_row_factory() {
     assert_eq!(row.event_type, "signup");
     assert_eq!(row.segment_id, 123);
     assert_eq!(row.zone_id, 7);
-    assert_eq!(row.payload["plan"], "enterprise");
+    assert_eq!(
+        row.payload.get("plan").and_then(|v| v.as_str()),
+        Some("enterprise")
+    );
 }

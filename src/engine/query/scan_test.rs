@@ -3,6 +3,7 @@ use crate::engine::core::Flusher;
 use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
 use crate::engine::core::read::result::QueryResult;
 use crate::engine::query::scan::scan;
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::{
     CommandFactory, EventFactory, MemTableFactory, SchemaRegistryFactory,
 };
@@ -76,8 +77,8 @@ async fn scan_query_returns_expected_events() {
     // columns: context_id, event_type, timestamp, payload
     assert_eq!(table.rows.len(), 1);
     let row = &table.rows[0];
-    assert_eq!(row[0], json!("ctx1"));
-    assert_eq!(row[3]["key"], json!("value1"));
+    assert_eq!(row[0], ScalarValue::from(json!("ctx1")));
+    assert_eq!(row[3].to_json()["key"], json!("value1"));
 }
 
 #[tokio::test]
@@ -280,7 +281,7 @@ async fn scan_query_with_context_id_and_expr_logic() {
         QueryResult::Selection(_) | QueryResult::Aggregation(_) => result.finalize_table(),
     };
     assert_eq!(table.rows.len(), 1);
-    assert_eq!(table.rows[0][0], json!("ctx1"));
+    assert_eq!(table.rows[0][0], ScalarValue::from(json!("ctx1")));
 
     // 2. Filter by context_id + key = "b"
     let expr = Expr::Compare {
@@ -307,7 +308,7 @@ async fn scan_query_with_context_id_and_expr_logic() {
         QueryResult::Selection(_) | QueryResult::Aggregation(_) => result.finalize_table(),
     };
     assert_eq!(table.rows.len(), 1);
-    assert_eq!(table.rows[0][0], json!("ctx2"));
+    assert_eq!(table.rows[0][0], ScalarValue::from(json!("ctx2")));
 
     // 3. context_id = ctx3 and value > 5
     let expr = Expr::Compare {
@@ -334,7 +335,7 @@ async fn scan_query_with_context_id_and_expr_logic() {
         QueryResult::Selection(_) | QueryResult::Aggregation(_) => result.finalize_table(),
     };
     assert_eq!(table.rows.len(), 1);
-    assert_eq!(table.rows[0][0], json!("ctx3"));
+    assert_eq!(table.rows[0][0], ScalarValue::from(json!("ctx3")));
 
     // 4. context_id = ctx1 but value > 5 (should fail)
     let expr = Expr::Compare {
@@ -394,7 +395,7 @@ async fn scan_query_with_context_id_and_expr_logic() {
         QueryResult::Selection(_) | QueryResult::Aggregation(_) => result.finalize_table(),
     };
     assert_eq!(table.rows.len(), 1);
-    assert_eq!(table.rows[0][0], json!("ctx2"));
+    assert_eq!(table.rows[0][0], ScalarValue::from(json!("ctx2")));
 }
 
 #[tokio::test]

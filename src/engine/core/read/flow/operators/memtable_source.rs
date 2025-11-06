@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::sync::Arc;
 
-use serde_json::Value;
+use crate::engine::types::ScalarValue;
 use tracing::{debug, info};
 
 use crate::engine::core::MemTable;
@@ -85,7 +85,7 @@ impl MemTableSource {
         schema: &Arc<BatchSchema>,
         output: &BatchSender,
         ctx: &FlowContext,
-        row_buf: &mut Vec<Value>,
+        row_buf: &mut Vec<ScalarValue>,
         mut emitted: usize,
     ) -> Result<usize, FlowOperatorError> {
         debug!(
@@ -107,7 +107,9 @@ impl MemTableSource {
 
             row_buf.clear();
             for column in columns {
-                let value = event.get_field(&column.name).unwrap_or(Value::Null);
+                let value = event
+                    .get_field_scalar(&column.name)
+                    .unwrap_or(ScalarValue::Null);
                 row_buf.push(value);
             }
             if builder.is_none() {
@@ -142,7 +144,7 @@ impl MemTableSource {
         limit: Option<usize>,
         columns: &[ColumnSpec],
         evaluator: &crate::engine::core::ConditionEvaluator,
-        rows: &mut Vec<Vec<Value>>,
+        rows: &mut Vec<Vec<ScalarValue>>,
         emitted: &mut usize,
     ) -> Result<(), FlowOperatorError> {
         for event in memtable.iter() {
@@ -158,7 +160,9 @@ impl MemTableSource {
 
             let mut row = Vec::with_capacity(columns.len());
             for column in columns {
-                let value = event.get_field(&column.name).unwrap_or(Value::Null);
+                let value = event
+                    .get_field_scalar(&column.name)
+                    .unwrap_or(ScalarValue::Null);
                 row.push(value);
             }
             rows.push(row);
@@ -205,7 +209,7 @@ impl FlowSource for MemTableSource {
                 })?;
             let ascending = !order_spec.desc;
 
-            let mut rows: Vec<Vec<Value>> = Vec::new();
+            let mut rows: Vec<Vec<ScalarValue>> = Vec::new();
             let mut emitted = 0usize;
 
             if let Some(active) = self.config.memtable.clone() {
@@ -241,7 +245,7 @@ impl FlowSource for MemTableSource {
 
             // Use sort_unstable_by for better performance - maintains relative order of equal elements
             rows.sort_unstable_by(|a, b| {
-                let ord = compare_json_values(&a[order_index], &b[order_index]);
+                let ord = compare_scalar_values(&a[order_index], &b[order_index]);
                 if ascending { ord } else { ord.reverse() }
             });
 
@@ -296,7 +300,7 @@ impl FlowSource for MemTableSource {
 
         let mut builder: Option<ColumnBatchBuilder> = None;
         let mut emitted = 0usize;
-        let mut row_buf: Vec<Value> = Vec::with_capacity(columns.len());
+        let mut row_buf: Vec<ScalarValue> = Vec::with_capacity(columns.len());
 
         if let Some(active) = self.config.memtable.clone() {
             emitted = self
@@ -378,23 +382,13 @@ impl FlowSource for MemTableSource {
     }
 }
 
-fn compare_json_values(a: &Value, b: &Value) -> Ordering {
+fn compare_scalar_values(a: &ScalarValue, b: &ScalarValue) -> Ordering {
+    // Try u64 first (existing behavior)
     if let (Some(va), Some(vb)) = (a.as_u64(), b.as_u64()) {
         return va.cmp(&vb);
     }
-    if let (Some(va), Some(vb)) = (a.as_i64(), b.as_i64()) {
-        return va.cmp(&vb);
-    }
-    if let (Some(va), Some(vb)) = (a.as_f64(), b.as_f64()) {
-        return va.partial_cmp(&vb).unwrap_or(Ordering::Equal);
-    }
-    if let (Some(va), Some(vb)) = (a.as_bool(), b.as_bool()) {
-        return va.cmp(&vb);
-    }
-    if let (Some(va), Some(vb)) = (a.as_str(), b.as_str()) {
-        return va.cmp(vb);
-    }
-    a.to_string().cmp(&b.to_string())
+    // Use the efficient direct comparison method
+    a.compare(b)
 }
 
 fn field_type_to_logical(field_type: &crate::engine::schema::types::FieldType) -> String {

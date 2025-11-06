@@ -8,8 +8,9 @@ use crate::engine::core::read::aggregate::partial::{
 };
 use crate::engine::core::read::aggregate::plan::{AggregateOpSpec, AggregatePlan};
 use crate::engine::core::{Event, EventId, QueryPlan};
+use crate::engine::types::ScalarValue;
 use ahash::RandomState as AHashRandomState;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 pub struct AggregateSink {
     specs: Vec<AggregateOpSpec>,
@@ -123,15 +124,16 @@ impl AggregateSink {
 
         let mut out = Vec::with_capacity(groups.len());
         for (gk, aggs) in groups.into_iter() {
-            let mut payload = serde_json::Map::new();
+            let mut payload = BTreeMap::new();
             // Add key fields
             if let Some(b) = gk.bucket {
-                payload.insert("bucket".to_string(), serde_json::json!(b));
+                // Use Int64 for consistency with json!(value) which creates Int64
+                payload.insert("bucket".to_string(), ScalarValue::Int64(b as i64));
             }
             if let Some(gb) = &self.group_by {
                 for (i, name) in gb.iter().enumerate() {
                     if let Some(val) = gk.groups.get(i) {
-                        payload.insert(name.clone(), serde_json::json!(val));
+                        payload.insert(name.clone(), ScalarValue::Utf8(val.clone()));
                     }
                 }
             }
@@ -141,51 +143,54 @@ impl AggregateSink {
                     (
                         AggregateOpSpec::CountAll,
                         crate::engine::core::read::aggregate::ops::AggOutput::Count(v),
-                    ) => ("count".to_string(), serde_json::json!(v)),
+                    ) => ("count".to_string(), ScalarValue::Int64(v as i64)),
                     (
                         AggregateOpSpec::CountField { field },
                         crate::engine::core::read::aggregate::ops::AggOutput::Count(v),
-                    ) => (format!("count_{}", field), serde_json::json!(v)),
+                    ) => (format!("count_{}", field), ScalarValue::Int64(v as i64)),
                     (
                         AggregateOpSpec::CountUnique { field },
                         crate::engine::core::read::aggregate::ops::AggOutput::CountUnique(v),
-                    ) => (format!("count_unique_{}", field), serde_json::json!(v)),
+                    ) => (
+                        format!("count_unique_{}", field),
+                        ScalarValue::Int64(v as i64),
+                    ),
                     (
                         AggregateOpSpec::Total { field },
                         crate::engine::core::read::aggregate::ops::AggOutput::Sum(v),
-                    ) => (format!("total_{}", field), serde_json::json!(v)),
+                    ) => (format!("total_{}", field), ScalarValue::Int64(v)),
                     (
                         AggregateOpSpec::Avg { field },
                         crate::engine::core::read::aggregate::ops::AggOutput::Avg(v),
-                    ) => (format!("avg_{}", field), serde_json::json!(v)),
+                    ) => (format!("avg_{}", field), ScalarValue::Float64(v)),
                     (
                         AggregateOpSpec::Min { field },
                         crate::engine::core::read::aggregate::ops::AggOutput::Min(v),
-                    ) => (format!("min_{}", field), serde_json::json!(v)),
+                    ) => (format!("min_{}", field), ScalarValue::Utf8(v)),
                     (
                         AggregateOpSpec::Max { field },
                         crate::engine::core::read::aggregate::ops::AggOutput::Max(v),
-                    ) => (format!("max_{}", field), serde_json::json!(v)),
+                    ) => (format!("max_{}", field), ScalarValue::Utf8(v)),
                     (_, other) => (
                         "metric".to_string(),
                         match other {
                             crate::engine::core::read::aggregate::ops::AggOutput::Count(v) => {
-                                serde_json::json!(v)
+                                ScalarValue::Int64(v as i64)
                             }
                             crate::engine::core::read::aggregate::ops::AggOutput::CountUnique(
                                 v,
-                            ) => serde_json::json!(v),
+                            ) => ScalarValue::Int64(v as i64),
                             crate::engine::core::read::aggregate::ops::AggOutput::Sum(v) => {
-                                serde_json::json!(v)
+                                ScalarValue::Int64(v)
                             }
                             crate::engine::core::read::aggregate::ops::AggOutput::Min(v) => {
-                                serde_json::json!(v)
+                                ScalarValue::Utf8(v)
                             }
                             crate::engine::core::read::aggregate::ops::AggOutput::Max(v) => {
-                                serde_json::json!(v)
+                                ScalarValue::Utf8(v)
                             }
                             crate::engine::core::read::aggregate::ops::AggOutput::Avg(v) => {
-                                serde_json::json!(v)
+                                ScalarValue::Float64(v)
                             }
                         },
                     ),
@@ -198,7 +203,7 @@ impl AggregateSink {
                 context_id: plan.context_id().unwrap_or("").to_string(),
                 timestamp: 0,
                 id: EventId::default(),
-                payload: serde_json::Value::Object(payload),
+                payload,
             };
             out.push(event);
         }

@@ -1,7 +1,8 @@
 use crate::engine::core::{Event, EventId};
+use crate::engine::types::ScalarValue;
 use rand::Rng;
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 pub struct EventFactory {
     params: HashMap<String, Value>,
@@ -28,13 +29,15 @@ impl EventFactory {
             .get("event_id")
             .and_then(|v| v.as_u64())
             .unwrap_or_else(|| rand::random::<u64>());
-        Event {
+        let mut event = Event {
             context_id: self.params["context_id"].as_str().unwrap().to_string(),
             timestamp: self.params["timestamp"].as_u64().unwrap(),
             event_type: self.params["event_type"].as_str().unwrap().to_string(),
             id: EventId::from(event_id_raw),
-            payload: self.params["payload"].clone(),
-        }
+            payload: BTreeMap::new(),
+        };
+        event.set_payload_json(self.params["payload"].clone());
+        event
     }
 
     pub fn create_list(self, count: usize) -> Vec<Event> {
@@ -57,13 +60,15 @@ impl EventFactory {
                     .and_then(|v| v.as_u64())
                     .unwrap_or_else(rand::random);
 
-                Event {
+                let mut event = Event {
                     context_id,
                     timestamp,
                     event_type: self.params["event_type"].as_str().unwrap().to_string(),
                     id: EventId::from(event_id),
-                    payload,
-                }
+                    payload: BTreeMap::new(),
+                };
+                event.set_payload_json(payload);
+                event
             })
             .collect()
     }

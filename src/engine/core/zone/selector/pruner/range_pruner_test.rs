@@ -4,6 +4,7 @@ use serde_json::json;
 use tempfile::tempdir;
 
 use crate::command::types::CompareOp;
+use crate::engine::types::ScalarValue;
 use crate::engine::core::QueryCaches;
 use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::engine::core::zone::selector::builder::ZoneSelectorBuilder;
@@ -331,7 +332,7 @@ async fn skips_surf_for_payload_temporal_field() {
         segment_id: "001",
         uid: &uid,
         column: "ts",
-        value: Some(&json!(150u64)),
+        value: Some(&ScalarValue::from(json!(150u64))),
         op: Some(&CompareOp::Gt),
     };
     let attempt = pruner.apply_surf_only(&args);

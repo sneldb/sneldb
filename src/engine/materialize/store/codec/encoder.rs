@@ -93,7 +93,7 @@ impl Encoder {
                             let s = value
                                 .as_str()
                                 .map(|s| s.to_string())
-                                .unwrap_or_else(|| value.to_string());
+                                .unwrap_or_else(|| value.to_json().to_string());
                             column_data[col_idx].extend_from_slice(s.as_bytes());
                         }
                         _ => {

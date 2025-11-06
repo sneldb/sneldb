@@ -1,30 +1,18 @@
-use serde_json::Value;
+use crate::engine::types::ScalarValue;
 
 pub struct ValueExtractor;
 
 impl ValueExtractor {
-    pub fn extract_u64(value: &Value) -> Option<u64> {
-        value
-            .as_u64()
-            .or_else(|| {
-                value
-                    .as_i64()
-                    .and_then(|i| if i >= 0 { Some(i as u64) } else { None })
-            })
-            .or_else(|| value.as_str().and_then(|s| s.parse::<u64>().ok()))
+    pub fn extract_u64(value: &ScalarValue) -> Option<u64> {
+        value.as_u64()
     }
 
-    pub fn extract_i64(value: &Value) -> Option<i64> {
-        value
-            .as_i64()
-            .or_else(|| value.as_u64().map(|u| u as i64))
-            .or_else(|| value.as_str().and_then(|s| s.parse::<i64>().ok()))
+    pub fn extract_i64(value: &ScalarValue) -> Option<i64> {
+        value.as_i64()
     }
 
-    pub fn extract_f64(value: &Value) -> Option<f64> {
-        value
-            .as_f64()
-            .or_else(|| value.as_str().and_then(|s| s.parse::<f64>().ok()))
+    pub fn extract_f64(value: &ScalarValue) -> Option<f64> {
+        value.as_f64()
     }
 }
 
