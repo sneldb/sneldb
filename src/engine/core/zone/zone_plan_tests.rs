@@ -159,7 +159,7 @@ fn test_collect_unique_field_values_includes_empty_for_missing() {
 fn test_from_rows_preserves_typed_payload() {
     let mut payload = HashMap::new();
     payload.insert("score".to_string(), ScalarValue::from(json!(123)));
-    payload.insert("region".to_string(), ScalarValue::from(json!("eu")));
+    payload.insert("region".to_string(), ScalarValue::Utf8("eu".into()));
 
     let rows = vec![
         Factory::zone_row()
