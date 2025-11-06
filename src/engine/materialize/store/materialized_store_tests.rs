@@ -48,10 +48,18 @@ fn materialized_store_roundtrip() {
     let pool = BatchPool::new(16).unwrap();
     let mut builder = pool.acquire(Arc::clone(&schema_arc));
     builder
-        .push_row(&[ScalarValue::from(json!(1_700_000_000_u64)), ScalarValue::from(json!("ctx-a")), ScalarValue::from(json!(1001_u64))])
+        .push_row(&[
+            ScalarValue::from(json!(1_700_000_000_u64)),
+            ScalarValue::from(json!("ctx-a")),
+            ScalarValue::from(json!(1001_u64)),
+        ])
         .unwrap();
     builder
-        .push_row(&[ScalarValue::from(json!(1_700_000_100_u64)), ScalarValue::from(json!("ctx-b")), ScalarValue::from(json!(1002_u64))])
+        .push_row(&[
+            ScalarValue::from(json!(1_700_000_100_u64)),
+            ScalarValue::from(json!("ctx-b")),
+            ScalarValue::from(json!(1002_u64)),
+        ])
         .unwrap();
     let batch = builder.finish().unwrap();
 
@@ -85,7 +93,11 @@ fn manifest_persists_across_reopen() {
         let mut store = MaterializedStore::open(dir.path()).unwrap();
         let mut builder = pool.acquire(Arc::clone(&schema));
         builder
-            .push_row(&[ScalarValue::from(json!(1_700_000_500_u64)), ScalarValue::from(json!("ctx-c")), ScalarValue::from(json!(42_u64))])
+            .push_row(&[
+                ScalarValue::from(json!(1_700_000_500_u64)),
+                ScalarValue::from(json!("ctx-c")),
+                ScalarValue::from(json!(42_u64)),
+            ])
             .unwrap();
         let batch = builder.finish().unwrap();
         let snapshots = batch_schema_to_snapshots(&schema);

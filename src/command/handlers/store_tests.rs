@@ -67,7 +67,9 @@ async fn test_store_handle_valid_event_is_routed() {
         .expect("no data");
 
     match result {
-        QueryResult::Selection(selection) => assert_eq!(selection.rows[0][3].to_json()["id"], json!(123)),
+        QueryResult::Selection(selection) => {
+            assert_eq!(selection.rows[0][3].to_json()["id"], json!(123))
+        }
         _ => panic!("Expected selection result, got {:?}", result),
     }
 }

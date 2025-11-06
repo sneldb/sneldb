@@ -131,7 +131,10 @@ fn build_outcome_updates_entry_metrics() {
     use crate::engine::types::ScalarValue;
     let batch = ColumnBatch::new(
         Arc::clone(&schema),
-        vec![vec![ScalarValue::from(json!(1u64))], vec![ScalarValue::from(json!(10u64))]],
+        vec![
+            vec![ScalarValue::from(json!(1u64))],
+            vec![ScalarValue::from(json!(10u64))],
+        ],
         1,
         None,
     )

@@ -912,8 +912,8 @@ fn column_batch_columns_ref_direct_access() {
         vec![ScalarValue::from(json!(1)), ScalarValue::from(json!(2))],
         vec![ScalarValue::from(json!("a")), ScalarValue::from(json!("b"))],
     ];
-    let batch =
-        ColumnBatch::new(Arc::clone(&schema), columns.clone(), 2, None).expect("batch should be created");
+    let batch = ColumnBatch::new(Arc::clone(&schema), columns.clone(), 2, None)
+        .expect("batch should be created");
 
     // Test columns_ref() for efficient access without cloning
     let columns_ref = batch.columns_ref();
@@ -947,8 +947,8 @@ fn column_batch_no_internal_arrow_conversion() {
         vec![ScalarValue::from(json!(1)), ScalarValue::from(json!(2))],
         vec![ScalarValue::from(json!("a")), ScalarValue::from(json!("b"))],
     ];
-    let batch =
-        ColumnBatch::new(Arc::clone(&schema), columns.clone(), 2, None).expect("batch should be created");
+    let batch = ColumnBatch::new(Arc::clone(&schema), columns.clone(), 2, None)
+        .expect("batch should be created");
 
     // Access columns multiple times - should be direct access, no conversion
     let col0_1 = batch.column(0).expect("column 0 should exist");

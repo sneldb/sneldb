@@ -4,7 +4,6 @@ use serde_json::json;
 use tempfile::tempdir;
 
 use crate::command::types::CompareOp;
-use crate::engine::types::ScalarValue;
 use crate::engine::core::QueryCaches;
 use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::engine::core::zone::selector::builder::ZoneSelectorBuilder;
@@ -12,6 +11,7 @@ use crate::engine::core::zone::selector::pruner::range_pruner::RangePruner;
 use crate::engine::core::zone::selector::selection_context::SelectionContext;
 use crate::engine::core::zone::zone_artifacts::ZoneArtifacts;
 use crate::engine::schema::FieldType;
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::{
     CommandFactory, EventFactory, FilterPlanFactory, MemTableFactory, QueryPlanFactory,
     SchemaRegistryFactory,

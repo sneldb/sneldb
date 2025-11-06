@@ -55,13 +55,13 @@ fn is_field_numeric_consistent(zone_plans: &[ZonePlan], key: &str) -> bool {
                     }
                 }
                 _ => return false,
-                    };
-                    kind = match (kind, this) {
-                        (Kind::Unknown, k) => k,
-                        (k, t) if k == t => k,
-                        // allow I/U mix by promoting to F only if all integral; to simplify, reject mix here
-                        _ => return false,
-                    };
+            };
+            kind = match (kind, this) {
+                (Kind::Unknown, k) => k,
+                (k, t) if k == t => k,
+                // allow I/U mix by promoting to F only if all integral; to simplify, reject mix here
+                _ => return false,
+            };
         }
     }
     kind != Kind::Unknown

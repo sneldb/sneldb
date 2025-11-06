@@ -50,7 +50,9 @@ async fn filter_op_drops_rows() {
     use crate::engine::types::ScalarValue;
     let mut builder = ctx.pool().acquire(Arc::clone(&schema));
     for value in 0..6 {
-        builder.push_row(&[ScalarValue::from(json!(value))]).expect("row inserted");
+        builder
+            .push_row(&[ScalarValue::from(json!(value))])
+            .expect("row inserted");
     }
     let batch = builder.finish().expect("batch builds");
     tx.send(Arc::new(batch)).await.expect("send batch");
@@ -69,5 +71,12 @@ async fn filter_op_drops_rows() {
         }
     }
 
-    assert_eq!(collected, vec![ScalarValue::from(json!(0)), ScalarValue::from(json!(2)), ScalarValue::from(json!(4))]);
+    assert_eq!(
+        collected,
+        vec![
+            ScalarValue::from(json!(0)),
+            ScalarValue::from(json!(2)),
+            ScalarValue::from(json!(4))
+        ]
+    );
 }

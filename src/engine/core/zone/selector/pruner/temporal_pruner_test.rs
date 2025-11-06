@@ -1,11 +1,11 @@
 use super::PruneArgs;
 use super::temporal_pruner::TemporalPruner;
 use crate::command::types::CompareOp;
-use crate::engine::types::ScalarValue;
 use crate::engine::core::time::{
     temporal_calendar_index::TemporalCalendarIndex, zone_temporal_index::ZoneTemporalIndex,
 };
 use crate::engine::core::zone::zone_artifacts::ZoneArtifacts;
+use crate::engine::types::ScalarValue;
 use serde_json::json;
 use std::fs;
 use std::path::PathBuf;

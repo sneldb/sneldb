@@ -325,8 +325,18 @@ fn handles_empty_payload() {
 fn timestamp_with_mixed_types() {
     use crate::engine::types::ScalarValue;
     // Test when timestamp is provided as different numeric types
-    let row1 = vec![ScalarValue::from(json!("ctx")), ScalarValue::from(json!("click")), ScalarValue::from(json!(1000_u64)), ScalarValue::from(json!({}))];
-    let row2 = vec![ScalarValue::from(json!("ctx")), ScalarValue::from(json!("click")), ScalarValue::from(json!(2000_i64)), ScalarValue::from(json!({}))];
+    let row1 = vec![
+        ScalarValue::from(json!("ctx")),
+        ScalarValue::from(json!("click")),
+        ScalarValue::from(json!(1000_u64)),
+        ScalarValue::from(json!({})),
+    ];
+    let row2 = vec![
+        ScalarValue::from(json!("ctx")),
+        ScalarValue::from(json!("click")),
+        ScalarValue::from(json!(2000_i64)),
+        ScalarValue::from(json!({})),
+    ];
 
     assert_eq!(
         RowComparator::compare(&row1, &row2, "timestamp"),
