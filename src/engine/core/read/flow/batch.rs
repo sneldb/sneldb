@@ -1,7 +1,7 @@
 use std::fmt;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use arrow_array::{Array, ArrayRef, RecordBatch};
+use arrow_array::{ArrayRef, RecordBatch};
 use arrow_schema::{DataType, TimeUnit};
 
 use crate::engine::core::read::result::ColumnSpec;
@@ -49,15 +49,14 @@ impl BatchSchema {
 #[derive(Debug)]
 pub struct ColumnBatch {
     schema: Arc<BatchSchema>,
-    // Store Arrow RecordBatch as the primary internal format for performance
-    record_batch: RecordBatch,
-    // Lazy ScalarValue conversion cache (None until first access, thread-safe)
-    scalar_columns: Arc<Mutex<Option<Vec<Vec<ScalarValue>>>>>,
+    // Store ScalarValue directly - no Arrow conversion overhead in pipeline
+    columns: Vec<Vec<ScalarValue>>,
     pool: Option<Arc<BatchPoolInner>>,
 }
 
 impl ColumnBatch {
-    /// Create a ColumnBatch from Arrow RecordBatch (preferred, zero conversion)
+    /// Create a ColumnBatch from Arrow RecordBatch (converts to ScalarValue)
+    /// This is used when data comes from Arrow format (e.g., materialized frames)
     pub(crate) fn from_record_batch(
         schema: Arc<BatchSchema>,
         record_batch: RecordBatch,
@@ -70,15 +69,23 @@ impl ColumnBatch {
             });
         }
 
+        // Convert Arrow → ScalarValue (only when needed, e.g., from materialized storage)
+        let mut columns = Vec::with_capacity(record_batch.num_columns());
+        for col_idx in 0..record_batch.num_columns() {
+            let array = record_batch.column(col_idx);
+            let column_spec = &schema.columns()[col_idx];
+            let values = array_to_scalar_values(array, column_spec.logical_type.as_str());
+            columns.push(values);
+        }
+
         Ok(Self {
             schema,
-            record_batch,
-            scalar_columns: Arc::new(Mutex::new(None)),
+            columns,
             pool,
         })
     }
 
-    /// Create a ColumnBatch from ScalarValues (backward compatibility, converts to Arrow internally)
+    /// Create a ColumnBatch from ScalarValues (no conversion - direct storage)
     pub(crate) fn new(
         schema: Arc<BatchSchema>,
         columns: Vec<Vec<ScalarValue>>,
@@ -102,15 +109,25 @@ impl ColumnBatch {
             }
         }
 
-        // Convert ScalarValues to Arrow RecordBatch
-        let arrow_schema = build_arrow_schema(&schema).map_err(|e| {
+        // No conversion - just store ScalarValues directly!
+        Ok(Self {
+            schema,
+            columns,
+            pool,
+        })
+    }
+
+    /// Convert to Arrow RecordBatch on-demand (for Arrow output format only)
+    /// This is the only place where ScalarValue → Arrow conversion happens
+    pub fn to_record_batch(&self) -> Result<RecordBatch, BatchError> {
+        let arrow_schema = build_arrow_schema(&self.schema).map_err(|e| {
             BatchError::InvalidSchema(format!("Failed to build Arrow schema: {}", e))
         })?;
 
-        let mut arrays = Vec::with_capacity(schema.column_count());
-        for (col_idx, column_spec) in schema.columns().iter().enumerate() {
+        let mut arrays = Vec::with_capacity(self.schema.column_count());
+        for (col_idx, column_spec) in self.schema.columns().iter().enumerate() {
             let data_type = logical_to_arrow_type(column_spec.logical_type.as_str());
-            let values = &columns[col_idx];
+            let values = &self.columns[col_idx];
 
             let array = match data_type {
                 DataType::Int64 => build_int64_array_from_scalars(values),
@@ -125,21 +142,15 @@ impl ColumnBatch {
             arrays.push(array);
         }
 
-        let record_batch = RecordBatch::try_new(arrow_schema, arrays).map_err(|e| {
+        RecordBatch::try_new(arrow_schema, arrays).map_err(|e| {
             BatchError::InvalidSchema(format!("Failed to create RecordBatch: {}", e))
-        })?;
-
-        Ok(Self {
-            schema,
-            record_batch,
-            scalar_columns: Arc::new(Mutex::new(Some(columns))), // Cache the scalars for pool recycling
-            pool,
         })
     }
 
-    /// Get the Arrow RecordBatch directly (zero conversion)
-    pub fn record_batch(&self) -> &RecordBatch {
-        &self.record_batch
+    /// Get the Arrow RecordBatch (for backward compatibility)
+    /// Converts on-demand - use to_record_batch() for better error handling
+    pub fn record_batch(&self) -> RecordBatch {
+        self.to_record_batch().expect("Failed to convert to RecordBatch")
     }
 
     pub fn schema(&self) -> &BatchSchema {
@@ -147,107 +158,50 @@ impl ColumnBatch {
     }
 
     pub fn len(&self) -> usize {
-        self.record_batch.num_rows()
+        if self.columns.is_empty() {
+            0
+        } else {
+            self.columns[0].len()
+        }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.record_batch.num_rows() == 0
+        self.len() == 0
     }
 
-    /// Get a column as ScalarValues (lazy conversion from Arrow)
-    /// Returns a Vec that can be borrowed as &[ScalarValue]
+    /// Get a column as ScalarValues (direct access - no conversion)
     pub fn column(&self, idx: usize) -> Result<Vec<ScalarValue>, BatchError> {
-        if idx >= self.record_batch.num_columns() {
+        if idx >= self.columns.len() {
             return Err(BatchError::ColumnOutOfBounds(idx));
         }
-
-        // Check cache first - only convert this specific column if not cached
-        {
-            let cached = self.scalar_columns.lock().unwrap();
-            if let Some(ref columns) = *cached {
-                if idx < columns.len() && columns[idx].len() == self.record_batch.num_rows() {
-                    return Ok(columns[idx].clone());
-                }
-            }
-        }
-
-        // Convert only this column from Arrow (not all columns!)
-        let array = self.record_batch.column(idx);
-        let column_spec = self
-            .schema
-            .columns()
-            .get(idx)
-            .ok_or(BatchError::ColumnOutOfBounds(idx))?;
-        let values = array_to_scalar_values(array, column_spec.logical_type.as_str());
-
-        // Update cache - initialize if needed, then cache this column
-        {
-            let mut cached = self.scalar_columns.lock().unwrap();
-            // Initialize cache if None
-            if cached.is_none() {
-                *cached = Some(Vec::with_capacity(self.record_batch.num_columns()));
-            }
-            if let Some(ref mut columns) = *cached {
-                // Ensure cache has enough columns
-                while columns.len() <= idx {
-                    columns.push(Vec::new());
-                }
-                // Cache this column
-                columns[idx] = values.clone();
-            }
-        }
-
-        Ok(values)
+        Ok(self.columns[idx].clone())
     }
 
-    /// Get a row as ScalarValues (lazy conversion from Arrow)
+    /// Get a row as ScalarValues (direct access - no conversion)
     pub fn row(&self, idx: usize) -> Result<Vec<ScalarValue>, BatchError> {
-        if idx >= self.record_batch.num_rows() {
+        let len = self.len();
+        if idx >= len {
             return Err(BatchError::RowOutOfBounds {
                 index: idx,
-                len: self.record_batch.num_rows(),
+                len,
             });
         }
 
-        let mut row = Vec::with_capacity(self.record_batch.num_columns());
-        for col_idx in 0..self.record_batch.num_columns() {
-            let array = self.record_batch.column(col_idx);
-            let column_spec = &self.schema.columns()[col_idx];
-            let value = array_scalar_at(array, idx, column_spec.logical_type.as_str())
-                .unwrap_or(ScalarValue::Null);
-            row.push(value);
+        let mut row = Vec::with_capacity(self.columns.len());
+        for column in &self.columns {
+            row.push(column.get(idx).cloned().unwrap_or(ScalarValue::Null));
         }
         Ok(row)
     }
 
-    /// Get all columns as ScalarValues (lazy conversion, caches result)
+    /// Get all columns as ScalarValues (direct access - no conversion)
     pub fn columns(&self) -> Vec<Vec<ScalarValue>> {
-        // Check cache first
-        {
-            let cached = self.scalar_columns.lock().unwrap();
-            if let Some(ref columns) = *cached {
-                if columns.len() == self.record_batch.num_columns() {
-                    return columns.clone();
-                }
-            }
-        }
+        self.columns.clone()
+    }
 
-        // Convert all columns from Arrow
-        let mut columns = Vec::with_capacity(self.record_batch.num_columns());
-        for col_idx in 0..self.record_batch.num_columns() {
-            let array = self.record_batch.column(col_idx);
-            let column_spec = &self.schema.columns()[col_idx];
-            let values = array_to_scalar_values(array, column_spec.logical_type.as_str());
-            columns.push(values);
-        }
-
-        // Cache the result
-        {
-            let mut cached = self.scalar_columns.lock().unwrap();
-            *cached = Some(columns.clone());
-        }
-
-        columns
+    /// Get a reference to the internal columns (for efficient access)
+    pub fn columns_ref(&self) -> &[Vec<ScalarValue>] {
+        &self.columns
     }
 
     // Note: columns_iter() removed - use columns() and convert to slices as needed
@@ -255,20 +209,15 @@ impl ColumnBatch {
 
     pub fn detach(mut self) -> (Arc<BatchSchema>, Vec<Vec<ScalarValue>>) {
         self.pool = None;
-        let columns = self.columns(); // Convert to ScalarValues
-        (Arc::clone(&self.schema), columns)
+        (Arc::clone(&self.schema), self.columns.clone())
     }
 }
 
 impl Drop for ColumnBatch {
     fn drop(&mut self) {
         if let Some(pool) = self.pool.take() {
-            // Convert to ScalarValues for pool recycling (if needed)
-            let columns = {
-                let mut cached = self.scalar_columns.lock().unwrap();
-                cached.take().unwrap_or_else(|| self.columns())
-            };
-            pool.recycle(Arc::clone(&self.schema), columns);
+            // Direct access - no conversion needed
+            pool.recycle(Arc::clone(&self.schema), self.columns.clone());
         }
     }
 }
@@ -541,7 +490,7 @@ fn array_to_scalar_values(array: &ArrayRef, logical_type: &str) -> Vec<ScalarVal
         "Integer" | "Number" => {
             if let Some(int_array) = array.as_any().downcast_ref::<arrow_array::Int64Array>() {
                 for i in 0..len {
-                    if int_array.is_null(i) {
+                    if array.is_null(i) {
                         values.push(ScalarValue::Null);
                     } else {
                         values.push(ScalarValue::Int64(int_array.value(i)));
@@ -558,7 +507,7 @@ fn array_to_scalar_values(array: &ArrayRef, logical_type: &str) -> Vec<ScalarVal
         "Float" => {
             if let Some(float_array) = array.as_any().downcast_ref::<arrow_array::Float64Array>() {
                 for i in 0..len {
-                    if float_array.is_null(i) {
+                    if array.is_null(i) {
                         values.push(ScalarValue::Null);
                     } else {
                         values.push(ScalarValue::Float64(float_array.value(i)));
@@ -574,7 +523,7 @@ fn array_to_scalar_values(array: &ArrayRef, logical_type: &str) -> Vec<ScalarVal
         "Boolean" => {
             if let Some(bool_array) = array.as_any().downcast_ref::<arrow_array::BooleanArray>() {
                 for i in 0..len {
-                    if bool_array.is_null(i) {
+                    if array.is_null(i) {
                         values.push(ScalarValue::Null);
                     } else {
                         values.push(ScalarValue::Boolean(bool_array.value(i)));
@@ -593,7 +542,7 @@ fn array_to_scalar_values(array: &ArrayRef, logical_type: &str) -> Vec<ScalarVal
                 .downcast_ref::<arrow_array::TimestampMillisecondArray>()
             {
                 for i in 0..len {
-                    if ts_array.is_null(i) {
+                    if array.is_null(i) {
                         values.push(ScalarValue::Null);
                     } else {
                         // Store as Int64 for consistency with json!(value) which creates Int64
@@ -615,7 +564,7 @@ fn array_to_scalar_values(array: &ArrayRef, logical_type: &str) -> Vec<ScalarVal
                 .downcast_ref::<arrow_array::LargeStringArray>()
             {
                 for i in 0..len {
-                    if string_array.is_null(i) {
+                    if array.is_null(i) {
                         values.push(ScalarValue::Null);
                     } else {
                         values.push(ScalarValue::Utf8(string_array.value(i).to_string()));

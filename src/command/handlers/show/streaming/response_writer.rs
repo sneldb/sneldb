@@ -6,12 +6,10 @@ use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 use crate::command::handlers::query_batch_stream::QueryBatchStream;
 use crate::command::handlers::show::errors::ShowError;
 use crate::engine::core::read::flow::{BatchSchema, ColumnBatch};
+use crate::engine::types::ScalarValue;
 use crate::shared::config::CONFIG;
 use crate::shared::response::ArrowStreamEncoder;
 use crate::shared::response::render::{Renderer, StreamingFormat};
-use arrow_array::{Array, Int64Array, UInt64Array};
-
-use serde_json::Value as JsonValue;
 
 pub struct ShowResponseWriter<'a, W: AsyncWrite + Unpin> {
     writer: BufWriter<&'a mut W>,
@@ -100,7 +98,7 @@ impl<'a, W: AsyncWrite + Unpin> ShowResponseWriter<'a, W> {
 
     async fn write_json(mut self, mut stream: QueryBatchStream) -> Result<(), ShowError> {
         self.renderer
-            .stream_schema_json(&self.column_metadata, &mut self.encode_buf);
+            .stream_schema(&self.column_metadata, &mut self.encode_buf);
         self.writer
             .write_all(&self.encode_buf)
             .await
@@ -120,10 +118,6 @@ impl<'a, W: AsyncWrite + Unpin> ShowResponseWriter<'a, W> {
                     }
 
                     let columns = batch_arc.columns();
-                    let column_views: Vec<Vec<JsonValue>> = columns
-                        .iter()
-                        .map(|column| column.iter().map(|v| v.to_json()).collect())
-                        .collect();
 
                     let mut valid_row_indices: Vec<usize> = Vec::new();
                     let is_materialized_frame = self.batch_count < self.materialized_frame_count;
@@ -131,8 +125,9 @@ impl<'a, W: AsyncWrite + Unpin> ShowResponseWriter<'a, W> {
                     for row_idx in 0..batch_arc.len() {
                         if let Some(ref mut seen_ids_set) = self.seen_ids {
                             if let Some(idx) = self.event_id_idx {
-                                if let Some(id) =
-                                    column_views[idx].get(row_idx).and_then(|v| v.as_u64())
+                                if let Some(id) = columns[idx]
+                                    .get(row_idx)
+                                    .and_then(|v| v.as_u64())
                                 {
                                     if is_materialized_frame {
                                         seen_ids_set.insert(id);
@@ -168,16 +163,16 @@ impl<'a, W: AsyncWrite + Unpin> ShowResponseWriter<'a, W> {
                     }
 
                     if self.batch_size > 0 {
-                        let batch_rows: Vec<Vec<&JsonValue>> = valid_row_indices
+                        let batch_rows: Vec<Vec<ScalarValue>> = valid_row_indices
                             .iter()
                             .map(|&row_idx| {
                                 (0..column_count)
-                                    .map(|col_idx| &column_views[col_idx][row_idx])
+                                    .map(|col_idx| columns[col_idx][row_idx].clone())
                                     .collect()
                             })
                             .collect();
 
-                        self.renderer.stream_batch_json(
+                        self.renderer.stream_batch(
                             &column_name_refs,
                             &batch_rows,
                             &mut self.encode_buf,
@@ -189,12 +184,12 @@ impl<'a, W: AsyncWrite + Unpin> ShowResponseWriter<'a, W> {
                         self.encode_buf.clear();
                     } else {
                         for &row_idx in &valid_row_indices {
-                            let row_refs: Vec<&JsonValue> = (0..column_count)
-                                .map(|col_idx| &column_views[col_idx][row_idx])
+                            let row_values: Vec<ScalarValue> = (0..column_count)
+                                .map(|col_idx| columns[col_idx][row_idx].clone())
                                 .collect();
-                            self.renderer.stream_row_json(
+                            self.renderer.stream_row(
                                 &column_name_refs,
-                                &row_refs,
+                                &row_values,
                                 &mut self.encode_buf,
                             );
                             self.writer
@@ -210,7 +205,7 @@ impl<'a, W: AsyncWrite + Unpin> ShowResponseWriter<'a, W> {
         }
 
         self.renderer
-            .stream_end_json(self.emitted, &mut self.encode_buf);
+            .stream_end(self.emitted, &mut self.encode_buf);
         self.writer
             .write_all(&self.encode_buf)
             .await
@@ -248,41 +243,17 @@ impl<'a, W: AsyncWrite + Unpin> ShowResponseWriter<'a, W> {
                     let mut valid_row_indices: Vec<usize> = Vec::new();
                     let is_materialized_frame = self.batch_count < self.materialized_frame_count;
 
-                    // For Arrow format, filter directly on Arrow arrays (zero JSON conversion!)
-                    let record_batch = batch_arc.record_batch();
+                    // Work with ScalarValue directly - Arrow conversion happens at output boundary
+                    let columns = batch_arc.columns_ref();
 
                     for row_idx in 0..batch_arc.len() {
-                        // Check event_id deduplication directly from Arrow arrays
+                        // Check event_id deduplication using ScalarValue directly
                         if let Some(ref mut seen_ids_set) = self.seen_ids {
                             if let Some(idx) = self.event_id_idx {
-                                let event_id_array = record_batch.column(idx);
-                                let id = if let Some(int_array) =
-                                    event_id_array.as_any().downcast_ref::<Int64Array>()
+                                if let Some(id) = columns[idx]
+                                    .get(row_idx)
+                                    .and_then(|v| v.as_u64())
                                 {
-                                    if !int_array.is_null(row_idx) {
-                                        Some(int_array.value(row_idx) as u64)
-                                    } else {
-                                        None
-                                    }
-                                } else if let Some(uint_array) =
-                                    event_id_array.as_any().downcast_ref::<UInt64Array>()
-                                {
-                                    if !uint_array.is_null(row_idx) {
-                                        Some(uint_array.value(row_idx))
-                                    } else {
-                                        None
-                                    }
-                                } else {
-                                    // Fallback: convert only this column to JSON (rare case)
-                                    match batch_arc.column(idx) {
-                                        Ok(event_id_col) => {
-                                            event_id_col.get(row_idx).and_then(|v| v.as_u64())
-                                        }
-                                        Err(_) => None,
-                                    }
-                                };
-
-                                if let Some(id) = id {
                                     if is_materialized_frame {
                                         seen_ids_set.insert(id);
                                     } else if !seen_ids_set.insert(id) {

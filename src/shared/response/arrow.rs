@@ -4,12 +4,13 @@ use std::sync::Arc;
 use arrow_array::builder::{
     BooleanBuilder, Float64Builder, Int64Builder, LargeStringBuilder, TimestampMillisecondBuilder,
 };
-use arrow_array::{Array, ArrayRef, RecordBatch};
+use arrow_array::{ArrayRef, RecordBatch};
 use arrow_ipc::writer::{DictionaryTracker, IpcDataGenerator, IpcWriteOptions};
 use arrow_schema::{ArrowError, DataType, Field, Schema, TimeUnit};
 use serde_json::Value;
 
 use crate::engine::core::read::flow::{BatchSchema, ColumnBatch};
+use crate::engine::types::ScalarValue;
 use crate::shared::response::render::{Renderer, StreamingFormat};
 use crate::shared::response::types::{Response, ResponseBody, StatusCode};
 
@@ -40,8 +41,9 @@ impl Renderer for ArrowRenderer {
                     ),
                 );
             }
-            ResponseBody::JsonArray(values) => {
-                payload.insert("results".into(), serde_json::Value::Array(values.clone()));
+            ResponseBody::ScalarArray(values) => {
+                let json_values: Vec<Value> = values.iter().map(|v| v.to_json()).collect();
+                payload.insert("results".into(), serde_json::Value::Array(json_values));
             }
             ResponseBody::Table { columns, rows } => {
                 let cols = columns
@@ -53,10 +55,10 @@ impl Renderer for ArrowRenderer {
                         })
                     })
                     .collect::<Vec<_>>();
-                let row_values = rows
+                let row_values: Vec<Value> = rows
                     .iter()
-                    .map(|r| serde_json::Value::Array(r.clone()))
-                    .collect::<Vec<_>>();
+                    .map(|r| Value::Array(r.iter().map(|v| v.to_json()).collect()))
+                    .collect();
                 payload.insert(
                     "results".into(),
                     serde_json::json!({ "columns": cols, "rows": row_values }),
@@ -75,6 +77,31 @@ impl Renderer for ArrowRenderer {
 
     fn streaming_format(&self) -> StreamingFormat {
         StreamingFormat::Arrow
+    }
+
+    fn stream_schema(&self, _columns: &[(String, String)], _out: &mut Vec<u8>) {
+        // Schema is handled by ArrowStreamEncoder
+        unreachable!("stream_schema should not be called directly for Arrow renderer")
+    }
+
+    fn stream_row(&self, _columns: &[&str], _values: &[ScalarValue], _out: &mut Vec<u8>) {
+        // Single row streaming not supported for Arrow - use stream_column_batch
+        unreachable!("stream_row should not be called for Arrow renderer")
+    }
+
+    fn stream_batch(&self, _columns: &[&str], _batch: &[Vec<ScalarValue>], _out: &mut Vec<u8>) {
+        // Batch streaming not directly supported - use stream_column_batch
+        unreachable!("stream_batch should not be called for Arrow renderer")
+    }
+
+    fn stream_column_batch(&self, _batch: &ColumnBatch, _out: &mut Vec<u8>) {
+        // ColumnBatch streaming is handled by ArrowStreamEncoder
+        unreachable!("stream_column_batch should not be called directly for Arrow renderer")
+    }
+
+    fn stream_end(&self, _row_count: usize, _out: &mut Vec<u8>) {
+        // End frame is handled by ArrowStreamEncoder
+        unreachable!("stream_end should not be called directly for Arrow renderer")
     }
 }
 
@@ -115,13 +142,14 @@ impl ArrowStreamEncoder {
         row_indices: Option<&[usize]>,
         out: &mut Vec<u8>,
     ) -> ArrowResult<()> {
-        // Use the RecordBatch directly (zero conversion - it's already stored internally)
-        // Avoid cloning when row_indices is None - use reference directly!
+        // Convert ScalarValue → Arrow on-demand (only at output boundary)
         let (dict_batches, record_data) = if row_indices.is_none() {
-            // Zero conversion path - use RecordBatch reference directly (no clone!)
-            let record_batch = batch.record_batch();
+            // Convert entire batch to Arrow
+            let record_batch = batch.to_record_batch().map_err(|e| {
+                ArrowError::InvalidArgumentError(format!("Failed to convert batch: {}", e))
+            })?;
             self.data_gen.encoded_batch(
-                record_batch,
+                &record_batch,
                 &mut self.dictionary_tracker,
                 &self.write_options,
             )?
@@ -176,150 +204,227 @@ fn logical_to_arrow_type(logical_type: &str) -> DataType {
     }
 }
 
+// Helper functions to convert ScalarValue to Arrow arrays (used at output boundary)
+fn build_int64_array_from_scalars(values: &[ScalarValue]) -> ArrayRef {
+    let mut builder = Int64Builder::with_capacity(values.len());
+    for value in values {
+        match value {
+            ScalarValue::Int64(i) => builder.append_value(*i),
+            ScalarValue::Timestamp(t) => builder.append_value(*t),
+            ScalarValue::Utf8(s) => {
+                if let Ok(i) = s.parse::<i64>() {
+                    builder.append_value(i);
+                } else {
+                    builder.append_null();
+                }
+            }
+            _ => builder.append_null(),
+        }
+    }
+    Arc::new(builder.finish())
+}
+
+fn build_float64_array_from_scalars(values: &[ScalarValue]) -> ArrayRef {
+    let mut builder = Float64Builder::with_capacity(values.len());
+    for value in values {
+        match value {
+            ScalarValue::Float64(f) => builder.append_value(*f),
+            ScalarValue::Int64(i) => builder.append_value(*i as f64),
+            ScalarValue::Utf8(s) => {
+                if let Ok(f) = s.parse::<f64>() {
+                    builder.append_value(f);
+                } else {
+                    builder.append_null();
+                }
+            }
+            _ => builder.append_null(),
+        }
+    }
+    Arc::new(builder.finish())
+}
+
+fn build_bool_array_from_scalars(values: &[ScalarValue]) -> ArrayRef {
+    let mut builder = BooleanBuilder::with_capacity(values.len());
+    for value in values {
+        match value {
+            ScalarValue::Boolean(b) => builder.append_value(*b),
+            ScalarValue::Utf8(s) => match s.to_ascii_lowercase().as_str() {
+                "true" | "1" => builder.append_value(true),
+                "false" | "0" => builder.append_value(false),
+                _ => builder.append_null(),
+            },
+            ScalarValue::Int64(i) => builder.append_value(*i != 0),
+            _ => builder.append_null(),
+        }
+    }
+    Arc::new(builder.finish())
+}
+
+fn build_timestamp_array_from_scalars(values: &[ScalarValue]) -> ArrayRef {
+    let mut builder = TimestampMillisecondBuilder::with_capacity(values.len());
+    for value in values {
+        match value {
+            ScalarValue::Timestamp(t) => builder.append_value(*t),
+            ScalarValue::Int64(i) => builder.append_value(*i),
+            ScalarValue::Utf8(s) => {
+                if let Ok(i) = s.parse::<i64>() {
+                    builder.append_value(i);
+                } else {
+                    builder.append_null();
+                }
+            }
+            _ => builder.append_null(),
+        }
+    }
+    Arc::new(builder.finish())
+}
+
+fn build_string_array_from_scalars(values: &[ScalarValue]) -> ArrayRef {
+    let mut builder = LargeStringBuilder::with_capacity(values.len(), values.len() * 8);
+    for value in values {
+        match value {
+            ScalarValue::Null => builder.append_null(),
+            ScalarValue::Utf8(s) => builder.append_value(s),
+            other => {
+                let string = other.to_string_repr();
+                builder.append_value(string.as_str());
+            }
+        }
+    }
+    Arc::new(builder.finish())
+}
+
 fn build_record_batch(
     arrow_schema: &Arc<Schema>,
-    _batch_schema: &BatchSchema,
+    batch_schema: &BatchSchema,
     batch: &ColumnBatch,
     row_indices: Option<&[usize]>,
 ) -> ArrowResult<RecordBatch> {
-    // Use the RecordBatch directly - no conversion needed!
-    let record_batch = batch.record_batch();
+    // Work with ScalarValue columns directly - convert to Arrow arrays
+    let columns = batch.columns_ref();
+    let mut arrays = Vec::with_capacity(batch_schema.column_count());
 
-    if let Some(indices) = row_indices {
-        // Slice arrays directly using manual take (zero JSON conversion!)
-        // Build new arrays by taking only the specified indices
-        let mut arrays: Vec<ArrayRef> = Vec::with_capacity(record_batch.num_columns());
+    for (col_idx, column_spec) in batch_schema.columns().iter().enumerate() {
+        let logical_type = column_spec.logical_type.as_str();
+        let data_type = logical_to_arrow_type(logical_type);
+        let column = &columns[col_idx];
 
-        for col_idx in 0..record_batch.num_columns() {
-            let array = record_batch.column(col_idx);
-            let column_spec = batch.schema().columns().get(col_idx).unwrap();
-            let logical_type = column_spec.logical_type.as_str();
-
-            // Build new array by taking only the specified indices
-            let taken = match logical_type {
-                "Integer" | "Number" => {
-                    if let Some(int_array) =
-                        array.as_any().downcast_ref::<arrow_array::Int64Array>()
-                    {
-                        let mut builder = Int64Builder::with_capacity(indices.len());
-                        for &idx in indices {
-                            if int_array.is_null(idx) {
-                                builder.append_null();
-                            } else {
-                                builder.append_value(int_array.value(idx));
-                            }
+        let array: ArrayRef = if let Some(indices) = row_indices {
+            // Build array with only selected row indices
+            match data_type {
+                DataType::Int64 => {
+                    let mut builder = Int64Builder::with_capacity(indices.len());
+                    for &idx in indices {
+                        match column.get(idx) {
+                            Some(ScalarValue::Int64(v)) => builder.append_value(*v),
+                            Some(ScalarValue::Timestamp(v)) => builder.append_value(*v),
+                            Some(ScalarValue::Null) => builder.append_null(),
+                            _ => builder.append_null(),
                         }
-                        Arc::new(builder.finish())
-                    } else {
-                        array.clone() // Fallback: return original
                     }
+                    Arc::new(builder.finish())
                 }
-                "Float" => {
-                    if let Some(float_array) =
-                        array.as_any().downcast_ref::<arrow_array::Float64Array>()
-                    {
-                        let mut builder = Float64Builder::with_capacity(indices.len());
-                        for &idx in indices {
-                            if float_array.is_null(idx) {
-                                builder.append_null();
-                            } else {
-                                builder.append_value(float_array.value(idx));
-                            }
+                DataType::Float64 => {
+                    let mut builder = Float64Builder::with_capacity(indices.len());
+                    for &idx in indices {
+                        match column.get(idx) {
+                            Some(ScalarValue::Float64(v)) => builder.append_value(*v),
+                            Some(ScalarValue::Int64(v)) => builder.append_value(*v as f64),
+                            Some(ScalarValue::Null) => builder.append_null(),
+                            _ => builder.append_null(),
                         }
-                        Arc::new(builder.finish())
-                    } else {
-                        array.clone()
                     }
+                    Arc::new(builder.finish())
                 }
-                "Boolean" => {
-                    if let Some(bool_array) =
-                        array.as_any().downcast_ref::<arrow_array::BooleanArray>()
-                    {
-                        let mut builder = BooleanBuilder::with_capacity(indices.len());
-                        for &idx in indices {
-                            if bool_array.is_null(idx) {
-                                builder.append_null();
-                            } else {
-                                builder.append_value(bool_array.value(idx));
-                            }
+                DataType::Boolean => {
+                    let mut builder = BooleanBuilder::with_capacity(indices.len());
+                    for &idx in indices {
+                        match column.get(idx) {
+                            Some(ScalarValue::Boolean(v)) => builder.append_value(*v),
+                            Some(ScalarValue::Null) => builder.append_null(),
+                            _ => builder.append_null(),
                         }
-                        Arc::new(builder.finish())
-                    } else {
-                        array.clone()
                     }
+                    Arc::new(builder.finish())
                 }
-                "Timestamp" => {
-                    if let Some(ts_array) = array
-                        .as_any()
-                        .downcast_ref::<arrow_array::TimestampMillisecondArray>()
-                    {
-                        let mut builder = TimestampMillisecondBuilder::with_capacity(indices.len());
-                        for &idx in indices {
-                            if ts_array.is_null(idx) {
-                                builder.append_null();
-                            } else {
-                                builder.append_value(ts_array.value(idx));
-                            }
+                DataType::Timestamp(TimeUnit::Millisecond, _) => {
+                    let mut builder = TimestampMillisecondBuilder::with_capacity(indices.len());
+                    for &idx in indices {
+                        match column.get(idx) {
+                            Some(ScalarValue::Timestamp(v)) => builder.append_value(*v),
+                            Some(ScalarValue::Int64(v)) => builder.append_value(*v),
+                            Some(ScalarValue::Null) => builder.append_null(),
+                            _ => builder.append_null(),
                         }
-                        Arc::new(builder.finish())
-                    } else {
-                        array.clone()
                     }
+                    Arc::new(builder.finish())
+                }
+                DataType::LargeUtf8 => {
+                    // Estimate string capacity
+                    let estimated_bytes = if indices.len() > 50 {
+                        let sample_size = 20.min(indices.len());
+                        let sample_sum: usize = indices[..sample_size]
+                            .iter()
+                            .filter_map(|&idx| {
+                                column.get(idx).and_then(|v| match v {
+                                    ScalarValue::Utf8(s) => Some(s.len()),
+                                    _ => None,
+                                })
+                            })
+                            .sum();
+                        if sample_size > 0 {
+                            (sample_sum * indices.len() / sample_size).max(indices.len() * 4)
+                        } else {
+                            indices.len() * 8
+                        }
+                    } else {
+                        indices.len() * 8
+                    };
+                    let mut builder = LargeStringBuilder::with_capacity(indices.len(), estimated_bytes);
+                    for &idx in indices {
+                        match column.get(idx) {
+                            Some(ScalarValue::Utf8(s)) => builder.append_value(s),
+                            Some(ScalarValue::Null) => builder.append_null(),
+                            Some(v) => {
+                                // Convert other types to string
+                                builder.append_value(v.to_string_repr());
+                            }
+                            None => builder.append_null(),
+                        }
+                    }
+                    Arc::new(builder.finish())
                 }
                 _ => {
-                    // String or other types
-                    if let Some(string_array) = array
-                        .as_any()
-                        .downcast_ref::<arrow_array::LargeStringArray>()
-                    {
-                        // Estimate capacity: for large slices, sample to estimate average string length
-                        // For small slices, use default estimate to avoid double iteration
-                        let estimated_bytes = if indices.len() > 50 {
-                            // For large slices (>50), sample first 20 to estimate average
-                            let sample_size = 20.min(indices.len());
-                            let sample_sum: usize = indices[..sample_size]
-                                .iter()
-                                .filter_map(|&idx| {
-                                    if !string_array.is_null(idx) {
-                                        Some(string_array.value(idx).len())
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .sum();
-                            if sample_size > 0 {
-                                (sample_sum * indices.len() / sample_size).max(indices.len() * 4)
-                            } else {
-                                indices.len() * 8 // Fallback
-                            }
-                        } else {
-                            // For small slices, use default estimate (avoid double iteration)
-                            indices.len() * 8
-                        };
-
-                        let mut builder =
-                            LargeStringBuilder::with_capacity(indices.len(), estimated_bytes);
-                        for &idx in indices {
-                            if string_array.is_null(idx) {
-                                builder.append_null();
-                            } else {
-                                builder.append_value(string_array.value(idx));
-                            }
+                    // Fallback to string
+                    let mut builder = LargeStringBuilder::with_capacity(indices.len(), indices.len() * 8);
+                    for &idx in indices {
+                        match column.get(idx) {
+                            Some(ScalarValue::Utf8(s)) => builder.append_value(s),
+                            Some(ScalarValue::Null) => builder.append_null(),
+                            Some(v) => builder.append_value(v.to_string_repr()),
+                            None => builder.append_null(),
                         }
-                        Arc::new(builder.finish())
-                    } else {
-                        array.clone()
                     }
+                    Arc::new(builder.finish())
                 }
-            };
-            arrays.push(taken);
-        }
-
-        RecordBatch::try_new(arrow_schema.clone(), arrays)
-    } else {
-        // No row_indices - just clone the RecordBatch
-        Ok(record_batch.clone())
+            }
+        } else {
+            // No row_indices - convert entire column
+            match data_type {
+                DataType::Int64 => build_int64_array_from_scalars(&column),
+                DataType::Float64 => build_float64_array_from_scalars(&column),
+                DataType::Boolean => build_bool_array_from_scalars(&column),
+                DataType::Timestamp(TimeUnit::Millisecond, _) => {
+                    build_timestamp_array_from_scalars(&column)
+                }
+                DataType::LargeUtf8 => build_string_array_from_scalars(&column),
+                _ => build_string_array_from_scalars(&column),
+            }
+        };
+        arrays.push(array);
     }
+
+    RecordBatch::try_new(arrow_schema.clone(), arrays)
 }
 
 fn build_indices(row_indices: Option<&[usize]>, len: usize) -> Cow<'_, [usize]> {

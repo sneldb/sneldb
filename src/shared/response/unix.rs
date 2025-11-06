@@ -1,3 +1,5 @@
+use crate::engine::core::read::flow::ColumnBatch;
+use crate::engine::types::ScalarValue;
 use crate::shared::response::render::{Renderer, StreamingFormat};
 use crate::shared::response::types::{Response, ResponseBody};
 use serde::Serialize;
@@ -34,10 +36,11 @@ impl Renderer for UnixRenderer {
                 }
             }
 
-            ResponseBody::JsonArray(items) => {
+            ResponseBody::ScalarArray(items) => {
                 for (i, item) in items.iter().enumerate() {
                     output.extend_from_slice(format!("[{}] ", i).as_bytes());
-                    match sonic_rs::to_writer(&mut output, item) {
+                    let json_value = item.to_json();
+                    match sonic_rs::to_writer(&mut output, &json_value) {
                         Ok(_) => {
                             output.push(b'\n');
                         }
@@ -49,6 +52,12 @@ impl Renderer for UnixRenderer {
             }
 
             ResponseBody::Table { columns, rows } => {
+                // Convert ScalarValues to JSON Values at render time
+                let json_rows: Vec<Vec<Value>> = rows
+                    .iter()
+                    .map(|row| row.iter().map(|v| v.to_json()).collect())
+                    .collect();
+
                 // Use sonic-rs to serialize the entire table at once for better performance
                 #[derive(serde::Serialize)]
                 struct TableResponse<'a> {
@@ -56,7 +65,10 @@ impl Renderer for UnixRenderer {
                     rows: &'a [Vec<serde_json::Value>],
                 }
 
-                let table = TableResponse { columns, rows };
+                let table = TableResponse {
+                    columns,
+                    rows: &json_rows,
+                };
                 if let Ok(_) = sonic_rs::to_writer(&mut output, &table) {
                     output.push(b'\n');
                 }
@@ -70,7 +82,7 @@ impl Renderer for UnixRenderer {
         StreamingFormat::Json
     }
 
-    fn stream_schema_json(&self, columns: &[(String, String)], out: &mut Vec<u8>) {
+    fn stream_schema(&self, columns: &[(String, String)], out: &mut Vec<u8>) {
         out.clear();
         let mut serializer = JsonSerializer::new(&mut *out);
         let mut map =
@@ -83,11 +95,16 @@ impl Renderer for UnixRenderer {
         out.push(b'\n');
     }
 
-    fn stream_row_json(&self, columns: &[&str], values: &[&Value], out: &mut Vec<u8>) {
+    fn stream_row(&self, columns: &[&str], values: &[ScalarValue], out: &mut Vec<u8>) {
         out.clear();
 
-        // Use RowValues which serializes Values by reference without cloning
-        let row_values = RowValues { columns, values };
+        // Convert ScalarValues to JSON Values at render time
+        let json_values: Vec<Value> = values.iter().map(|v| v.to_json()).collect();
+        let json_refs: Vec<&Value> = json_values.iter().collect();
+        let row_values = RowValues {
+            columns,
+            values: &json_refs,
+        };
 
         let frame = UnixRowFrameNoClone {
             frame_type: "row",
@@ -103,20 +120,26 @@ impl Renderer for UnixRenderer {
         out.push(b'\n');
     }
 
-    fn stream_batch_json(&self, _columns: &[&str], batch: &[Vec<&Value>], out: &mut Vec<u8>) {
+    fn stream_batch(&self, _columns: &[&str], batch: &[Vec<ScalarValue>], out: &mut Vec<u8>) {
         out.clear();
+
+        // Convert ScalarValues to JSON Values at render time
+        let json_batch: Vec<Vec<Value>> = batch
+            .iter()
+            .map(|row| row.iter().map(|v| v.to_json()).collect())
+            .collect();
 
         // Serialize batch as array of arrays (same format as JsonRenderer)
         #[derive(serde::Serialize)]
-        struct UnixBatchFrame<'a> {
+        struct UnixBatchFrame {
             #[serde(rename = "type")]
             frame_type: &'static str,
-            rows: &'a [Vec<&'a Value>],
+            rows: Vec<Vec<Value>>,
         }
 
         let batch_frame = UnixBatchFrame {
             frame_type: "batch",
-            rows: batch,
+            rows: json_batch,
         };
 
         if sonic_rs::to_writer(&mut *out, &batch_frame).is_err() {
@@ -128,7 +151,13 @@ impl Renderer for UnixRenderer {
         out.push(b'\n');
     }
 
-    fn stream_end_json(&self, row_count: usize, out: &mut Vec<u8>) {
+    fn stream_column_batch(&self, _batch: &ColumnBatch, _out: &mut Vec<u8>) {
+        // For Unix, we need to convert ColumnBatch to rows of ScalarValues
+        // This is handled by the caller using stream_batch instead
+        unreachable!("stream_column_batch should not be called for Unix renderer")
+    }
+
+    fn stream_end(&self, row_count: usize, out: &mut Vec<u8>) {
         out.clear();
         let mut serializer = JsonSerializer::new(&mut *out);
         let mut map =
@@ -152,7 +181,7 @@ fn estimate_response_size(response: &Response) -> usize {
             // Each line + newline
             size += lines.iter().map(|l| l.len() + 1).sum::<usize>();
         }
-        ResponseBody::JsonArray(items) => {
+        ResponseBody::ScalarArray(items) => {
             // Rough estimate: ~200 bytes per JSON event (typical)
             // Plus index prefix "[N] "
             size += items.len() * 220;
