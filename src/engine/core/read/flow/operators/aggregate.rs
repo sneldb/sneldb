@@ -6,9 +6,11 @@ use crate::engine::core::event::event_id::EventId;
 use crate::engine::core::read::aggregate::plan::{AggregateOpSpec, AggregatePlan};
 use crate::engine::core::read::flow::{BatchSchema, FlowContext, FlowOperator, FlowOperatorError};
 use crate::engine::core::read::result::ColumnSpec;
+use crate::engine::core::read::aggregate::partial::{AggPartial, AggState};
 use crate::engine::core::read::sink::{AggregateSink, ResultSink};
 use crate::engine::types::ScalarValue;
 use std::collections::BTreeMap;
+use serde_json;
 
 use super::super::{BatchReceiver, BatchSender};
 
@@ -76,58 +78,106 @@ impl FlowOperator for AggregateOp {
             }
         }
 
-        let aggregated_events = sink.into_events(&self.config.plan);
+        // Use into_partial() instead of into_events() to preserve sum/count for AVG merging
+        let partial = sink.into_partial();
         let schema_columns = self.output_schema();
         let schema = Arc::new(BatchSchema::new(schema_columns.clone()).map_err(|e| {
             FlowOperatorError::Batch(format!("failed to build aggregate schema: {}", e))
         })?);
-        if aggregated_events.is_empty() {
+
+        if partial.groups.is_empty() {
             return Ok(());
         }
 
-        let mut builder = ctx.pool().acquire(Arc::clone(&schema));
-        let mut row_values: Vec<ScalarValue> = Vec::with_capacity(schema.column_count());
+        partial_to_batches(partial, schema, ctx, output).await
+    }
+}
 
-        for event in aggregated_events {
-            row_values.clear();
-            for column in schema.columns() {
-                let mut value = event
-                    .get_field_scalar(&column.name)
-                    .unwrap_or(ScalarValue::Null);
+/// Converts AggPartial to batches, preserving sum/count for AVG aggregations
+async fn partial_to_batches(
+    partial: AggPartial,
+    schema: Arc<BatchSchema>,
+    ctx: Arc<FlowContext>,
+    output: BatchSender,
+) -> Result<(), FlowOperatorError> {
+    use crate::engine::core::read::aggregate::plan::AggregateOpSpec;
 
-                if let Some(group_by) = self.config.aggregate.group_by.as_ref() {
-                    if group_by.iter().any(|g| g == &column.name) {
-                        if let Some(v) = event.payload.get(&column.name) {
-                            value = v.clone();
-                        }
-                    }
-                }
+    let mut builder = ctx.pool().acquire(Arc::clone(&schema));
 
-                if column.name == "bucket" {
-                    if let Some(v) = event.payload.get("bucket") {
-                        value = v.clone();
-                    }
-                }
+    for (group_key, states) in partial.groups {
+        let mut row = Vec::with_capacity(schema.column_count());
 
-                row_values.push(value);
-            }
-            builder
-                .push_row(&row_values)
-                .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
+        // Add bucket if present
+        if partial.time_bucket.is_some() {
+            row.push(ScalarValue::Int64(
+                group_key.bucket.map(|b| b as i64).unwrap_or(0)
+            ));
+        }
 
-            if builder.is_full() {
-                let batch = builder
-                    .finish()
-                    .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
-                output
-                    .send(Arc::new(batch))
-                    .await
-                    .map_err(|_| FlowOperatorError::ChannelClosed)?;
-                builder = ctx.pool().acquire(Arc::clone(&schema));
+        // Add group_by values
+        if let Some(_group_by_fields) = &partial.group_by {
+            for val in &group_key.groups {
+                row.push(ScalarValue::Utf8(val.clone()));
             }
         }
 
-        if builder.len() > 0 {
+        // Add metric values
+        for (spec, state) in partial.specs.iter().zip(states.iter()) {
+            match (spec, state) {
+                (AggregateOpSpec::CountAll, AggState::CountAll { count }) => {
+                    row.push(ScalarValue::Int64(*count));
+                }
+                (AggregateOpSpec::CountField { .. }, AggState::CountAll { count }) => {
+                    row.push(ScalarValue::Int64(*count));
+                }
+                (AggregateOpSpec::CountUnique { .. }, AggState::CountUnique { values }) => {
+                    // Serialize HashSet as JSON array string for accurate merging across shards
+                    // This preserves the actual values, not just the count
+                    let json_values: Vec<&String> = values.iter().collect();
+                    let json_str = serde_json::to_string(&json_values)
+                        .map_err(|e| FlowOperatorError::Batch(format!("failed to serialize CountUnique values: {}", e)))?;
+                    row.push(ScalarValue::Utf8(json_str));
+                }
+                (AggregateOpSpec::Total { .. }, AggState::Sum { sum }) => {
+                    row.push(ScalarValue::Int64(*sum));
+                }
+                (AggregateOpSpec::Avg { .. }, AggState::Avg { sum, count }) => {
+                    // Output sum and count separately for accurate merging
+                    row.push(ScalarValue::Int64(*sum));
+                    row.push(ScalarValue::Int64(*count));
+                }
+                (AggregateOpSpec::Min { .. }, AggState::Min { min_num, min_str }) => {
+                    if let Some(n) = min_num {
+                        row.push(ScalarValue::Int64(*n));
+                    } else if let Some(s) = min_str {
+                        row.push(ScalarValue::Utf8(s.clone()));
+                    } else {
+                        row.push(ScalarValue::Utf8(String::new()));
+                    }
+                }
+                (AggregateOpSpec::Max { .. }, AggState::Max { max_num, max_str }) => {
+                    if let Some(n) = max_num {
+                        row.push(ScalarValue::Int64(*n));
+                    } else if let Some(s) = max_str {
+                        row.push(ScalarValue::Utf8(s.clone()));
+                    } else {
+                        row.push(ScalarValue::Utf8(String::new()));
+                    }
+                }
+                _ => {
+                    return Err(FlowOperatorError::Batch(format!(
+                        "unsupported aggregate spec/state combination: {:?}/{:?}",
+                        spec, state
+                    )));
+                }
+            }
+        }
+
+        builder
+            .push_row(&row)
+            .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
+
+        if builder.is_full() {
             let batch = builder
                 .finish()
                 .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
@@ -135,10 +185,21 @@ impl FlowOperator for AggregateOp {
                 .send(Arc::new(batch))
                 .await
                 .map_err(|_| FlowOperatorError::ChannelClosed)?;
+            builder = ctx.pool().acquire(Arc::clone(&schema));
         }
-
-        Ok(())
     }
+
+    if builder.len() > 0 {
+        let batch = builder
+            .finish()
+            .map_err(|e| FlowOperatorError::Batch(e.to_string()))?;
+        output
+            .send(Arc::new(batch))
+            .await
+            .map_err(|_| FlowOperatorError::ChannelClosed)?;
+    }
+
+    Ok(())
 }
 
 fn event_from_row(
@@ -260,18 +321,29 @@ fn build_aggregate_schema(plan: &AggregatePlan) -> Vec<ColumnSpec> {
                 name: format!("count_{}", field),
                 logical_type: "Integer".to_string(),
             }),
-            AggregateOpSpec::CountUnique { field } => columns.push(ColumnSpec {
-                name: format!("count_unique_{}", field),
-                logical_type: "Integer".to_string(),
-            }),
+            AggregateOpSpec::CountUnique { field } => {
+                // For streaming mode, output JSON array string for accurate merging
+                // This preserves the actual unique values, not just the count
+                columns.push(ColumnSpec {
+                    name: format!("count_unique_{}_values", field),
+                    logical_type: "String".to_string(),
+                });
+            },
             AggregateOpSpec::Total { field } => columns.push(ColumnSpec {
                 name: format!("total_{}", field),
                 logical_type: "Integer".to_string(),
             }),
-            AggregateOpSpec::Avg { field } => columns.push(ColumnSpec {
-                name: format!("avg_{}", field),
-                logical_type: "Float".to_string(),
-            }),
+            AggregateOpSpec::Avg { field } => {
+                // For streaming mode, output sum and count separately for accurate merging
+                columns.push(ColumnSpec {
+                    name: format!("avg_{}_sum", field),
+                    logical_type: "Integer".to_string(),
+                });
+                columns.push(ColumnSpec {
+                    name: format!("avg_{}_count", field),
+                    logical_type: "Integer".to_string(),
+                });
+            },
             AggregateOpSpec::Min { field } => columns.push(ColumnSpec {
                 name: format!("min_{}", field),
                 logical_type: "String".to_string(),

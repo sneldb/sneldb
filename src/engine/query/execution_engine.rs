@@ -1,11 +1,5 @@
 use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
-use crate::engine::core::read::execution_step::ExecutionStep;
-use crate::engine::core::read::memtable_query::MemTableQuery;
-use crate::engine::core::read::result::{
-    AggregateResult, ColumnSpec, QueryResult, SelectionResult,
-};
-use crate::engine::core::read::segment_aggregate_runner::SegmentAggregateRunner;
-use crate::engine::core::read::sink::{AggregateSink, ResultSink};
+use crate::engine::core::read::result::{ColumnSpec, QueryResult, SelectionResult};
 use crate::engine::core::{MemTable, QueryCaches, QueryExecution, QueryPlan};
 use crate::engine::errors::QueryExecutionError;
 use crate::engine::schema::registry::SchemaRegistry;
@@ -50,11 +44,13 @@ impl ExecutionEngine {
         plan: &QueryPlan,
         ctx: &ScanContext<'a>,
     ) -> Result<QueryResult, QueryExecutionError> {
+        // Aggregate queries must use streaming execution path
         if plan.aggregate_plan.is_some() {
-            Self::run_aggregation(plan, ctx).await
-        } else {
-            Self::run_selection(plan, ctx).await
+            return Err(QueryExecutionError::ExprEval(
+                "Aggregate queries must use streaming execution path".to_string(),
+            ));
         }
+        Self::run_selection(plan, ctx).await
     }
 
     async fn run_selection<'a>(
@@ -104,39 +100,5 @@ impl ExecutionEngine {
             columns: cols,
             rows,
         }))
-    }
-
-    async fn run_aggregation<'a>(
-        plan: &QueryPlan,
-        ctx: &ScanContext<'a>,
-    ) -> Result<QueryResult, QueryExecutionError> {
-        let mut sink = AggregateSink::from_query_plan(plan, plan.aggregate_plan.as_ref().unwrap())
-            .with_group_limit(plan.limit());
-        // Memtable path
-        let mem_events = MemTableQuery::new(ctx.memtable, plan).query();
-        for e in &mem_events {
-            sink.on_event(e);
-        }
-        // Segment path
-        SegmentAggregateRunner::new(
-            plan,
-            plan.filter_plans
-                .iter()
-                .map(|f| ExecutionStep::new(f.clone(), plan))
-                .collect(),
-        )
-        .with_caches(Some(&ctx.caches))
-        .run(&mut sink)
-        .await;
-
-        let partial = sink.into_partial();
-
-        let result = AggregateResult {
-            group_by: partial.group_by,
-            time_bucket: partial.time_bucket,
-            specs: partial.specs,
-            groups: partial.groups,
-        };
-        Ok(QueryResult::Aggregation(result))
     }
 }

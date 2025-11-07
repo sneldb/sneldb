@@ -21,6 +21,7 @@ fn for_context_returns_ordered_merger_with_order_by() {
     match merger {
         StreamMergerKind::Ordered(_) => {}
         StreamMergerKind::Unordered(_) => panic!("Expected Ordered merger"),
+        StreamMergerKind::Aggregate(_) => panic!("Expected Ordered merger, not Aggregate"),
     }
 }
 
@@ -41,6 +42,7 @@ fn for_context_returns_unordered_merger_without_order_by() {
     match merger {
         StreamMergerKind::Ordered(_) => panic!("Expected Unordered merger"),
         StreamMergerKind::Unordered(_) => {}
+        StreamMergerKind::Aggregate(_) => panic!("Expected Unordered merger, not Aggregate"),
     }
 }
 
@@ -56,5 +58,6 @@ fn for_context_handles_empty_command() {
     match merger {
         StreamMergerKind::Ordered(_) => panic!("Expected Unordered merger"),
         StreamMergerKind::Unordered(_) => {}
+        StreamMergerKind::Aggregate(_) => panic!("Expected Unordered merger, not Aggregate"),
     }
 }

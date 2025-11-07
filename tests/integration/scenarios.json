@@ -793,6 +793,7 @@
   },
   {
     "name": "bucket_month_using_created_at_boundary",
+    "config": { "query": { "streaming_enabled": true } },
     "input_commands": [
       "DEFINE orders_time FIELDS { \"id\": \"int\", \"created_at\": \"datetime\", \"amount\": \"int\" }",
       "STORE orders_time FOR b1 PAYLOAD {\"id\":1,\"created_at\":1736639999,\"amount\":10}",
@@ -809,6 +810,7 @@
   ,
   {
     "name": "bucket_week_using_created_at_negative_offset_cross_week",
+    "config": { "query": { "streaming_enabled": true } },
     "input_commands": [
       "DEFINE sessions FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
       "STORE sessions FOR s1 PAYLOAD {\"id\":1,\"created_at\":1735171199}",
@@ -823,6 +825,7 @@
   ,
   {
     "name": "bucket_day_using_date_field_midnight_normalization",
+    "config": { "query": { "streaming_enabled": true } },
     "input_commands": [
       "DEFINE birthdays FIELDS { \"id\": \"int\", \"birthdate\": \"date\" }",
       "STORE birthdays FOR bd1 PAYLOAD {\"id\":1,\"birthdate\":\"2025-09-06\"}",
@@ -840,6 +843,7 @@
   ,
   {
     "name": "bucket_hour_using_created_at_ms_payload",
+    "config": { "query": { "streaming_enabled": true } },
     "input_commands": [
       "DEFINE clicks FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
       "STORE clicks FOR c1 PAYLOAD {\"id\":1,\"created_at\":1735689600000}",
@@ -1024,6 +1028,7 @@
   ,
   {
     "name": "agg_count_per_day_by_country_and_plan",
+    "config": { "query": { "streaming_enabled": true } },
     "input_commands": [
       "DEFINE orders FIELDS { \"amount\": \"int\", \"country\": \"string\", \"plan\": \"string\" }",
       "STORE orders FOR c1 PAYLOAD {\"amount\":10,\"country\":\"NL\",\"plan\":\"pro\"}",
@@ -1043,6 +1048,7 @@
   ,
   {
     "name": "agg_count_unique_user_by_country_per_week",
+    "config": { "query": { "streaming_enabled": true } },
     "input_commands": [
       "DEFINE login FIELDS { \"user_id\": \"string\", \"country\": \"string\" }",
       "STORE login FOR u1 PAYLOAD {\"user_id\":\"A\",\"country\":\"NL\"}",
@@ -1060,6 +1066,7 @@
   ,
   {
     "name": "agg_avg_min_max_with_filter_by_country",
+    "config": { "query": { "streaming_enabled": true } },
     "input_commands": [
       "DEFINE orders FIELDS { \"amount\": \"int\", \"country\": \"string\", \"status\": \"string\" }",
       "STORE orders FOR c1 PAYLOAD {\"amount\":10,\"country\":\"NL\",\"status\":\"ok\"}",
@@ -1081,6 +1088,7 @@
   ,
   {
     "name": "agg_total_amount_group_by_two_fields_no_bucket",
+    "config": { "query": { "streaming_enabled": true } },
     "input_commands": [
       "DEFINE orders FIELDS { \"amount\": \"int\", \"region\": \"string\", \"channel\": \"string\" }",
       "STORE orders FOR r1 PAYLOAD {\"amount\":5,\"region\":\"EU\",\"channel\":\"web\"}",
@@ -1098,6 +1106,7 @@
   ,
   {
     "name": "agg_count_and_avg_per_hour_by_region",
+    "config": { "query": { "streaming_enabled": true } },
     "input_commands": [
       "DEFINE metrics FIELDS { \"value\": \"int\", \"region\": \"string\" }",
       "STORE metrics FOR m1 PAYLOAD {\"value\":1,\"region\":\"EU\"}",
@@ -1114,6 +1123,7 @@
   ,
   {
     "name": "agg_count_and_count_unique_by_country",
+    "config": { "query": { "streaming_enabled": true } },
     "input_commands": [
       "DEFINE login FIELDS { \"user_id\": \"string\", \"country\": \"string\" }",
       "STORE login FOR a PAYLOAD {\"user_id\":\"X\",\"country\":\"NL\"}",
@@ -1130,6 +1140,7 @@
   },
   {
     "name": "agg_count_all_simple",
+    "config": { "query": { "streaming_enabled": true } },
     "input_commands": [
       "DEFINE evt FIELDS { \"v\": \"int\" }",
       "STORE evt FOR a PAYLOAD {\"v\":1}",
@@ -1142,6 +1153,7 @@
   ,
   {
     "name": "agg_count_unique_by_country",
+    "config": { "query": { "streaming_enabled": true } },
     "input_commands": [
       "DEFINE login FIELDS { \"user_id\": \"string\", \"country\": \"string\" }",
       "STORE login FOR u1 PAYLOAD {\"user_id\":\"A\",\"country\":\"NL\"}",
@@ -1159,6 +1171,7 @@
   ,
   {
     "name": "agg_count_by_country",
+    "config": { "query": { "streaming_enabled": true } },
     "input_commands": [
       "DEFINE login FIELDS { \"user_id\": \"string\", \"country\": \"string\" }",
       "STORE login FOR u1 PAYLOAD {\"user_id\":\"A\",\"country\":\"NL\"}",
@@ -1176,6 +1189,7 @@
   ,
   {
     "name": "agg_avg_total_min_max_per_month_by_country",
+    "config": { "query": { "streaming_enabled": true } },
     "input_commands": [
       "DEFINE orders FIELDS { \"amount\": \"int\", \"country\": \"string\" }",
       "STORE orders FOR c1 PAYLOAD {\"amount\":10,\"country\":\"NL\"}",
@@ -1192,6 +1206,7 @@
   ,
   {
     "name": "agg_multiple_ops_no_group",
+    "config": { "query": { "streaming_enabled": true } },
     "input_commands": [
       "DEFINE evt FIELDS { \"x\": \"int\", \"y\": \"int\" }",
       "STORE evt FOR a PAYLOAD {\"x\":1,\"y\":2}",
@@ -1206,6 +1221,7 @@
   ,
   {
     "name": "agg_count_only_with_filter",
+    "config": { "query": { "streaming_enabled": true } },
     "input_commands": [
       "DEFINE evt FIELDS { \"kind\": \"string\" }",
       "STORE evt FOR k1 PAYLOAD {\"kind\":\"a\"}",
@@ -1215,6 +1231,171 @@
       "QUERY evt WHERE kind=\"a\" COUNT"
     ],
     "matcher": { "kind": "include", "value": "\"rows\":[[2]]" }
+  },
+  {
+    "name": "agg_scalar_avg_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"amount\": \"int\" }",
+      "STORE orders FOR c1 PAYLOAD {\"amount\":10}",
+      "STORE orders FOR c2 PAYLOAD {\"amount\":20}",
+      "STORE orders FOR c3 PAYLOAD {\"amount\":30}",
+      "FLUSH",
+      "QUERY orders AVG amount"
+    ],
+    "matcher": { "kind": "include", "value": "[[20.0]]" }
+  },
+  {
+    "name": "agg_scalar_total_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"amount\": \"int\" }",
+      "STORE orders FOR c1 PAYLOAD {\"amount\":10}",
+      "STORE orders FOR c2 PAYLOAD {\"amount\":20}",
+      "STORE orders FOR c3 PAYLOAD {\"amount\":30}",
+      "FLUSH",
+      "QUERY orders TOTAL amount"
+    ],
+    "matcher": { "kind": "include", "value": "[[60]]" }
+  },
+  {
+    "name": "agg_scalar_min_max_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"amount\": \"int\" }",
+      "STORE orders FOR c1 PAYLOAD {\"amount\":10}",
+      "STORE orders FOR c2 PAYLOAD {\"amount\":30}",
+      "STORE orders FOR c3 PAYLOAD {\"amount\":20}",
+      "FLUSH",
+      "QUERY orders MIN amount, MAX amount"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "[10,30]" }
+    ]
+  },
+  {
+    "name": "agg_count_with_limit_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"amount\": \"int\", \"country\": \"string\" }",
+      "STORE orders FOR c1 PAYLOAD {\"amount\":10,\"country\":\"NL\"}",
+      "STORE orders FOR c2 PAYLOAD {\"amount\":20,\"country\":\"FR\"}",
+      "STORE orders FOR c3 PAYLOAD {\"amount\":15,\"country\":\"FR\"}",
+      "STORE orders FOR c4 PAYLOAD {\"amount\":25,\"country\":\"IT\"}",
+      "FLUSH",
+      "QUERY orders COUNT BY country ORDER BY country DESC LIMIT 2"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "[\"NL\",1],[\"IT\",1]" }
+    ]
+  },
+  {
+    "name": "agg_avg_merging_accuracy_streaming",
+    "config": { "query": { "streaming_enabled": true }, "engine": { "shard_count": 2 } },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"amount\": \"int\", \"category\": \"string\" }",
+      "STORE orders FOR shard1-c1 PAYLOAD {\"amount\":10,\"category\":\"A\"}",
+      "STORE orders FOR shard1-c2 PAYLOAD {\"amount\":20,\"category\":\"A\"}",
+      "FLUSH",
+      "STORE orders FOR shard2-c3 PAYLOAD {\"amount\":30,\"category\":\"A\"}",
+      "FLUSH",
+      "QUERY orders AVG amount BY category"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "[[\"A\",20.0]]" }
+    ]
+  },
+  {
+    "name": "agg_count_unique_merging_accuracy_streaming",
+    "config": { "query": { "streaming_enabled": true }, "engine": { "shard_count": 2 } },
+    "input_commands": [
+      "DEFINE login FIELDS { \"user_id\": \"string\", \"region\": \"string\" }",
+      "STORE login FOR shard1-r1 PAYLOAD {\"user_id\":\"user1\",\"region\":\"EU\"}",
+      "STORE login FOR shard1-r2 PAYLOAD {\"user_id\":\"user2\",\"region\":\"EU\"}",
+      "FLUSH",
+      "STORE login FOR shard2-r3 PAYLOAD {\"user_id\":\"user1\",\"region\":\"EU\"}",
+      "STORE login FOR shard2-r4 PAYLOAD {\"user_id\":\"user3\",\"region\":\"EU\"}",
+      "FLUSH",
+      "QUERY login COUNT UNIQUE user_id BY region"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "[[\"EU\",3]]" }
+    ]
+  },
+  {
+    "name": "agg_scalar_count_unique_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE login FIELDS { \"user_id\": \"string\" }",
+      "STORE login FOR u1 PAYLOAD {\"user_id\":\"A\"}",
+      "STORE login FOR u2 PAYLOAD {\"user_id\":\"B\"}",
+      "STORE login FOR u3 PAYLOAD {\"user_id\":\"A\"}",
+      "FLUSH",
+      "QUERY login COUNT UNIQUE user_id"
+    ],
+    "matcher": { "kind": "include", "value": "[[2]]" }
+  },
+  {
+    "name": "agg_multiple_ops_with_limit_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"amount\": \"int\", \"country\": \"string\" }",
+      "STORE orders FOR c1 PAYLOAD {\"amount\":10,\"country\":\"NL\"}",
+      "STORE orders FOR c2 PAYLOAD {\"amount\":20,\"country\":\"DE\"}",
+      "STORE orders FOR c3 PAYLOAD {\"amount\":15,\"country\":\"IT\"}",
+      "STORE orders FOR c4 PAYLOAD {\"amount\":25,\"country\":\"IT\"}",
+      "FLUSH",
+      "QUERY orders AVG amount, TOTAL amount BY country ORDER BY country DESC LIMIT 2"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "[[\"NL\",10.0,10],[\"IT\",20.0,40]]" }
+    ]
+  },
+  {
+    "name": "agg_empty_groups_filtered_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"amount\": \"int\", \"country\": \"string\" }",
+      "STORE orders FOR c1 PAYLOAD {\"amount\":10,\"country\":\"NL\"}",
+      "STORE orders FOR c2 PAYLOAD {\"amount\":20,\"country\":\"DE\"}",
+      "FLUSH",
+      "QUERY orders COUNT BY country"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "[\"NL\",1]" },
+      { "kind": "include", "value": "[\"DE\",1]" }
+    ]
+  },
+  {
+    "name": "agg_count_field_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"order_id\": \"int | null\", \"country\": \"string\" }",
+      "STORE orders FOR c1 PAYLOAD {\"order_id\":1,\"country\":\"NL\"}",
+      "STORE orders FOR c2 PAYLOAD {\"order_id\":2,\"country\":\"NL\"}",
+      "STORE orders FOR c3 PAYLOAD {\"country\":\"DE\"}",
+      "FLUSH",
+      "QUERY orders COUNT order_id BY country"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"NL\",2" }
+    ]
+  },
+  {
+    "name": "agg_all_operations_comprehensive_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE metrics FIELDS { \"value\": \"int\", \"user_id\": \"string\", \"category\": \"string\" }",
+      "STORE metrics FOR m1 PAYLOAD {\"value\":10,\"user_id\":\"A\",\"category\":\"X\"}",
+      "STORE metrics FOR m2 PAYLOAD {\"value\":20,\"user_id\":\"B\",\"category\":\"X\"}",
+      "STORE metrics FOR m3 PAYLOAD {\"value\":15,\"user_id\":\"A\",\"category\":\"Y\"}",
+      "STORE metrics FOR m4 PAYLOAD {\"value\":25,\"user_id\":\"C\",\"category\":\"X\"}",
+      "FLUSH",
+      "QUERY metrics COUNT, COUNT UNIQUE user_id, AVG value, TOTAL value, MIN value, MAX value BY category"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "[[\"X\",3,3,18.333333333333332,55,10,25],[\"Y\",1,1,15.0,15,15,15]]" }
+    ]
   },
   {
     "name": "enum_store_wrong_case_rejected",

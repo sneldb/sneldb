@@ -227,7 +227,7 @@ pub async fn build_segment_stream(
     );
 
     let metrics = Arc::clone(ctx.metrics());
-    let (source_tx, current_rx) = FlowChannel::bounded(ctx.batch_size(), Arc::clone(&metrics));
+    let (source_tx, mut current_rx) = FlowChannel::bounded(ctx.batch_size(), Arc::clone(&metrics));
     let mut tasks: Vec<JoinHandle<()>> = Vec::new();
 
     let plan_for_task = Arc::clone(&plan);
@@ -251,15 +251,37 @@ pub async fn build_segment_stream(
         }
     }));
 
+    let mut final_schema = Arc::clone(&schema);
+
+    if let Some(aggregate_plan) = plan.aggregate_plan.clone() {
+        let aggregate_config = AggregateOpConfig {
+            plan: Arc::clone(&plan),
+            aggregate: aggregate_plan.clone(),
+        };
+        let aggregate = AggregateOp::new(aggregate_config);
+        let (agg_tx, agg_rx) = FlowChannel::bounded(ctx.batch_size(), Arc::clone(&metrics));
+        let agg_ctx = Arc::clone(&ctx);
+        tasks.push(tokio::spawn(async move {
+            if let Err(err) = aggregate.run(current_rx, agg_tx, agg_ctx).await {
+                error!(target: "sneldb::flow", error = %err, "Aggregate operator failed");
+            }
+        }));
+        current_rx = agg_rx;
+        final_schema = Arc::new(
+            BatchSchema::new(aggregate_output_schema(&aggregate_plan))
+                .map_err(|e| FlowOperatorError::Batch(e.to_string()))?,
+        );
+    }
+
     let projection = Projection {
-        indices: (0..schema.column_count()).collect(),
-        schema: Arc::clone(&schema),
+        indices: (0..final_schema.column_count()).collect(),
+        schema: Arc::clone(&final_schema),
     };
 
     // Optimize: Skip ProjectOp if it's an identity projection (all columns in same order)
     if projection.is_identity() {
         // Identity projection - just pass through batches without cloning
-        Ok(Some(ShardFlowHandle::new(current_rx, schema, tasks)))
+        Ok(Some(ShardFlowHandle::new(current_rx, final_schema, tasks)))
     } else {
         let projector = ProjectOp::new(projection);
         let (proj_tx, proj_rx) = FlowChannel::bounded(ctx.batch_size(), Arc::clone(&metrics));
@@ -270,6 +292,6 @@ pub async fn build_segment_stream(
             }
         }));
 
-        Ok(Some(ShardFlowHandle::new(proj_rx, schema, tasks)))
+        Ok(Some(ShardFlowHandle::new(proj_rx, final_schema, tasks)))
     }
 }

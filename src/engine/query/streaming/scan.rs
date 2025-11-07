@@ -43,10 +43,6 @@ impl<'a> StreamingScan<'a> {
             }
         }
 
-        if plan.aggregate_plan.is_some() {
-            return Err(QueryExecutionError::Aborted);
-        }
-
         let context =
             StreamingContext::new(Arc::new(plan), passive_buffers, STREAMING_BATCH_SIZE).await?;
 

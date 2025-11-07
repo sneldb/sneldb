@@ -94,6 +94,18 @@ impl<'a, W: AsyncWrite + Unpin> QueryCommandHandler<'a, W> {
         let limit_value = *limit;
         let offset_value = *offset;
 
+        // Aggregate queries must use streaming path - fail early if streaming is disabled
+        if let Command::Query { aggs: Some(_), .. } = self.command {
+            if !QueryStreamingConfig::enabled() {
+                return self
+                    .write_error(
+                        StatusCode::InternalError,
+                        "Aggregate queries require streaming execution (streaming is disabled)",
+                    )
+                    .await;
+            }
+        }
+
         if QueryStreamingConfig::enabled() && pipeline.streaming_supported() {
             match pipeline.execute_streaming().await {
                 Ok(Some(stream)) => {
@@ -113,8 +125,32 @@ impl<'a, W: AsyncWrite + Unpin> QueryCommandHandler<'a, W> {
                     );
                     return response_writer.write(stream).await;
                 }
-                Ok(None) => {}
+                Ok(None) => {
+                    // Streaming not available - check if this is an aggregate query
+                    if let Command::Query { aggs: Some(_), .. } = self.command {
+                        return self
+                            .write_error(
+                                StatusCode::InternalError,
+                                "Aggregate queries require streaming execution",
+                            )
+                            .await;
+                    }
+                }
                 Err(error) => {
+                    // For aggregate queries, don't fall back to batch - fail fast
+                    if let Command::Query { aggs: Some(_), .. } = self.command {
+                        warn!(
+                            target: "sneldb::query",
+                            error = %error,
+                            "Streaming execution failed for aggregate query"
+                        );
+                        return self
+                            .write_error(
+                                StatusCode::InternalError,
+                                &format!("Aggregate query failed: {error}"),
+                            )
+                            .await;
+                    }
                     warn!(
                         target: "sneldb::query",
                         error = %error,
@@ -125,6 +161,7 @@ impl<'a, W: AsyncWrite + Unpin> QueryCommandHandler<'a, W> {
         }
 
         // Only create formatter when we actually need it (non-streaming path)
+        // Aggregate queries should never reach here - they're rejected above
         let mut formatter = QueryResponseFormatter::new(self.renderer);
         match pipeline.execute().await {
             Ok(result) => formatter.write(self.writer, result).await,

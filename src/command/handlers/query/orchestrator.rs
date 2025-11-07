@@ -42,15 +42,7 @@ impl<'a> QueryExecutionPipeline<'a> {
     }
 
     pub fn streaming_supported(&self) -> bool {
-        matches!(
-            self.ctx.command,
-            Command::Query {
-                aggs: None,
-                time_bucket: None,
-                group_by: None,
-                ..
-            }
-        )
+        true
     }
 
     pub fn is_sequence_query(&self) -> bool {
@@ -120,7 +112,9 @@ impl<'a> QueryExecutionPipeline<'a> {
             limit.map(|l| l as usize),
         );
 
-        let stream = merger.merge(&self.ctx, sequence_handles.handles_by_type).await?;
+        let stream = merger
+            .merge(&self.ctx, sequence_handles.handles_by_type)
+            .await?;
         Ok(Some(stream))
     }
 }

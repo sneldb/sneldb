@@ -103,12 +103,16 @@ async fn streaming_scan_emits_memtable_rows() {
 }
 
 #[tokio::test]
-async fn streaming_scan_rejects_aggregate_queries() {
+async fn streaming_scan_supports_aggregate_queries() {
     let registry_factory = SchemaRegistryFactory::new();
     registry_factory
         .define_with_fields(
             "stream_event",
-            &[("context_id", "string"), ("timestamp", "u64")],
+            &[
+                ("context_id", "string"),
+                ("timestamp", "u64"),
+                ("value", "int"),
+            ],
         )
         .await
         .expect("schema defined");
@@ -128,6 +132,7 @@ async fn streaming_scan_rejects_aggregate_queries() {
 
     let segment_ids = Arc::new(StdRwLock::new(vec!["seg-agg".to_string()]));
 
+    // Aggregate queries now support streaming via AggregateOp
     let result = StreamingScan::new(
         &command,
         None,
@@ -139,5 +144,8 @@ async fn streaming_scan_rejects_aggregate_queries() {
     )
     .await;
 
-    assert!(result.is_err(), "aggregation queries should be rejected");
+    assert!(
+        result.is_ok(),
+        "aggregation queries should be supported in streaming mode"
+    );
 }

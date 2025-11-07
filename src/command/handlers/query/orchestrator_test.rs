@@ -43,7 +43,7 @@ fn streaming_supported_returns_true_with_order_by() {
 }
 
 #[test]
-fn streaming_supported_returns_false_with_aggregations() {
+fn streaming_supported_returns_true_with_aggregations() {
     let manager = ShardManager { shards: Vec::new() };
     let registry = SchemaRegistryFactory::new().registry();
 
@@ -52,11 +52,12 @@ fn streaming_supported_returns_false_with_aggregations() {
         .add_count()
         .create();
     let pipeline = QueryExecutionPipeline::new(&command, &manager, Arc::clone(&registry));
-    assert!(!pipeline.streaming_supported());
+    // Aggregations now support streaming via AggregateOp and AggregateStreamMerger
+    assert!(pipeline.streaming_supported());
 }
 
 #[test]
-fn streaming_supported_returns_false_with_time_bucket() {
+fn streaming_supported_returns_true_with_time_bucket() {
     let manager = ShardManager { shards: Vec::new() };
     let registry = SchemaRegistryFactory::new().registry();
 
@@ -65,11 +66,12 @@ fn streaming_supported_returns_false_with_time_bucket() {
         .with_time_bucket(crate::command::types::TimeGranularity::Hour)
         .create();
     let pipeline = QueryExecutionPipeline::new(&command, &manager, Arc::clone(&registry));
-    assert!(!pipeline.streaming_supported());
+    // Time bucketing now supports streaming via AggregateOp
+    assert!(pipeline.streaming_supported());
 }
 
 #[test]
-fn streaming_supported_returns_false_with_group_by() {
+fn streaming_supported_returns_true_with_group_by() {
     let manager = ShardManager { shards: Vec::new() };
     let registry = SchemaRegistryFactory::new().registry();
 
@@ -78,7 +80,8 @@ fn streaming_supported_returns_false_with_group_by() {
         .with_group_by(vec!["field1"])
         .create();
     let pipeline = QueryExecutionPipeline::new(&command, &manager, Arc::clone(&registry));
-    assert!(!pipeline.streaming_supported());
+    // Group by now supports streaming via AggregateOp
+    assert!(pipeline.streaming_supported());
 }
 
 #[test]
