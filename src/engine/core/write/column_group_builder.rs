@@ -35,13 +35,20 @@ impl ColumnGroupBuilder {
             .or_insert_with(|| Vec::new());
         let s = match &job.value {
             ScalarValue::Utf8(s) => s.clone(),
-            ScalarValue::Int64(i) => i.to_string(),
+            ScalarValue::Int64(i) => {
+                // For event_id field, convert to u64 string to match PhysicalType::U64
+                // This handles the case where event_id > i64::MAX (casts to negative i64)
+                if job.key.1 == "event_id" && *i < 0 {
+                    // Negative i64 means original u64 > i64::MAX, reconstruct it
+                    (*i as u64).to_string()
+                } else {
+                    i.to_string()
+                }
+            },
             ScalarValue::Timestamp(ts) => ts.to_string(),
             ScalarValue::Float64(f) => f.to_string(),
             ScalarValue::Boolean(b) => b.to_string(),
             ScalarValue::Null => String::new(),
-            // Complex JSON already serialized as Utf8 string
-            ScalarValue::Utf8(s) => s.clone(),
             ScalarValue::Binary(bytes) => BASE64_STANDARD.encode(bytes),
         };
         values.push(s);
