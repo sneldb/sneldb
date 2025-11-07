@@ -8,6 +8,21 @@
   <link rel="stylesheet" href="/static/highlight.css" />
   <link rel="icon" href="data:," />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script type="module">
+    // Load Apache Arrow as ES module and expose it globally
+    try {
+      import('https://cdn.jsdelivr.net/npm/apache-arrow@15.0.0/+esm').then(Arrow => {
+        window.ApacheArrow = Arrow;
+        // Dispatch event to notify that Arrow is ready
+        window.dispatchEvent(new CustomEvent('arrow-loaded'));
+      }).catch(err => {
+        console.error('Failed to load Apache Arrow:', err);
+        window.ApacheArrow = null;
+      });
+    } catch (err) {
+      console.error('Error importing Apache Arrow:', err);
+    }
+  </script>
 </head>
 <body>
   <div id="app">
@@ -69,6 +84,7 @@
                   <option value="250">250</option>
                   <option value="500">500</option>
                   <option value="1000">1000</option>
+                  <option value="5000">5000</option>
                 </select>
               </label>
             </div>
