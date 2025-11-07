@@ -78,7 +78,10 @@ async fn test_recv_returns_batches_from_stream() {
     let pool = BatchPool::new(16).expect("batch pool");
     let mut builder = pool.acquire(Arc::clone(&schema));
     builder
-        .push_row(&vec![ScalarValue::from(json!("ctx-1")), ScalarValue::from(json!(42))])
+        .push_row(&vec![
+            ScalarValue::from(json!("ctx-1")),
+            ScalarValue::from(json!(42)),
+        ])
         .expect("push row");
     let batch = builder.finish().expect("finish batch");
     tx.send(Arc::new(batch)).await.expect("send batch");
@@ -92,7 +95,10 @@ async fn test_recv_returns_batches_from_stream() {
     // Send another batch
     let mut builder = pool.acquire(Arc::clone(&schema));
     builder
-        .push_row(&vec![ScalarValue::from(json!("ctx-2")), ScalarValue::from(json!(84))])
+        .push_row(&vec![
+            ScalarValue::from(json!("ctx-2")),
+            ScalarValue::from(json!(84)),
+        ])
         .expect("push row");
     let batch = builder.finish().expect("finish batch");
     tx.send(Arc::new(batch)).await.expect("send batch");

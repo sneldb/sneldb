@@ -110,10 +110,22 @@ fn decode_basic_batch() {
 
     assert_eq!(decoded.len(), 2);
     use crate::engine::types::ScalarValue;
-    assert_eq!(decoded.column(0).unwrap()[0], ScalarValue::from(json!(1700000000_u64)));
-    assert_eq!(decoded.column(0).unwrap()[1], ScalarValue::from(json!(1700000001_u64)));
-    assert_eq!(decoded.column(1).unwrap()[0], ScalarValue::from(json!(1_u64)));
-    assert_eq!(decoded.column(1).unwrap()[1], ScalarValue::from(json!(2_u64)));
+    assert_eq!(
+        decoded.column(0).unwrap()[0],
+        ScalarValue::from(json!(1700000000_u64))
+    );
+    assert_eq!(
+        decoded.column(0).unwrap()[1],
+        ScalarValue::from(json!(1700000001_u64))
+    );
+    assert_eq!(
+        decoded.column(1).unwrap()[0],
+        ScalarValue::from(json!(1_u64))
+    );
+    assert_eq!(
+        decoded.column(1).unwrap()[1],
+        ScalarValue::from(json!(2_u64))
+    );
 }
 
 #[test]
@@ -168,10 +180,22 @@ fn decode_handles_all_column_types() {
 
     assert_eq!(decoded.len(), 1);
     use crate::engine::types::ScalarValue;
-    assert_eq!(decoded.column(0).unwrap()[0], ScalarValue::from(json!(1000_u64)));
-    assert_eq!(decoded.column(1).unwrap()[0], ScalarValue::from(json!(42_i64)));
-    assert_eq!(decoded.column(3).unwrap()[0], ScalarValue::from(json!(true)));
-    assert_eq!(decoded.column(4).unwrap()[0], ScalarValue::from(json!("product")));
+    assert_eq!(
+        decoded.column(0).unwrap()[0],
+        ScalarValue::from(json!(1000_u64))
+    );
+    assert_eq!(
+        decoded.column(1).unwrap()[0],
+        ScalarValue::from(json!(42_i64))
+    );
+    assert_eq!(
+        decoded.column(3).unwrap()[0],
+        ScalarValue::from(json!(true))
+    );
+    assert_eq!(
+        decoded.column(4).unwrap()[0],
+        ScalarValue::from(json!("product"))
+    );
 }
 
 #[test]
@@ -191,7 +215,10 @@ fn decode_handles_string_columns() {
 
     assert_eq!(decoded.len(), 2);
     use crate::engine::types::ScalarValue;
-    assert_eq!(decoded.column(1).unwrap()[0], ScalarValue::from(json!("short")));
+    assert_eq!(
+        decoded.column(1).unwrap()[0],
+        ScalarValue::from(json!("short"))
+    );
     assert_eq!(
         decoded.column(1).unwrap()[1],
         ScalarValue::from(json!("much longer string here"))
@@ -215,8 +242,14 @@ fn decode_handles_json_columns() {
 
     assert_eq!(decoded.len(), 2);
     use crate::engine::types::ScalarValue;
-    assert_eq!(decoded.column(1).unwrap()[0], ScalarValue::from(json!({"key": "value"})));
-    assert_eq!(decoded.column(1).unwrap()[1], ScalarValue::from(json!([1, 2, 3])));
+    assert_eq!(
+        decoded.column(1).unwrap()[0],
+        ScalarValue::from(json!({"key": "value"}))
+    );
+    assert_eq!(
+        decoded.column(1).unwrap()[1],
+        ScalarValue::from(json!([1, 2, 3]))
+    );
 }
 
 #[test]
@@ -316,12 +349,27 @@ fn encode_decode_roundtrip_complex() {
     assert_eq!(decoded.len(), 3);
     // Verify first row
     use crate::engine::types::ScalarValue;
-    assert_eq!(decoded.column(0).unwrap()[0], ScalarValue::from(json!(1000_u64)));
+    assert_eq!(
+        decoded.column(0).unwrap()[0],
+        ScalarValue::from(json!(1000_u64))
+    );
     assert_eq!(decoded.column(1).unwrap()[0], ScalarValue::from(json!(1)));
-    assert_eq!(decoded.column(2).unwrap()[0], ScalarValue::from(json!(10.5)));
-    assert_eq!(decoded.column(3).unwrap()[0], ScalarValue::from(json!(true)));
-    assert_eq!(decoded.column(4).unwrap()[0], ScalarValue::from(json!("item1")));
-    assert_eq!(decoded.column(5).unwrap()[0], ScalarValue::from(json!(["tag1", "tag2"])));
+    assert_eq!(
+        decoded.column(2).unwrap()[0],
+        ScalarValue::from(json!(10.5))
+    );
+    assert_eq!(
+        decoded.column(3).unwrap()[0],
+        ScalarValue::from(json!(true))
+    );
+    assert_eq!(
+        decoded.column(4).unwrap()[0],
+        ScalarValue::from(json!("item1"))
+    );
+    assert_eq!(
+        decoded.column(5).unwrap()[0],
+        ScalarValue::from(json!(["tag1", "tag2"]))
+    );
 
     // Verify nulls in third row
     assert_eq!(decoded.column(1).unwrap()[2], ScalarValue::Null);

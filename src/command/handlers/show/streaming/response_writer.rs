@@ -125,9 +125,7 @@ impl<'a, W: AsyncWrite + Unpin> ShowResponseWriter<'a, W> {
                     for row_idx in 0..batch_arc.len() {
                         if let Some(ref mut seen_ids_set) = self.seen_ids {
                             if let Some(idx) = self.event_id_idx {
-                                if let Some(id) = columns[idx]
-                                    .get(row_idx)
-                                    .and_then(|v| v.as_u64())
+                                if let Some(id) = columns[idx].get(row_idx).and_then(|v| v.as_u64())
                                 {
                                     if is_materialized_frame {
                                         seen_ids_set.insert(id);
@@ -204,8 +202,7 @@ impl<'a, W: AsyncWrite + Unpin> ShowResponseWriter<'a, W> {
             }
         }
 
-        self.renderer
-            .stream_end(self.emitted, &mut self.encode_buf);
+        self.renderer.stream_end(self.emitted, &mut self.encode_buf);
         self.writer
             .write_all(&self.encode_buf)
             .await
@@ -250,9 +247,7 @@ impl<'a, W: AsyncWrite + Unpin> ShowResponseWriter<'a, W> {
                         // Check event_id deduplication using ScalarValue directly
                         if let Some(ref mut seen_ids_set) = self.seen_ids {
                             if let Some(idx) = self.event_id_idx {
-                                if let Some(id) = columns[idx]
-                                    .get(row_idx)
-                                    .and_then(|v| v.as_u64())
+                                if let Some(id) = columns[idx].get(row_idx).and_then(|v| v.as_u64())
                                 {
                                     if is_materialized_frame {
                                         seen_ids_set.insert(id);

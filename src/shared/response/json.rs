@@ -201,9 +201,7 @@ impl Renderer for JsonRenderer {
         // Serialize batch as array of arrays (more efficient than per-row objects)
         let batch_frame = BatchFrame {
             frame_type: "batch",
-            rows: BatchRows {
-                rows: &json_batch,
-            },
+            rows: BatchRows { rows: &json_batch },
         };
 
         if sonic_rs::to_writer(&mut *out, &batch_frame).is_err() {

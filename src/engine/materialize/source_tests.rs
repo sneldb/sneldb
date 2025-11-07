@@ -27,7 +27,9 @@ fn build_schema() -> BatchSchema {
     .expect("valid schema")
 }
 
-fn batch_to_rows(batch: &crate::engine::core::read::flow::ColumnBatch) -> Vec<Vec<serde_json::Value>> {
+fn batch_to_rows(
+    batch: &crate::engine::core::read::flow::ColumnBatch,
+) -> Vec<Vec<serde_json::Value>> {
     use crate::engine::types::ScalarValue;
     let column_count = batch.schema().column_count();
     let mut rows = vec![vec![serde_json::Value::Null; column_count]; batch.len()];
@@ -52,10 +54,18 @@ async fn materialized_source_streams_frames() {
     let pool = BatchPool::new(8).unwrap();
     let mut builder = pool.acquire(Arc::clone(&schema_arc));
     builder
-        .push_row(&[ScalarValue::from(json!(1_700_000_000_u64)), ScalarValue::from(json!("ctx-a")), ScalarValue::from(json!(1_u64))])
+        .push_row(&[
+            ScalarValue::from(json!(1_700_000_000_u64)),
+            ScalarValue::from(json!("ctx-a")),
+            ScalarValue::from(json!(1_u64)),
+        ])
         .unwrap();
     builder
-        .push_row(&[ScalarValue::from(json!(1_700_000_050_u64)), ScalarValue::from(json!("ctx-b")), ScalarValue::from(json!(2_u64))])
+        .push_row(&[
+            ScalarValue::from(json!(1_700_000_050_u64)),
+            ScalarValue::from(json!("ctx-b")),
+            ScalarValue::from(json!(2_u64)),
+        ])
         .unwrap();
     sink.append(&builder.finish().unwrap()).unwrap();
     drop(sink);

@@ -30,7 +30,10 @@ fn frame_writer_reader_roundtrip() {
     let pool = BatchPool::new(8).unwrap();
     let mut builder = pool.acquire(Arc::clone(&schema));
     builder
-        .push_row(&[ScalarValue::from(json!(1_700_000_000_u64)), ScalarValue::from(json!(42_u64))])
+        .push_row(&[
+            ScalarValue::from(json!(1_700_000_000_u64)),
+            ScalarValue::from(json!(42_u64)),
+        ])
         .unwrap();
     let batch = builder.finish().unwrap();
 

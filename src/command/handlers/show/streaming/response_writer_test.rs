@@ -34,9 +34,18 @@ fn build_schema() -> Arc<BatchSchema> {
 
 fn build_batch(schema: Arc<BatchSchema>, rows: &[(u64, u64, &str)]) -> Arc<ColumnBatch> {
     use crate::engine::types::ScalarValue;
-    let timestamps: Vec<ScalarValue> = rows.iter().map(|(ts, _, _)| ScalarValue::from(json!(ts))).collect();
-    let event_ids: Vec<ScalarValue> = rows.iter().map(|(_, id, _)| ScalarValue::from(json!(id))).collect();
-    let values: Vec<ScalarValue> = rows.iter().map(|(_, _, v)| ScalarValue::from(json!(v))).collect();
+    let timestamps: Vec<ScalarValue> = rows
+        .iter()
+        .map(|(ts, _, _)| ScalarValue::from(json!(ts)))
+        .collect();
+    let event_ids: Vec<ScalarValue> = rows
+        .iter()
+        .map(|(_, id, _)| ScalarValue::from(json!(id)))
+        .collect();
+    let values: Vec<ScalarValue> = rows
+        .iter()
+        .map(|(_, _, v)| ScalarValue::from(json!(v)))
+        .collect();
 
     Arc::new(
         ColumnBatch::new(
@@ -338,9 +347,18 @@ async fn writes_arrow_format_with_u64_event_ids() {
         (2u64, 1000000000001u64, "second"),
     ];
     use crate::engine::types::ScalarValue;
-    let timestamps: Vec<ScalarValue> = rows.iter().map(|(ts, _, _)| ScalarValue::from(json!(*ts))).collect();
-    let event_ids: Vec<ScalarValue> = rows.iter().map(|(_, id, _)| ScalarValue::from(json!(*id))).collect();
-    let values: Vec<ScalarValue> = rows.iter().map(|(_, _, v)| ScalarValue::from(json!(*v))).collect();
+    let timestamps: Vec<ScalarValue> = rows
+        .iter()
+        .map(|(ts, _, _)| ScalarValue::from(json!(*ts)))
+        .collect();
+    let event_ids: Vec<ScalarValue> = rows
+        .iter()
+        .map(|(_, id, _)| ScalarValue::from(json!(*id)))
+        .collect();
+    let values: Vec<ScalarValue> = rows
+        .iter()
+        .map(|(_, _, v)| ScalarValue::from(json!(*v)))
+        .collect();
 
     let batch = Arc::new(
         ColumnBatch::new(

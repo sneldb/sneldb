@@ -1,13 +1,26 @@
-use crate::command::handlers::query::handle;
+use crate::command::handlers::query::QueryCommandHandler;
 use crate::command::parser::commands::query::parse;
 use crate::engine::shard::manager::ShardManager;
 use crate::logging::init_for_tests;
 use crate::shared::response::JsonRenderer;
 use crate::test_helpers::factories::{CommandFactory, SchemaRegistryFactory};
 use serde_json::Value as JsonValue;
+use std::sync::Arc;
 use tempfile::tempdir;
-use tokio::io::{AsyncReadExt, duplex};
+use tokio::io::{AsyncReadExt, AsyncWrite, duplex};
 use tokio::time::{Duration, sleep};
+
+async fn execute_query<W: AsyncWrite + Unpin>(
+    cmd: &crate::command::types::Command,
+    shard_manager: &ShardManager,
+    registry: &Arc<tokio::sync::RwLock<crate::engine::schema::SchemaRegistry>>,
+    writer: &mut W,
+    renderer: &dyn crate::shared::response::render::Renderer,
+) -> std::io::Result<()> {
+    QueryCommandHandler::new(cmd, shard_manager, Arc::clone(registry), writer, renderer)
+        .handle()
+        .await
+}
 
 #[tokio::test]
 async fn test_query_returns_no_results_when_nothing_matches() {
@@ -35,7 +48,7 @@ async fn test_query_returns_no_results_when_nothing_matches() {
 
     let (mut reader, mut writer) = duplex(1024);
 
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .expect("handler should not fail");
 
@@ -106,7 +119,7 @@ async fn test_query_aggregation_count_unique_by_returns_values() {
     let cmd = parse(cmd_str).expect("parse COUNT UNIQUE query");
 
     let (mut reader, mut writer) = duplex(2048);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -178,7 +191,7 @@ async fn test_query_aggregation_count_field_by_returns_values() {
     let cmd = parse(cmd_str).expect("parse COUNT <field> query");
 
     let (mut reader, mut writer) = duplex(4096);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -230,7 +243,7 @@ async fn test_query_aggregation_per_month_by_country_returns_bucket_and_group() 
     let cmd = parse(cmd_str).expect("parse agg per/by query");
 
     let (mut reader, mut writer) = duplex(4096);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -301,7 +314,7 @@ async fn test_query_aggregation_count_per_day_by_two_fields() {
     let cmd = parse(cmd_str).expect("parse COUNT PER day BY query");
 
     let (mut reader, mut writer) = duplex(4096);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -353,7 +366,7 @@ async fn test_query_aggregation_multiple_aggs_returns_all_metrics() {
     let cmd = parse(cmd_str).expect("parse multi agg query");
 
     let (mut reader, mut writer) = duplex(2048);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -406,7 +419,7 @@ async fn test_query_aggregation_count_returns_value() {
     let cmd = parse(cmd_str).expect("parse COUNT query");
 
     let (mut reader, mut writer) = duplex(2048);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -467,7 +480,7 @@ async fn test_query_aggregation_avg_with_filter_returns_value() {
     let cmd = parse(cmd_str).expect("parse AVG query");
 
     let (mut reader, mut writer) = duplex(2048);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -507,7 +520,7 @@ async fn test_query_aggregation_empty_returns_table_not_message() {
     let cmd = parse(cmd_str).expect("parse COUNT query");
 
     let (mut reader, mut writer) = duplex(1024);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -562,7 +575,7 @@ async fn test_query_returns_matching_event_as_json() {
         .with_context_id("ctx1")
         .create();
     let (mut reader, mut writer) = duplex(1024);
-    handle(
+    execute_query(
         &query_cmd,
         &shard_manager,
         &registry,
@@ -595,7 +608,7 @@ async fn test_query_returns_error_for_empty_event_type() {
         .create();
     let (mut reader, mut writer) = duplex(1024);
 
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -646,7 +659,7 @@ async fn test_query_selection_limit_truncates() {
     // LIMIT 2 should return two rows sorted by context_id: c1, c2
     let cmd = parse("QUERY limit_sel_evt LIMIT 2").expect("parse LIMIT selection query");
     let (mut reader, mut writer) = duplex(4096);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -702,7 +715,7 @@ async fn test_query_order_by_with_lt_filter_returns_rows() {
     let cmd_str = "QUERY lt_evt WHERE id < 10 ORDER BY id ASC LIMIT 2";
     let cmd = parse(cmd_str).expect("parse lt filter with order+limit");
     let (mut reader, mut writer) = duplex(4096);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -753,7 +766,7 @@ async fn test_query_aggregation_limit_truncates_and_sorts_groups() {
 
     let cmd = parse("QUERY limit_agg_evt COUNT BY country LIMIT 2").expect("parse agg LIMIT query");
     let (mut reader, mut writer) = duplex(4096);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -910,7 +923,7 @@ async fn test_query_order_by_limit_with_large_dataset() {
     let cmd =
         parse("QUERY large_evt ORDER BY score DESC LIMIT 5").expect("parse ORDER BY DESC LIMIT");
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let mut buf = vec![0; 8192];
@@ -936,7 +949,7 @@ async fn test_query_order_by_limit_with_large_dataset() {
     let cmd =
         parse("QUERY large_evt ORDER BY score ASC LIMIT 7").expect("parse ORDER BY ASC LIMIT");
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let mut buf = vec![0; 8192];
@@ -962,7 +975,7 @@ async fn test_query_order_by_limit_with_large_dataset() {
     let cmd =
         parse("QUERY large_evt ORDER BY priority DESC LIMIT 10").expect("parse priority DESC");
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let mut buf = vec![0; 8192];
@@ -984,7 +997,7 @@ async fn test_query_order_by_limit_with_large_dataset() {
     // Test 4: ORDER BY priority ASC, LIMIT 12 - test negative numbers ascending
     let cmd = parse("QUERY large_evt ORDER BY priority ASC LIMIT 12").expect("parse priority ASC");
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let mut buf = vec![0; 8192];
@@ -1006,7 +1019,7 @@ async fn test_query_order_by_limit_with_large_dataset() {
     // Test 5: ORDER BY category ASC, LIMIT 15 - test string ordering ascending
     let cmd = parse("QUERY large_evt ORDER BY category ASC LIMIT 15").expect("parse category ASC");
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let mut buf = vec![0; 8192];
@@ -1032,7 +1045,7 @@ async fn test_query_order_by_limit_with_large_dataset() {
     let cmd =
         parse("QUERY large_evt ORDER BY category DESC LIMIT 20").expect("parse category DESC");
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let mut buf = vec![0; 8192];
@@ -1057,7 +1070,7 @@ async fn test_query_order_by_limit_with_large_dataset() {
     // Test 7: LIMIT 1 - edge case, single result
     let cmd = parse("QUERY large_evt ORDER BY score DESC LIMIT 1").expect("parse LIMIT 1");
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let mut buf = vec![0; 8192];
@@ -1071,7 +1084,7 @@ async fn test_query_order_by_limit_with_large_dataset() {
     // Test 8: Large LIMIT 100 - test with many records including duplicates
     let cmd = parse("QUERY large_evt ORDER BY score DESC LIMIT 100").expect("parse large LIMIT");
     let (mut reader, mut writer) = duplex(16384);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let mut buf = vec![0; 16384];
@@ -1091,7 +1104,7 @@ async fn test_query_order_by_limit_with_large_dataset() {
     // Test 9: LIMIT exceeds dataset - should return all 150
     let cmd = parse("QUERY large_evt ORDER BY score ASC LIMIT 500").expect("parse LIMIT > dataset");
     let (mut reader, mut writer) = duplex(32768);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let mut buf = vec![0; 32768];
@@ -1115,7 +1128,7 @@ async fn test_query_order_by_limit_with_large_dataset() {
     // Test 10: ORDER BY with LIMIT on field with many duplicates (score=42 for 30 rows)
     let cmd = parse("QUERY large_evt ORDER BY score ASC LIMIT 35").expect("parse duplicates test");
     let (mut reader, mut writer) = duplex(16384);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let mut buf = vec![0; 16384];
@@ -1140,7 +1153,7 @@ async fn test_query_order_by_limit_with_large_dataset() {
     let cmd =
         parse("QUERY large_evt ORDER BY priority DESC LIMIT 149").expect("parse near-full LIMIT");
     let (mut reader, mut writer) = duplex(32768);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let mut buf = vec![0; 32768];
@@ -1163,7 +1176,7 @@ async fn test_query_order_by_limit_with_large_dataset() {
     // Test 12: LIMIT without ORDER BY - should still respect LIMIT
     let cmd = parse("QUERY large_evt LIMIT 42").expect("parse LIMIT no ORDER");
     let (mut reader, mut writer) = duplex(16384);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let mut buf = vec![0; 16384];
@@ -1220,7 +1233,7 @@ async fn test_timestamp_order_by_desc_offset_limit() {
     let cmd = parse("QUERY ts_evt_desc ORDER BY created_at DESC OFFSET 3 LIMIT 4")
         .expect("parse ts order by desc with offset");
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let mut buf = vec![0; 8192];
@@ -1288,7 +1301,7 @@ async fn test_timestamp_where_gt_asc_limit() {
     let cmd = parse("QUERY ts_evt_range WHERE created_at > 307 ORDER BY created_at ASC LIMIT 3")
         .expect("parse where created_at>");
     let (mut reader, mut writer) = duplex(4096);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let mut buf = vec![0; 4096];
@@ -1390,7 +1403,7 @@ async fn test_query_with_datetime_field_and_limit() {
     let cmd = parse("QUERY time_evt ORDER BY created_at DESC LIMIT 5")
         .expect("parse ORDER BY created_at DESC");
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let mut buf = vec![0; 8192];
@@ -1420,7 +1433,7 @@ async fn test_query_with_datetime_field_and_limit() {
     let cmd = parse("QUERY time_evt ORDER BY created_at ASC LIMIT 10")
         .expect("parse ORDER BY created_at ASC");
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let mut buf = vec![0; 8192];
@@ -1450,7 +1463,7 @@ async fn test_query_with_datetime_field_and_limit() {
     let cmd = parse("QUERY time_evt ORDER BY created_at DESC LIMIT 20")
         .expect("parse ORDER BY created_at DESC LIMIT 20");
     let (mut reader, mut writer) = duplex(16384);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let mut buf = vec![0; 16384];
@@ -1475,7 +1488,7 @@ async fn test_query_with_datetime_field_and_limit() {
     let cmd = parse("QUERY time_evt ORDER BY created_at ASC LIMIT 100")
         .expect("parse ORDER BY created_at ASC LIMIT 100");
     let (mut reader, mut writer) = duplex(32768);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let mut buf = vec![0; 32768];
@@ -1504,7 +1517,7 @@ async fn test_query_with_datetime_field_and_limit() {
     // Test 5: LIMIT without ORDER BY - should still work
     let cmd = parse("QUERY time_evt LIMIT 15").expect("parse LIMIT without ORDER BY");
     let (mut reader, mut writer) = duplex(16384);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let mut buf = vec![0; 16384];
@@ -1519,7 +1532,7 @@ async fn test_query_with_datetime_field_and_limit() {
     let cmd = parse("QUERY time_evt ORDER BY created_at DESC LIMIT 1")
         .expect("parse ORDER BY created_at DESC LIMIT 1");
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let mut buf = vec![0; 8192];
@@ -1577,7 +1590,7 @@ async fn test_orchestrator_multi_shard_query() {
         .with_event_type("multi_shard_evt")
         .create();
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -1642,7 +1655,7 @@ async fn test_orchestrator_order_by_with_offset_and_limit() {
     let cmd = parse("QUERY offset_evt ORDER BY rank ASC OFFSET 5 LIMIT 3")
         .expect("parse ORDER BY with OFFSET and LIMIT");
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -1725,7 +1738,7 @@ async fn test_orchestrator_kway_merge_performance() {
     let cmd = parse("QUERY perf_evt ORDER BY score ASC LIMIT 50")
         .expect("parse ORDER BY for k-way merge");
     let (mut reader, mut writer) = duplex(32768);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let duration = start.elapsed();
@@ -1798,7 +1811,7 @@ async fn test_orchestrator_handles_empty_shards() {
         .with_event_type("sparse_evt")
         .create();
     let (mut reader, mut writer) = duplex(4096);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -1852,7 +1865,7 @@ async fn test_orchestrator_order_by_string_multi_shard() {
         .with_event_type("string_sort_evt")
         .create();
     let (mut reader, mut writer) = duplex(4096);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -1908,7 +1921,7 @@ async fn test_orchestrator_command_builder_efficiency() {
         .with_event_type("builder_test_evt")
         .create();
     let (mut reader, mut writer) = duplex(4096);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -1969,7 +1982,7 @@ async fn test_orchestrator_parallel_segment_discovery() {
     let cmd = parse("QUERY parallel_evt ORDER BY seq DESC LIMIT 10")
         .expect("parse ORDER BY for discovery test");
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
     let duration = start.elapsed();
@@ -2051,7 +2064,7 @@ async fn test_orchestrator_order_by_with_filter() {
     let cmd = parse("QUERY filter_sort_evt WHERE status = active ORDER BY amount DESC LIMIT 5")
         .expect("parse WHERE with ORDER BY");
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -2118,7 +2131,7 @@ async fn test_orchestrator_offset_exceeds_results() {
     let (mut reader, mut writer) = duplex(4096);
 
     // Main test: orchestrator handles OFFSET/LIMIT without panicking
-    let result = handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer).await;
+    let result = execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer).await;
     assert!(
         result.is_ok(),
         "Orchestrator should handle OFFSET/LIMIT without errors"
@@ -2178,7 +2191,7 @@ async fn test_orchestrator_order_desc_with_large_offset() {
     let cmd = parse("QUERY offset_desc_evt ORDER BY num DESC OFFSET 10 LIMIT 5")
         .expect("parse ORDER BY DESC with OFFSET");
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -2246,7 +2259,7 @@ async fn test_orchestrator_legacy_merge_path() {
         .with_event_type("legacy_evt")
         .create();
     let (mut reader, mut writer) = duplex(4096);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -2274,7 +2287,7 @@ async fn test_orchestrator_handles_invalid_event_type() {
     // Query with empty event_type
     let cmd = CommandFactory::query().with_event_type("").create();
     let (mut reader, mut writer) = duplex(1024);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -2342,7 +2355,7 @@ async fn test_offset_only_without_order_by() {
     // OFFSET 3 LIMIT 2 (no ORDER BY)
     let cmd = parse("QUERY offset_plain_evt OFFSET 3 LIMIT 2").expect("parse OFFSET LIMIT");
     let (mut reader, mut writer) = duplex(4096);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -2445,7 +2458,7 @@ async fn test_offset_zero_is_noop() {
     let cmd =
         parse("QUERY offset_zero_evt ORDER BY val ASC OFFSET 0 LIMIT 3").expect("parse OFFSET 0");
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -2514,7 +2527,7 @@ async fn test_offset_equals_dataset_size() {
     let cmd = parse("QUERY offset_boundary_evt ORDER BY num ASC OFFSET 5 LIMIT 10")
         .expect("parse OFFSET at boundary");
     let (mut reader, mut writer) = duplex(4096);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -2588,7 +2601,7 @@ async fn test_offset_limit_exact_boundary() {
     let cmd = parse("QUERY offset_exact_evt ORDER BY id ASC OFFSET 9 LIMIT 5")
         .expect("parse OFFSET+LIMIT at boundary");
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -2657,7 +2670,7 @@ async fn test_large_offset_small_limit() {
     let cmd = parse("QUERY large_offset_evt ORDER BY idx ASC OFFSET 47 LIMIT 2")
         .expect("parse large OFFSET small LIMIT");
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -2704,7 +2717,7 @@ async fn test_offset_without_limit_is_rejected() {
     let cmd = parse("QUERY offset_no_limit_evt ORDER BY val ASC OFFSET 10")
         .expect("parse OFFSET without LIMIT");
     let (mut reader, mut writer) = duplex(1024);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -2768,7 +2781,7 @@ async fn test_offset_with_descending_order() {
     let cmd = parse("QUERY offset_desc_order_evt ORDER BY score DESC OFFSET 3 LIMIT 4")
         .expect("parse DESC with OFFSET");
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -2853,7 +2866,7 @@ async fn test_offset_multi_shard_kway_merge() {
     let cmd = parse("QUERY multi_offset_evt ORDER BY num ASC OFFSET 10 LIMIT 5")
         .expect("parse multi-shard OFFSET");
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
@@ -2939,7 +2952,7 @@ async fn test_offset_one() {
     let cmd =
         parse("QUERY offset_one_evt ORDER BY letter ASC OFFSET 1 LIMIT 3").expect("parse OFFSET 1");
     let (mut reader, mut writer) = duplex(8192);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
         .await
         .unwrap();
 
