@@ -119,6 +119,11 @@ impl ConditionEvaluator {
             }
 
             // Materialize passing rows
+            // Check once per zone if event_id column is missing/empty to avoid per-event checks
+            let event_id_missing = zone.values.get("event_id")
+                .map(|vals| vals.len() == 0)
+                .unwrap_or(true);
+
             for i in 0..event_count {
                 if !mask[i] {
                     continue;
@@ -168,7 +173,15 @@ impl ConditionEvaluator {
                         }
                     }
                 }
-                results.push(builder.build());
+                let mut event = builder.build();
+                // If event_id column is missing/empty, generate a unique ID based on zone and row index
+                // This prevents deduplication from incorrectly removing valid events
+                // Only check/update if we know the column is missing (optimization)
+                if event_id_missing || event.event_id().is_zero() {
+                    let synthetic_id = (zone.zone_id as u64) << 32 | (i as u64);
+                    event.set_event_id(crate::engine::core::EventId::from(synthetic_id));
+                }
+                results.push(event);
             }
         }
 

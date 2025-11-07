@@ -1,6 +1,10 @@
-use crate::engine::core::column::format::ColumnBlockHeader;
+use crate::engine::core::column::format::{ColumnBlockHeader, PhysicalType};
 use crate::engine::core::write::column_group_builder::ColumnGroupBuilder;
+use crate::engine::core::{ColumnKey, WriteJob};
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::WriteJobFactory;
+use std::collections::HashMap;
+use std::path::PathBuf;
 
 #[test]
 fn groups_jobs_by_key_and_zone_and_tracks_offsets() {
@@ -61,4 +65,139 @@ fn creates_separate_groups_per_zone_or_column() {
     let groups = builder.finish();
     // Expect three groups: (ip,z1), (ip,z2), (device,z1)
     assert_eq!(groups.len(), 3);
+}
+
+#[test]
+fn event_id_handles_negative_int64_as_large_u64() {
+    // Test the fix for event_id > i64::MAX
+    // When event_id.raw() > i64::MAX, casting to i64 wraps to negative
+    // The fix should convert negative i64 back to u64 string representation
+
+    let mut types = HashMap::new();
+    types.insert(
+        ("login".to_string(), "event_id".to_string()),
+        PhysicalType::U64,
+    );
+
+    let mut builder = ColumnGroupBuilder::with_types(types);
+
+    // Create event_id values that would wrap when cast to i64
+    // i64::MAX = 9223372036854775807
+    // u64 value > i64::MAX, e.g., 9223372036854775808 (i64::MAX + 1)
+    let large_u64 = i64::MAX as u64 + 1;
+    let negative_i64 = large_u64 as i64; // This wraps to negative
+
+    let job = WriteJob {
+        key: ("login".to_string(), "event_id".to_string()),
+        zone_id: 0,
+        path: PathBuf::from("/tmp/test.col"),
+        value: ScalarValue::Int64(negative_i64),
+    };
+
+    builder.add(&job);
+
+    let groups = builder.finish();
+    let ((_key, _zone), (_buf, _lens, values)) = groups.into_iter().next().unwrap();
+
+    // The value should be converted to u64 string, not negative string
+    assert_eq!(values[0], large_u64.to_string());
+    assert_ne!(values[0], negative_i64.to_string()); // Should not be negative
+}
+
+#[test]
+fn event_id_handles_normal_int64_values() {
+    // Test that normal (non-negative) Int64 values for event_id work correctly
+    let mut types = HashMap::new();
+    types.insert(
+        ("login".to_string(), "event_id".to_string()),
+        PhysicalType::U64,
+    );
+
+    let mut builder = ColumnGroupBuilder::with_types(types);
+
+    let normal_i64 = 12345i64;
+    let job = WriteJob {
+        key: ("login".to_string(), "event_id".to_string()),
+        zone_id: 0,
+        path: PathBuf::from("/tmp/test.col"),
+        value: ScalarValue::Int64(normal_i64),
+    };
+
+    builder.add(&job);
+
+    let groups = builder.finish();
+    let ((_key, _zone), (_buf, _lens, values)) = groups.into_iter().next().unwrap();
+
+    // Normal values should be converted to string as-is
+    assert_eq!(values[0], normal_i64.to_string());
+}
+
+#[test]
+fn event_id_handles_multiple_values_including_large_u64() {
+    // Test mixing normal and large u64 values
+    let mut types = HashMap::new();
+    types.insert(
+        ("login".to_string(), "event_id".to_string()),
+        PhysicalType::U64,
+    );
+
+    let mut builder = ColumnGroupBuilder::with_types(types);
+
+    let normal = 100i64;
+    let large_u64 = i64::MAX as u64 + 100;
+    let negative_i64 = large_u64 as i64; // Wraps to negative
+
+    let jobs = vec![
+        WriteJob {
+            key: ("login".to_string(), "event_id".to_string()),
+            zone_id: 0,
+            path: PathBuf::from("/tmp/test.col"),
+            value: ScalarValue::Int64(normal),
+        },
+        WriteJob {
+            key: ("login".to_string(), "event_id".to_string()),
+            zone_id: 0,
+            path: PathBuf::from("/tmp/test.col"),
+            value: ScalarValue::Int64(negative_i64),
+        },
+    ];
+
+    for job in &jobs {
+        builder.add(job);
+    }
+
+    let groups = builder.finish();
+    let ((_key, _zone), (_buf, _lens, values)) = groups.into_iter().next().unwrap();
+
+    assert_eq!(values.len(), 2);
+    assert_eq!(values[0], normal.to_string());
+    assert_eq!(values[1], large_u64.to_string());
+}
+
+#[test]
+fn non_event_id_int64_fields_not_affected() {
+    // Test that non-event_id Int64 fields are not affected by the special handling
+    let mut types = HashMap::new();
+    types.insert(
+        ("login".to_string(), "timestamp".to_string()),
+        PhysicalType::I64,
+    );
+
+    let mut builder = ColumnGroupBuilder::with_types(types);
+
+    let negative_i64 = -100i64;
+    let job = WriteJob {
+        key: ("login".to_string(), "timestamp".to_string()),
+        zone_id: 0,
+        path: PathBuf::from("/tmp/test.col"),
+        value: ScalarValue::Int64(negative_i64),
+    };
+
+    builder.add(&job);
+
+    let groups = builder.finish();
+    let ((_key, _zone), (_buf, _lens, values)) = groups.into_iter().next().unwrap();
+
+    // Non-event_id fields should keep negative values as-is
+    assert_eq!(values[0], negative_i64.to_string());
 }

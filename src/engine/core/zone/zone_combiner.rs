@@ -63,6 +63,13 @@ impl ZoneCombiner {
             }
         };
 
-        CandidateZone::uniq(result.into_values().collect())
+        let mut zones: Vec<CandidateZone> = result.into_values().collect();
+        // Sort zones deterministically by (segment_id, zone_id) to ensure consistent processing order
+        zones.sort_by(|a, b| {
+            a.segment_id
+                .cmp(&b.segment_id)
+                .then_with(|| a.zone_id.cmp(&b.zone_id))
+        });
+        CandidateZone::uniq(zones)
     }
 }

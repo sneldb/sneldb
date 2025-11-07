@@ -188,3 +188,156 @@ fn evaluates_zones_with_limit_exact_boundary_stops_mid_zone() {
     assert_eq!(results[1].get_field_value("seq"), "2");
     assert_eq!(results[2].get_field_value("seq"), "3");
 }
+
+#[test]
+fn generates_synthetic_event_id_when_missing() {
+    // Zone without event_id column
+    let mut values = HashMap::new();
+    values.insert("status".to_string(), vec!["ok".into(), "fail".into()]);
+    values.insert("context_id".to_string(), vec!["ctx1".into(), "ctx2".into()]);
+    values.insert("event_type".to_string(), vec!["test".into(), "test".into()]);
+
+    let zone = CandidateZoneFactory::new()
+        .with("zone_id", 42)
+        .with("segment_id", "seg-1")
+        .with_values(values)
+        .create();
+
+    let mut evaluator = ConditionEvaluator::new();
+    evaluator.add_string_condition("status".into(), CompareOp::Eq, "ok".into());
+
+    let results = evaluator.evaluate_zones(vec![zone]);
+
+    assert_eq!(results.len(), 1);
+    let event = &results[0];
+
+    // Should have synthetic ID: (zone_id << 32) | row_index
+    let expected_id = (42u64 << 32) | 0u64;
+    assert_eq!(event.event_id().raw(), expected_id);
+    assert!(!event.event_id().is_zero());
+}
+
+#[test]
+fn generates_synthetic_event_id_when_zero() {
+    // Zone with event_id column containing zeros
+    let mut values = HashMap::new();
+    values.insert("status".to_string(), vec!["ok".into()]);
+    values.insert("context_id".to_string(), vec!["ctx1".into()]);
+    values.insert("event_type".to_string(), vec!["test".into()]);
+    values.insert("event_id".to_string(), vec!["0".into()]); // Zero event_id
+
+    let zone = CandidateZoneFactory::new()
+        .with("zone_id", 10)
+        .with("segment_id", "seg-1")
+        .with_values(values)
+        .create();
+
+    let mut evaluator = ConditionEvaluator::new();
+    evaluator.add_string_condition("status".into(), CompareOp::Eq, "ok".into());
+
+    let results = evaluator.evaluate_zones(vec![zone]);
+
+    assert_eq!(results.len(), 1);
+    let event = &results[0];
+
+    // Should have synthetic ID instead of zero
+    let expected_id = (10u64 << 32) | 0u64;
+    assert_eq!(event.event_id().raw(), expected_id);
+    assert!(!event.event_id().is_zero());
+}
+
+#[test]
+fn preserves_valid_event_id_when_present() {
+    // Zone with valid event_id column
+    let mut values = HashMap::new();
+    values.insert("status".to_string(), vec!["ok".into()]);
+    values.insert("context_id".to_string(), vec!["ctx1".into()]);
+    values.insert("event_type".to_string(), vec!["test".into()]);
+    values.insert("event_id".to_string(), vec!["12345".into()]); // Valid event_id
+
+    let zone = CandidateZoneFactory::new()
+        .with("zone_id", 10)
+        .with("segment_id", "seg-1")
+        .with_values(values)
+        .create();
+
+    let mut evaluator = ConditionEvaluator::new();
+    evaluator.add_string_condition("status".into(), CompareOp::Eq, "ok".into());
+
+    let results = evaluator.evaluate_zones(vec![zone]);
+
+    assert_eq!(results.len(), 1);
+    let event = &results[0];
+
+    // Should preserve the original event_id
+    assert_eq!(event.event_id().raw(), 12345);
+}
+
+#[test]
+fn generates_unique_synthetic_ids_per_row() {
+    // Zone with multiple rows, missing event_id
+    let mut values = HashMap::new();
+    values.insert("status".to_string(), vec!["ok".into(), "ok".into(), "ok".into()]);
+    values.insert("context_id".to_string(), vec!["ctx1".into(), "ctx2".into(), "ctx3".into()]);
+    values.insert("event_type".to_string(), vec!["test".into(), "test".into(), "test".into()]);
+
+    let zone = CandidateZoneFactory::new()
+        .with("zone_id", 5)
+        .with("segment_id", "seg-1")
+        .with_values(values)
+        .create();
+
+    let mut evaluator = ConditionEvaluator::new();
+    evaluator.add_string_condition("status".into(), CompareOp::Eq, "ok".into());
+
+    let results = evaluator.evaluate_zones(vec![zone]);
+
+    assert_eq!(results.len(), 3);
+
+    // Each row should have a unique synthetic ID
+    let ids: Vec<u64> = results.iter().map(|e| e.event_id().raw()).collect();
+    assert_eq!(ids[0], (5u64 << 32) | 0u64);
+    assert_eq!(ids[1], (5u64 << 32) | 1u64);
+    assert_eq!(ids[2], (5u64 << 32) | 2u64);
+
+    // All IDs should be unique
+    let unique_ids: std::collections::HashSet<u64> = ids.iter().cloned().collect();
+    assert_eq!(unique_ids.len(), 3);
+}
+
+#[test]
+fn generates_synthetic_ids_across_multiple_zones() {
+    // Two zones, both missing event_id
+    let mut zone1_values = HashMap::new();
+    zone1_values.insert("status".to_string(), vec!["ok".into()]);
+    zone1_values.insert("context_id".to_string(), vec!["ctx1".into()]);
+    zone1_values.insert("event_type".to_string(), vec!["test".into()]);
+
+    let zone1 = CandidateZoneFactory::new()
+        .with("zone_id", 10)
+        .with("segment_id", "seg-1")
+        .with_values(zone1_values)
+        .create();
+
+    let mut zone2_values = HashMap::new();
+    zone2_values.insert("status".to_string(), vec!["ok".into()]);
+    zone2_values.insert("context_id".to_string(), vec!["ctx2".into()]);
+    zone2_values.insert("event_type".to_string(), vec!["test".into()]);
+
+    let zone2 = CandidateZoneFactory::new()
+        .with("zone_id", 20)
+        .with("segment_id", "seg-2")
+        .with_values(zone2_values)
+        .create();
+
+    let mut evaluator = ConditionEvaluator::new();
+    evaluator.add_string_condition("status".into(), CompareOp::Eq, "ok".into());
+
+    let results = evaluator.evaluate_zones(vec![zone1, zone2]);
+
+    assert_eq!(results.len(), 2);
+
+    // Each zone should generate unique IDs
+    assert_eq!(results[0].event_id().raw(), (10u64 << 32) | 0u64);
+    assert_eq!(results[1].event_id().raw(), (20u64 << 32) | 0u64);
+}

@@ -741,3 +741,140 @@ async fn executes_query_limit_larger_than_total_results() {
     let results = execution.run().await.unwrap();
     assert_eq!(results.len(), 3);
 }
+
+#[tokio::test]
+async fn deduplicates_events_by_event_id() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    // Setup schema
+    let schema_factory = SchemaRegistryFactory::new();
+    let registry = schema_factory.registry();
+    let event_type = "deduplicates_events_by_event_id";
+    schema_factory
+        .define_with_fields(event_type, &[("status", "string")])
+        .await
+        .unwrap();
+
+    // Create events with duplicate event_ids
+    let mut event1 = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctx1")
+        .with("payload", json!({"status": "ok"}))
+        .create();
+    let event_id = event1.event_id();
+
+    let mut event2 = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctx1")
+        .with("payload", json!({"status": "ok"}))
+        .create();
+    // Set same event_id to create duplicate
+    event2.set_event_id(event_id);
+
+    let memtable = MemTableFactory::new()
+        .with_event(event1.clone())
+        .with_event(event2.clone())
+        .create()
+        .unwrap();
+
+    let query_cmd = CommandFactory::query()
+        .with_event_type(event_type)
+        .with_context_id("ctx1")
+        .with_where_clause(Expr::Compare {
+            field: "status".into(),
+            op: CompareOp::Eq,
+            value: json!("ok"),
+        })
+        .create();
+
+    let tmp_dir = tempdir().unwrap();
+    let plan = QueryPlanFactory::new()
+        .with_command(query_cmd)
+        .with_registry(Arc::clone(&registry))
+        .with_segment_base_dir(tmp_dir.path())
+        .create()
+        .await;
+
+    let mut execution = QueryExecution::new(&plan).with_memtable(&memtable);
+    let results = execution.run().await.unwrap();
+
+    // Should deduplicate and return only one event
+    assert_eq!(results.len(), 1);
+}
+
+#[tokio::test]
+async fn deduplication_works_with_mixed_valid_and_synthetic_ids() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    // Setup schema
+    let schema_factory = SchemaRegistryFactory::new();
+    let registry = schema_factory.registry();
+    let event_type = "deduplication_works_with_mixed_valid_and_synthetic_ids";
+    schema_factory
+        .define_with_fields(event_type, &[("status", "string")])
+        .await
+        .unwrap();
+
+    // Create events with valid event_ids
+    let mut event1 = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctx1")
+        .with("payload", json!({"status": "ok"}))
+        .create();
+    let event_id_1 = event1.event_id();
+
+    let mut event2 = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctx1")
+        .with("payload", json!({"status": "ok"}))
+        .create();
+    // Set same event_id to create duplicate
+    event2.set_event_id(event_id_1);
+
+    let mut event3 = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctx1")
+        .with("payload", json!({"status": "ok"}))
+        .create();
+    // Different event_id
+    let event_id_3 = event3.event_id();
+
+    let memtable = MemTableFactory::new()
+        .with_event(event1.clone())
+        .with_event(event2.clone())
+        .with_event(event3.clone())
+        .create()
+        .unwrap();
+
+    let query_cmd = CommandFactory::query()
+        .with_event_type(event_type)
+        .with_context_id("ctx1")
+        .with_where_clause(Expr::Compare {
+            field: "status".into(),
+            op: CompareOp::Eq,
+            value: json!("ok"),
+        })
+        .create();
+
+    let tmp_dir = tempdir().unwrap();
+    let plan = QueryPlanFactory::new()
+        .with_command(query_cmd)
+        .with_registry(Arc::clone(&registry))
+        .with_segment_base_dir(tmp_dir.path())
+        .create()
+        .await;
+
+    let mut execution = QueryExecution::new(&plan).with_memtable(&memtable);
+    let results = execution.run().await.unwrap();
+
+    // Should deduplicate event1 and event2 (same event_id), keep event3 (different event_id)
+    assert_eq!(results.len(), 2);
+
+    // Verify unique event_ids
+    let event_ids: Vec<_> = results.iter().map(|e| e.event_id()).collect();
+    assert_eq!(event_ids.len(), 2);
+    assert!(event_ids.contains(&event_id_1));
+    assert!(event_ids.contains(&event_id_3));
+}
