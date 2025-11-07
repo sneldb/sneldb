@@ -482,4 +482,10 @@ impl Avg {
         self.sum += v;
         self.count += 1;
     }
+
+    /// Get sum and count without finalizing (for streaming mode merging)
+    /// This preserves the mergeable state needed for accurate AVG aggregation across shards
+    pub fn sum_count(&self) -> (i64, i64) {
+        (self.sum, self.count)
+    }
 }

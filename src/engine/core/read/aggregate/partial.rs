@@ -197,15 +197,10 @@ pub fn snapshot_aggregator(agg: &AggregatorImpl) -> AggState {
             },
         },
         AggregatorImpl::Avg(a) => {
-            // finalize returns Avg(f64); keep mergeable (sum,count) is not exposed; approximate using avg with count=1.
-            if let crate::engine::core::read::aggregate::ops::AggOutput::Avg(avg) = a.finalize() {
-                AggState::Avg {
-                    sum: avg as i64,
-                    count: 1,
-                }
-            } else {
-                AggState::Avg { sum: 0, count: 0 }
-            }
+            // Use sum_count() instead of finalize() to preserve mergeable state
+            // This allows accurate merging of AVG aggregates across shards/segments
+            let (sum, count) = a.sum_count();
+            AggState::Avg { sum, count }
         }
     }
 }

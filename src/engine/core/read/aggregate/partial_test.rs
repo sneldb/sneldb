@@ -215,17 +215,21 @@ fn snapshot_from_aggregators_covers_all_variants() {
         }
     );
 
-    // Avg approximates as (sum=avg as i64, count=1)
+    // Avg preserves sum and count separately (not finalized) for accurate merging
+    // This allows accurate merging of AVG aggregates across shards/segments
     let mut av = AggregatorImpl::from_spec(&AggregateOpSpec::Avg {
         field: "amount".into(),
     });
-    // simulate avg 5.0
+    // Update with multiple values to verify sum and count are preserved
     if let AggregatorImpl::Avg(ref mut inner) = av {
         inner.update_value_i64(5);
+        inner.update_value_i64(10);
+        inner.update_value_i64(15);
     }
     if let AggState::Avg { sum, count } = snapshot_aggregator(&av) {
-        assert_eq!(sum, 5);
-        assert_eq!(count, 1);
+        // Sum should be 5 + 10 + 15 = 30, count should be 3
+        assert_eq!(sum, 30);
+        assert_eq!(count, 3);
     } else {
         panic!("expected Avg state");
     }
@@ -296,6 +300,77 @@ fn agg_partial_merge_merges_matching_keys_and_states() {
             min_str: Some("amy".into())
         }
     );
+}
+
+#[test]
+fn snapshot_aggregator_avg_preserves_sum_and_count() {
+    // Test that snapshot_aggregator for Avg uses sum_count() not finalize()
+    // This ensures accurate merging across shards/segments
+    let mut av = AggregatorImpl::from_spec(&AggregateOpSpec::Avg {
+        field: "amount".into(),
+    });
+
+    // Update with values: 10, 20, 30
+    if let AggregatorImpl::Avg(ref mut inner) = av {
+        inner.update_value_i64(10);
+        inner.update_value_i64(20);
+        inner.update_value_i64(30);
+    }
+
+    let state = snapshot_aggregator(&av);
+    if let AggState::Avg { sum, count } = state {
+        // Should preserve sum=60, count=3 (not finalized average)
+        assert_eq!(sum, 60);
+        assert_eq!(count, 3);
+        // Verify it's not finalized (average would be 20.0, but we have sum/count)
+        assert_ne!(sum as f64 / count as f64, 0.0); // Just verify division works
+    } else {
+        panic!("expected Avg state with sum and count");
+    }
+}
+
+#[test]
+fn snapshot_aggregator_avg_empty_has_zero_sum_and_count() {
+    // Test that empty Avg aggregator has sum=0, count=0
+    let av = AggregatorImpl::from_spec(&AggregateOpSpec::Avg {
+        field: "amount".into(),
+    });
+
+    let state = snapshot_aggregator(&av);
+    if let AggState::Avg { sum, count } = state {
+        assert_eq!(sum, 0);
+        assert_eq!(count, 0);
+    } else {
+        panic!("expected Avg state");
+    }
+}
+
+#[test]
+fn agg_state_merge_avg_accurate_merging() {
+    // Test that merging Avg states preserves accuracy
+    // This is the key benefit of using sum/count instead of finalized average
+    let mut a = AggState::Avg { sum: 30, count: 3 }; // avg = 10.0
+    let b = AggState::Avg { sum: 20, count: 2 }; // avg = 10.0
+    a.merge(&b);
+    // Merged: sum = 50, count = 5, avg = 10.0 (accurate!)
+    // If we had merged finalized averages (10.0 + 10.0) / 2 = 10.0, but that's only correct
+    // because both averages happened to be the same. With sum/count, we get accurate results
+    // even when averages differ.
+    assert_eq!(a, AggState::Avg { sum: 50, count: 5 });
+
+    // Test with different averages to show accuracy
+    let mut c = AggState::Avg { sum: 20, count: 2 }; // avg = 10.0
+    let d = AggState::Avg { sum: 30, count: 3 }; // avg = 10.0
+    c.merge(&d);
+    assert_eq!(c, AggState::Avg { sum: 50, count: 5 });
+
+    // Test with different averages
+    let mut e = AggState::Avg { sum: 10, count: 2 }; // avg = 5.0
+    let f = AggState::Avg { sum: 30, count: 3 }; // avg = 10.0
+    e.merge(&f);
+    // Merged: sum = 40, count = 5, avg = 8.0 (accurate!)
+    // If we had merged finalized averages: (5.0 + 10.0) / 2 = 7.5 (WRONG!)
+    assert_eq!(e, AggState::Avg { sum: 40, count: 5 });
 }
 
 #[test]

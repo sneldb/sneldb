@@ -15,7 +15,6 @@ pub mod query_execution;
 pub mod query_plan;
 pub mod range_query_handler;
 pub mod result;
-pub mod segment_aggregate_runner;
 pub mod segment_query_runner;
 pub mod sequence;
 pub mod sink;
@@ -42,7 +41,5 @@ mod query_plan_test;
 mod range_query_handler_test;
 #[cfg(test)]
 mod result_test;
-#[cfg(test)]
-mod segment_aggregate_runner_test;
 #[cfg(test)]
 mod segment_query_runner_test;

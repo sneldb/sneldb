@@ -1,3 +1,4 @@
+mod aggregate_stream;
 mod batch_merger;
 mod ordered;
 mod sequence_stream;
@@ -5,6 +6,8 @@ mod stream_merger;
 mod streaming;
 mod unordered;
 
+#[cfg(test)]
+mod aggregate_stream_test;
 #[cfg(test)]
 mod batch_merger_test;
 #[cfg(test)]

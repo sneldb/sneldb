@@ -7,9 +7,10 @@
 
 ## When we stream
 
-- Only plain `QUERY` commands without aggregations, grouping, event sequences, or time buckets.
+- Plain `QUERY` commands including aggregations, grouping, and time buckets (aggregate queries always use streaming).
+- Sequence queries use a specialized streaming path.
 - Triggered by the HTTP/TCP `QUERY` handler when the caller asks for streaming (e.g. client-side backpressure, large scans where batching the whole result is impractical).
-- Falls back to the existing batch pipeline when the command shape or planner outcome cannot be streamed.
+- Falls back to the existing batch pipeline only for non-aggregate selection queries when streaming is disabled or unavailable.
 
 ## Pipeline overview
 
@@ -29,22 +30,25 @@
 3. **Coordinator merge & delivery**
 
    - The dispatcher hands the `ShardFlowHandle`s to the merge layer (`StreamMergerKind`).
-   - `OrderedStreamMerger` uses the flow-level ordered merger to respect `ORDER BY field [DESC]`, honouring `LIMIT/OFFSET` at the coordinator.
-   - `UnorderedStreamMerger` forwards batches as they arrive when no ordering is requested.
+   - For aggregate queries: `AggregateStreamMerger` collects partial aggregate batches from all shards, merges them by group key, applies ORDER BY/LIMIT/OFFSET, and emits finalized results.
+   - `OrderedStreamMerger` uses the flow-level ordered merger to respect `ORDER BY field [DESC]`, honouring `LIMIT/OFFSET` at the coordinator (for non-aggregate queries).
+   - `UnorderedStreamMerger` forwards batches as they arrive when no ordering is requested (for non-aggregate queries).
    - `QueryBatchStream` wraps the merged receiver. Dropping it aborts all shard/background tasks to avoid leaks.
 
 ## Where to look in code
 
 - Coordinator entry: `src/command/handlers/mod.rs`, `query/orchestrator.rs` (`execute_streaming`).
 - Dispatch: `src/command/handlers/query/dispatch/streaming.rs`.
-- Merge: `src/command/handlers/query/merge/streaming.rs`, `query_batch_stream.rs`.
+- Merge: `src/command/handlers/query/merge/streaming.rs`, `src/command/handlers/query/merge/aggregate_stream.rs`, `query_batch_stream.rs`.
 - Shard message + worker: `src/engine/shard/message.rs`, `src/engine/shard/worker.rs`.
 - Shard read pipeline: `src/engine/query/streaming/{scan.rs,context.rs,builders.rs,merger.rs}`.
 - Flow primitives (channels, batches, ordered merge): `src/engine/core/read/flow/` (notably `context.rs`, `channel.rs`, `ordered_merger.rs`, `shard_pipeline.rs`).
 
 ## Operational notes
 
-- Aggregations and grouped queries are intentionally excluded because they require per-shard stateful sinks and finalize logic (tracked separately).
+- **Aggregate queries always use the streaming path** - they cannot fall back to batch execution. Each shard produces partial aggregates via `AggregateOp` that are merged at the coordinator using `AggregateStreamMerger`.
+- AVG aggregations preserve sum and count throughout the streaming pipeline, ensuring accurate merging across shards/segments. The average is only finalized at the coordinator when emitting results.
+- COUNT UNIQUE aggregations preserve the actual unique values (as JSON array strings) throughout the streaming pipeline, ensuring accurate merging across shards/segments. The count is only finalized at the coordinator when emitting results.
 - `StreamingContext` snapshots passive buffers at creation; long-lived streams do not see newer passive flushes until a new stream is opened.
 - Flow channels are bounded (default 32k rows per batch) to provide natural backpressure; coordinator-side consumers should `recv` promptly.
 - If any shard fails while constructing the stream, the dispatcher surfaces a shard-specific error and aborts the entire streaming request.
