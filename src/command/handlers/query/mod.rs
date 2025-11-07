@@ -16,3 +16,6 @@ mod response_test;
 
 pub use handler::QueryCommandHandler;
 pub use orchestrator::QueryExecutionPipeline;
+
+#[cfg(test)]
+pub use streaming::set_streaming_enabled;

@@ -1,4 +1,6 @@
 use crate::command::handlers::query::QueryCommandHandler;
+#[cfg(test)]
+use crate::command::handlers::query::set_streaming_enabled;
 use crate::command::parser::commands::query::parse;
 use crate::engine::shard::manager::ShardManager;
 use crate::logging::init_for_tests;
@@ -2984,6 +2986,7 @@ async fn test_offset_one() {
 /// E2E test for basic FOLLOWED BY sequence query
 #[tokio::test]
 async fn test_sequence_followed_by_basic() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3068,6 +3071,7 @@ async fn test_sequence_followed_by_basic() {
 /// E2E test for FOLLOWED BY with WHERE clause filtering
 #[tokio::test]
 async fn test_sequence_followed_by_with_where_clause() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3188,6 +3192,7 @@ async fn test_sequence_followed_by_with_where_clause() {
 /// E2E test for PRECEDED BY sequence query
 #[tokio::test]
 async fn test_sequence_preceded_by_basic() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3275,6 +3280,7 @@ async fn test_sequence_preceded_by_basic() {
 /// E2E test for sequence query with numeric link field
 #[tokio::test]
 async fn test_sequence_with_numeric_link_field() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3365,6 +3371,7 @@ async fn test_sequence_with_numeric_link_field() {
 /// for the same user, all valid sequences are matched.
 #[tokio::test]
 async fn test_sequence_multiple_sequences_same_link_value() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3457,6 +3464,7 @@ async fn test_sequence_multiple_sequences_same_link_value() {
 /// Tests that when events exist but don't match the sequence pattern, no results are returned.
 #[tokio::test]
 async fn test_sequence_no_matching_sequences() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3536,6 +3544,7 @@ async fn test_sequence_no_matching_sequences() {
 /// Tests that FOLLOWED BY requires correct temporal ordering.
 #[tokio::test]
 async fn test_sequence_wrong_temporal_order() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3615,6 +3624,7 @@ async fn test_sequence_wrong_temporal_order() {
 /// Tests that only users with complete sequences are returned.
 #[tokio::test]
 async fn test_sequence_multiple_users_partial_matches() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3715,6 +3725,7 @@ async fn test_sequence_multiple_users_partial_matches() {
 /// Tests that LIMIT works correctly with sequence queries.
 #[tokio::test]
 async fn test_sequence_with_limit() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3800,6 +3811,7 @@ async fn test_sequence_with_limit() {
 /// Tests WHERE clause filtering on the second event in the sequence.
 #[tokio::test]
 async fn test_sequence_where_clause_on_second_event() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3925,6 +3937,7 @@ async fn test_sequence_where_clause_on_second_event() {
 /// Tests that multiple events of the same type for the same link value are handled correctly.
 #[tokio::test]
 async fn test_sequence_duplicate_events_same_link() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -4008,6 +4021,7 @@ async fn test_sequence_duplicate_events_same_link() {
 /// Tests that sequences work when events are stored in different shards.
 #[tokio::test]
 async fn test_sequence_across_multiple_shards() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -4091,6 +4105,7 @@ async fn test_sequence_across_multiple_shards() {
 /// Tests that PRECEDED BY correctly requires the preceding event to come first.
 #[tokio::test]
 async fn test_sequence_preceded_by_wrong_order() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -4174,6 +4189,7 @@ async fn test_sequence_preceded_by_wrong_order() {
 /// Tests complex WHERE clause filtering on both events in the sequence.
 #[tokio::test]
 async fn test_sequence_where_clause_both_events() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -4310,6 +4326,7 @@ async fn test_sequence_where_clause_both_events() {
 /// Tests that sequences work correctly when events have very close timestamps.
 #[tokio::test]
 async fn test_sequence_very_close_timestamps() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
