@@ -16,8 +16,8 @@ use crate::command::types::Command;
 use crate::engine::core::read::result::QueryResult;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
-use crate::shared::config::CONFIG;
 use crate::engine::types::ScalarValue;
+use crate::shared::config::CONFIG;
 use crate::shared::response::ArrowStreamEncoder;
 use crate::shared::response::render::{Renderer, StreamingFormat};
 use crate::shared::response::{Response, StatusCode};
@@ -79,6 +79,25 @@ pub async fn handle<W: AsyncWrite + Unpin>(
     let limit_value = *limit;
     let offset_value = *offset;
 
+    // For sequence queries, LIMIT is already applied at the sequence matching level,
+    // so we should not apply it again when writing the response
+    let is_sequence_query = matches!(
+        cmd,
+        Command::Query {
+            event_sequence: Some(_),
+            ..
+        }
+    );
+    let response_limit = if is_sequence_query { None } else { limit_value };
+
+    if is_sequence_query {
+        debug!(
+            target: "sneldb::query",
+            original_limit = ?limit_value,
+            "Sequence query detected: skipping LIMIT in response writer (already applied at sequence matching level)"
+        );
+    }
+
     if streaming_enabled() && pipeline.streaming_supported() {
         match pipeline.execute_streaming().await {
             Ok(Some(stream)) => {
@@ -86,7 +105,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
                     stream,
                     writer,
                     renderer,
-                    limit_value,
+                    response_limit,
                     offset_value,
                 )
                 .await;
@@ -254,9 +273,7 @@ async fn write_streaming_response<W: AsyncWrite + Unpin>(
                         for row_idx in 0..batch_arc.len() {
                             // Check event_id deduplication using ScalarValue directly
                             if let Some(idx) = event_id_idx {
-                                if let Some(id) = columns[idx]
-                                    .get(row_idx)
-                                    .and_then(|v| v.as_u64())
+                                if let Some(id) = columns[idx].get(row_idx).and_then(|v| v.as_u64())
                                 {
                                     if !seen_ids.insert(id) {
                                         continue;
@@ -288,9 +305,7 @@ async fn write_streaming_response<W: AsyncWrite + Unpin>(
 
                         for row_idx in 0..batch_arc.len() {
                             if let Some(idx) = event_id_idx {
-                                if let Some(id) = columns[idx]
-                                    .get(row_idx)
-                                    .and_then(|v| v.as_u64())
+                                if let Some(id) = columns[idx].get(row_idx).and_then(|v| v.as_u64())
                                 {
                                     if !seen_ids.insert(id) {
                                         continue;
@@ -429,12 +444,68 @@ async fn write_with_backpressure<W: AsyncWrite + Unpin>(
 }
 
 fn streaming_enabled() -> bool {
+    // Check for test override first (thread-local)
+    #[cfg(test)]
+    {
+        if let Some(override_value) = TEST_STREAMING_ENABLED_OVERRIDE.get() {
+            return override_value;
+        }
+    }
+
+    // Fall back to config
     CONFIG
         .query
         .as_ref()
         .and_then(|cfg| cfg.streaming_enabled)
         .unwrap_or(false)
 }
+
+#[cfg(test)]
+pub mod test_helpers {
+    use std::cell::Cell;
+
+    thread_local! {
+        /// Thread-local override for streaming_enabled in tests
+        pub static TEST_STREAMING_ENABLED_OVERRIDE: Cell<Option<bool>> = Cell::new(None);
+    }
+
+    /// Guard that restores the previous streaming_enabled value when dropped
+    pub struct StreamingEnabledGuard {
+        previous: Option<bool>,
+    }
+
+    impl Drop for StreamingEnabledGuard {
+        fn drop(&mut self) {
+            TEST_STREAMING_ENABLED_OVERRIDE.set(self.previous);
+        }
+    }
+
+    /// Sets streaming_enabled override for the current test thread
+    ///
+    /// Returns a guard that will restore the previous value when dropped.
+    /// This allows tests to set the override at the start and have it
+    /// automatically cleaned up when the test completes.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use crate::command::handlers::query::test_helpers::set_streaming_enabled;
+    ///
+    /// #[tokio::test]
+    /// async fn my_test() {
+    ///     let _guard = set_streaming_enabled(true);
+    ///     // Test code here - streaming will be enabled
+    ///     // Guard automatically restores previous value when test ends
+    /// }
+    /// ```
+    pub fn set_streaming_enabled(enabled: bool) -> StreamingEnabledGuard {
+        let previous = TEST_STREAMING_ENABLED_OVERRIDE.get();
+        TEST_STREAMING_ENABLED_OVERRIDE.set(Some(enabled));
+        StreamingEnabledGuard { previous }
+    }
+}
+
+#[cfg(test)]
+use test_helpers::TEST_STREAMING_ENABLED_OVERRIDE;
 
 #[cfg(test)]
 mod tests {
@@ -471,7 +542,10 @@ mod tests {
         let mut builder = BatchPool::new(4)
             .expect("pool")
             .acquire(Arc::clone(&schema));
-        let row1 = vec![ScalarValue::from(json!("ctx-stream")), ScalarValue::from(json!(42u64))];
+        let row1 = vec![
+            ScalarValue::from(json!("ctx-stream")),
+            ScalarValue::from(json!(42u64)),
+        ];
         builder.push_row(&row1).expect("push row should succeed");
         let batch = builder.finish().expect("batch finish");
         sender.send(Arc::new(batch)).await.expect("send batch");

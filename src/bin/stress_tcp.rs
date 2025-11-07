@@ -30,8 +30,27 @@ async fn main() -> Result<()> {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(10_000);
-    let event_type =
-        std::env::var("SNEL_STRESS_EVENT_TYPE").unwrap_or_else(|_| "stress_evt".to_string());
+    // Support multiple event types for sequence query testing
+    // SNEL_STRESS_EVENT_TYPES (comma-separated) takes precedence over SNEL_STRESS_EVENT_TYPE
+    let event_types: Vec<String> = std::env::var("SNEL_STRESS_EVENT_TYPES")
+        .ok()
+        .map(|s| {
+            s.split(',')
+                .map(|x| x.trim().to_string())
+                .filter(|x| !x.is_empty())
+                .collect()
+        })
+        .or_else(|| {
+            std::env::var("SNEL_STRESS_EVENT_TYPE")
+                .ok()
+                .map(|s| vec![s])
+        })
+        .unwrap_or_else(|| vec!["stress_evt".to_string()]);
+
+    // Link field for sequence queries (default: user_id)
+    let link_field = std::env::var("SNEL_STRESS_LINK_FIELD")
+        .unwrap_or_else(|_| "user_id".to_string());
+
     // Sample context id for replay/query timings
     let sample_ctx =
         std::env::var("SNEL_STRESS_SAMPLE_CTX").unwrap_or_else(|_| "ctx-5000".to_string());
@@ -77,12 +96,16 @@ async fn main() -> Result<()> {
     control.set_nodelay(true)?;
     let mut control_reader = BufReader::new(control);
 
-    // Define schema (add enum field `plan` with 20 variants and datetime `created_at`)
-    let schema_cmd = format!(
-        "DEFINE {} FIELDS {{ id: \"u64\", v: \"string\", flag: \"bool\", created_at: \"datetime\", plan: [\"type01\", \"type02\", \"type03\", \"type04\", \"type05\", \"type06\", \"type07\", \"type08\", \"type09\", \"type10\", \"type11\", \"type12\", \"type13\", \"type14\", \"type15\", \"type16\", \"type17\", \"type18\", \"type19\", \"type20\"] }}\n",
-        event_type
-    );
-    send_and_drain(&mut control_reader, &schema_cmd, wait_dur).await?;
+    // Define schemas for all event types
+    // All event types share the same schema with link_field for sequence queries
+    println!("Defining schemas for {} event type(s): {:?}", event_types.len(), event_types);
+    for event_type in &event_types {
+        let schema_cmd = format!(
+            "DEFINE {} FIELDS {{ id: \"u64\", v: \"string\", flag: \"bool\", created_at: \"datetime\", {}: \"u64\", plan: [\"type01\", \"type02\", \"type03\", \"type04\", \"type05\", \"type06\", \"type07\", \"type08\", \"type09\", \"type10\", \"type11\", \"type12\", \"type13\", \"type14\", \"type15\", \"type16\", \"type17\", \"type18\", \"type19\", \"type20\"] }}\n",
+            event_type, link_field
+        );
+        send_and_drain(&mut control_reader, &schema_cmd, wait_dur).await?;
+    }
 
     // Pre-generate contexts
     let contexts: Vec<String> = (0..context_pool).map(|i| format!("ctx-{}", i)).collect();
@@ -234,10 +257,18 @@ async fn main() -> Result<()> {
         worker_handles.push(handle);
     }
 
-    // Produce jobs
+    // Produce jobs - distribute events across event types
+    // For sequence queries, we need some user_ids to have multiple event types
+    // Strategy: Assign user_id independently from event_type to ensure overlap
+    let mut rng = rand::thread_rng();
     for i in 0..total_events {
         let ctx_id = &contexts[i % context_pool];
-        let evt = random_event_payload(i as u64, ts_start, ts_end);
+        // Select event type based on index (round-robin distribution)
+        let event_type = &event_types[i % event_types.len()];
+        // Generate user_id independently from event_type to ensure some user_ids have multiple event types
+        // Use random selection from context_pool to create overlap between event types
+        let user_id = rng.gen_range(0..context_pool);
+        let evt = random_event_payload(i as u64, ts_start, ts_end, user_id as u64, &link_field);
         let cmd = format!("STORE {} FOR {} PAYLOAD {}\n", event_type, ctx_id, evt);
         let txi = &tx_vec[i % tx_vec.len()];
         let _ = txi.send(cmd).await; // backpressure via channel
@@ -263,62 +294,72 @@ async fn main() -> Result<()> {
     let _ = reporter.await;
 
     // Run REPLAY to sample latency (only if control connection is still alive)
-    if let Ok(replay_result) = timeout(Duration::from_secs(2), async {
-        let replay_cmd = format!("REPLAY {} FOR {}\n", event_type, sample_ctx);
-        let t0 = Instant::now();
-        send_and_collect_json_with_timeout(&mut control_reader, &replay_cmd, 10, wait_dur).await?;
-        println!(
-            "Replay latency: {:.2} ms",
-            t0.elapsed().as_secs_f64() * 1000.0
-        );
-        Ok::<(), anyhow::Error>(())
-    })
-    .await
-    {
-        let _ = replay_result;
-    } else {
-        eprintln!("Skipping replay (connection closed)");
+    // Use first event type for replay
+    if let Some(first_event_type) = event_types.first() {
+        if let Ok(replay_result) = timeout(Duration::from_secs(2), async {
+            let replay_cmd = format!("REPLAY {} FOR {}\n", first_event_type, sample_ctx);
+            let t0 = Instant::now();
+            send_and_collect_json_with_timeout(&mut control_reader, &replay_cmd, 10, wait_dur).await?;
+            println!(
+                "Replay latency: {:.2} ms",
+                t0.elapsed().as_secs_f64() * 1000.0
+            );
+            Ok::<(), anyhow::Error>(())
+        })
+        .await
+        {
+            let _ = replay_result;
+        } else {
+            eprintln!("Skipping replay (connection closed)");
+        }
     }
 
     // Run QUERY (scoped) to sample latency over time using `created_at` (only if connection alive)
-    if let Ok(query_result) = timeout(Duration::from_secs(2), async {
-        let since_secs = now_secs_i64 - 86_400; // last 24h
-        let query_cmd = format!(
-            "QUERY {} SINCE {} USING created_at WHERE id < 100\n",
-            event_type, since_secs
-        );
-        let t1 = Instant::now();
-        send_and_collect_json_with_timeout(&mut control_reader, &query_cmd, 10, wait_dur).await?;
-        println!(
-            "Query latency: {:.2} ms",
-            t1.elapsed().as_secs_f64() * 1000.0
-        );
-        Ok::<(), anyhow::Error>(())
-    })
-    .await
-    {
-        let _ = query_result;
-    } else {
-        eprintln!("Skipping query (connection closed)");
+    // Use first event type for regular query
+    if let Some(first_event_type) = event_types.first() {
+        if let Ok(query_result) = timeout(Duration::from_secs(2), async {
+            let since_secs = now_secs_i64 - 86_400; // last 24h
+            let query_cmd = format!(
+                "QUERY {} SINCE {} USING created_at WHERE id < 100\n",
+                first_event_type, since_secs
+            );
+            let t1 = Instant::now();
+            send_and_collect_json_with_timeout(&mut control_reader, &query_cmd, 10, wait_dur).await?;
+            println!(
+                "Query latency: {:.2} ms",
+                t1.elapsed().as_secs_f64() * 1000.0
+            );
+            Ok::<(), anyhow::Error>(())
+        })
+        .await
+        {
+            let _ = query_result;
+        } else {
+            eprintln!("Skipping query (connection closed)");
+        }
     }
 
     Ok(())
 }
 
-fn random_event_payload(seq: u64, ts_start: i64, ts_end: i64) -> String {
+fn random_event_payload(seq: u64, ts_start: i64, ts_end: i64, user_id: u64, link_field: &str) -> String {
     let v = Alphanumeric.sample_string(&mut rand::thread_rng(), 12);
     let plan = format!("type{:02}", (seq % 20) + 1);
     let mut rng = rand::thread_rng();
     let low = ts_start.min(ts_end);
     let high = ts_start.max(ts_end);
     let ts = rng.gen_range(low..=high);
-    let obj = json!({
+    let mut obj = json!({
         "id": seq,
         "v": v,
         "flag": (seq % 2 == 0),
         "created_at": ts,
         "plan": plan
     });
+    // Add link_field for sequence queries
+    if let Value::Object(ref mut map) = obj {
+        map.insert(link_field.to_string(), json!(user_id));
+    }
     obj.to_string()
 }
 

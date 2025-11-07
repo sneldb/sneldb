@@ -1964,5 +1964,409 @@
       { "kind": "regex", "value": "seg-2(?s).*mem-1(?s).*seg-1" },
       { "kind": "include", "value": "\"type\":\"end\"" }
     ]
+  },
+  {
+    "name": "sequence_followed_by_basic",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"status\": \"string\" }",
+      "STORE page_view FOR u1 PAYLOAD {\"page\":\"/home\",\"user_id\":\"u1\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\",\"status\":\"done\"}",
+      "STORE page_view FOR u2 PAYLOAD {\"page\":\"/checkout\",\"user_id\":\"u2\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u2 PAYLOAD {\"order_id\":2,\"user_id\":\"u2\",\"status\":\"done\"}",
+      "FLUSH",
+      "QUERY page_view FOLLOWED BY order_created LINKED BY user_id"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["u1", "u2"] }
+    ]
+  },
+  {
+    "name": "sequence_followed_by_with_where_clause",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"status\": \"string\" }",
+      "STORE page_view FOR u1 PAYLOAD {\"page\":\"/checkout\",\"user_id\":\"u1\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\",\"status\":\"done\"}",
+      "STORE page_view FOR u2 PAYLOAD {\"page\":\"/home\",\"user_id\":\"u2\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u2 PAYLOAD {\"order_id\":2,\"user_id\":\"u2\",\"status\":\"done\"}",
+      "FLUSH",
+      "QUERY page_view FOLLOWED BY order_created LINKED BY user_id WHERE page_view.page=\"/checkout\""
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["u1"] },
+      { "kind": "include_none", "value": ["u2"] }
+    ]
+  },
+  {
+    "name": "sequence_preceded_by_basic",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE payment_failed FIELDS { \"user_id\": \"string\", \"amount\": \"int\" }",
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"status\": \"string\" }",
+      "STORE payment_failed FOR u1 PAYLOAD {\"user_id\":\"u1\",\"amount\":100}",
+      "SLEEP 1000",
+      "STORE order_created FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\",\"status\":\"done\"}",
+      "STORE order_created FOR u2 PAYLOAD {\"order_id\":2,\"user_id\":\"u2\",\"status\":\"done\"}",
+      "FLUSH",
+      "QUERY order_created PRECEDED BY payment_failed LINKED BY user_id"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["u1"] },
+      { "kind": "include_none", "value": ["u2"] }
+    ]
+  },
+  {
+    "name": "sequence_preceded_by_with_where_clause",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE payment_failed FIELDS { \"user_id\": \"string\", \"amount\": \"int\" }",
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"status\": \"string\" }",
+      "STORE payment_failed FOR u1 PAYLOAD {\"user_id\":\"u1\",\"amount\":100}",
+      "SLEEP 1000",
+      "STORE order_created FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\",\"status\":\"done\"}",
+      "STORE payment_failed FOR u2 PAYLOAD {\"user_id\":\"u2\",\"amount\":200}",
+      "SLEEP 1000",
+      "STORE order_created FOR u2 PAYLOAD {\"order_id\":2,\"user_id\":\"u2\",\"status\":\"pending\"}",
+      "FLUSH",
+      "QUERY order_created PRECEDED BY payment_failed LINKED BY user_id WHERE order_created.status=\"done\""
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["u1"] },
+      { "kind": "include_none", "value": ["u2"] }
+    ]
+  },
+  {
+    "name": "sequence_followed_by_no_match",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\" }",
+      "STORE page_view FOR u1 PAYLOAD {\"page\":\"/home\",\"user_id\":\"u1\"}",
+      "STORE page_view FOR u2 PAYLOAD {\"page\":\"/checkout\",\"user_id\":\"u2\"}",
+      "FLUSH",
+      "QUERY page_view FOLLOWED BY order_created LINKED BY user_id"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "\"row_count\":0"
+    }
+  },
+  {
+    "name": "sequence_followed_by_out_of_order",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\" }",
+      "STORE order_created FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\"}",
+      "SLEEP 1000",
+      "STORE page_view FOR u1 PAYLOAD {\"page\":\"/checkout\",\"user_id\":\"u1\"}",
+      "FLUSH",
+      "QUERY page_view FOLLOWED BY order_created LINKED BY user_id"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "\"row_count\":0"
+    }
+  },
+  {
+    "name": "sequence_followed_by_multiple_users",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\" }",
+      "STORE page_view FOR u1 PAYLOAD {\"page\":\"checkout\",\"user_id\":\"u1\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\"}",
+      "STORE page_view FOR u2 PAYLOAD {\"page\":\"checkout\",\"user_id\":\"u2\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u2 PAYLOAD {\"order_id\":2,\"user_id\":\"u2\"}",
+      "STORE page_view FOR u3 PAYLOAD {\"page\":\"checkout\",\"user_id\":\"u3\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u3 PAYLOAD {\"order_id\":3,\"user_id\":\"u3\"}",
+      "FLUSH",
+      "QUERY page_view FOLLOWED BY order_created LINKED BY user_id WHERE page_view.page=\"checkout\""
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["u1", "u2", "u3"] }
+    ]
+  },
+  {
+    "name": "sequence_linked_by_order_id",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\" }",
+      "DEFINE order_cancelled FIELDS { \"order_id\": \"int\", \"reason\": \"string\" }",
+      "STORE order_created FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\"}",
+      "SLEEP 1000",
+      "STORE order_cancelled FOR u1 PAYLOAD {\"order_id\":1,\"reason\":\"changed_mind\"}",
+      "STORE order_created FOR u2 PAYLOAD {\"order_id\":2,\"user_id\":\"u2\"}",
+      "FLUSH",
+      "QUERY order_created FOLLOWED BY order_cancelled LINKED BY order_id"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["1,\"u1\""] },
+      { "kind": "include_none", "value": ["2,\"u2\""] }
+    ]
+  },
+  {
+    "name": "sequence_followed_by_with_common_where",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\", \"timestamp\": \"int\" }",
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"timestamp\": \"int\" }",
+      "STORE page_view FOR u1 PAYLOAD {\"page\":\"/checkout\",\"user_id\":\"u1\",\"timestamp\":1000}",
+      "SLEEP 1000",
+      "STORE order_created FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\",\"timestamp\":2000}",
+      "STORE page_view FOR u2 PAYLOAD {\"page\":\"/checkout\",\"user_id\":\"u2\",\"timestamp\":3000}",
+      "SLEEP 1000",
+      "STORE order_created FOR u2 PAYLOAD {\"order_id\":2,\"user_id\":\"u2\",\"timestamp\":4000}",
+      "FLUSH",
+      "QUERY page_view FOLLOWED BY order_created LINKED BY user_id WHERE timestamp > 500"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["u1", "u2"] }
+    ]
+  },
+  {
+    "name": "sequence_followed_by_with_and_where",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"status\": \"string\" }",
+      "STORE page_view FOR u1 PAYLOAD {\"page\":\"/checkout\",\"user_id\":\"u1\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\",\"status\":\"done\"}",
+      "STORE page_view FOR u2 PAYLOAD {\"page\":\"/checkout\",\"user_id\":\"u2\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u2 PAYLOAD {\"order_id\":2,\"user_id\":\"u2\",\"status\":\"pending\"}",
+      "FLUSH",
+      "QUERY page_view FOLLOWED BY order_created LINKED BY user_id WHERE page_view.page=\"/checkout\" AND order_created.status=\"done\""
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["u1"] },
+      { "kind": "include_none", "value": ["u2"] }
+    ]
+  },
+  {
+    "name": "sequence_preceded_by_multiple_events",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE payment_failed FIELDS { \"user_id\": \"string\", \"attempt\": \"int\" }",
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\" }",
+      "STORE payment_failed FOR u1 PAYLOAD {\"user_id\":\"u1\",\"attempt\":1}",
+      "SLEEP 1000",
+      "STORE payment_failed FOR u1 PAYLOAD {\"user_id\":\"u1\",\"attempt\":2}",
+      "SLEEP 1000",
+      "STORE order_created FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\"}",
+      "STORE order_created FOR u2 PAYLOAD {\"order_id\":2,\"user_id\":\"u2\"}",
+      "FLUSH",
+      "QUERY order_created PRECEDED BY payment_failed LINKED BY user_id"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["u1"] },
+      { "kind": "include_none", "value": ["u2"] }
+    ]
+  },
+  {
+    "name": "sequence_followed_by_limit",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\" }",
+      "STORE page_view FOR u1 PAYLOAD {\"page\":\"/checkout\",\"user_id\":\"u1\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\"}",
+      "STORE page_view FOR u2 PAYLOAD {\"page\":\"/checkout\",\"user_id\":\"u2\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u2 PAYLOAD {\"order_id\":2,\"user_id\":\"u2\"}",
+      "STORE page_view FOR u3 PAYLOAD {\"page\":\"/checkout\",\"user_id\":\"u3\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u3 PAYLOAD {\"order_id\":3,\"user_id\":\"u3\"}",
+      "FLUSH",
+      "QUERY page_view FOLLOWED BY order_created LINKED BY user_id WHERE page_view.page=\"/checkout\" LIMIT 2"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "u1" },
+      { "kind": "include", "value": "u2" },
+      { "kind": "include_none", "value": ["u3"] }
+    ]
+  },
+  {
+    "name": "sequence_followed_by_same_timestamp",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\", \"created_at\": \"datetime\" }",
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"created_at\": \"datetime\" }",
+      "STORE page_view FOR u1 PAYLOAD {\"page\":\"/checkout\",\"user_id\":\"u1\", \"created_at\":1000}",
+      "STORE order_created FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\", \"created_at\":1000}",
+      "FLUSH",
+      "QUERY page_view FOLLOWED BY order_created LINKED BY user_id USING TIME created_at"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "\"row_count\":0"
+    }
+  },
+  {
+    "name": "sequence_followed_by_different_link_values",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\" }",
+      "STORE page_view FOR u1 PAYLOAD {\"page\":\"/checkout\",\"user_id\":\"u1\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u2 PAYLOAD {\"order_id\":1,\"user_id\":\"u2\"}",
+      "FLUSH",
+      "QUERY page_view FOLLOWED BY order_created LINKED BY user_id"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "\"row_count\":0"
+    }
+  },
+  {
+    "name": "sequence_followed_by_with_numeric_link_field",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"customer_id\": \"int\" }",
+      "DEFINE order_shipped FIELDS { \"order_id\": \"int\", \"customer_id\": \"int\" }",
+      "STORE order_created FOR c1 PAYLOAD {\"order_id\":1,\"customer_id\":100}",
+      "SLEEP 1000",
+      "STORE order_shipped FOR c1 PAYLOAD {\"order_id\":1,\"customer_id\":100}",
+      "STORE order_created FOR c2 PAYLOAD {\"order_id\":2,\"customer_id\":200}",
+      "FLUSH",
+      "QUERY order_created FOLLOWED BY order_shipped LINKED BY customer_id"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": [",100,1"] },
+      { "kind": "include_none", "value": [",200,1"] }
+    ]
+  },
+  {
+    "name": "sequence_followed_by_with_time_field",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\", \"viewed_at\": \"datetime\" }",
+      "DEFINE purchase FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"purchased_at\": \"datetime\" }",
+      "STORE page_view FOR u1 PAYLOAD {\"page\":\"/product\",\"user_id\":\"u1\",\"viewed_at\":\"2025-01-01T10:00:00Z\"}",
+      "STORE purchase FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\",\"purchased_at\":\"2025-01-01T10:05:00Z\"}",
+      "STORE page_view FOR u2 PAYLOAD {\"page\":\"/product\",\"user_id\":\"u2\",\"viewed_at\":\"2025-01-01T11:00:00Z\"}",
+      "STORE purchase FOR u2 PAYLOAD {\"order_id\":2,\"user_id\":\"u2\",\"purchased_at\":\"2025-01-01T11:10:00Z\"}",
+      "FLUSH",
+      "QUERY page_view FOLLOWED BY purchase LINKED BY user_id USING TIME viewed_at"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["u1", "u2"] }
+    ]
+  },
+  {
+    "name": "sequence_followed_by_with_time_field_out_of_order",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\", \"viewed_at\": \"datetime\" }",
+      "DEFINE purchase FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"purchased_at\": \"datetime\" }",
+      "STORE purchase FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\",\"purchased_at\":\"2025-01-01T10:05:00Z\"}",
+      "STORE page_view FOR u1 PAYLOAD {\"page\":\"/product\",\"user_id\":\"u1\",\"viewed_at\":\"2025-01-01T10:00:00Z\"}",
+      "FLUSH",
+      "QUERY page_view FOLLOWED BY purchase LINKED BY user_id USING TIME viewed_at"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["u1"] }
+    ]
+  },
+  {
+    "name": "sequence_followed_by_with_time_field_and_where",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\", \"viewed_at\": \"datetime\" }",
+      "DEFINE purchase FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"viewed_at\": \"datetime\", \"amount\": \"int\" }",
+      "STORE page_view FOR u1 PAYLOAD {\"page\":\"/product\",\"user_id\":\"u1\",\"viewed_at\":\"2025-01-01T10:00:00Z\"}",
+      "STORE purchase FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\",\"viewed_at\":\"2025-01-01T10:05:00Z\",\"amount\":100}",
+      "STORE page_view FOR u2 PAYLOAD {\"page\":\"/product\",\"user_id\":\"u2\",\"viewed_at\":\"2025-01-01T11:00:00Z\"}",
+      "STORE purchase FOR u2 PAYLOAD {\"order_id\":2,\"user_id\":\"u2\",\"viewed_at\":\"2025-01-01T11:10:00Z\",\"amount\":50}",
+      "FLUSH",
+      "QUERY page_view FOLLOWED BY purchase LINKED BY user_id USING TIME viewed_at WHERE purchase.amount > 75"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["u1"] },
+      { "kind": "include_none", "value": ["u2"] }
+    ]
+  },
+  {
+    "name": "sequence_followed_by_with_time_field_and_limit",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\", \"viewed_at\": \"datetime\" }",
+      "DEFINE purchase FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"viewed_at\": \"datetime\" }",
+      "STORE page_view FOR u1 PAYLOAD {\"page\":\"/product\",\"user_id\":\"u1\",\"viewed_at\":\"2025-01-01T10:00:00Z\"}",
+      "STORE purchase FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\",\"viewed_at\":\"2025-01-01T10:05:00Z\"}",
+      "STORE page_view FOR u2 PAYLOAD {\"page\":\"/product\",\"user_id\":\"u2\",\"viewed_at\":\"2025-01-01T11:00:00Z\"}",
+      "STORE purchase FOR u2 PAYLOAD {\"order_id\":2,\"user_id\":\"u2\",\"viewed_at\":\"2025-01-01T11:10:00Z\"}",
+      "STORE page_view FOR u3 PAYLOAD {\"page\":\"/product\",\"user_id\":\"u3\",\"viewed_at\":\"2025-01-01T12:00:00Z\"}",
+      "STORE purchase FOR u3 PAYLOAD {\"order_id\":3,\"user_id\":\"u3\",\"viewed_at\":\"2025-01-01T12:15:00Z\"}",
+      "FLUSH",
+      "QUERY page_view FOLLOWED BY purchase LINKED BY user_id USING TIME viewed_at LIMIT 2"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "u1" },
+      { "kind": "include", "value": "u2" },
+      { "kind": "include_none", "value": ["u3"] }
+    ]
+  },
+  {
+    "name": "sequence_preceded_by_with_time_field",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE payment_failed FIELDS { \"user_id\": \"string\", \"failed_at\": \"datetime\" }",
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"created_at\": \"datetime\" }",
+      "STORE payment_failed FOR u1 PAYLOAD {\"user_id\":\"u1\",\"failed_at\":\"2025-01-01T10:00:00Z\"}",
+      "STORE order_created FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\",\"created_at\":\"2025-01-01T10:30:00Z\"}",
+      "STORE order_created FOR u2 PAYLOAD {\"order_id\":2,\"user_id\":\"u2\",\"created_at\":\"2025-01-01T11:00:00Z\"}",
+      "FLUSH",
+      "QUERY order_created PRECEDED BY payment_failed LINKED BY user_id USING TIME created_at"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["u1"] },
+      { "kind": "include_none", "value": ["u2"] }
+    ]
+  },
+  {
+    "name": "sequence_with_time_field_numeric_timestamp",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\", \"ts\": \"int\" }",
+      "DEFINE purchase FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"ts\": \"int\" }",
+      "STORE page_view FOR u1 PAYLOAD {\"page\":\"/product\",\"user_id\":\"u1\",\"ts\":1735689600}",
+      "STORE purchase FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\",\"ts\":1735689900}",
+      "STORE page_view FOR u2 PAYLOAD {\"page\":\"/product\",\"user_id\":\"u2\",\"ts\":1735690000}",
+      "STORE purchase FOR u2 PAYLOAD {\"order_id\":2,\"user_id\":\"u2\",\"ts\":1735690300}",
+      "FLUSH",
+      "QUERY page_view FOLLOWED BY purchase LINKED BY user_id USING TIME ts"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["u1", "u2"] }
+    ]
+  },
+  {
+    "name": "sequence_with_different_time_fields",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\", \"viewed_at\": \"datetime\" }",
+      "DEFINE purchase FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"viewed_at\": \"datetime\", \"purchased_at\": \"datetime\" }",
+      "STORE page_view FOR u1 PAYLOAD {\"page\":\"/product\",\"user_id\":\"u1\",\"viewed_at\":\"2025-01-01T10:00:00Z\"}",
+      "STORE purchase FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\",\"purchased_at\":\"2025-01-01T13:05:00Z\",\"viewed_at\":\"2025-01-01T12:00:00Z\"}",
+      "FLUSH",
+      "QUERY page_view FOLLOWED BY purchase LINKED BY user_id USING TIME viewed_at"
+    ],
+    "matchers": [
+      { "kind": "include_all", "value": ["u1"] }
+    ]
   }
 ]

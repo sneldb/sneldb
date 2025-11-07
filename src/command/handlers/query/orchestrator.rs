@@ -9,9 +9,10 @@ use tokio::sync::RwLock;
 
 use super::context::QueryContext;
 use super::dispatch::{
-    BatchDispatch, BatchShardDispatcher, StreamingDispatch, StreamingShardDispatcher,
+    BatchDispatch, BatchShardDispatcher, SequenceStreamingDispatcher, StreamingDispatch,
+    StreamingShardDispatcher,
 };
-use super::merge::{BatchMerger, StreamMergerKind};
+use super::merge::{BatchMerger, SequenceStreamMerger, StreamMergerKind};
 use super::planner::{QueryPlanner, QueryPlannerBuilder};
 
 pub struct QueryExecutionPipeline<'a> {
@@ -47,7 +48,17 @@ impl<'a> QueryExecutionPipeline<'a> {
                 aggs: None,
                 time_bucket: None,
                 group_by: None,
-                event_sequence: None,
+                ..
+            }
+        )
+    }
+
+    pub fn is_sequence_query(&self) -> bool {
+        matches!(
+            self.ctx.command,
+            Command::Query {
+                event_sequence: Some(_),
+                link_field: Some(_),
                 ..
             }
         )
@@ -62,6 +73,11 @@ impl<'a> QueryExecutionPipeline<'a> {
     }
 
     pub async fn execute_streaming(&self) -> Result<Option<QueryBatchStream>, String> {
+        // Check if this is a sequence query
+        if self.is_sequence_query() {
+            return self.execute_sequence_streaming().await;
+        }
+
         if !self.streaming_supported() {
             return Ok(None);
         }
@@ -71,6 +87,40 @@ impl<'a> QueryExecutionPipeline<'a> {
         let handles = dispatcher.dispatch(&self.ctx, &plan).await?;
         let merger = StreamMergerKind::for_context(&self.ctx);
         let stream = merger.merge(&self.ctx, handles)?;
+        Ok(Some(stream))
+    }
+
+    /// Executes sequence queries using the streaming infrastructure.
+    async fn execute_sequence_streaming(&self) -> Result<Option<QueryBatchStream>, String> {
+        let Command::Query {
+            event_sequence: Some(event_sequence),
+            link_field: Some(link_field),
+            sequence_time_field,
+            limit,
+            ..
+        } = &self.ctx.command
+        else {
+            return Err("Sequence query requires event_sequence and link_field".to_string());
+        };
+
+        let sequence_time_field = sequence_time_field
+            .as_ref()
+            .map(|s| s.clone())
+            .unwrap_or_else(|| "timestamp".to_string());
+
+        // Use sequence dispatcher to split into sub-queries
+        let dispatcher = SequenceStreamingDispatcher::new();
+        let sequence_handles = dispatcher.dispatch_grouped_internal(&self.ctx).await?;
+
+        // Merge using sequence merger
+        let merger = SequenceStreamMerger::new(
+            event_sequence.clone(),
+            link_field.clone(),
+            sequence_time_field,
+            limit.map(|l| l as usize),
+        );
+
+        let stream = merger.merge(&self.ctx, sequence_handles.handles_by_type).await?;
         Ok(Some(stream))
     }
 }

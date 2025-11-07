@@ -74,6 +74,7 @@ impl From<JsonCommand> for Command {
                 context_id,
                 since,
                 time_field,
+                sequence_time_field: None,
                 where_clause: where_clause.map(Into::into),
                 limit,
                 offset,

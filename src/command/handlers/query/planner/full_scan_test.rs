@@ -12,6 +12,7 @@ fn create_context() -> QueryContext<'static> {
         context_id: None,
         since: None,
         time_field: None,
+        sequence_time_field: None,
         where_clause: None,
         limit: None,
         offset: None,

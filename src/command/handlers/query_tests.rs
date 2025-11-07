@@ -1,4 +1,5 @@
 use crate::command::handlers::query::handle;
+use crate::command::handlers::query::test_helpers::set_streaming_enabled;
 use crate::command::parser::commands::query::parse;
 use crate::engine::shard::manager::ShardManager;
 use crate::logging::init_for_tests;
@@ -2961,5 +2962,1431 @@ async fn test_offset_one() {
         letters,
         vec!["B", "C", "D"],
         "OFFSET 1 should skip first letter"
+    );
+}
+
+// =============================================================================
+// SEQUENCE QUERY TESTS - E2E tests for FOLLOWED BY, PRECEDED BY, LINKED BY
+// =============================================================================
+
+/// E2E test for basic FOLLOWED BY sequence query
+#[tokio::test]
+async fn test_sequence_followed_by_basic() {
+    let _guard = set_streaming_enabled(true);
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("page_view", &[("page", "string"), ("user_id", "string")])
+        .await
+        .unwrap();
+    factory
+        .define_with_fields(
+            "order_created",
+            &[("order_id", "int"), ("user_id", "string")],
+        )
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store page_view for u1
+    let store_cmd = CommandFactory::store()
+        .with_event_type("page_view")
+        .with_context_id("ctx1")
+        .with_payload(serde_json::json!({"page": "/home", "user_id": "u1"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(1000)).await;
+
+    // Store order_created for u1 (after page_view)
+    let store_cmd = CommandFactory::store()
+        .with_event_type("order_created")
+        .with_context_id("ctx2")
+        .with_payload(serde_json::json!({"order_id": 1, "user_id": "u1"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(500)).await;
+
+    // Query: page_view FOLLOWED BY order_created LINKED BY user_id
+    let cmd_str = "QUERY page_view FOLLOWED BY order_created LINKED BY user_id";
+    let cmd = parse(cmd_str).expect("parse FOLLOWED BY query");
+    let (mut reader, mut writer) = duplex(4096);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Should return both events (page_view and order_created for u1)
+    assert!(
+        body.contains("page_view") && body.contains("order_created"),
+        "Should return both events in sequence"
+    );
+    assert!(
+        !body.contains("No matching events found"),
+        "Should find matching sequence"
+    );
+}
+
+/// E2E test for FOLLOWED BY with WHERE clause filtering
+#[tokio::test]
+async fn test_sequence_followed_by_with_where_clause() {
+    let _guard = set_streaming_enabled(true);
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("page_view", &[("page", "string"), ("user_id", "string")])
+        .await
+        .unwrap();
+    factory
+        .define_with_fields(
+            "order_created",
+            &[("order_id", "int"), ("user_id", "string")],
+        )
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store page_view for u1 with /checkout
+    let store_cmd = CommandFactory::store()
+        .with_event_type("page_view")
+        .with_context_id("ctx1")
+        .with_payload(serde_json::json!({"page": "/checkout", "user_id": "u1"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(1000)).await;
+
+    // Store order_created for u1
+    let store_cmd = CommandFactory::store()
+        .with_event_type("order_created")
+        .with_context_id("ctx2")
+        .with_payload(serde_json::json!({"order_id": 1, "user_id": "u1"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    // Store page_view for u2 with /home (should not match)
+    let store_cmd = CommandFactory::store()
+        .with_event_type("page_view")
+        .with_context_id("ctx3")
+        .with_payload(serde_json::json!({"page": "/home", "user_id": "u2"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(1000)).await;
+
+    // Store order_created for u2
+    let store_cmd = CommandFactory::store()
+        .with_event_type("order_created")
+        .with_context_id("ctx4")
+        .with_payload(serde_json::json!({"order_id": 2, "user_id": "u2"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(500)).await;
+
+    // Query: page_view FOLLOWED BY order_created LINKED BY user_id WHERE page_view.page="/checkout"
+    let cmd_str = "QUERY page_view FOLLOWED BY order_created LINKED BY user_id WHERE page_view.page=\"/checkout\"";
+    let cmd = parse(cmd_str).expect("parse FOLLOWED BY with WHERE clause");
+    let (mut reader, mut writer) = duplex(4096);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Should only return u1's events (u2 has /home, not /checkout)
+    assert!(
+        body.contains("u1") && !body.contains("u2"),
+        "Should only return u1's sequence"
+    );
+    assert!(
+        !body.contains("No matching events found"),
+        "Should find matching sequence"
+    );
+}
+
+/// E2E test for PRECEDED BY sequence query
+#[tokio::test]
+async fn test_sequence_preceded_by_basic() {
+    let _guard = set_streaming_enabled(true);
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields(
+            "payment_failed",
+            &[("user_id", "string"), ("amount", "int")],
+        )
+        .await
+        .unwrap();
+    factory
+        .define_with_fields(
+            "order_created",
+            &[("order_id", "int"), ("user_id", "string")],
+        )
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store payment_failed for u1
+    let store_cmd = CommandFactory::store()
+        .with_event_type("payment_failed")
+        .with_context_id("ctx1")
+        .with_payload(serde_json::json!({"user_id": "u1", "amount": 100}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(1000)).await;
+
+    // Store order_created for u1 (after payment_failed)
+    let store_cmd = CommandFactory::store()
+        .with_event_type("order_created")
+        .with_context_id("ctx2")
+        .with_payload(serde_json::json!({"order_id": 1, "user_id": "u1"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(500)).await;
+
+    // Query: order_created PRECEDED BY payment_failed LINKED BY user_id
+    let cmd_str = "QUERY order_created PRECEDED BY payment_failed LINKED BY user_id";
+    let cmd = parse(cmd_str).expect("parse PRECEDED BY query");
+    let (mut reader, mut writer) = duplex(4096);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Should return both events (payment_failed and order_created for u1)
+    assert!(
+        body.contains("payment_failed") && body.contains("order_created"),
+        "Should return both events in sequence"
+    );
+    assert!(
+        !body.contains("No matching events found"),
+        "Should find matching sequence"
+    );
+}
+
+/// E2E test for sequence query with numeric link field
+#[tokio::test]
+async fn test_sequence_with_numeric_link_field() {
+    let _guard = set_streaming_enabled(true);
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields(
+            "order_created",
+            &[("order_id", "int"), ("customer_id", "int")],
+        )
+        .await
+        .unwrap();
+    factory
+        .define_with_fields(
+            "order_shipped",
+            &[("order_id", "int"), ("customer_id", "int")],
+        )
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store order_created for customer_id=100
+    let store_cmd = CommandFactory::store()
+        .with_event_type("order_created")
+        .with_context_id("ctx1")
+        .with_payload(serde_json::json!({"order_id": 1, "customer_id": 100}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(1000)).await;
+
+    // Store order_shipped for customer_id=100
+    let store_cmd = CommandFactory::store()
+        .with_event_type("order_shipped")
+        .with_context_id("ctx2")
+        .with_payload(serde_json::json!({"order_id": 1, "customer_id": 100}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(500)).await;
+
+    // Query: order_created FOLLOWED BY order_shipped LINKED BY customer_id
+    let cmd_str = "QUERY order_created FOLLOWED BY order_shipped LINKED BY customer_id";
+    let cmd = parse(cmd_str).expect("parse sequence query with numeric link field");
+    let (mut reader, mut writer) = duplex(4096);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Should return both events
+    assert!(
+        body.contains("order_created") && body.contains("order_shipped"),
+        "Should return both events in sequence"
+    );
+    assert!(body.contains("100"), "Should contain customer_id=100");
+    assert!(
+        !body.contains("No matching events found"),
+        "Should find matching sequence"
+    );
+}
+
+/// Edge case: Multiple sequences for the same link value
+/// Tests that when there are multiple page_views and multiple order_createds
+/// for the same user, all valid sequences are matched.
+#[tokio::test]
+async fn test_sequence_multiple_sequences_same_link_value() {
+    let _guard = set_streaming_enabled(true);
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("page_view", &[("page", "string"), ("user_id", "string")])
+        .await
+        .unwrap();
+    factory
+        .define_with_fields(
+            "order_created",
+            &[("order_id", "int"), ("user_id", "string")],
+        )
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store multiple page_views for u1
+    for (i, page) in [("/home", 1), ("/products", 2), ("/cart", 3)]
+        .iter()
+        .enumerate()
+    {
+        let store_cmd = CommandFactory::store()
+            .with_event_type("page_view")
+            .with_context_id(&format!("ctx_pv{}", i))
+            .with_payload(serde_json::json!({"page": page.0, "user_id": "u1"}))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+        sleep(Duration::from_millis(500)).await;
+    }
+
+    // Store multiple order_createds for u1
+    for i in 1..=2 {
+        let store_cmd = CommandFactory::store()
+            .with_event_type("order_created")
+            .with_context_id(&format!("ctx_oc{}", i))
+            .with_payload(serde_json::json!({"order_id": i, "user_id": "u1"}))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+        sleep(Duration::from_millis(500)).await;
+    }
+
+    sleep(Duration::from_millis(500)).await;
+
+    // Query: page_view FOLLOWED BY order_created LINKED BY user_id
+    let cmd_str = "QUERY page_view FOLLOWED BY order_created LINKED BY user_id";
+    let cmd = parse(cmd_str).expect("parse FOLLOWED BY query");
+    let (mut reader, mut writer) = duplex(8192);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 8192];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Should find multiple sequences (each page_view can match with order_createds that come after)
+    assert!(
+        body.contains("page_view") && body.contains("order_created"),
+        "Should return sequences"
+    );
+    assert!(
+        !body.contains("No matching events found"),
+        "Should find matching sequences"
+    );
+}
+
+/// Edge case: No matching sequences - events exist but don't form valid sequences
+/// Tests that when events exist but don't match the sequence pattern, no results are returned.
+#[tokio::test]
+async fn test_sequence_no_matching_sequences() {
+    let _guard = set_streaming_enabled(true);
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("signup", &[("user_id", "string")])
+        .await
+        .unwrap();
+    factory
+        .define_with_fields("purchase", &[("order_id", "int"), ("user_id", "string")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store signup for u1
+    let store_cmd = CommandFactory::store()
+        .with_event_type("signup")
+        .with_context_id("ctx1")
+        .with_payload(serde_json::json!({"user_id": "u1"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(1000)).await;
+
+    // Store purchase for u2 (different user - should not match)
+    let store_cmd = CommandFactory::store()
+        .with_event_type("purchase")
+        .with_context_id("ctx2")
+        .with_payload(serde_json::json!({"order_id": 1, "user_id": "u2"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(500)).await;
+
+    // Query: signup FOLLOWED BY purchase LINKED BY user_id
+    // Should not match because u1 != u2
+    let cmd_str = "QUERY signup FOLLOWED BY purchase LINKED BY user_id";
+    let cmd = parse(cmd_str).expect("parse FOLLOWED BY query");
+    let (mut reader, mut writer) = duplex(4096);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Should return no matching sequences
+    assert!(
+        body.contains("\"row_count\":0"),
+        "Should not find matching sequences when link values don't match"
+    );
+}
+
+/// Edge case: Wrong temporal order - events in wrong order shouldn't match for FOLLOWED BY
+/// Tests that FOLLOWED BY requires correct temporal ordering.
+#[tokio::test]
+async fn test_sequence_wrong_temporal_order() {
+    let _guard = set_streaming_enabled(true);
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("login", &[("user_id", "string")])
+        .await
+        .unwrap();
+    factory
+        .define_with_fields("logout", &[("user_id", "string")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store logout for u1 FIRST
+    let store_cmd = CommandFactory::store()
+        .with_event_type("logout")
+        .with_context_id("ctx1")
+        .with_payload(serde_json::json!({"user_id": "u1"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(1000)).await;
+
+    // Store login for u1 AFTER logout (wrong order)
+    let store_cmd = CommandFactory::store()
+        .with_event_type("login")
+        .with_context_id("ctx2")
+        .with_payload(serde_json::json!({"user_id": "u1"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(500)).await;
+
+    // Query: login FOLLOWED BY logout LINKED BY user_id
+    // Should not match because login comes AFTER logout (wrong order)
+    let cmd_str = "QUERY login FOLLOWED BY logout LINKED BY user_id";
+    let cmd = parse(cmd_str).expect("parse FOLLOWED BY query");
+    let (mut reader, mut writer) = duplex(4096);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Should return no matching sequences (wrong temporal order)
+    assert!(
+        body.contains("\"row_count\":0"),
+        "Should not match when events are in wrong temporal order"
+    );
+}
+
+/// Edge case: Multiple users with partial matches
+/// Tests that only users with complete sequences are returned.
+#[tokio::test]
+async fn test_sequence_multiple_users_partial_matches() {
+    let _guard = set_streaming_enabled(true);
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("view_item", &[("item_id", "int"), ("user_id", "string")])
+        .await
+        .unwrap();
+    factory
+        .define_with_fields("add_to_cart", &[("item_id", "int"), ("user_id", "string")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // User u1: view_item -> add_to_cart (complete sequence)
+    let store_cmd = CommandFactory::store()
+        .with_event_type("view_item")
+        .with_context_id("ctx1")
+        .with_payload(serde_json::json!({"item_id": 1, "user_id": "u1"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(1000)).await;
+
+    let store_cmd = CommandFactory::store()
+        .with_event_type("add_to_cart")
+        .with_context_id("ctx2")
+        .with_payload(serde_json::json!({"item_id": 1, "user_id": "u1"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(500)).await;
+
+    // User u2: only view_item (incomplete sequence - no add_to_cart)
+    let store_cmd = CommandFactory::store()
+        .with_event_type("view_item")
+        .with_context_id("ctx3")
+        .with_payload(serde_json::json!({"item_id": 2, "user_id": "u2"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(500)).await;
+
+    // Query: view_item FOLLOWED BY add_to_cart LINKED BY user_id
+    let cmd_str = "QUERY view_item FOLLOWED BY add_to_cart LINKED BY user_id";
+    let cmd = parse(cmd_str).expect("parse FOLLOWED BY query");
+    let (mut reader, mut writer) = duplex(4096);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Should only return u1's sequence (u2 has incomplete sequence)
+    assert!(
+        body.contains("u1") && !body.contains("u2"),
+        "Should only return complete sequences"
+    );
+    assert!(
+        !body.contains("No matching events found"),
+        "Should find at least one matching sequence"
+    );
+}
+
+/// Edge case: Sequence with LIMIT
+/// Tests that LIMIT works correctly with sequence queries.
+#[tokio::test]
+async fn test_sequence_with_limit() {
+    let _guard = set_streaming_enabled(true);
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("click", &[("user_id", "string"), ("button", "string")])
+        .await
+        .unwrap();
+    factory
+        .define_with_fields("conversion", &[("user_id", "string"), ("value", "int")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Create sequences for 3 users
+    for user_id in ["u1", "u2", "u3"] {
+        // Store click
+        let store_cmd = CommandFactory::store()
+            .with_event_type("click")
+            .with_context_id(&format!("ctx_click_{}", user_id))
+            .with_payload(serde_json::json!({"user_id": user_id, "button": "buy"}))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+
+        sleep(Duration::from_millis(500)).await;
+
+        // Store conversion
+        let store_cmd = CommandFactory::store()
+            .with_event_type("conversion")
+            .with_context_id(&format!("ctx_conv_{}", user_id))
+            .with_payload(serde_json::json!({"user_id": user_id, "value": 100}))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+
+        sleep(Duration::from_millis(500)).await;
+    }
+
+    // Query with LIMIT 2
+    let cmd_str = "QUERY click FOLLOWED BY conversion LINKED BY user_id LIMIT 2";
+    let cmd = parse(cmd_str).expect("parse FOLLOWED BY with LIMIT");
+    let (mut reader, mut writer) = duplex(8192);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 8192];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Should return at most 2 sequences (4 events total: 2 clicks + 2 conversions)
+    assert!(
+        body.contains("click") && body.contains("conversion"),
+        "Should return sequences"
+    );
+    assert!(
+        !body.contains("No matching events found"),
+        "Should find matching sequences"
+    );
+}
+
+/// Edge case: Sequence with WHERE clause on second event type
+/// Tests WHERE clause filtering on the second event in the sequence.
+#[tokio::test]
+async fn test_sequence_where_clause_on_second_event() {
+    let _guard = set_streaming_enabled(true);
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("search", &[("query", "string"), ("user_id", "string")])
+        .await
+        .unwrap();
+    factory
+        .define_with_fields(
+            "purchase",
+            &[
+                ("order_id", "int"),
+                ("user_id", "string"),
+                ("amount", "int"),
+            ],
+        )
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // User u1: search -> purchase (amount = 50)
+    let store_cmd = CommandFactory::store()
+        .with_event_type("search")
+        .with_context_id("ctx1")
+        .with_payload(serde_json::json!({"query": "laptop", "user_id": "u1"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(1000)).await;
+
+    let store_cmd = CommandFactory::store()
+        .with_event_type("purchase")
+        .with_context_id("ctx2")
+        .with_payload(serde_json::json!({"order_id": 1, "user_id": "u1", "amount": 50}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(1000)).await;
+
+    // User u2: search -> purchase (amount = 200)
+    let store_cmd = CommandFactory::store()
+        .with_event_type("search")
+        .with_context_id("ctx3")
+        .with_payload(serde_json::json!({"query": "phone", "user_id": "u2"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(1000)).await;
+
+    let store_cmd = CommandFactory::store()
+        .with_event_type("purchase")
+        .with_context_id("ctx4")
+        .with_payload(serde_json::json!({"order_id": 2, "user_id": "u2", "amount": 200}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(500)).await;
+
+    // Query: search FOLLOWED BY purchase LINKED BY user_id WHERE purchase.amount > 100
+    let cmd_str = "QUERY search FOLLOWED BY purchase LINKED BY user_id WHERE purchase.amount > 100";
+    let cmd = parse(cmd_str).expect("parse FOLLOWED BY with WHERE on second event");
+    let (mut reader, mut writer) = duplex(4096);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Should only return u2's sequence (u1's purchase amount is 50, which is <= 100)
+    assert!(
+        body.contains("u2") && !body.contains("u1"),
+        "Should only return sequences where purchase.amount > 100"
+    );
+    assert!(
+        !body.contains("No matching events found"),
+        "Should find matching sequence"
+    );
+}
+
+/// Edge case: Sequence with duplicate events for same link value
+/// Tests that multiple events of the same type for the same link value are handled correctly.
+#[tokio::test]
+async fn test_sequence_duplicate_events_same_link() {
+    let _guard = set_streaming_enabled(true);
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("page_view", &[("page", "string"), ("user_id", "string")])
+        .await
+        .unwrap();
+    factory
+        .define_with_fields("checkout", &[("user_id", "string")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store multiple page_views for u1
+    for (i, page) in ["/home", "/products", "/cart"].iter().enumerate() {
+        let store_cmd = CommandFactory::store()
+            .with_event_type("page_view")
+            .with_context_id(&format!("ctx_pv{}", i))
+            .with_payload(serde_json::json!({"page": page, "user_id": "u1"}))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+        sleep(Duration::from_millis(500)).await;
+    }
+
+    // Store checkout for u1 (after all page_views)
+    let store_cmd = CommandFactory::store()
+        .with_event_type("checkout")
+        .with_context_id("ctx_checkout")
+        .with_payload(serde_json::json!({"user_id": "u1"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(500)).await;
+
+    // Query: page_view FOLLOWED BY checkout LINKED BY user_id
+    let cmd_str = "QUERY page_view FOLLOWED BY checkout LINKED BY user_id";
+    let cmd = parse(cmd_str).expect("parse FOLLOWED BY query");
+    let (mut reader, mut writer) = duplex(8192);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 8192];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Should find sequences (each page_view can match with checkout)
+    assert!(
+        body.contains("page_view") && body.contains("checkout"),
+        "Should return sequences with duplicate events"
+    );
+    assert!(
+        !body.contains("No matching events found"),
+        "Should find matching sequences"
+    );
+}
+
+/// Edge case: Sequence across multiple shards
+/// Tests that sequences work when events are stored in different shards.
+#[tokio::test]
+async fn test_sequence_across_multiple_shards() {
+    let _guard = set_streaming_enabled(true);
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("event_a", &[("user_id", "string")])
+        .await
+        .unwrap();
+    factory
+        .define_with_fields("event_b", &[("user_id", "string")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    // Use multiple shards to test cross-shard sequence matching
+    let shard_manager = ShardManager::new(3, base_dir, wal_dir).await;
+
+    // Store event_a for u1 (might go to any shard)
+    let store_cmd = CommandFactory::store()
+        .with_event_type("event_a")
+        .with_context_id("ctx_a1")
+        .with_payload(serde_json::json!({"user_id": "u1"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(1000)).await;
+
+    // Store event_b for u1 (might go to different shard)
+    let store_cmd = CommandFactory::store()
+        .with_event_type("event_b")
+        .with_context_id("ctx_b1")
+        .with_payload(serde_json::json!({"user_id": "u1"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(500)).await;
+
+    // Query: event_a FOLLOWED BY event_b LINKED BY user_id
+    let cmd_str = "QUERY event_a FOLLOWED BY event_b LINKED BY user_id";
+    let cmd = parse(cmd_str).expect("parse FOLLOWED BY query");
+    let (mut reader, mut writer) = duplex(4096);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Should find sequence even across shards
+    assert!(
+        body.contains("event_a") && body.contains("event_b"),
+        "Should return sequence across shards"
+    );
+    assert!(
+        !body.contains("No matching events found"),
+        "Should find matching sequence"
+    );
+}
+
+/// Edge case: PRECEDED BY with wrong temporal order
+/// Tests that PRECEDED BY correctly requires the preceding event to come first.
+#[tokio::test]
+async fn test_sequence_preceded_by_wrong_order() {
+    let _guard = set_streaming_enabled(true);
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("login", &[("user_id", "string")])
+        .await
+        .unwrap();
+    factory
+        .define_with_fields("logout", &[("user_id", "string")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store login FIRST (preceding event)
+    let store_cmd = CommandFactory::store()
+        .with_event_type("login")
+        .with_context_id("ctx1")
+        .with_payload(serde_json::json!({"user_id": "u1"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(1000)).await;
+
+    // Store logout AFTER login (correct order for PRECEDED BY)
+    let store_cmd = CommandFactory::store()
+        .with_event_type("logout")
+        .with_context_id("ctx2")
+        .with_payload(serde_json::json!({"user_id": "u1"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(500)).await;
+
+    // Query: logout PRECEDED BY login LINKED BY user_id
+    // Should match because login (preceding) comes before logout
+    let cmd_str = "QUERY logout PRECEDED BY login LINKED BY user_id";
+    let cmd = parse(cmd_str).expect("parse PRECEDED BY query");
+    let (mut reader, mut writer) = duplex(4096);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Should match because login (preceding) comes before logout
+    assert!(
+        body.contains("login") && body.contains("logout"),
+        "Should match when preceding event comes first"
+    );
+    assert!(
+        !body.contains("No matching events found"),
+        "Should find matching sequence"
+    );
+}
+
+/// Edge case: Sequence with WHERE clause on both event types
+/// Tests complex WHERE clause filtering on both events in the sequence.
+#[tokio::test]
+async fn test_sequence_where_clause_both_events() {
+    let _guard = set_streaming_enabled(true);
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields(
+            "view",
+            &[
+                ("product", "string"),
+                ("user_id", "string"),
+                ("category", "string"),
+            ],
+        )
+        .await
+        .unwrap();
+    factory
+        .define_with_fields(
+            "buy",
+            &[
+                ("product", "string"),
+                ("user_id", "string"),
+                ("price", "int"),
+            ],
+        )
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // User u1: view (electronics) -> buy (price=100)
+    let store_cmd = CommandFactory::store()
+        .with_event_type("view")
+        .with_context_id("ctx1")
+        .with_payload(
+            serde_json::json!({"product": "laptop", "user_id": "u1", "category": "electronics"}),
+        )
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(1000)).await;
+
+    let store_cmd = CommandFactory::store()
+        .with_event_type("buy")
+        .with_context_id("ctx2")
+        .with_payload(serde_json::json!({"product": "laptop", "user_id": "u1", "price": 100}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(1000)).await;
+
+    // User u2: view (clothing) -> buy (price=50)
+    let store_cmd = CommandFactory::store()
+        .with_event_type("view")
+        .with_context_id("ctx3")
+        .with_payload(
+            serde_json::json!({"product": "shirt", "user_id": "u2", "category": "clothing"}),
+        )
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(1000)).await;
+
+    let store_cmd = CommandFactory::store()
+        .with_event_type("buy")
+        .with_context_id("ctx4")
+        .with_payload(serde_json::json!({"product": "shirt", "user_id": "u2", "price": 50}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(500)).await;
+
+    // Query: view FOLLOWED BY buy LINKED BY user_id WHERE view.category="electronics" AND buy.price > 80
+    let cmd_str = "QUERY view FOLLOWED BY buy LINKED BY user_id WHERE view.category=\"electronics\" AND buy.price > 80";
+    let cmd = parse(cmd_str).expect("parse FOLLOWED BY with WHERE on both events");
+    let (mut reader, mut writer) = duplex(4096);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Should only return u1's sequence (u2 has clothing category and price=50)
+    assert!(
+        body.contains("u1") && !body.contains("u2"),
+        "Should only return sequences matching both WHERE conditions"
+    );
+    assert!(
+        !body.contains("No matching events found"),
+        "Should find matching sequence"
+    );
+}
+
+/// Edge case: Sequence with very close timestamps
+/// Tests that sequences work correctly when events have very close timestamps.
+#[tokio::test]
+async fn test_sequence_very_close_timestamps() {
+    let _guard = set_streaming_enabled(true);
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("start", &[("user_id", "string")])
+        .await
+        .unwrap();
+    factory
+        .define_with_fields("end", &[("user_id", "string")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store start for u1
+    let store_cmd = CommandFactory::store()
+        .with_event_type("start")
+        .with_context_id("ctx1")
+        .with_payload(serde_json::json!({"user_id": "u1"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    // Store end immediately after (very close timestamps)
+    sleep(Duration::from_millis(10)).await;
+
+    let store_cmd = CommandFactory::store()
+        .with_event_type("end")
+        .with_context_id("ctx2")
+        .with_payload(serde_json::json!({"user_id": "u1"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(500)).await;
+
+    // Query: start FOLLOWED BY end LINKED BY user_id
+    let cmd_str = "QUERY start FOLLOWED BY end LINKED BY user_id";
+    let cmd = parse(cmd_str).expect("parse FOLLOWED BY query");
+    let (mut reader, mut writer) = duplex(4096);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Should match even with very close timestamps
+    assert!(
+        body.contains("start") && body.contains("end"),
+        "Should match sequences with very close timestamps"
+    );
+    assert!(
+        !body.contains("No matching events found"),
+        "Should find matching sequence"
     );
 }

@@ -74,5 +74,11 @@ even like:
 QUERY payment_verified WHERE amount > 500
 ```
 
+or find sequences:
+
+```sneldb
+QUERY payment_initiated FOLLOWED BY payment_settled LINKED BY user_id
+```
+
 Instead of thinking in terms of tables and joins, you think in terms of events.
-SnelDB is designed so the way you ask matches the way you think: “What happened? When? For whom?”
+SnelDB is designed so the way you ask matches the way you think: "What happened? When? For whom? What happened next?"

@@ -73,6 +73,28 @@ More examples: [Query](../commands/query.md) and [Replay](../commands/replay.md)
 
    - Merge rows; apply global `LIMIT` if set.
 
+### Sequence Queries (step‑by‑step)
+
+Sequence queries (`FOLLOWED BY`, `PRECEDED BY`, `LINKED BY`) follow a specialized path optimized for finding ordered event pairs:
+
+1. **Parse sequence**: Extract event types, link field, and sequence operator from the query.
+2. **Parallel zone collection**: Collect zones for all event types in parallel across shards. Each event type gets its own query plan with transformed WHERE clauses (event-prefixed fields like `page_view.page` become `page` for the `page_view` plan).
+3. **Index strategy assignment**: Assign index strategies to filter plans so zone XOR indexes are used for field filters.
+4. **Zone hydration**: Load column values (including the `link_field`) without materializing events.
+5. **Grouping**: Group row indices by `link_field` value using columnar data. Within each group, sort by timestamp.
+6. **Matching**: Apply the two-pointer algorithm to find matching sequences:
+   - For `FOLLOWED BY`: find events where `event_type_b` occurs at the same timestamp or later
+   - For `PRECEDED BY`: find events where `event_type_b` occurred strictly before
+   - Apply WHERE clause filters during matching to avoid materializing non-matching events
+7. **Materialization**: Only materialize events from matched sequences, using `EventBuilder` and `PreparedAccessor` for efficient construction.
+
+**Performance optimizations**:
+- Columnar processing avoids premature event materialization
+- Early filtering reduces the search space before grouping
+- Parallel zone collection for different event types
+- Index usage for `link_field` and `event_type` filters
+- Limit short-circuiting stops processing once enough matches are found
+
 ### REPLAY (step‑by‑step)
 
 1. Parse and validate inputs.

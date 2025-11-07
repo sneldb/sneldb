@@ -1,4 +1,5 @@
 mod batch;
+mod sequence_streaming;
 mod streaming;
 mod traits;
 
@@ -10,5 +11,6 @@ mod streaming_test;
 mod traits_test;
 
 pub use batch::BatchShardDispatcher;
+pub use sequence_streaming::SequenceStreamingDispatcher;
 pub use streaming::StreamingShardDispatcher;
 pub use traits::{BatchDispatch, StreamingDispatch};
