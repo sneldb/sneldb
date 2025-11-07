@@ -94,9 +94,90 @@ QUERY orders MIN amount, MAX amount BY country
 - `LIMIT` on aggregation caps the number of distinct groups produced (it does not limit events scanned within those groups).
 - Aggregations return a tabular result with columns: optional `bucket`, grouped fields, followed by metric columns like `count`, `total_<field>`, `avg_<field>`, `min_<field>`, `max_<field>`.
 
+## Sequence Queries
+
+SnelDB supports sequence matching queries that find events that occur in a specific order for the same entity. This is perfect for funnel analysis, conversion tracking, and understanding event dependencies.
+
+### Basic Form
+
+```sneldb
+QUERY <event_type_a> FOLLOWED BY <event_type_b> LINKED BY <link_field>
+QUERY <event_type_a> PRECEDED BY <event_type_b> LINKED BY <link_field>
+```
+
+### Concepts
+
+- **FOLLOWED BY**: Finds events where `event_type_b` occurs after `event_type_a` in time
+- **PRECEDED BY**: Finds events where `event_type_b` occurred before `event_type_a` in time
+- **LINKED BY**: Defines the field that connects events together (e.g., `user_id`, `order_id`, `session_id`)
+
+### Examples
+
+**Funnel analysis**: Find users who viewed the checkout page and then created an order:
+
+```sneldb
+QUERY page_view FOLLOWED BY order_created LINKED BY user_id
+```
+
+**With WHERE clause**: Only count checkout page views:
+
+```sneldb
+QUERY page_view FOLLOWED BY order_created LINKED BY user_id WHERE page_view.page="/checkout"
+```
+
+**Event-specific filters**: Filter both events in the sequence:
+
+```sneldb
+QUERY page_view FOLLOWED BY order_created LINKED BY user_id
+WHERE page_view.page="/checkout" AND order_created.status="done"
+```
+
+**PRECEDED BY**: Find orders that were preceded by a payment failure:
+
+```sneldb
+QUERY order_created PRECEDED BY payment_failed LINKED BY user_id WHERE order_created.status="done"
+```
+
+**Different link fields**: Use order_id instead of user_id:
+
+```sneldb
+QUERY order_created FOLLOWED BY order_cancelled LINKED BY order_id
+```
+
+### How It Works
+
+1. **Grouping**: Events are grouped by the `link_field` value (e.g., all events for `user_id="u1"` are grouped together)
+2. **Sorting**: Within each group, events are sorted by timestamp
+3. **Matching**: The two-pointer algorithm finds matching sequences efficiently
+4. **Filtering**: WHERE clauses are applied before matching to reduce the search space
+
+### WHERE Clause Behavior
+
+- **Event-prefixed fields**: Use `event_type.field` to filter specific events (e.g., `page_view.page="/checkout"`)
+- **Common fields**: Fields without a prefix apply to all events (e.g., `timestamp > 1000`)
+- **Combined**: You can mix event-specific and common filters with `AND`/`OR`
+
+### Performance
+
+Sequence queries are optimized for performance:
+
+- **Columnar processing**: Events are processed in columnar format without materialization
+- **Early filtering**: WHERE clauses are applied before grouping and matching
+- **Parallel collection**: Zones for different event types are collected in parallel
+- **Index usage**: Existing indexes on `link_field` and `event_type` are leveraged
+
+### Notes
+
+- Both events in the sequence must have the same value for the `link_field`
+- For `FOLLOWED BY`, `event_type_b` must occur at the same timestamp or later than `event_type_a`
+- For `PRECEDED BY`, `event_type_b` must occur strictly before `event_type_a` (same timestamp does not match)
+- The query returns both events from each matched sequence
+- `LIMIT` applies to the number of matched sequences, not individual events
+
 ## Gotchas
 
 - Field names used in `WHERE` must exist in the schema for that event type.
 - Strings must be double-quoted when you need explicit string literals.
 - Unknown fields in `RETURN` are ignored; only schema-defined payload fields (plus core fields `context_id`, `event_type`, `timestamp`) are returned.
 - Temporal literals in `WHERE` (e.g., `created_at = "2025-01-01T00:00:01Z") are parsed and normalized to epoch seconds. Fractional seconds are truncated; ranges using only sub-second differences may collapse to empty after normalization.
+- In sequence queries, the `link_field` must exist in both event types' schemas.

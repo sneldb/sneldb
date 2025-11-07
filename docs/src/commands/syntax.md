@@ -8,6 +8,7 @@ DEFINE <event_type> FIELDS { "key": "type", … }
 STORE  <event_type> FOR <context_id> PAYLOAD <json_object>
 
 QUERY  <event_type> [FOR <context_id>] [SINCE <ts>] [USING <time_field>] [WHERE <expr>] [LIMIT <n>]
+QUERY  <event_type_a> [FOLLOWED BY|PRECEDED BY] <event_type_b> LINKED BY <link_field> [WHERE <expr>] [LIMIT <n>]
 
 REPLAY [<event_type>] FOR <context_id> [SINCE <ts>] [USING <time_field>]
 
@@ -54,6 +55,8 @@ STORE order_created FOR ctx_123 PAYLOAD {
 QUERY order_created FOR "ctx_123" SINCE "2025-08-01T00:00:00Z" USING created_at
 WHERE amount >= 40 AND currency = "EUR"
 LIMIT 100
+
+QUERY page_view FOLLOWED BY order_created LINKED BY user_id WHERE page_view.page="/checkout"
 
 REPLAY order_created FOR ctx_123 SINCE "2025-08-01T00:00:00Z" USING created_at
 ```

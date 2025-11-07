@@ -39,13 +39,23 @@ The result: queries stay snappy whether you have thousands or billions of events
 
 ## 4. Replay built in
 
-You don’t just query — you can replay events in order:
+You don't just query — you can replay events in order:
 
 ```sneldb
 REPLAY order_created FOR customer-42
 ```
 
 This makes debugging, time-travel analysis, and sequence modeling natural parts of the workflow.
+
+## 4.5. Sequence matching
+
+Find events that occur in a specific order for the same entity:
+
+```sneldb
+QUERY page_view FOLLOWED BY order_created LINKED BY user_id WHERE page_view.page="/checkout"
+```
+
+Perfect for funnel analysis, conversion tracking, and understanding event dependencies. SnelDB uses efficient columnar processing and two-pointer algorithms to match sequences without materializing events.
 
 ## 5. Flexible schemas
 

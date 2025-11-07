@@ -21,6 +21,16 @@ impl<'a> ProjectionStrategy for SelectionProjection<'a> {
         set.add_many(ctx.core_fields());
         set.add_many(ctx.filter_columns());
 
+        // For sequence queries, include the link_field in columns to load
+        // This is needed for grouping events by the link field value
+        if let crate::command::types::Command::Query {
+            link_field: Some(link_field),
+            ..
+        } = &self.plan.command
+        {
+            set.add(link_field.clone());
+        }
+
         let mode_all = match &self.plan.command {
             crate::command::types::Command::Query { return_fields, .. } => match return_fields {
                 None => true,

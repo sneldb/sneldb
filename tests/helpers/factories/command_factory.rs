@@ -49,6 +49,7 @@ impl CommandFactory {
                 group_by: None,
                 event_sequence: None,
                 time_field: None,
+                sequence_time_field: None,
             },
         }
     }
@@ -155,6 +156,13 @@ impl CommandFactory {
     pub fn with_link_field(mut self, field: &str) -> Self {
         if let Command::Query { link_field, .. } = &mut self.inner {
             *link_field = Some(field.to_string());
+        }
+        self
+    }
+
+    pub fn with_event_sequence(mut self, sequence: crate::command::types::EventSequence) -> Self {
+        if let Command::Query { event_sequence, .. } = &mut self.inner {
+            *event_sequence = Some(sequence);
         }
         self
     }

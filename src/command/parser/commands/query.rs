@@ -59,6 +59,7 @@ peg::parser! {
             / return_clause()
             / linked_clause()
             / where_clause()
+            / using_time_clause()
             / using_clause()
             / agg_clause()
             / time_clause()
@@ -99,6 +100,11 @@ peg::parser! {
         rule where_clause() -> Clause
             = ci("WHERE") _ e:expr() {
                 Clause::Where(e)
+            }
+
+        rule using_time_clause() -> Clause
+            = ci("USING") _ ci("TIME") _ fld:field() {
+                Clause::UsingTime(fld)
             }
 
         rule using_clause() -> Clause
@@ -282,6 +288,7 @@ struct QueryParts {
     link_field: Option<String>,
     where_clause: Option<Expr>,
     using_field: Option<String>,
+    sequence_time_field: Option<String>,
     aggs: Option<Vec<AggSpec>>,
     time_bucket: Option<TimeGranularity>,
     group_by: Option<Vec<String>>,
@@ -299,6 +306,7 @@ impl QueryParts {
             Clause::Link(v) => self.link_field = Some(v),
             Clause::Where(e) => self.where_clause = Some(e),
             Clause::Using(f) => self.using_field = Some(f),
+            Clause::UsingTime(f) => self.sequence_time_field = Some(f),
             Clause::Aggs(a) => self.aggs = Some(a),
             Clause::Time(tg, uf) => {
                 self.time_bucket = Some(tg);
@@ -326,6 +334,7 @@ impl QueryParts {
             context_id: self.context_id,
             since: self.since,
             time_field: self.using_field,
+            sequence_time_field: self.sequence_time_field,
             where_clause: self.where_clause,
             limit: self.limit,
             offset: self.offset,
@@ -365,6 +374,7 @@ enum Clause {
     Link(String),
     Where(Expr),
     Using(String),
+    UsingTime(String),
     Aggs(Vec<AggSpec>),
     Time(TimeGranularity, Option<String>),
     Group(Vec<String>, Option<String>),

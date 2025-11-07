@@ -17,6 +17,7 @@ pub mod range_query_handler;
 pub mod result;
 pub mod segment_aggregate_runner;
 pub mod segment_query_runner;
+pub mod sequence;
 pub mod sink;
 
 #[cfg(test)]

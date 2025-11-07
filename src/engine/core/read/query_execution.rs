@@ -92,6 +92,13 @@ impl<'a> QueryExecution<'a> {
             "Starting query execution"
         );
 
+        // Sequence queries are handled via streaming pipeline - not here
+        if self.is_sequence_query() {
+            return Err(QueryExecutionError::ExprEval(
+                "Sequence queries must use streaming execution path".to_string(),
+            ));
+        }
+
         let mut events = Vec::new();
 
         // Extract query context to check for ORDER BY
@@ -170,5 +177,19 @@ impl<'a> QueryExecution<'a> {
         );
 
         Ok(events)
+    }
+
+    /// Checks if the query is a sequence query (has event_sequence and link_field).
+    fn is_sequence_query(&self) -> bool {
+        if let crate::command::types::Command::Query {
+            event_sequence,
+            link_field,
+            ..
+        } = &self.plan.command
+        {
+            event_sequence.is_some() && link_field.is_some()
+        } else {
+            false
+        }
     }
 }
