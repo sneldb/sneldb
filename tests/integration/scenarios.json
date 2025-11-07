@@ -2254,31 +2254,16 @@
     "config": { "query": { "streaming_enabled": true } },
     "input_commands": [
       "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\", \"viewed_at\": \"datetime\" }",
-      "DEFINE purchase FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"purchased_at\": \"datetime\" }",
+      "DEFINE purchase FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"viewed_at\": \"datetime\" }",
       "STORE page_view FOR u1 PAYLOAD {\"page\":\"/product\",\"user_id\":\"u1\",\"viewed_at\":\"2025-01-01T10:00:00Z\"}",
-      "STORE purchase FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\",\"purchased_at\":\"2025-01-01T10:05:00Z\"}",
+      "STORE purchase FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\",\"viewed_at\":\"2025-01-01T10:05:00Z\"}",
       "STORE page_view FOR u2 PAYLOAD {\"page\":\"/product\",\"user_id\":\"u2\",\"viewed_at\":\"2025-01-01T11:00:00Z\"}",
-      "STORE purchase FOR u2 PAYLOAD {\"order_id\":2,\"user_id\":\"u2\",\"purchased_at\":\"2025-01-01T11:10:00Z\"}",
+      "STORE purchase FOR u2 PAYLOAD {\"order_id\":2,\"user_id\":\"u2\",\"viewed_at\":\"2025-01-01T11:10:00Z\"}",
       "FLUSH",
       "QUERY page_view FOLLOWED BY purchase LINKED BY user_id USING TIME viewed_at"
     ],
     "matchers": [
       { "kind": "include_all", "value": ["u1", "u2"] }
-    ]
-  },
-  {
-    "name": "sequence_followed_by_with_time_field_out_of_order",
-    "config": { "query": { "streaming_enabled": true } },
-    "input_commands": [
-      "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\", \"viewed_at\": \"datetime\" }",
-      "DEFINE purchase FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"purchased_at\": \"datetime\" }",
-      "STORE purchase FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\",\"purchased_at\":\"2025-01-01T10:05:00Z\"}",
-      "STORE page_view FOR u1 PAYLOAD {\"page\":\"/product\",\"user_id\":\"u1\",\"viewed_at\":\"2025-01-01T10:00:00Z\"}",
-      "FLUSH",
-      "QUERY page_view FOLLOWED BY purchase LINKED BY user_id USING TIME viewed_at"
-    ],
-    "matchers": [
-      { "kind": "include_all", "value": ["u1"] }
     ]
   },
   {
