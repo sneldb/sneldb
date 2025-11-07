@@ -380,7 +380,8 @@ fn build_record_batch(
                     } else {
                         indices.len() * 8
                     };
-                    let mut builder = LargeStringBuilder::with_capacity(indices.len(), estimated_bytes);
+                    let mut builder =
+                        LargeStringBuilder::with_capacity(indices.len(), estimated_bytes);
                     for &idx in indices {
                         match column.get(idx) {
                             Some(ScalarValue::Utf8(s)) => builder.append_value(s),
@@ -396,7 +397,8 @@ fn build_record_batch(
                 }
                 _ => {
                     // Fallback to string
-                    let mut builder = LargeStringBuilder::with_capacity(indices.len(), indices.len() * 8);
+                    let mut builder =
+                        LargeStringBuilder::with_capacity(indices.len(), indices.len() * 8);
                     for &idx in indices {
                         match column.get(idx) {
                             Some(ScalarValue::Utf8(s)) => builder.append_value(s),
@@ -610,8 +612,12 @@ mod tests {
         let rows = vec![(json!(1), json!("alpha")), (json!(2), json!("beta"))];
 
         let columns = vec![
-            rows.iter().map(|(id, _)| ScalarValue::from(id.clone())).collect::<Vec<_>>(),
-            rows.iter().map(|(_, v)| ScalarValue::from(v.clone())).collect::<Vec<_>>(),
+            rows.iter()
+                .map(|(id, _)| ScalarValue::from(id.clone()))
+                .collect::<Vec<_>>(),
+            rows.iter()
+                .map(|(_, v)| ScalarValue::from(v.clone()))
+                .collect::<Vec<_>>(),
         ];
 
         let batch = ColumnBatch::new(Arc::clone(&schema_arc), columns, rows.len(), None)

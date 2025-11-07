@@ -142,15 +142,15 @@ impl ColumnBatch {
             arrays.push(array);
         }
 
-        RecordBatch::try_new(arrow_schema, arrays).map_err(|e| {
-            BatchError::InvalidSchema(format!("Failed to create RecordBatch: {}", e))
-        })
+        RecordBatch::try_new(arrow_schema, arrays)
+            .map_err(|e| BatchError::InvalidSchema(format!("Failed to create RecordBatch: {}", e)))
     }
 
     /// Get the Arrow RecordBatch (for backward compatibility)
     /// Converts on-demand - use to_record_batch() for better error handling
     pub fn record_batch(&self) -> RecordBatch {
-        self.to_record_batch().expect("Failed to convert to RecordBatch")
+        self.to_record_batch()
+            .expect("Failed to convert to RecordBatch")
     }
 
     pub fn schema(&self) -> &BatchSchema {
@@ -181,10 +181,7 @@ impl ColumnBatch {
     pub fn row(&self, idx: usize) -> Result<Vec<ScalarValue>, BatchError> {
         let len = self.len();
         if idx >= len {
-            return Err(BatchError::RowOutOfBounds {
-                index: idx,
-                len,
-            });
+            return Err(BatchError::RowOutOfBounds { index: idx, len });
         }
 
         let mut row = Vec::with_capacity(self.columns.len());

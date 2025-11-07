@@ -41,7 +41,11 @@ fn sink_appends_and_tracks_stats() {
     let pool = BatchPool::new(8).unwrap();
     let mut builder = pool.acquire(Arc::clone(&schema_arc));
     builder
-        .push_row(&[ScalarValue::from(json!(1_700_000_000_u64)), ScalarValue::from(json!("ctx")), ScalarValue::from(json!(123_u64))])
+        .push_row(&[
+            ScalarValue::from(json!(1_700_000_000_u64)),
+            ScalarValue::from(json!("ctx")),
+            ScalarValue::from(json!(123_u64)),
+        ])
         .unwrap();
     let batch = builder.finish().unwrap();
 
@@ -69,7 +73,11 @@ fn sink_rejects_schema_mismatch_with_existing_frames() {
     let pool = BatchPool::new(4).unwrap();
     let mut builder = pool.acquire(Arc::clone(&schema_arc));
     builder
-        .push_row(&[ScalarValue::from(json!(1_700_000_000_u64)), ScalarValue::from(json!("ctx")), ScalarValue::from(json!(1_u64))])
+        .push_row(&[
+            ScalarValue::from(json!(1_700_000_000_u64)),
+            ScalarValue::from(json!("ctx")),
+            ScalarValue::from(json!(1_u64)),
+        ])
         .unwrap();
     sink.append(&builder.finish().unwrap()).unwrap();
     let store = sink.into_store();
@@ -112,7 +120,11 @@ fn sink_rejects_mismatched_batch_schema() {
     let pool = BatchPool::new(4).unwrap();
     let mut builder = pool.acquire(Arc::clone(&mismatched_arc));
     builder
-        .push_row(&[ScalarValue::from(json!(1_700_000_000_u64)), ScalarValue::from(json!("ctx")), ScalarValue::from(json!("id"))])
+        .push_row(&[
+            ScalarValue::from(json!(1_700_000_000_u64)),
+            ScalarValue::from(json!("ctx")),
+            ScalarValue::from(json!("id")),
+        ])
         .unwrap();
     let batch = builder.finish().unwrap();
 

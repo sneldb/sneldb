@@ -49,7 +49,10 @@ impl ValueCodec {
                 buffer.push(byte);
             }
             "String" => {
-                let s = value.as_str().map(|s| s.to_string()).unwrap_or_else(|| value.to_json().to_string());
+                let s = value
+                    .as_str()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| value.to_json().to_string());
                 ByteEncoder::encode_bytes(s.as_bytes(), buffer);
             }
             _ => {

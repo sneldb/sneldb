@@ -22,8 +22,14 @@ fn build_batch(timestamps: &[u64], event_ids: &[u64]) -> Arc<ColumnBatch> {
         .expect("schema"),
     );
 
-    let timestamp_column: Vec<ScalarValue> = timestamps.iter().map(|ts| ScalarValue::from(json!(ts))).collect();
-    let event_column: Vec<ScalarValue> = event_ids.iter().map(|id| ScalarValue::from(json!(id))).collect();
+    let timestamp_column: Vec<ScalarValue> = timestamps
+        .iter()
+        .map(|ts| ScalarValue::from(json!(ts)))
+        .collect();
+    let event_column: Vec<ScalarValue> = event_ids
+        .iter()
+        .map(|id| ScalarValue::from(json!(id)))
+        .collect();
 
     Arc::new(
         ColumnBatch::new(

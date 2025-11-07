@@ -89,7 +89,11 @@ impl Response {
         }
     }
 
-    pub fn ok_table(columns: Vec<(String, String)>, rows: Vec<Vec<ScalarValue>>, count: usize) -> Self {
+    pub fn ok_table(
+        columns: Vec<(String, String)>,
+        rows: Vec<Vec<ScalarValue>>,
+        count: usize,
+    ) -> Self {
         Self {
             status: StatusCode::Ok,
             count,

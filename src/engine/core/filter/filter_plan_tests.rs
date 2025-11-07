@@ -296,7 +296,10 @@ async fn temporal_where_literal_string_normalized_to_epoch() {
     let p = plans.iter().find(|p| p.column == "created_at").unwrap();
     assert_eq!(p.operation, Some(CompareOp::Gte));
     let v = p.value.as_ref().unwrap();
-    assert!(v.as_i64().is_some() || v.as_u64().is_some() || v.as_f64().is_some(), "expected normalized epoch seconds number");
+    assert!(
+        v.as_i64().is_some() || v.as_u64().is_some() || v.as_f64().is_some(),
+        "expected normalized epoch seconds number"
+    );
     assert_eq!(v.as_i64().unwrap(), 1_735_689_600); // 2025-01-01T00:00:00Z
 }
 
@@ -328,7 +331,10 @@ async fn date_where_literal_string_normalized_to_epoch_midnight() {
     let p = plans.iter().find(|p| p.column == "due_date").unwrap();
     assert_eq!(p.operation, Some(CompareOp::Eq));
     let v = p.value.as_ref().unwrap();
-    assert!(v.as_i64().is_some() || v.as_u64().is_some() || v.as_f64().is_some(), "expected normalized epoch seconds number");
+    assert!(
+        v.as_i64().is_some() || v.as_u64().is_some() || v.as_f64().is_some(),
+        "expected normalized epoch seconds number"
+    );
     assert_eq!(v.as_i64().unwrap(), 1_735_776_000); // 2025-01-02T00:00:00Z
 }
 

@@ -142,8 +142,16 @@ async fn aggregate_op_computes_count_and_total() {
     assert_eq!(
         results,
         vec![
-            (ScalarValue::from(json!("ctx1")), ScalarValue::from(json!(2)), ScalarValue::from(json!(25))),
-            (ScalarValue::from(json!("ctx2")), ScalarValue::from(json!(1)), ScalarValue::from(json!(7)))
+            (
+                ScalarValue::from(json!("ctx1")),
+                ScalarValue::from(json!(2)),
+                ScalarValue::from(json!(25))
+            ),
+            (
+                ScalarValue::from(json!("ctx2")),
+                ScalarValue::from(json!(1)),
+                ScalarValue::from(json!(7))
+            )
         ]
     );
 }

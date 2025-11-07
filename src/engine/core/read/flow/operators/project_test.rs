@@ -56,7 +56,11 @@ async fn project_op_reorders_and_drops_columns() {
     for idx in 0..3 {
         use crate::engine::types::ScalarValue;
         builder
-            .push_row(&[ScalarValue::from(json!(idx)), ScalarValue::from(json!(format!("s{}", idx))), ScalarValue::from(json!(idx * 10))])
+            .push_row(&[
+                ScalarValue::from(json!(idx)),
+                ScalarValue::from(json!(format!("s{}", idx))),
+                ScalarValue::from(json!(idx * 10)),
+            ])
             .unwrap();
     }
     let batch = builder.finish().unwrap();

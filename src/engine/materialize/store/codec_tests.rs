@@ -31,10 +31,16 @@ fn build_batch(schema: &Arc<BatchSchema>) -> ColumnBatch {
     let pool = BatchPool::new(4).unwrap();
     let mut builder = pool.acquire(Arc::clone(schema));
     builder
-        .push_row(&[ScalarValue::from(json!(1_700_000_000_u64)), ScalarValue::from(json!(10_u64))])
+        .push_row(&[
+            ScalarValue::from(json!(1_700_000_000_u64)),
+            ScalarValue::from(json!(10_u64)),
+        ])
         .unwrap();
     builder
-        .push_row(&[ScalarValue::from(json!(1_700_000_005_u64)), ScalarValue::Null])
+        .push_row(&[
+            ScalarValue::from(json!(1_700_000_005_u64)),
+            ScalarValue::Null,
+        ])
         .unwrap();
     builder.finish().unwrap()
 }
@@ -93,6 +99,9 @@ fn lz4_codec_roundtrip() {
 
     let decoded = codec.decode(&meta, frame_data).unwrap();
     assert_eq!(decoded.len(), batch.len());
-    assert_eq!(decoded.column(0).unwrap()[0], ScalarValue::from(json!(1_700_000_000_u64)));
+    assert_eq!(
+        decoded.column(0).unwrap()[0],
+        ScalarValue::from(json!(1_700_000_000_u64))
+    );
     assert!(decoded.column(1).unwrap()[1].is_null());
 }

@@ -1,4 +1,5 @@
-use crate::command::handlers::{define, flush, query, remember, replay, show, store};
+use crate::command::handlers::query::QueryCommandHandler;
+use crate::command::handlers::{define, flush, remember, replay, show, store};
 use crate::command::types::Command;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
@@ -25,7 +26,11 @@ pub async fn dispatch_command<W: AsyncWrite + Unpin>(
         RememberQuery { .. } => {
             remember::handle(cmd, shard_manager, registry, writer, renderer).await
         }
-        Query { .. } => query::handle(cmd, shard_manager, registry, writer, renderer).await,
+        Query { .. } => {
+            QueryCommandHandler::new(cmd, shard_manager, Arc::clone(registry), writer, renderer)
+                .handle()
+                .await
+        }
         Replay { .. } => replay::handle(cmd, shard_manager, registry, writer, renderer).await,
         ShowMaterialized { .. } => {
             show::handle(cmd, shard_manager, registry, writer, renderer).await
