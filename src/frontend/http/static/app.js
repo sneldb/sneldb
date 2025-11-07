@@ -55,14 +55,36 @@
   // Initialize theme
   setTheme(getTheme());
 
-  function setStatus(text, type = 'ready') {
+  function setStatus(text, type = 'ready', executionTimeMs = null) {
     const statusText = status.querySelector('.status-text');
+    let displayText = text;
+
+    // Add execution time if provided
+    if (executionTimeMs !== null && executionTimeMs !== undefined) {
+      const formattedTime = formatExecutionTime(executionTimeMs);
+      displayText = `${text} ${formattedTime}`;
+    }
+
     if (statusText) {
-      statusText.textContent = text;
+      statusText.textContent = displayText;
     } else {
-      status.textContent = text;
+      status.textContent = displayText;
     }
     status.className = 'status ' + type;
+  }
+
+  function formatExecutionTime(ms) {
+    if (ms < 1) {
+      // Less than 1ms, show in microseconds
+      return `(${(ms * 1000).toFixed(0)}μs)`;
+    } else if (ms < 1000) {
+      // Less than 1 second, show in milliseconds with 1 decimal
+      return `(${ms.toFixed(1)}ms)`;
+    } else {
+      // 1 second or more, show in seconds with 2 decimals
+      const seconds = ms / 1000;
+      return `(${seconds.toFixed(2)}s)`;
+    }
   }
 
   function setOutput(text) {
@@ -541,29 +563,282 @@
     dataTable.appendChild(tbody);
   }
 
-  function handleQueryResult(text) {
+  // Parse Arrow format response and convert to columns/rows format
+  async function parseArrowResponse(arrayBuffer) {
     try {
-      // Strip TCP response headers if present (e.g., "200 OK\n")
-      let jsonText = text.trim();
-      const lines = jsonText.split('\n');
-      if (lines.length > 1 && lines[0].match(/^\d{3}\s+\w+$/)) {
-        // First line looks like a status code, skip it
-        jsonText = lines.slice(1).join('\n').trim();
+      // Wait for Apache Arrow to load if it's being loaded asynchronously (ES module)
+      let retries = 0;
+      while ((typeof window === 'undefined' || typeof window.ApacheArrow === 'undefined') && retries < 50) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        retries++;
       }
 
-      const json = JSON.parse(jsonText);
+      // Check if Apache Arrow is available - try different possible global names
+      let Arrow = null;
+      if (typeof window !== 'undefined' && window.ApacheArrow) {
+        Arrow = window.ApacheArrow;
+      } else if (typeof ApacheArrow !== 'undefined') {
+        Arrow = ApacheArrow;
+      } else if (typeof arrow !== 'undefined') {
+        Arrow = arrow;
+      } else {
+        console.error('Available globals:', Object.keys(window || {}).filter(k => k.toLowerCase().includes('arrow')));
+        throw new Error('Apache Arrow library not loaded. Please ensure the library is included and wait for it to load.');
+      }
 
-      // Check if data is in the top level (columns/rows)
+      // Arrow IPC streams need to be read using a StreamReader
+      // The server sends: schema message + batch messages + end marker
+      // Convert ArrayBuffer to Uint8Array for Arrow library
+      const uint8Array = new Uint8Array(arrayBuffer);
+
+      let table = null;
+
+      // Try using RecordBatchStreamReader (for IPC streams) - check different API patterns
+      if (Arrow.RecordBatchStreamReader) {
+        try {
+          // Try with Uint8Array
+          const reader = Arrow.RecordBatchStreamReader.from(uint8Array);
+          const batches = [];
+
+          // Try iterator pattern
+          if (typeof reader[Symbol.iterator] === 'function') {
+            for (const batch of reader) {
+              batches.push(batch);
+            }
+          }
+          // Try async iteration
+          else if (reader[Symbol.asyncIterator]) {
+            for await (const batch of reader) {
+              batches.push(batch);
+            }
+          }
+          // Try next() method
+          else if (typeof reader.next === 'function') {
+            let result = reader.next();
+            while (!result.done) {
+              batches.push(result.value);
+              result = reader.next();
+            }
+          }
+          // Try readAll() method
+          else if (typeof reader.readAll === 'function') {
+            const allBatches = reader.readAll();
+            if (Array.isArray(allBatches)) {
+              batches.push(...allBatches);
+            } else {
+              batches.push(allBatches);
+            }
+          }
+
+          // Combine all batches into a single table
+          if (batches.length > 0) {
+            if (Arrow.Table && typeof Arrow.Table.new === 'function') {
+              table = Arrow.Table.new(batches);
+            } else if (Arrow.Table && typeof Arrow.Table.from === 'function') {
+              table = Arrow.Table.from(batches);
+            } else if (batches.length === 1) {
+              // If we can't combine and only have one batch, use it directly
+              table = batches[0];
+            } else {
+              // Multiple batches but no combine method - try to manually combine
+              console.warn('Multiple batches but no combine method, using first batch');
+              table = batches[0];
+            }
+          } else {
+            throw new Error('No batches found in Arrow stream');
+          }
+        } catch (streamError) {
+          console.warn('RecordBatchStreamReader failed:', streamError);
+          console.warn('Error details:', {
+            message: streamError.message,
+            stack: streamError.stack
+          });
+          // Fall through to try other methods
+        }
+      }
+
+      // If stream reader didn't work, try tableFromIPC (for complete IPC files)
+      if (!table && typeof Arrow.tableFromIPC === 'function') {
+        try {
+          table = Arrow.tableFromIPC(uint8Array);
+        } catch (e) {
+          try {
+            table = Arrow.tableFromIPC(arrayBuffer);
+          } catch (e2) {
+            // Fall through to try other methods
+          }
+        }
+      }
+      // Try Table.tableFromIPC (namespaced)
+      if (!table && Arrow.Table && typeof Arrow.Table.tableFromIPC === 'function') {
+        try {
+          table = Arrow.Table.tableFromIPC(uint8Array);
+        } catch (e) {
+          // Fall through to try other methods
+        }
+      }
+      // Try Table.from (alternative API)
+      if (!table && Arrow.Table && typeof Arrow.Table.from === 'function') {
+        try {
+          table = Arrow.Table.from(uint8Array);
+        } catch (e) {
+          // Fall through to try other methods
+        }
+      }
+      // Try using Reader API
+      if (!table && Arrow.table && typeof Arrow.table.tableFromIPC === 'function') {
+        try {
+          table = Arrow.table.tableFromIPC(uint8Array);
+        } catch (e) {
+          // Fall through to try other methods
+        }
+      }
+      // Try read function
+      if (!table && typeof Arrow.read === 'function') {
+        try {
+          table = Arrow.read(uint8Array);
+        } catch (e) {
+          // Fall through
+        }
+      }
+
+      if (!table) {
+        // Log available methods for debugging
+        const availableMethods = Object.keys(Arrow).filter(k => {
+          const val = Arrow[k];
+          return typeof val === 'function' || (typeof val === 'object' && val !== null);
+        });
+        console.error('Available Arrow exports:', availableMethods);
+        console.error('Arrow object structure:', Arrow);
+        throw new Error('Could not parse Arrow IPC stream. Available exports: ' + availableMethods.join(', '));
+      }
+
+      const schema = table.schema;
+      const columns = schema.fields.map(field => ({
+        name: field.name,
+        type: mapArrowTypeToLogicalType(field.type)
+      }));
+
+      const rows = [];
+      const numRows = table.numRows;
+      const numCols = table.numCols;
+
+      for (let i = 0; i < numRows; i++) {
+        const row = [];
+        for (let j = 0; j < numCols; j++) {
+          const column = table.getChildAt(j);
+          const value = column.get(i);
+          // Convert Arrow values to JavaScript values
+          row.push(convertArrowValue(value, columns[j].type));
+        }
+        rows.push(row);
+      }
+
+      return { columns, rows };
+    } catch (e) {
+      console.error('Error parsing Arrow response:', e);
+      console.error('Error stack:', e.stack);
+      throw e;
+    }
+  }
+
+  // Map Arrow data types to logical types
+  function mapArrowTypeToLogicalType(arrowType) {
+    const typeName = arrowType.toString();
+    if (typeName.includes('Int64') || typeName.includes('Int32') || typeName.includes('Int16') || typeName.includes('Int8')) {
+      return 'Integer';
+    }
+    if (typeName.includes('Float64') || typeName.includes('Float32')) {
+      return 'Float';
+    }
+    if (typeName.includes('Bool')) {
+      return 'Boolean';
+    }
+    if (typeName.includes('Timestamp')) {
+      return 'Timestamp';
+    }
+    if (typeName.includes('Utf8') || typeName.includes('LargeUtf8') || typeName.includes('String')) {
+      return 'String';
+    }
+    return 'String'; // Default fallback
+  }
+
+  // Convert Arrow value to JavaScript value
+  function convertArrowValue(value, logicalType) {
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    // Handle BigInt values (Arrow Int64 returns BigInt in JavaScript)
+    if (typeof value === 'bigint') {
+      // Convert BigInt to Number, but check if it's within safe integer range
+      const num = Number(value);
+      if (num > Number.MAX_SAFE_INTEGER || num < Number.MIN_SAFE_INTEGER) {
+        console.warn('BigInt value exceeds safe integer range, converting anyway:', value);
+      }
+      // For timestamps: The server stores seconds but sends them as Arrow TimestampMillisecond
+      // Arrow returns them as if they were milliseconds, but they're actually seconds
+      // So we should NOT divide by 1000 - pass through as-is
+      if (logicalType === 'Timestamp') {
+        return num; // Already in seconds, despite Arrow thinking it's milliseconds
+      }
+      return num;
+    }
+
+    // Handle Timestamp type: Server stores seconds but Arrow TimestampMillisecond treats them as milliseconds
+    // Arrow returns the value as-is (thinking it's milliseconds), but it's actually seconds
+    // So we pass it through unchanged - formatTimestamp expects seconds
+    if (logicalType === 'Timestamp' && typeof value === 'number') {
+      return value; // Already in seconds
+    }
+
+    // Handle regular numbers
+    if (typeof value === 'number') {
+      return value;
+    }
+
+    // Return other types as-is (strings, booleans, etc.)
+    return value;
+  }
+
+  function handleQueryResult(text, isArrow = false, arrowData = null) {
+    try {
+      let json = null;
       let data = null;
-      if (json.columns && json.rows && Array.isArray(json.columns) && Array.isArray(json.rows)) {
-        data = json;
-      }
-      // Check if data is nested in results array (SnelDB response format)
-      else if (json.results && Array.isArray(json.results) && json.results.length > 0) {
-        const firstResult = json.results[0];
-        if (firstResult.columns && firstResult.rows &&
-            Array.isArray(firstResult.columns) && Array.isArray(firstResult.rows)) {
-          data = firstResult;
+
+      if (isArrow && arrowData) {
+        // Use Arrow data directly
+        data = arrowData;
+        // Create a JSON representation for the output view
+        json = {
+          status: 200,
+          message: 'OK',
+          count: arrowData.rows ? arrowData.rows.length : 0,
+          results: [arrowData]
+        };
+      } else {
+        // Parse JSON response
+        // Strip TCP response headers if present (e.g., "200 OK\n")
+        let jsonText = text.trim();
+        const lines = jsonText.split('\n');
+        if (lines.length > 1 && lines[0].match(/^\d{3}\s+\w+$/)) {
+          // First line looks like a status code, skip it
+          jsonText = lines.slice(1).join('\n').trim();
+        }
+
+        json = JSON.parse(jsonText);
+
+        // Check if data is in the top level (columns/rows)
+        if (json.columns && json.rows && Array.isArray(json.columns) && Array.isArray(json.rows)) {
+          data = json;
+        }
+        // Check if data is nested in results array (SnelDB response format)
+        else if (json.results && Array.isArray(json.results) && json.results.length > 0) {
+          const firstResult = json.results[0];
+          if (firstResult.columns && firstResult.rows &&
+              Array.isArray(firstResult.columns) && Array.isArray(firstResult.rows)) {
+            data = firstResult;
+          }
         }
       }
 
@@ -676,14 +951,14 @@
         viewControls.style.display = 'none';
         // Clear table when no data
         dataTable.innerHTML = '';
-        setOutput(text);
+        setOutput(json ? JSON.stringify(json, null, 2) : text);
       }
     } catch (e) {
       emptyState.style.display = 'flex';
       chartControls.style.display = 'none';
       viewControls.style.display = 'none';
       hidePaginationUI();
-      setOutput(text);
+      setOutput(text || String(e));
     }
   }
 
@@ -820,20 +1095,66 @@
 
     const lines = queryToRun.split(/\n+/).map(s => s.trim()).filter(Boolean);
     const outputs = [];
+    let lastResponse = null;
+    let lastContentType = null;
+    let lastExecutionTimeMs = null;
 
     for (const line of lines) {
       try {
         const res = await fetch('/command', { method: 'POST', headers, body: line });
-        const text = await res.text();
+        const contentType = res.headers.get('Content-Type') || '';
+        lastContentType = contentType;
+
+        // Extract execution time from header
+        const executionTimeHeader = res.headers.get('X-Execution-Time-Ms');
+        if (executionTimeHeader) {
+          const executionTime = parseFloat(executionTimeHeader);
+          if (!isNaN(executionTime)) {
+            lastExecutionTimeMs = executionTime;
+          }
+        }
+
+        // Check if response is Arrow format
+        const isArrow = contentType.includes('arrow') || contentType.includes('application/vnd.apache.arrow');
 
         if (!res.ok) {
+          const text = await res.text();
           outputs.push(text);
           outputs.push(`-- Error ${res.status}`);
           setStatus(`Error ${res.status}`, 'error');
           break;
         }
 
-        outputs.push(text);
+        if (isArrow) {
+          // Handle Arrow format - ensure we read the complete response
+          const arrayBuffer = await res.arrayBuffer();
+
+          // Verify we have data
+          if (arrayBuffer.byteLength === 0) {
+            throw new Error('Empty Arrow response received');
+          }
+
+          lastResponse = arrayBuffer;
+          try {
+            const arrowData = await parseArrowResponse(arrayBuffer);
+            handleQueryResult('', true, arrowData);
+            // Create a text representation for outputs array (for consistency)
+            outputs.push(`[Arrow format: ${arrowData.rows ? arrowData.rows.length : 0} rows]`);
+          } catch (arrowError) {
+            console.error('Arrow parsing error:', arrowError);
+            console.error('Arrow buffer length:', arrayBuffer.byteLength);
+            console.error('First 100 bytes:', new Uint8Array(arrayBuffer.slice(0, 100)));
+            console.error('First 100 bytes (hex):', Array.from(new Uint8Array(arrayBuffer.slice(0, 100))).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+            console.error('First 100 bytes (decimal):', Array.from(new Uint8Array(arrayBuffer.slice(0, 100))).join(', '));
+            outputs.push(`Arrow parsing error: ${arrowError.message}`);
+            setStatus('Arrow parsing failed', 'error');
+          }
+        } else {
+          // Handle JSON/text format
+          const text = await res.text();
+          lastResponse = text;
+          outputs.push(text);
+        }
       } catch (e) {
         outputs.push(String(e));
         setStatus('Request failed', 'error');
@@ -841,11 +1162,14 @@
       }
     }
 
-    const result = outputs.join('\n');
-    handleQueryResult(result);
+    // Only call handleQueryResult for JSON if we didn't already handle Arrow
+    if (!lastContentType || !lastContentType.includes('arrow')) {
+      const result = outputs.join('\n');
+      handleQueryResult(result);
+    }
 
     if (status.className.indexOf('error') === -1) {
-      setStatus('Done', 'ready');
+      setStatus('Done', 'ready', lastExecutionTimeMs);
     }
   }
 

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use tokio::task::JoinHandle;
-use tracing::error;
+use tracing::{debug, error};
 
 use crate::engine::core::Event;
 use crate::engine::core::MemTable;
@@ -85,7 +85,15 @@ pub async fn build_memtable_flow(
     let source_ctx = Arc::clone(&ctx);
     tasks.push(tokio::spawn(async move {
         if let Err(err) = source.run(source_tx, source_ctx).await {
-            error!(target: "sneldb::flow", error = %err, "MemTable source failed");
+            // ChannelClosed is expected when LIMIT is reached early - don't log as error
+            match &err {
+                FlowOperatorError::ChannelClosed => {
+                    debug!(target: "sneldb::flow", "MemTable source stopped (channel closed, likely LIMIT reached)");
+                }
+                _ => {
+                    error!(target: "sneldb::flow", error = %err, "MemTable source failed");
+                }
+            }
         }
     }));
 
@@ -101,7 +109,15 @@ pub async fn build_memtable_flow(
         let agg_ctx = Arc::clone(&ctx);
         tasks.push(tokio::spawn(async move {
             if let Err(err) = aggregate.run(current_rx, agg_tx, agg_ctx).await {
-                error!(target: "sneldb::flow", error = %err, "Aggregate operator failed");
+                // ChannelClosed is expected when LIMIT is reached early - don't log as error
+                match &err {
+                    FlowOperatorError::ChannelClosed => {
+                        debug!(target: "sneldb::flow", "Aggregate operator stopped (channel closed, likely LIMIT reached)");
+                    }
+                    _ => {
+                        error!(target: "sneldb::flow", error = %err, "Aggregate operator failed");
+                    }
+                }
             }
         }));
         current_rx = agg_rx;
@@ -127,7 +143,15 @@ pub async fn build_memtable_flow(
         let proj_ctx = Arc::clone(&ctx);
         tasks.push(tokio::spawn(async move {
             if let Err(err) = projector.run(current_rx, proj_tx, proj_ctx).await {
-                error!(target: "sneldb::flow", error = %err, "Projection operator failed");
+                // ChannelClosed is expected when LIMIT is reached early - don't log as error
+                match &err {
+                    FlowOperatorError::ChannelClosed => {
+                        debug!(target: "sneldb::flow", "Projection operator stopped (channel closed, likely LIMIT reached)");
+                    }
+                    _ => {
+                        error!(target: "sneldb::flow", error = %err, "Projection operator failed");
+                    }
+                }
             }
         }));
 
@@ -174,7 +198,15 @@ pub async fn build_segment_flow(
     let source_ctx = Arc::clone(&ctx);
     tasks.push(tokio::spawn(async move {
         if let Err(err) = source.run(source_tx, source_ctx).await {
-            error!(target: "sneldb::flow", error = %err, "Segment source failed");
+            // ChannelClosed is expected when LIMIT is reached early - don't log as error
+            match &err {
+                FlowOperatorError::ChannelClosed => {
+                    debug!(target: "sneldb::flow", "Segment source stopped (channel closed, likely LIMIT reached)");
+                }
+                _ => {
+                    error!(target: "sneldb::flow", error = %err, "Segment source failed");
+                }
+            }
         }
     }));
 
@@ -193,7 +225,15 @@ pub async fn build_segment_flow(
         let proj_ctx = Arc::clone(&ctx);
         tasks.push(tokio::spawn(async move {
             if let Err(err) = projector.run(current_rx, proj_tx, proj_ctx).await {
-                error!(target: "sneldb::flow", error = %err, "Segment projection failed");
+                // ChannelClosed is expected when LIMIT is reached early - don't log as error
+                match &err {
+                    FlowOperatorError::ChannelClosed => {
+                        debug!(target: "sneldb::flow", "Segment projection stopped (channel closed, likely LIMIT reached)");
+                    }
+                    _ => {
+                        error!(target: "sneldb::flow", error = %err, "Segment projection failed");
+                    }
+                }
             }
         }));
 
@@ -247,7 +287,15 @@ pub async fn build_segment_stream(
             .stream_into(ctx_for_task, Arc::clone(&schema_for_task), source_tx)
             .await
         {
-            error!(target: "sneldb::flow", error = %err, "Segment stream failed");
+            // ChannelClosed is expected when LIMIT is reached early - don't log as error
+            match &err {
+                FlowOperatorError::ChannelClosed => {
+                    debug!(target: "sneldb::flow", "Segment stream stopped (channel closed, likely LIMIT reached)");
+                }
+                _ => {
+                    error!(target: "sneldb::flow", error = %err, "Segment stream failed");
+                }
+            }
         }
     }));
 
@@ -263,7 +311,15 @@ pub async fn build_segment_stream(
         let agg_ctx = Arc::clone(&ctx);
         tasks.push(tokio::spawn(async move {
             if let Err(err) = aggregate.run(current_rx, agg_tx, agg_ctx).await {
-                error!(target: "sneldb::flow", error = %err, "Aggregate operator failed");
+                // ChannelClosed is expected when LIMIT is reached early - don't log as error
+                match &err {
+                    FlowOperatorError::ChannelClosed => {
+                        debug!(target: "sneldb::flow", "Aggregate operator stopped (channel closed, likely LIMIT reached)");
+                    }
+                    _ => {
+                        error!(target: "sneldb::flow", error = %err, "Aggregate operator failed");
+                    }
+                }
             }
         }));
         current_rx = agg_rx;
@@ -288,7 +344,15 @@ pub async fn build_segment_stream(
         let proj_ctx = Arc::clone(&ctx);
         tasks.push(tokio::spawn(async move {
             if let Err(err) = projector.run(current_rx, proj_tx, proj_ctx).await {
-                error!(target: "sneldb::flow", error = %err, "Segment projection failed");
+                // ChannelClosed is expected when LIMIT is reached early - don't log as error
+                match &err {
+                    FlowOperatorError::ChannelClosed => {
+                        debug!(target: "sneldb::flow", "Projection operator stopped (channel closed, likely LIMIT reached)");
+                    }
+                    _ => {
+                        error!(target: "sneldb::flow", error = %err, "Projection operator failed");
+                    }
+                }
             }
         }));
 
