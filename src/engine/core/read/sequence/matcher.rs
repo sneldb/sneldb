@@ -313,8 +313,8 @@ impl SequenceMatcher {
     /// Matches A FOLLOWED BY B using two-pointer technique.
     ///
     /// This implements O(n+m) matching by using two pointers that advance
-    /// through sorted row indices. When event B's timestamp is greater than
-    /// event A's timestamp, we have a match.
+    /// through sorted row indices. When event B's timestamp is greater than or equal to
+    /// event A's timestamp, we have a match. Events with the same timestamp are considered matches.
     fn match_followed_by(
         &self,
         group: &GroupedRowIndices,

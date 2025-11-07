@@ -97,11 +97,18 @@ impl<'a, W: AsyncWrite + Unpin> QueryCommandHandler<'a, W> {
         if QueryStreamingConfig::enabled() && pipeline.streaming_supported() {
             match pipeline.execute_streaming().await {
                 Ok(Some(stream)) => {
+                    // For sequence queries, the limit is already applied at the sequence matcher level
+                    // (limiting sequences, not events). We should not apply it again here to events.
+                    let response_limit = if pipeline.is_sequence_query() {
+                        None
+                    } else {
+                        limit_value
+                    };
                     let response_writer = QueryResponseWriter::new(
                         self.writer,
                         self.renderer,
                         stream.schema(),
-                        limit_value,
+                        response_limit,
                         offset_value,
                     );
                     return response_writer.write(stream).await;
