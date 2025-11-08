@@ -12,9 +12,10 @@ Compaction keeps reads predictable as data grows. Instead of editing files in pl
 
 ## How it runs (big picture)
 
-- One background task per process coordinates compaction across shards with a global concurrency of 1 (configurable). Shards are compacted one at a time; within a shard, work runs serially.
+- One background task per process coordinates compaction across shards with a global concurrency limit (configurable). Shards are compacted concurrently up to the limit; within a shard, work runs serially.
 - Periodically checks system IO pressure; if the system is busy, it skips.
-- Uses a policy to plan compaction (k-way by uid); if the policy yields plans, a worker runs them and publishes new segments atomically.
+- Uses a policy to plan compaction (k-way by uid, multi-level); if the policy yields plans, a worker runs them and publishes new segments atomically.
+- Plans are grouped by shared input segments to enable efficient multi-UID compaction in a single pass.
 
 ## Shard-local by design
 
@@ -40,23 +41,33 @@ Each shard compacts its own segments. This keeps the work isolated, prevents cro
 
 ## What the worker does (conceptually)
 
-- For each uid, groups L0 segments into chunks of size `k` (config).
-- For each full chunk, performs a k-way merge of events sorted by `context_id`.
+- Groups segments by UID and level, then chunks them into batches of size `k` (config).
+- For each batch, processes all UIDs from the same input segments together in a single pass (multi-UID compaction).
+- Performs k-way merges of events sorted by `context_id` for each UID.
 - Rebuilds zones at a level-aware target size: `events_per_zone * fill_factor * (level+1)`.
-- Emits a new L1 (or higher-level) segment with correct naming, updates the segment index, and removes inputs from the index.
+- Emits new segments at the next level (L0→L1, L1→L2, etc.) with correct naming, updates the segment index, and removes inputs from the index.
+- Leftover segments (those that don't form a complete batch of `k`) accumulate across cycles rather than being force-compacted immediately.
 
 ## Operator knobs
 
-- `segments_per_merge`: number of L0 segments to merge per output.
+- `segments_per_merge`: number of segments to merge per output batch (applies to all levels).
 - `compaction_max_shard_concurrency`: max shards compacted simultaneously (default 1 = serial across shards).
 - `sys_io_threshold` (and related IO heuristics): how conservative to be under load.
 - `events_per_zone` and `fill_factor`: base and multiplier for zone sizing; higher levels multiply by `(level+1)`.
+
+## Leftover handling
+
+- Segments that don't form a complete batch of `k` are left to accumulate across compaction cycles.
+- When accumulated leftovers reach a threshold of approximately `(k * 2) / 3`, they are force-compacted to prevent indefinite accumulation.
+- This less aggressive approach reduces compaction overhead while still maintaining predictable read performance.
 
 ## Invariants
 
 - No in-place mutation; only append/replace at the segment set level.
 - Queries stay available and correct while compaction runs.
 - Failures are contained to the background task; foreground paths remain healthy.
+- Multi-UID compaction ensures all UIDs from shared input segments are written to a single output segment, maintaining data locality.
+- Atomic segment index updates ensure consistency: output segments are verified to exist before the index is updated.
 
 ## What this page is not
 

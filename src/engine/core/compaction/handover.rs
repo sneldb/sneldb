@@ -1,4 +1,4 @@
-use super::merge_plan::MergePlan;
+use super::segment_batch::SegmentBatch;
 use crate::engine::core::read::cache::{
     GlobalColumnBlockCache, GlobalColumnHandleCache, GlobalIndexCatalogCache, GlobalZoneIndexCache,
     GlobalZoneSurfCache,
@@ -117,66 +117,188 @@ impl CompactionHandover {
         }
     }
 
-    pub async fn commit(
+    /// Commits a batch of UIDs compacted from the same input segments.
+    /// Returns the list of drained segment labels that can be deleted later.
+    pub async fn commit_batch(
         &self,
-        plan: &MergePlan,
-        new_entry: SegmentEntry,
-    ) -> Result<(), StoreError> {
-        let retired_labels = plan.input_segment_labels.clone();
-        let new_label = SegmentId::from(new_entry.id).dir_name();
+        batch: &SegmentBatch,
+        new_entries: Vec<SegmentEntry>,
+    ) -> Result<Vec<String>, StoreError> {
+        let input_labels = batch.input_segment_labels.clone();
 
         info!(
-            target: "compaction_handover::commit",
+            target: "compaction_handover::commit_batch",
             shard = self.shard_id,
-            level_from = plan.level_from,
-            level_to = plan.level_to,
-            input_count = retired_labels.len(),
-            %new_label,
-            "Applying compaction handover"
+            input_count = input_labels.len(),
+            uid_count = new_entries.len(),
+            "Applying batch compaction handover"
         );
 
-        {
+        let drained_labels = {
             let _guard = self.flush_lock.lock().await;
             let mut index = SegmentIndex::load(&self.shard_dir).await?;
-            let removed = index.remove_labels(retired_labels.iter().map(|s| s.as_str()));
-            debug!(
-                target: "compaction_handover::commit",
+
+            // Log segment states before retirement
+            let segments_before: Vec<_> = input_labels
+                .iter()
+                .filter_map(|l| {
+                    index
+                        .iter_all()
+                        .find(|e| e.label() == *l)
+                        .map(|e| (l.clone(), e.uids.clone()))
+                })
+                .collect();
+
+            tracing::warn!(
+                target: "compaction_handover::commit_batch",
                 shard = self.shard_id,
-                removed = removed.len(),
-                "Removed retired entries from index"
+                input_labels = ?input_labels,
+                segments_before_retirement = segments_before.len(),
+                segment_states_before = ?segments_before,
+                total_entries_before = index.len(),
+                "About to retire UIDs from segments"
             );
-            index.insert_entry(new_entry);
+
+            // Retire all UIDs from the input segments
+            // We need to deduplicate drained segments since the same segment might be returned
+            // multiple times if it becomes empty after retiring different UIDs
+            let mut all_drained: Vec<crate::engine::core::SegmentEntry> = Vec::new();
+            let mut seen_drained_labels: HashSet<String> = HashSet::new();
+
+            warn!(
+                target: "compaction_handover::commit_batch",
+                shard = self.shard_id,
+                uid_count = batch.uid_plans.len(),
+                uids_to_retire = ?batch.uid_plans.iter().map(|p| p.uid.clone()).collect::<Vec<_>>(),
+                input_segments = ?input_labels,
+                "Retiring multiple UIDs from shared segments"
+            );
+
+            for uid_plan in &batch.uid_plans {
+                let drained = index
+                    .retire_uid_from_labels(&uid_plan.uid, input_labels.iter().map(|s| s.as_str()));
+
+                warn!(
+                    target: "compaction_handover::commit_batch",
+                    shard = self.shard_id,
+                    uid = %uid_plan.uid,
+                    drained_from_this_uid = drained.len(),
+                    "Retired UID from segments"
+                );
+
+                // Only add segments that haven't been marked as drained yet
+                for entry in drained {
+                    let label = entry.label();
+                    if !seen_drained_labels.contains(&label) {
+                        seen_drained_labels.insert(label.clone());
+                        all_drained.push(entry);
+                    }
+                }
+            }
+
+            let drained_labels: Vec<String> =
+                all_drained.iter().map(|entry| entry.label()).collect();
+
+            warn!(
+                target: "compaction_handover::commit_batch",
+                shard = self.shard_id,
+                total_uids_retired = batch.uid_plans.len(),
+                total_drained_after_all_uids = drained_labels.len(),
+                drained_labels = ?drained_labels,
+                input_segments = ?input_labels,
+                "Completed retiring all UIDs from segments"
+            );
+
+            // Log segment states after retirement
+            let segments_after: Vec<_> = input_labels
+                .iter()
+                .filter_map(|l| {
+                    index
+                        .iter_all()
+                        .find(|e| e.label() == *l)
+                        .map(|e| (l.clone(), e.uids.clone()))
+                })
+                .collect();
+
+            tracing::warn!(
+                target: "compaction_handover::commit_batch",
+                shard = self.shard_id,
+                drained_count = drained_labels.len(),
+                drained_labels = ?drained_labels,
+                segments_remaining = segments_after.len(),
+                segment_states_after = ?segments_after,
+                total_entries_after_retirement = index.len(),
+                "Retired UIDs from input segments"
+            );
+
+            // Verify output segments exist before updating index (crash safety)
+            // This ensures we never update the index to reference segments that don't exist
+            for entry in &new_entries {
+                let output_segment_dir = self.shard_dir.join(SegmentId::from(entry.id).dir_name());
+                if !output_segment_dir.exists() {
+                    error!(
+                        target: "compaction_handover::commit_batch",
+                        shard = self.shard_id,
+                        output_segment_id = entry.id,
+                        output_segment_dir = %output_segment_dir.display(),
+                        "Output segment directory does not exist, aborting index update"
+                    );
+                    return Err(StoreError::FlushFailed(format!(
+                        "Output segment directory does not exist: {}",
+                        output_segment_dir.display()
+                    )));
+                }
+            }
+
+            // Insert all new entries
+            for entry in &new_entries {
+                let new_entry_id = entry.id;
+                let new_entry_uids = entry.uids.clone();
+                index.insert_entry(entry.clone());
+                debug!(
+                    target: "compaction_handover::commit_batch",
+                    shard = self.shard_id,
+                    new_entry_id = new_entry_id,
+                    new_entry_uids = ?new_entry_uids,
+                    "Inserted new entry"
+                );
+            }
+
             index.save(&self.shard_dir).await?;
-            debug!(
-                target: "compaction_handover::commit",
+
+            tracing::warn!(
+                target: "compaction_handover::commit_batch",
                 shard = self.shard_id,
-                len = index.len(),
-                "Persisted segment index after compaction"
+                new_entries_count = new_entries.len(),
+                total_entries_final = index.len(),
+                "Inserted all entries and saved index"
             );
-        }
 
-        self.update_segment_ids(&retired_labels, &new_label);
-        self.invalidate_caches(&retired_labels);
-        self.schedule_reclaim(retired_labels);
+            drained_labels
+        };
 
-        Ok(())
-    }
-
-    fn update_segment_ids(&self, retired: &[String], new_label: &str) {
-        let retired_set: HashSet<&str> = retired.iter().map(|s| s.as_str()).collect();
+        // Update segment IDs: remove all drained segments, add all new segments
+        let retired_set: HashSet<&str> = drained_labels.iter().map(|s| s.as_str()).collect();
         let mut guard = self.segment_ids.write().unwrap();
         let before = guard.len();
         guard.retain(|label| !retired_set.contains(label.as_str()));
-        guard.push(new_label.to_string());
+        for entry in &new_entries {
+            let new_label = SegmentId::from(entry.id).dir_name();
+            guard.push(new_label);
+        }
         guard.sort();
         debug!(
-            target: "compaction_handover::segment_ids",
+            target: "compaction_handover::commit_batch",
             shard = self.shard_id,
             before,
             after = guard.len(),
-            %new_label,
+            new_entries_count = new_entries.len(),
             "Updated shared segment id list"
         );
+
+        self.invalidate_caches(&drained_labels);
+
+        Ok(drained_labels)
     }
 
     fn invalidate_caches(&self, retired: &[String]) {
@@ -195,7 +317,7 @@ impl CompactionHandover {
         }
     }
 
-    fn schedule_reclaim(&self, retired: Vec<String>) {
+    pub fn schedule_reclaim(&self, retired: Vec<String>) {
         if retired.is_empty() {
             return;
         }
