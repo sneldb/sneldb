@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="/static/styles.css" />
   <link rel="stylesheet" href="/static/highlight.css" />
   <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script type="module">
     // Load Apache Arrow as ES module and expose it globally
@@ -32,15 +33,24 @@
           <h1>SnelDB Dashboard</h1>
           <p class="tagline">Query. Visualize. Analyze.</p>
         </div>
+        <nav class="nav-tabs">
+          <button class="nav-tab active" data-page="query">
+            <i class="fas fa-database"></i>
+            Query
+          </button>
+          <button class="nav-tab" data-page="monitoring">
+            <i class="fas fa-chart-line"></i>
+            Monitoring
+          </button>
+        </nav>
         <div class="header-actions">
+          <button id="settingsBtn" class="btn btn-secondary btn-sm" style="display: none;">
+            <i class="fas fa-cog"></i>
+            Settings
+          </button>
           <button id="themeToggle" class="theme-toggle" aria-label="Toggle theme">
-            <svg class="sun-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="1.5"/>
-              <path d="M10 2V4M10 16V18M18 10H16M4 10H2M15.657 4.343L14.243 5.757M5.757 14.243L4.343 15.657M15.657 15.657L14.243 14.243M5.757 5.757L4.343 4.343" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-            <svg class="moon-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <path d="M17 10.5C16.6 14.4 13.4 17.5 9.5 18C5.1 18.5 1.5 14.9 2 10.5C2.4 6.6 5.6 3.5 9.5 3C10.4 2.9 11.2 3 12 3.3C11.2 4.3 10.7 5.6 10.7 7C10.7 10.3 13.3 13 16.6 13C17.4 13 18.1 12.8 18.8 12.5C18.2 13.8 17.3 14.9 16.2 15.7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
+            <i class="far fa-sun sun-icon"></i>
+            <i class="far fa-moon moon-icon"></i>
           </button>
           <div class="status" id="status">
             <span class="status-indicator"></span>
@@ -50,6 +60,8 @@
       </div>
     </header>
     <main>
+      <!-- Query Page -->
+      <div id="queryPage" class="page-content active">
       <section class="input-section">
         <div class="section-header">
           <h2>Query Editor</h2>
@@ -60,9 +72,7 @@
         </div>
         <div class="actions">
           <button id="run" class="btn btn-primary">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M3 2L13 8L3 14V2Z" fill="currentColor"/>
-            </svg>
+            <i class="fas fa-play"></i>
             Run Query
           </button>
           <button id="clear" class="btn btn-secondary">Clear</button>
@@ -91,26 +101,15 @@
           </div>
           <div class="view-controls" id="viewControls" style="display: none;">
             <button class="view-btn active" data-view="chart" id="chartViewBtn">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <rect x="2" y="8" width="3" height="6" fill="currentColor"/>
-                <rect x="6" y="4" width="3" height="10" fill="currentColor"/>
-                <rect x="10" y="6" width="3" height="8" fill="currentColor"/>
-              </svg>
+              <i class="far fa-chart-bar"></i>
               Chart
             </button>
             <button class="view-btn" data-view="table" id="tableViewBtn">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <rect x="2" y="2" width="12" height="12" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                <line x1="2" y1="6" x2="14" y2="6" stroke="currentColor" stroke-width="1.5"/>
-                <line x1="8" y1="2" x2="8" y2="14" stroke="currentColor" stroke-width="1.5"/>
-              </svg>
+              <i class="fas fa-table"></i>
               Table
             </button>
             <button class="view-btn" data-view="json" id="jsonViewBtn">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M4 2C2.89543 2 2 2.89543 2 4V6C2 7.10457 2.89543 8 4 8C2.89543 8 2 8.89543 2 10V12C2 13.1046 2.89543 14 4 14" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                <path d="M12 2C13.1046 2 14 2.89543 14 4V6C14 7.10457 13.1046 8 12 8C13.1046 8 14 8.89543 14 10V12C14 13.1046 13.1046 14 12 14" stroke="currentColor" stroke-width="1.5" fill="none"/>
-              </svg>
+              <i class="fas fa-code"></i>
               JSON
             </button>
           </div>
@@ -149,11 +148,7 @@
               <canvas id="chart"></canvas>
             </div>
             <div class="empty-state" id="emptyState">
-              <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
-                <rect x="8" y="32" width="12" height="24" fill="currentColor" opacity="0.2"/>
-                <rect x="26" y="16" width="12" height="40" fill="currentColor" opacity="0.2"/>
-                <rect x="44" y="24" width="12" height="32" fill="currentColor" opacity="0.2"/>
-              </svg>
+              <i class="far fa-chart-bar" style="font-size: 48px; opacity: 0.3;"></i>
               <p>Run a query to visualize results</p>
             </div>
           </div>
@@ -167,6 +162,77 @@
           </div>
         </div>
       </section>
+      </div>
+      <!-- Monitoring Page -->
+      <div id="monitoringPage" class="page-content">
+        <section class="monitoring-section">
+          <div class="monitoring-grid" id="monitoringGrid">
+            <!-- 6 monitoring slots will be generated here -->
+          </div>
+        </section>
+      </div>
+      <!-- Settings Modal -->
+      <div id="settingsModal" class="modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2>Monitoring Settings</h2>
+            <button class="modal-close" id="closeSettingsModal">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="setting-group">
+              <label class="refresh-label">
+                <input type="checkbox" id="autoRefresh" />
+                <span>Auto-refresh</span>
+              </label>
+              <select id="refreshInterval" class="refresh-select">
+                <option value="5">5 seconds</option>
+                <option value="10" selected>10 seconds</option>
+                <option value="30">30 seconds</option>
+                <option value="60">1 minute</option>
+                <option value="300">5 minutes</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Edit Chart Modal -->
+      <div id="editChartModal" class="modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2>Edit Chart</h2>
+            <button class="modal-close" id="closeEditModal">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="setting-group">
+              <div class="form-group">
+                <label for="editChartName">Chart Name</label>
+                <input type="text" id="editChartName" class="form-input" placeholder="Chart name (optional)...">
+              </div>
+              <div class="form-group">
+                <label for="editChartQuery">Query</label>
+                <input type="text" id="editChartQuery" class="form-input" placeholder="Enter your SnelDB query...">
+              </div>
+              <div class="form-group">
+                <label for="editChartType">Chart Type</label>
+                <select id="editChartType" class="form-select">
+                  <option value="bar">Bar</option>
+                  <option value="line">Line</option>
+                  <option value="pie">Pie</option>
+                  <option value="doughnut">Doughnut</option>
+                </select>
+              </div>
+              <div class="modal-actions">
+                <button id="saveChartBtn" class="btn btn-primary">Save</button>
+                <button id="cancelEditBtn" class="btn btn-secondary">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
   <script src="/static/app.js"></script>

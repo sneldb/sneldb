@@ -1394,6 +1394,650 @@
 
   cmd.addEventListener('input', syncHighlight);
   syncHighlight();
+
+  // ========== Monitoring Page Functionality ==========
+  const monitoringGrid = $('monitoringGrid');
+  const queryPage = $('queryPage');
+  const monitoringPage = $('monitoringPage');
+  const navTabs = document.querySelectorAll('.nav-tab');
+  const autoRefreshCheckbox = $('autoRefresh');
+  const refreshIntervalSelect = $('refreshInterval');
+  const settingsBtn = $('settingsBtn');
+  const settingsModal = $('settingsModal');
+  const closeSettingsModal = $('closeSettingsModal');
+  const editChartModal = $('editChartModal');
+  const closeEditModalBtn = $('closeEditModal');
+  const editChartName = $('editChartName');
+  const editChartQuery = $('editChartQuery');
+  const editChartType = $('editChartType');
+  const saveChartBtn = $('saveChartBtn');
+  const cancelEditBtn = $('cancelEditBtn');
+
+  let currentEditingSlotId = null;
+
+  let monitoringSlots = [];
+  let refreshIntervalId = null;
+  const NUM_SLOTS = 6;
+
+  // Page navigation
+  navTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const page = tab.dataset.page;
+      switchPage(page);
+    });
+  });
+
+  function switchPage(page) {
+    navTabs.forEach(t => t.classList.remove('active'));
+    document.querySelector(`[data-page="${page}"]`).classList.add('active');
+
+    queryPage.classList.remove('active');
+    monitoringPage.classList.remove('active');
+
+    // Show/hide settings button based on page
+    if (settingsBtn) {
+      if (page === 'monitoring') {
+        settingsBtn.style.display = 'inline-flex';
+      } else {
+        settingsBtn.style.display = 'none';
+      }
+    }
+
+    if (page === 'query') {
+      queryPage.classList.add('active');
+    } else {
+      monitoringPage.classList.add('active');
+      initializeMonitoringPage();
+    }
+  }
+
+  // Initialize monitoring slots
+  function initializeMonitoringPage() {
+    if (monitoringSlots.length === 0) {
+      loadMonitoringSlots();
+    }
+    renderMonitoringSlots();
+
+    // Auto-load saved charts after DOM is ready
+    setTimeout(() => {
+      monitoringSlots.forEach(slot => {
+        if (slot.query && slot.query.trim()) {
+          refreshSlot(slot.id);
+        }
+      });
+    }, 100);
+  }
+
+  function loadMonitoringSlots() {
+    const saved = localStorage.getItem('monitoringSlots');
+    if (saved) {
+      try {
+        monitoringSlots = JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to load monitoring slots:', e);
+        monitoringSlots = [];
+      }
+    }
+
+    // Ensure we have exactly NUM_SLOTS slots
+    while (monitoringSlots.length < NUM_SLOTS) {
+      monitoringSlots.push({
+        id: monitoringSlots.length + 1,
+        name: '',
+        query: '',
+        chartType: 'bar',
+        colorScheme: 'multicolor',
+        configCollapsed: false
+      });
+    }
+  }
+
+  function saveMonitoringSlots() {
+    // Only save serializable data, exclude chart instances and lastData
+    const serializableSlots = monitoringSlots.map(slot => ({
+      id: slot.id,
+      name: slot.name || '',
+      query: slot.query || '',
+      chartType: slot.chartType || 'bar',
+      colorScheme: slot.colorScheme || 'multicolor',
+      configCollapsed: slot.configCollapsed || false
+    }));
+    localStorage.setItem('monitoringSlots', JSON.stringify(serializableSlots));
+  }
+
+  function renderMonitoringSlots() {
+    if (!monitoringGrid) return;
+
+    monitoringGrid.innerHTML = '';
+
+    monitoringSlots.forEach((slot, index) => {
+      const slotEl = createMonitoringSlot(slot, index);
+      monitoringGrid.appendChild(slotEl);
+    });
+  }
+
+  function createMonitoringSlot(slot, index) {
+    const slotDiv = document.createElement('div');
+    slotDiv.className = 'monitoring-slot';
+    slotDiv.dataset.slotId = slot.id;
+
+    const header = document.createElement('div');
+    header.className = 'monitoring-slot-header';
+
+    const title = document.createElement('div');
+    title.className = 'monitoring-slot-title';
+    title.id = `monitoringTitle${slot.id}`;
+    updateSlotTitle(slot, title);
+
+    const actions = document.createElement('div');
+    actions.className = 'monitoring-slot-actions';
+    actions.addEventListener('click', (e) => e.stopPropagation()); // Prevent header toggle when clicking buttons
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'btn-icon';
+    editBtn.title = 'Edit chart';
+    editBtn.innerHTML = '<i class="far fa-edit"></i>';
+    editBtn.addEventListener('click', () => openEditModal(slot.id));
+
+    const refreshBtn = document.createElement('button');
+    refreshBtn.className = 'btn-icon';
+    refreshBtn.title = 'Refresh chart';
+    refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i>';
+    refreshBtn.addEventListener('click', () => refreshSlot(slot.id));
+
+    actions.appendChild(editBtn);
+    actions.appendChild(refreshBtn);
+
+    header.appendChild(title);
+    header.appendChild(actions);
+
+    // Config section is now hidden - editing happens in modal
+    const config = document.createElement('div');
+    config.className = 'monitoring-slot-config collapsed';
+    config.id = `monitoringConfig${slot.id}`;
+
+    const chartDiv = document.createElement('div');
+    chartDiv.className = 'monitoring-slot-chart';
+    const canvas = document.createElement('canvas');
+    canvas.id = `monitoringChart${slot.id}`;
+    chartDiv.appendChild(canvas);
+
+    const emptyState = document.createElement('div');
+    emptyState.className = 'monitoring-slot-empty';
+    emptyState.id = `monitoringEmpty${slot.id}`;
+    emptyState.innerHTML = '<p>Enter a query and click Save to display chart</p>';
+    chartDiv.appendChild(emptyState);
+
+    slotDiv.appendChild(header);
+    slotDiv.appendChild(config);
+    slotDiv.appendChild(chartDiv);
+
+    // Load and render chart if query exists
+    if (slot.query) {
+      refreshSlot(slot.id);
+    }
+
+    return slotDiv;
+  }
+
+  function updateSlotTitle(slot, titleEl) {
+    if (slot.name && slot.name.trim()) {
+      titleEl.textContent = slot.name;
+      titleEl.classList.remove('empty');
+    } else {
+      const slotIndex = monitoringSlots.findIndex(s => s.id === slot.id);
+      titleEl.textContent = `Chart ${slotIndex + 1}`;
+      titleEl.classList.add('empty');
+    }
+  }
+
+  function openEditModal(slotId) {
+    const slot = monitoringSlots.find(s => s.id === slotId);
+    if (!slot) return;
+
+    currentEditingSlotId = slotId;
+
+    if (editChartName) editChartName.value = slot.name || '';
+    if (editChartQuery) editChartQuery.value = slot.query || '';
+    if (editChartType) editChartType.value = slot.chartType || 'bar';
+
+    if (editChartModal) {
+      editChartModal.classList.add('active');
+    }
+  }
+
+  function closeEditModal() {
+    if (editChartModal) {
+      editChartModal.classList.remove('active');
+    }
+    currentEditingSlotId = null;
+  }
+
+  function saveChartFromModal() {
+    if (currentEditingSlotId === null) return;
+
+    const slot = monitoringSlots.find(s => s.id === currentEditingSlotId);
+    if (!slot) return;
+
+    slot.name = editChartName ? editChartName.value.trim() : '';
+    slot.query = editChartQuery ? editChartQuery.value.trim() : '';
+    slot.chartType = editChartType ? editChartType.value : 'bar';
+
+    saveMonitoringSlots();
+    refreshSlot(currentEditingSlotId);
+
+    // Update title
+    const titleEl = document.getElementById(`monitoringTitle${currentEditingSlotId}`);
+    if (titleEl) {
+      updateSlotTitle(slot, titleEl);
+    }
+
+    closeEditModal();
+  }
+
+  async function refreshSlot(slotId) {
+    const slot = monitoringSlots.find(s => s.id === slotId);
+    if (!slot || !slot.query) return;
+
+    const canvas = document.getElementById(`monitoringChart${slot.id}`);
+    const emptyState = document.getElementById(`monitoringEmpty${slot.id}`);
+    if (!canvas || !emptyState) return;
+
+    try {
+      const headers = { 'Content-Type': 'text/plain' };
+      if (window.SNELDB_AUTH_TOKEN) {
+        headers['Authorization'] = 'Bearer ' + window.SNELDB_AUTH_TOKEN;
+      }
+
+      const res = await fetch('/command', { method: 'POST', headers, body: slot.query });
+      const contentType = res.headers.get('Content-Type') || '';
+      const isArrow = contentType.includes('arrow') || contentType.includes('application/vnd.apache.arrow');
+
+      if (!res.ok) {
+        throw new Error(`Query failed: ${res.status}`);
+      }
+
+      let data = null;
+      if (isArrow) {
+        const arrayBuffer = await res.arrayBuffer();
+        data = await parseArrowResponse(arrayBuffer);
+      } else {
+        const text = await res.text();
+        const json = JSON.parse(text);
+        if (json.columns && json.rows) {
+          data = json;
+        } else if (json.results && json.results.length > 0) {
+          data = json.results[0];
+        }
+      }
+
+      if (data && data.columns && data.rows && data.rows.length > 0) {
+        emptyState.style.display = 'none';
+        renderMonitoringChart(slot, data);
+      } else {
+        emptyState.style.display = 'flex';
+        emptyState.textContent = 'No data returned';
+        if (slot.chart) {
+          slot.chart.destroy();
+          slot.chart = null;
+        }
+      }
+    } catch (error) {
+      console.error(`Error refreshing slot ${slotId}:`, error);
+      emptyState.style.display = 'flex';
+      emptyState.textContent = `Error: ${error.message}`;
+      if (slot.chart) {
+        slot.chart.destroy();
+        slot.chart = null;
+      }
+    }
+  }
+
+  function renderMonitoringChart(slot, data = null) {
+    const canvas = document.getElementById(`monitoringChart${slot.id}`);
+    if (!canvas) return;
+
+    // Use provided data or stored data
+    const chartData = data || slot.lastData;
+    if (!chartData) return;
+
+    slot.lastData = chartData;
+
+    // Destroy existing chart
+    if (slot.chart) {
+      slot.chart.destroy();
+    }
+
+    const isDarkMode = getIsDarkMode();
+    const textColor = isDarkMode ? '#f9fafb' : '#111827';
+    const gridColor = isDarkMode ? '#374151' : '#e5e7eb';
+
+    const isGrouped = chartData.columns.length >= 3;
+
+    if (isGrouped) {
+      renderGroupedChartForMonitoring(slot, chartData, slot.chartType, isDarkMode, textColor, gridColor, canvas);
+    } else {
+      renderSimpleChartForMonitoring(slot, chartData, slot.chartType, isDarkMode, textColor, gridColor, canvas);
+    }
+  }
+
+  function renderSimpleChartForMonitoring(slot, data, type, isDarkMode, textColor, gridColor, canvas) {
+    const xColumn = data.columns[0];
+    const yColumn = data.columns[1];
+
+    const labels = data.rows.map(row => {
+      const value = row[0];
+      if (xColumn.type === 'Timestamp') {
+        return formatTimestamp(value);
+      }
+      return String(value);
+    });
+
+    const values = data.rows.map(row => row[1]);
+    const colors = generateColors(data.rows.length, slot.colorScheme || 'multicolor');
+
+    const chartConfig = {
+      type: type,
+      data: {
+        labels: labels,
+        datasets: [{
+          label: yColumn.name,
+          data: values,
+          backgroundColor: type === 'bar' || type === 'line'
+            ? colors[0] + '80'
+            : colors,
+          borderColor: colors[0],
+          borderWidth: type === 'line' ? 2 : 1,
+          tension: 0.3,
+          fill: type === 'line'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: type === 'pie' || type === 'doughnut',
+            position: 'bottom',
+            labels: {
+              color: textColor,
+              padding: 10,
+              font: { size: 10 }
+            }
+          },
+          tooltip: {
+            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+            titleColor: textColor,
+            bodyColor: textColor,
+            borderColor: gridColor,
+            borderWidth: 1,
+            padding: 8
+          }
+        },
+        scales: type === 'bar' || type === 'line' ? {
+          x: {
+            ticks: { color: textColor, maxRotation: 45, minRotation: 0, font: { size: 10 } },
+            grid: { color: gridColor, drawBorder: false }
+          },
+          y: {
+            ticks: { color: textColor, font: { size: 10 } },
+            grid: { color: gridColor, drawBorder: false },
+            beginAtZero: true
+          }
+        } : undefined
+      }
+    };
+
+    slot.chart = new Chart(canvas, chartConfig);
+  }
+
+  function renderGroupedChartForMonitoring(slot, data, type, isDarkMode, textColor, gridColor, canvas) {
+    const xColumn = data.columns[0];
+    const valueColumn = data.columns[data.columns.length - 1];
+    const groupColumns = data.columns.slice(1, -1);
+
+    const seriesMap = new Map();
+    const xAxisValues = new Set();
+
+    data.rows.forEach(row => {
+      const xValue = row[0];
+      const yValue = row[row.length - 1];
+      const seriesKey = groupColumns.map((col, idx) => row[idx + 1]).join(' | ');
+      xAxisValues.add(xValue);
+      if (!seriesMap.has(seriesKey)) {
+        seriesMap.set(seriesKey, new Map());
+      }
+      seriesMap.get(seriesKey).set(xValue, yValue);
+    });
+
+    const sortedXValues = Array.from(xAxisValues).sort((a, b) => a - b);
+    const labels = sortedXValues.map(value => {
+      if (xColumn.type === 'Timestamp') {
+        return formatTimestamp(value);
+      }
+      return String(value);
+    });
+
+    const colors = generateColors(seriesMap.size, slot.colorScheme || 'multicolor');
+    const datasets = [];
+    let colorIndex = 0;
+
+    seriesMap.forEach((dataPoints, seriesKey) => {
+      const color = colors[colorIndex % colors.length];
+      const data = sortedXValues.map(xValue => dataPoints.get(xValue) || 0);
+      datasets.push({
+        label: seriesKey,
+        data: data,
+        backgroundColor: type === 'bar' || type === 'line' ? color + '80' : color,
+        borderColor: color,
+        borderWidth: type === 'line' ? 2 : 1,
+        tension: 0.3,
+        fill: false
+      });
+      colorIndex++;
+    });
+
+    if (type === 'pie' || type === 'doughnut') {
+      const aggregated = new Map();
+      seriesMap.forEach((dataPoints, seriesKey) => {
+        let sum = 0;
+        dataPoints.forEach(value => sum += value);
+        aggregated.set(seriesKey, sum);
+      });
+
+      const pieLabels = Array.from(aggregated.keys());
+      const pieValues = Array.from(aggregated.values());
+      const pieColors = generateColors(pieLabels.length, slot.colorScheme || 'multicolor');
+
+      const chartConfig = {
+        type: type,
+        data: {
+          labels: pieLabels,
+          datasets: [{
+            label: valueColumn.name,
+            data: pieValues,
+            backgroundColor: pieColors,
+            borderColor: pieColors.map(c => c),
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true,
+              position: 'right',
+              labels: {
+                color: textColor,
+                padding: 10,
+                font: { size: 10 }
+              }
+            },
+            tooltip: {
+              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+              titleColor: textColor,
+              bodyColor: textColor,
+              borderColor: gridColor,
+              borderWidth: 1,
+              padding: 8
+            }
+          }
+        }
+      };
+
+      slot.chart = new Chart(canvas, chartConfig);
+      return;
+    }
+
+    const chartConfig = {
+      type: type,
+      data: {
+        labels: labels,
+        datasets: datasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            labels: {
+              color: textColor,
+              padding: 10,
+              font: { size: 10 },
+              usePointStyle: true
+            }
+          },
+          tooltip: {
+            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+            titleColor: textColor,
+            bodyColor: textColor,
+            borderColor: gridColor,
+            borderWidth: 1,
+            padding: 8
+          }
+        },
+        scales: {
+          x: {
+            stacked: type === 'bar',
+            ticks: { color: textColor, maxRotation: 45, minRotation: 0, font: { size: 10 } },
+            grid: { color: gridColor, drawBorder: false }
+          },
+          y: {
+            stacked: type === 'bar',
+            ticks: { color: textColor, font: { size: 10 } },
+            grid: { color: gridColor, drawBorder: false },
+            beginAtZero: true
+          }
+        }
+      }
+    };
+
+    slot.chart = new Chart(canvas, chartConfig);
+  }
+
+  // Auto-refresh functionality
+  function startAutoRefresh() {
+    stopAutoRefresh();
+    const interval = parseInt(refreshIntervalSelect.value) * 1000;
+    refreshIntervalId = setInterval(() => {
+      monitoringSlots.forEach(slot => {
+        if (slot.query) {
+          refreshSlot(slot.id);
+        }
+      });
+    }, interval);
+  }
+
+  function stopAutoRefresh() {
+    if (refreshIntervalId) {
+      clearInterval(refreshIntervalId);
+      refreshIntervalId = null;
+    }
+  }
+
+  if (autoRefreshCheckbox) {
+    autoRefreshCheckbox.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        startAutoRefresh();
+      } else {
+        stopAutoRefresh();
+      }
+    });
+  }
+
+  if (refreshIntervalSelect) {
+    refreshIntervalSelect.addEventListener('change', () => {
+      if (autoRefreshCheckbox && autoRefreshCheckbox.checked) {
+        startAutoRefresh();
+      }
+    });
+  }
+
+  // Settings Modal functionality
+  if (settingsBtn) {
+    settingsBtn.addEventListener('click', () => {
+      if (settingsModal) {
+        settingsModal.classList.add('active');
+      }
+    });
+  }
+
+  if (closeSettingsModal) {
+    closeSettingsModal.addEventListener('click', () => {
+      if (settingsModal) {
+        settingsModal.classList.remove('active');
+      }
+    });
+  }
+
+  if (settingsModal) {
+    settingsModal.addEventListener('click', (e) => {
+      if (e.target === settingsModal) {
+        settingsModal.classList.remove('active');
+      }
+    });
+  }
+
+  // Edit Chart Modal functionality
+  if (closeEditModalBtn) {
+    closeEditModalBtn.addEventListener('click', closeEditModal);
+  }
+
+  if (cancelEditBtn) {
+    cancelEditBtn.addEventListener('click', closeEditModal);
+  }
+
+  if (saveChartBtn) {
+    saveChartBtn.addEventListener('click', saveChartFromModal);
+  }
+
+  if (editChartModal) {
+    editChartModal.addEventListener('click', (e) => {
+      if (e.target === editChartModal) {
+        closeEditModal();
+      }
+    });
+  }
+
+  // Allow Enter key to save in edit modal
+  if (editChartQuery) {
+    editChartQuery.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        saveChartFromModal();
+      }
+    });
+  }
+
+  // Initialize monitoring slots on load
+  loadMonitoringSlots();
 })();
 
 
