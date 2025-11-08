@@ -6,17 +6,17 @@ use tracing::{debug, error, info};
 use crate::command::handlers::query::context::QueryContext;
 use crate::command::handlers::query_batch_stream::QueryBatchStream;
 use crate::command::types::{Command, EventSequence};
-use crate::engine::core::read::flow::shard_pipeline::ShardFlowHandle;
 use crate::engine::core::read::cache::DecompressedBlock;
+use crate::engine::core::read::flow::shard_pipeline::ShardFlowHandle;
 use crate::engine::core::read::flow::{
     BatchPool, BatchSchema, ColumnBatch, FlowChannel, FlowMetrics,
 };
 use crate::engine::core::read::result::ColumnSpec;
+use crate::engine::core::read::sequence::utils::scalar_to_string;
 use crate::engine::core::read::sequence::{
     ColumnarGrouper, SequenceMatcher, SequenceMaterializer, SequenceWhereEvaluator,
 };
 use crate::engine::core::{CandidateZone, ColumnValues, Event};
-use crate::engine::core::read::sequence::utils::scalar_to_string;
 use crate::engine::types::ScalarValue;
 
 /// Merges streaming results from sequence sub-queries, groups by link field,
@@ -67,23 +67,26 @@ impl SequenceStreamMerger {
         let zones_by_type = self.collect_zones_by_type(handles_by_type).await?;
 
         // Step 2: Group zones by link_field using columnar grouper
-        let grouper = ColumnarGrouper::new(self.link_field.clone(), self.sequence_time_field.clone());
+        let grouper =
+            ColumnarGrouper::new(self.link_field.clone(), self.sequence_time_field.clone());
         let grouped_indices = grouper.group_zones_by_link_field(&zones_by_type);
 
         // Step 3: Match sequences
-        let where_clause = if let Command::Query {
-            where_clause,
-            ..
-        } = ctx.command
-        {
+        let where_clause = if let Command::Query { where_clause, .. } = ctx.command {
             where_clause.as_ref()
         } else {
             None
         };
 
-        let where_evaluator = SequenceWhereEvaluator::new(where_clause, &self.event_types);
-        let matcher = SequenceMatcher::new(self.event_sequence.clone(), self.sequence_time_field.clone())
-            .with_where_evaluator(where_evaluator);
+        let where_evaluator =
+            SequenceWhereEvaluator::new(where_clause, &self.event_types, &ctx.registry)
+                .await
+                .map_err(|e| format!("WHERE clause validation failed: {}", e))?;
+        let matcher = SequenceMatcher::new(
+            self.event_sequence.clone(),
+            self.sequence_time_field.clone(),
+        )
+        .with_where_evaluator(where_evaluator);
 
         let matched_indices = matcher.match_sequences(grouped_indices, &zones_by_type, self.limit);
 
@@ -187,7 +190,10 @@ impl SequenceStreamMerger {
                             all_batches.append(&mut batches);
                         }
                         Err(e) => {
-                            return Err(format!("Failed to collect batches for {}: {}", event_type_clone, e));
+                            return Err(format!(
+                                "Failed to collect batches for {}: {}",
+                                event_type_clone, e
+                            ));
                         }
                     }
                 }
@@ -258,7 +264,8 @@ impl SequenceStreamMerger {
         let mut column_values_map: HashMap<String, ColumnValues> = HashMap::new();
 
         // OPTIMIZATION: Pre-build column index maps for each batch to avoid repeated lookups
-        let mut batch_column_indices: Vec<HashMap<String, usize>> = Vec::with_capacity(batches.len());
+        let mut batch_column_indices: Vec<HashMap<String, usize>> =
+            Vec::with_capacity(batches.len());
         for (_batch, schema) in &batches {
             let mut column_map = HashMap::new();
             for (idx, col) in schema.columns().iter().enumerate() {
@@ -298,7 +305,9 @@ impl SequenceStreamMerger {
                     // Use pre-built column index map
                     if let Some(&col_idx) = batch_column_indices[batch_idx].get(field_name) {
                         // Get column values directly from batch (columnar access)
-                        let column_values = batch.columns_ref().get(col_idx)
+                        let column_values = batch
+                            .columns_ref()
+                            .get(col_idx)
                             .ok_or_else(|| format!("Column index {} out of bounds", col_idx))?;
 
                         // Extract i64 values directly from ScalarValue
@@ -364,7 +373,8 @@ impl SequenceStreamMerger {
                 };
 
                 let block = Arc::new(DecompressedBlock::from_bytes(bytes));
-                let column_values = ColumnValues::new_typed_i64(block, payload_start, row_count, nulls);
+                let column_values =
+                    ColumnValues::new_typed_i64(block, payload_start, row_count, nulls);
                 column_values_map.insert(field_name.clone(), column_values);
             } else {
                 // For non-timestamp fields, use string-based storage
@@ -376,7 +386,9 @@ impl SequenceStreamMerger {
                     // Use pre-built column index map
                     if let Some(&col_idx) = batch_column_indices[batch_idx].get(field_name) {
                         // Get column values directly from batch (columnar access)
-                        let column_values = batch.columns_ref().get(col_idx)
+                        let column_values = batch
+                            .columns_ref()
+                            .get(col_idx)
                             .ok_or_else(|| format!("Column index {} out of bounds", col_idx))?;
 
                         // Convert ScalarValues directly to bytes without row materialization
@@ -417,12 +429,8 @@ impl SequenceStreamMerger {
         Ok(vec![zone])
     }
 
-
     /// Creates a result stream from matched events.
-    async fn create_result_stream(
-        &self,
-        events: Vec<Event>,
-    ) -> Result<QueryBatchStream, String> {
+    async fn create_result_stream(&self, events: Vec<Event>) -> Result<QueryBatchStream, String> {
         info!(
             target: "sneldb::sequence::streaming::merger",
             event_count = events.len(),
@@ -517,8 +525,8 @@ impl SequenceStreamMerger {
         let (tx, rx) = FlowChannel::bounded(capacity, metrics);
 
         // Create batch pool
-        let pool = BatchPool::new(1024)
-            .map_err(|e| format!("Failed to create batch pool: {}", e))?;
+        let pool =
+            BatchPool::new(1024).map_err(|e| format!("Failed to create batch pool: {}", e))?;
 
         // Spawn task to send events as batches
         let schema_clone = Arc::clone(&schema);
@@ -661,4 +669,3 @@ impl SequenceStreamMerger {
         Ok(QueryBatchStream::new(schema, rx, vec![task]))
     }
 }
-

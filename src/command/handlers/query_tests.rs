@@ -5732,3 +5732,190 @@ async fn test_sequence_very_close_timestamps() {
         "Should find matching sequence"
     );
 }
+
+/// Edge case: Ambiguous field in WHERE clause
+/// Tests that when a common field (without event prefix) exists in multiple event types,
+/// the query returns a BadRequest error requiring event-prefixed fields.
+#[tokio::test]
+async fn test_sequence_ambiguous_field_error() {
+    let _guard = set_streaming_enabled(true);
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    // Both event types have "status" field - this creates ambiguity
+    factory
+        .define_with_fields(
+            "order_created",
+            &[("order_id", "int"), ("user_id", "string"), ("status", "string")],
+        )
+        .await
+        .unwrap();
+    factory
+        .define_with_fields(
+            "payment_failed",
+            &[("user_id", "string"), ("amount", "int"), ("status", "string")],
+        )
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store some events
+    let store_cmd = CommandFactory::store()
+        .with_event_type("order_created")
+        .with_context_id("ctx1")
+        .with_payload(serde_json::json!({"order_id": 1, "user_id": "u1", "status": "done"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(1000)).await;
+
+    let store_cmd = CommandFactory::store()
+        .with_event_type("payment_failed")
+        .with_context_id("ctx2")
+        .with_payload(serde_json::json!({"user_id": "u1", "amount": 100, "status": "failed"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(500)).await;
+
+    // Query with ambiguous field: status without event prefix
+    // Both order_created and payment_failed have "status" field
+    let cmd_str = "QUERY order_created PRECEDED BY payment_failed LINKED BY user_id WHERE status=\"done\"";
+    let cmd = parse(cmd_str).expect("parse PRECEDED BY with ambiguous WHERE");
+    let (mut reader, mut writer) = duplex(4096);
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Should return BadRequest error (400) with message about ambiguous field
+    assert!(
+        body.contains("400") || body.contains("Bad Request"),
+        "Should return BadRequest status code for ambiguous field"
+    );
+    assert!(
+        body.contains("Ambiguous field 'status'") || body.contains("ambiguous"),
+        "Error message should mention ambiguous field: {}",
+        body
+    );
+    assert!(
+        (body.contains("order_created") && body.contains("payment_failed"))
+            || body.contains("event-prefixed"),
+        "Error message should mention both event types or suggest event-prefixed fields: {}",
+        body
+    );
+}
+
+/// Edge case: Non-ambiguous field passes validation
+/// Tests that a common field that exists in only one event type doesn't cause an error.
+#[tokio::test]
+async fn test_sequence_non_ambiguous_field_passes() {
+    let _guard = set_streaming_enabled(true);
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    // Only order_created has "status" field - no ambiguity
+    factory
+        .define_with_fields(
+            "order_created",
+            &[("order_id", "int"), ("user_id", "string"), ("status", "string")],
+        )
+        .await
+        .unwrap();
+    factory
+        .define_with_fields(
+            "payment_failed",
+            &[("user_id", "string"), ("amount", "int")], // No "status" field
+        )
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store some events
+    let store_cmd = CommandFactory::store()
+        .with_event_type("order_created")
+        .with_context_id("ctx1")
+        .with_payload(serde_json::json!({"order_id": 1, "user_id": "u1", "status": "done"}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(1000)).await;
+
+    let store_cmd = CommandFactory::store()
+        .with_event_type("payment_failed")
+        .with_context_id("ctx2")
+        .with_payload(serde_json::json!({"user_id": "u1", "amount": 100}))
+        .create();
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
+
+    sleep(Duration::from_millis(500)).await;
+
+    // Query with non-ambiguous field: status only exists in order_created
+    let cmd_str = "QUERY order_created PRECEDED BY payment_failed LINKED BY user_id WHERE status=\"done\"";
+    let cmd = parse(cmd_str).expect("parse PRECEDED BY with non-ambiguous WHERE");
+    let (mut reader, mut writer) = duplex(4096);
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Should NOT return an error - field is not ambiguous
+    assert!(
+        !body.contains("400") && !body.contains("Bad Request"),
+        "Should not return BadRequest when field is not ambiguous"
+    );
+    assert!(
+        !body.contains("Ambiguous field") && !body.contains("ambiguous"),
+        "Should not mention ambiguity when field exists in only one event type"
+    );
+}
