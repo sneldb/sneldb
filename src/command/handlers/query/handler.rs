@@ -137,6 +137,18 @@ impl<'a, W: AsyncWrite + Unpin> QueryCommandHandler<'a, W> {
                     }
                 }
                 Err(error) => {
+                    // Check if this is a validation error (WHERE clause ambiguity)
+                    // Validation errors should return BadRequest, not InternalError
+                    if error.contains("WHERE clause validation failed")
+                        || error.contains("Ambiguous field")
+                    {
+                        warn!(
+                            target: "sneldb::query",
+                            error = %error,
+                            "Query validation failed"
+                        );
+                        return self.write_error(StatusCode::BadRequest, &error).await;
+                    }
                     // For aggregate queries, don't fall back to batch - fail fast
                     if let Command::Query { aggs: Some(_), .. } = self.command {
                         warn!(

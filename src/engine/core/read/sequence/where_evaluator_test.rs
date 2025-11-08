@@ -1,9 +1,37 @@
-
 use crate::command::types::{CompareOp, Expr};
 use crate::engine::core::read::sequence::group::RowIndex;
 use crate::engine::core::read::sequence::where_evaluator::SequenceWhereEvaluator;
+use crate::engine::schema::registry::{MiniSchema, SchemaRegistry};
+use crate::engine::schema::types::FieldType;
 use serde_json::json;
 use std::collections::HashMap;
+use std::sync::Arc;
+use tempfile::tempdir;
+use tokio::sync::RwLock;
+
+/// Helper to create a test registry with schemas for event types
+async fn create_test_registry(
+    event_types_and_fields: &[(&str, &[&str])],
+) -> Arc<RwLock<SchemaRegistry>> {
+    let tempdir = tempdir().expect("Failed to create temp dir");
+    let path = tempdir.path().join("schemas.bin");
+    let mut registry = SchemaRegistry::new_with_path(path).expect("Failed to create registry");
+
+    for (event_type, fields) in event_types_and_fields {
+        let mut schema_fields = HashMap::new();
+        for field in *fields {
+            schema_fields.insert(field.to_string(), FieldType::String);
+        }
+        let schema = MiniSchema {
+            fields: schema_fields,
+        };
+        registry
+            .define(event_type, schema)
+            .expect("Failed to define schema");
+    }
+
+    Arc::new(RwLock::new(registry))
+}
 
 /// Helper to create a test zone with payload fields for WHERE clause testing
 fn create_zone_with_payload(
@@ -51,8 +79,8 @@ fn create_zone_with_payload(
     zone
 }
 
-#[test]
-fn test_extract_event_specific_condition() {
+#[tokio::test]
+async fn test_extract_event_specific_condition() {
     // Test: page_view.page = "/checkout"
     let where_clause = Expr::Compare {
         field: "page_view.page".to_string(),
@@ -61,15 +89,19 @@ fn test_extract_event_specific_condition() {
     };
 
     let event_types = vec!["page_view".to_string(), "order_created".to_string()];
-    let _evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types);
+    let registry =
+        create_test_registry(&[("page_view", &["page"]), ("order_created", &["status"])]).await;
+    let _evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry)
+        .await
+        .expect("Should create evaluator");
 
     // Should have evaluator for page_view but not order_created
     // (since order_created has no conditions, evaluate_row should return true for it)
     // The actual evaluation happens in matcher.rs with real zones
 }
 
-#[test]
-fn test_evaluate_row_with_event_specific_field() {
+#[tokio::test]
+async fn test_evaluate_row_with_event_specific_field() {
     // Test: page_view.page = "/checkout"
     let where_clause = Expr::Compare {
         field: "page_view.page".to_string(),
@@ -78,7 +110,10 @@ fn test_evaluate_row_with_event_specific_field() {
     };
 
     let event_types = vec!["page_view".to_string()];
-    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types);
+    let registry = create_test_registry(&[("page_view", &["page"])]).await;
+    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry)
+        .await
+        .expect("Should create evaluator");
 
     // Create zone with page field
     let mut payload_fields = HashMap::new();
@@ -106,11 +141,15 @@ fn test_evaluate_row_with_event_specific_field() {
     assert!(!result2, "Should fail when page doesn't match");
 }
 
-#[test]
-fn test_evaluate_row_with_no_evaluator() {
+#[tokio::test]
+async fn test_evaluate_row_with_no_evaluator() {
     // Test: No WHERE clause, or event type not in WHERE clause
     let event_types = vec!["page_view".to_string(), "order_created".to_string()];
-    let evaluator = SequenceWhereEvaluator::new(None, &event_types);
+    let registry =
+        create_test_registry(&[("page_view", &["page"]), ("order_created", &["status"])]).await;
+    let evaluator = SequenceWhereEvaluator::new(None, &event_types, &registry)
+        .await
+        .expect("Should create evaluator");
 
     let mut payload_fields = HashMap::new();
     payload_fields.insert("page".to_string(), vec!["/checkout".to_string()]);
@@ -127,8 +166,8 @@ fn test_evaluate_row_with_no_evaluator() {
     assert!(result, "Should pass when no evaluator exists");
 }
 
-#[test]
-fn test_evaluate_row_with_event_not_in_where_clause() {
+#[tokio::test]
+async fn test_evaluate_row_with_event_not_in_where_clause() {
     // Test: WHERE clause only has page_view.page, but we evaluate order_created
     let where_clause = Expr::Compare {
         field: "page_view.page".to_string(),
@@ -137,7 +176,11 @@ fn test_evaluate_row_with_event_not_in_where_clause() {
     };
 
     let event_types = vec!["page_view".to_string(), "order_created".to_string()];
-    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types);
+    let registry =
+        create_test_registry(&[("page_view", &["page"]), ("order_created", &["status"])]).await;
+    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry)
+        .await
+        .expect("Should create evaluator");
 
     let mut payload_fields = HashMap::new();
     payload_fields.insert("status".to_string(), vec!["done".to_string()]);
@@ -154,8 +197,8 @@ fn test_evaluate_row_with_event_not_in_where_clause() {
     assert!(result, "Should pass when event type has no evaluator");
 }
 
-#[test]
-fn test_extract_and_condition_with_event_specific_fields() {
+#[tokio::test]
+async fn test_extract_and_condition_with_event_specific_fields() {
     // Test: page_view.page = "/checkout" AND order_created.status = "done"
     let where_clause = Expr::And(
         Box::new(Expr::Compare {
@@ -171,7 +214,11 @@ fn test_extract_and_condition_with_event_specific_fields() {
     );
 
     let event_types = vec!["page_view".to_string(), "order_created".to_string()];
-    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types);
+    let registry =
+        create_test_registry(&[("page_view", &["page"]), ("order_created", &["status"])]).await;
+    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry)
+        .await
+        .expect("Should create evaluator");
 
     // Create zones for both event types
     let mut page_payload = HashMap::new();
@@ -199,9 +246,9 @@ fn test_extract_and_condition_with_event_specific_fields() {
     assert!(order_result, "order_created should pass");
 }
 
-#[test]
-fn test_extract_common_field_condition() {
-    // Test: timestamp > 1000 (common field)
+#[tokio::test]
+async fn test_extract_common_field_condition() {
+    // Test: timestamp > 1000 (common field - core field, should not cause ambiguity)
     let where_clause = Expr::Compare {
         field: "timestamp".to_string(),
         op: CompareOp::Gt,
@@ -209,7 +256,11 @@ fn test_extract_common_field_condition() {
     };
 
     let event_types = vec!["page_view".to_string(), "order_created".to_string()];
-    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types);
+    let registry =
+        create_test_registry(&[("page_view", &["page"]), ("order_created", &["status"])]).await;
+    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry)
+        .await
+        .expect("Should create evaluator");
 
     // Create zone with timestamp
     let zone = create_zone_with_payload(
@@ -244,8 +295,8 @@ fn test_extract_common_field_condition() {
     assert!(!result2, "Should fail when timestamp <= 1000");
 }
 
-#[test]
-fn test_parse_event_field() {
+#[tokio::test]
+async fn test_parse_event_field() {
     // Test the parse_event_field logic indirectly through evaluation
     let where_clause = Expr::Compare {
         field: "page_view.page".to_string(),
@@ -254,7 +305,10 @@ fn test_parse_event_field() {
     };
 
     let event_types = vec!["page_view".to_string()];
-    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types);
+    let registry = create_test_registry(&[("page_view", &["page"])]).await;
+    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry)
+        .await
+        .expect("Should create evaluator");
 
     // Create zone with page field (not page_view.page)
     let mut payload_fields = HashMap::new();
@@ -272,8 +326,8 @@ fn test_parse_event_field() {
     assert!(result, "Should pass after parsing page_view.page to page");
 }
 
-#[test]
-fn test_multiple_conditions_for_same_event() {
+#[tokio::test]
+async fn test_multiple_conditions_for_same_event() {
     // Test: page_view.page = "/checkout" AND page_view.user_id = "u1"
     // This tests that multiple conditions for the same event are combined with AND
     let where_clause = Expr::And(
@@ -290,7 +344,10 @@ fn test_multiple_conditions_for_same_event() {
     );
 
     let event_types = vec!["page_view".to_string()];
-    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types);
+    let registry = create_test_registry(&[("page_view", &["page", "user_id"])]).await;
+    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry)
+        .await
+        .expect("Should create evaluator");
 
     // Create zone with both fields matching
     let mut payload_fields = HashMap::new();
@@ -320,8 +377,8 @@ fn test_multiple_conditions_for_same_event() {
     assert!(!result2, "Should fail when one condition doesn't match");
 }
 
-#[test]
-fn test_sequence_where_clause_scenario() {
+#[tokio::test]
+async fn test_sequence_where_clause_scenario() {
     // Test the actual scenario from integration test:
     // page_view.page = "/checkout" for page_view FOLLOWED BY order_created
     let where_clause = Expr::Compare {
@@ -331,7 +388,11 @@ fn test_sequence_where_clause_scenario() {
     };
 
     let event_types = vec!["page_view".to_string(), "order_created".to_string()];
-    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types);
+    let registry =
+        create_test_registry(&[("page_view", &["page"]), ("order_created", &["status"])]).await;
+    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry)
+        .await
+        .expect("Should create evaluator");
 
     // Create page_view zone with /checkout (should pass)
     let mut page_payload = HashMap::new();
@@ -366,4 +427,60 @@ fn test_sequence_where_clause_scenario() {
     // Test order_created (no evaluator, should pass)
     let order_result = evaluator.evaluate_row("order_created", &order_zone, &row_index);
     assert!(order_result, "order_created should pass (no evaluator)");
+}
+
+#[tokio::test]
+async fn test_ambiguous_field_error() {
+    // Test that ambiguous fields (without event prefix) that exist in multiple event types
+    // cause an error
+    let where_clause = Expr::Compare {
+        field: "status".to_string(), // Common field without prefix
+        op: CompareOp::Eq,
+        value: json!("done"),
+    };
+
+    let event_types = vec!["order_created".to_string(), "payment_failed".to_string()];
+    let registry = create_test_registry(&[
+        ("order_created", &["status"]),
+        ("payment_failed", &["status"]), // Both have "status" field
+    ])
+    .await;
+
+    let result = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry).await;
+
+    assert!(result.is_err(), "Should return error for ambiguous field");
+    if let Err(error_msg) = result {
+        assert!(
+            error_msg.contains("Ambiguous field 'status'"),
+            "Error message should mention ambiguous field"
+        );
+        assert!(
+            error_msg.contains("order_created") && error_msg.contains("payment_failed"),
+            "Error message should mention both event types"
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_non_ambiguous_field_passes() {
+    // Test that a common field that exists in only one event type doesn't cause an error
+    let where_clause = Expr::Compare {
+        field: "status".to_string(),
+        op: CompareOp::Eq,
+        value: json!("done"),
+    };
+
+    let event_types = vec!["order_created".to_string(), "payment_failed".to_string()];
+    let registry = create_test_registry(&[
+        ("order_created", &["status"]),
+        ("payment_failed", &["amount"]), // payment_failed has amount but not status
+    ])
+    .await;
+
+    let result = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry).await;
+
+    assert!(
+        result.is_ok(),
+        "Should not return error when field is not ambiguous"
+    );
 }

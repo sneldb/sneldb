@@ -8,7 +8,10 @@ use crate::engine::core::filter::condition::PreparedAccessor;
 use crate::engine::core::filter::condition_evaluator::ConditionEvaluator;
 use crate::engine::core::filter::condition_evaluator_builder::ConditionEvaluatorBuilder;
 use crate::engine::core::read::sequence::group::RowIndex;
-use std::collections::HashMap;
+use crate::engine::schema::registry::SchemaRegistry;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::{debug, info, trace, warn};
 
 /// Evaluates WHERE clauses for sequence queries with event-specific field references.
@@ -35,7 +38,17 @@ impl SequenceWhereEvaluator {
     ///
     /// * `where_clause` - The WHERE clause expression (may contain event-prefixed fields)
     /// * `event_types` - List of event types in the sequence
-    pub fn new(where_clause: Option<&Expr>, event_types: &[String]) -> Self {
+    /// * `registry` - Schema registry to validate field ambiguity
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(Self)` if successful, or `Err(String)` if there's field ambiguity
+    /// (e.g., a common field exists in multiple event types without an event prefix).
+    pub async fn new(
+        where_clause: Option<&Expr>,
+        event_types: &[String],
+        registry: &Arc<RwLock<SchemaRegistry>>,
+    ) -> Result<Self, String> {
         if tracing::enabled!(tracing::Level::INFO) {
             info!(
                 target: "sneldb::sequence::where_evaluator",
@@ -54,6 +67,9 @@ impl SequenceWhereEvaluator {
                     "Parsing WHERE clause for event-specific conditions"
                 );
             }
+
+            // Validate field ambiguity before extracting conditions
+            Self::validate_field_ambiguity(expr, event_types, registry).await?;
 
             // Parse WHERE clause and extract event-specific conditions
             let conditions_by_event = Self::extract_event_conditions(expr, event_types);
@@ -104,8 +120,94 @@ impl SequenceWhereEvaluator {
             );
         }
 
-        Self {
+        Ok(Self {
             evaluators_by_event_type,
+        })
+    }
+
+    /// Validates that common fields (without event prefix) don't create ambiguity.
+    ///
+    /// If a field without an event prefix exists in multiple event types,
+    /// this returns an error requiring the user to use event-prefixed fields.
+    ///
+    /// # Arguments
+    ///
+    /// * `expr` - The WHERE clause expression
+    /// * `event_types` - List of event types in the sequence
+    /// * `registry` - Schema registry to check field existence
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if no ambiguity, or `Err(String)` with error message if ambiguity detected.
+    async fn validate_field_ambiguity(
+        expr: &Expr,
+        event_types: &[String],
+        registry: &Arc<RwLock<SchemaRegistry>>,
+    ) -> Result<(), String> {
+        // Collect all common fields (without event prefix) from the expression
+        let mut common_fields = HashSet::new();
+        Self::collect_common_fields(expr, &mut common_fields);
+
+        if common_fields.is_empty() {
+            // No common fields, no ambiguity possible
+            return Ok(());
+        }
+
+        // Check each common field against all event types
+        let registry_read = registry.read().await;
+        for field in &common_fields {
+            // Skip core fields that are expected to exist in all event types
+            if matches!(field.as_str(), "timestamp" | "context_id" | "event_type" | "event_id") {
+                continue;
+            }
+
+            // Find which event types have this field
+            let mut event_types_with_field = Vec::new();
+            for event_type in event_types {
+                if let Some(schema) = registry_read.get(event_type) {
+                    if schema.fields.contains_key(field) {
+                        event_types_with_field.push(event_type.clone());
+                    }
+                }
+            }
+
+            // If field exists in multiple event types, it's ambiguous
+            if event_types_with_field.len() > 1 {
+                return Err(format!(
+                    "Ambiguous field '{}' exists in multiple event types: {}. Use event-prefixed fields (e.g., '{}.{}' or '{}.{}') to disambiguate.",
+                    field,
+                    event_types_with_field.join(", "),
+                    event_types_with_field[0],
+                    field,
+                    event_types_with_field[1],
+                    field
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Recursively collects common fields (without event prefix) from an expression.
+    fn collect_common_fields(expr: &Expr, common_fields: &mut HashSet<String>) {
+        match expr {
+            Expr::Compare { field, .. } => {
+                // Only collect fields without event prefix
+                if Self::parse_event_field(field).is_none() {
+                    common_fields.insert(field.clone());
+                }
+            }
+            Expr::And(left, right) => {
+                Self::collect_common_fields(left, common_fields);
+                Self::collect_common_fields(right, common_fields);
+            }
+            Expr::Or(left, right) => {
+                Self::collect_common_fields(left, common_fields);
+                Self::collect_common_fields(right, common_fields);
+            }
+            Expr::Not(inner) => {
+                Self::collect_common_fields(inner, common_fields);
+            }
         }
     }
 

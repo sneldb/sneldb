@@ -3,7 +3,34 @@ use crate::command::types::{EventSequence, EventTarget, SequenceLink};
 use crate::engine::core::CandidateZone;
 use crate::engine::core::read::sequence::group::ColumnarGrouper;
 use crate::engine::core::read::sequence::matcher::SequenceMatcher;
+use crate::engine::schema::registry::{MiniSchema, SchemaRegistry};
+use crate::engine::schema::types::FieldType;
 use std::collections::HashMap;
+use std::sync::Arc;
+use tempfile::tempdir;
+use tokio::sync::RwLock;
+
+/// Helper to create a test registry with schemas for event types
+async fn create_test_registry(
+    event_types_and_fields: &[(&str, &[&str])],
+) -> Arc<RwLock<SchemaRegistry>> {
+    let tempdir = tempdir().expect("Failed to create temp dir");
+    let path = tempdir.path().join("schemas.bin");
+    let mut registry = SchemaRegistry::new_with_path(path).expect("Failed to create registry");
+
+    for (event_type, fields) in event_types_and_fields {
+        let mut schema_fields = HashMap::new();
+        for field in *fields {
+            schema_fields.insert(field.to_string(), FieldType::String);
+        }
+        let schema = MiniSchema {
+            fields: schema_fields,
+        };
+        registry.define(event_type, schema).expect("Failed to define schema");
+    }
+
+    Arc::new(RwLock::new(registry))
+}
 
 /// Helper to create test zones (reuse from group_test)
 fn create_test_zone(
@@ -299,8 +326,8 @@ fn test_match_preceded_by_same_timestamp_no_match() {
     assert_eq!(matches.len(), 0);
 }
 
-#[test]
-fn test_match_followed_by_with_where_clause() {
+#[tokio::test]
+async fn test_match_followed_by_with_where_clause() {
     // Test: page_view FOLLOWED BY order_created WHERE page_view.page = "/checkout"
     // This is the scenario from the failing integration test
     let mut zones_by_type = HashMap::new();
@@ -339,11 +366,18 @@ fn test_match_followed_by_with_where_clause() {
 
     // Create WHERE evaluator
     let event_types = vec!["page_view".to_string(), "order_created".to_string()];
+    let registry = create_test_registry(&[
+        ("page_view", &["page"]),
+        ("order_created", &["status"]),
+    ]).await;
     let where_evaluator =
         crate::engine::core::read::sequence::where_evaluator::SequenceWhereEvaluator::new(
             Some(&where_clause),
             &event_types,
-        );
+            &registry,
+        )
+        .await
+        .expect("Should create evaluator");
 
     // Match sequences with WHERE clause
     let sequence = EventSequence {
@@ -374,8 +408,8 @@ fn test_match_followed_by_with_where_clause() {
     );
 }
 
-#[test]
-fn test_match_preceded_by_with_where_clause() {
+#[tokio::test]
+async fn test_match_preceded_by_with_where_clause() {
     // Test: order_created PRECEDED BY payment_failed WHERE order_created.status = "done"
     let mut zones_by_type = HashMap::new();
 
@@ -413,11 +447,18 @@ fn test_match_preceded_by_with_where_clause() {
 
     // Create WHERE evaluator
     let event_types = vec!["payment_failed".to_string(), "order_created".to_string()];
+    let registry = create_test_registry(&[
+        ("payment_failed", &["amount"]), // payment_failed has amount but not status
+        ("order_created", &["status"]),
+    ]).await;
     let where_evaluator =
         crate::engine::core::read::sequence::where_evaluator::SequenceWhereEvaluator::new(
             Some(&where_clause),
             &event_types,
-        );
+            &registry,
+        )
+        .await
+        .expect("Should create evaluator");
 
     // Match sequences with WHERE clause
     let sequence = EventSequence {
