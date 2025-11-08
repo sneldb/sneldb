@@ -80,13 +80,15 @@ impl CompactionPolicy for KWayCountPolicy {
                 continue;
             }
 
-            tracing::warn!(
-                target: "compaction_policy::plan",
-                current_level = current_level,
-                next_level = next_level,
-                uid_count = uid_to_segments.len(),
-                "Planning compaction for level"
-            );
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                tracing::debug!(
+                    target: "compaction_policy::plan",
+                    current_level = current_level,
+                    next_level = next_level,
+                    uid_count = uid_to_segments.len(),
+                    "Planning compaction for level"
+                );
+            }
 
             let mut leftover_segments_by_uid: HashMap<String, Vec<String>> = HashMap::new();
 
@@ -109,15 +111,17 @@ impl CompactionPolicy for KWayCountPolicy {
 
                 // Force compact if we have enough leftovers (>= min_leftover_threshold but < k)
                 if should_force_compact {
-                    tracing::warn!(
-                        target: "compaction_policy::plan",
-                        level = current_level,
-                        uid = %uid,
-                        segment_count = labels.len(),
-                        min_threshold = self.min_leftover_threshold,
-                        k = self.k,
-                        "Forcing compaction of leftover segments"
-                    );
+                    if tracing::enabled!(tracing::Level::INFO) {
+                        tracing::info!(
+                            target: "compaction_policy::plan",
+                            level = current_level,
+                            uid = %uid,
+                            segment_count = labels.len(),
+                            min_threshold = self.min_leftover_threshold,
+                            k = self.k,
+                            "Forcing compaction of leftover segments"
+                        );
+                    }
                     let out_id = allocator.next_for_level(next_level);
                     plans.push(MergePlan {
                         level_from: current_level,
@@ -157,16 +161,18 @@ impl CompactionPolicy for KWayCountPolicy {
                 // Log leftover segments if any (that weren't force-compacted)
                 if let Some(leftover) = leftover_segments_by_uid.get(&uid) {
                     if !leftover.is_empty() {
-                        tracing::warn!(
-                            target: "compaction_policy::plan",
-                            level = current_level,
-                            uid = %uid,
-                            leftover_count = leftover.len(),
-                            leftover_segments = ?leftover,
-                            processed_count,
-                            total_segments = labels.len(),
-                            "UID has leftover segments that will be compacted in next cycle when more segments accumulate"
-                        );
+                        if tracing::enabled!(tracing::Level::DEBUG) {
+                            tracing::debug!(
+                                target: "compaction_policy::plan",
+                                level = current_level,
+                                uid = %uid,
+                                leftover_count = leftover.len(),
+                                leftover_segments = ?leftover,
+                                processed_count,
+                                total_segments = labels.len(),
+                                "UID has leftover segments that will be compacted in next cycle when more segments accumulate"
+                            );
+                        }
                     }
                 }
             }
@@ -177,14 +183,16 @@ impl CompactionPolicy for KWayCountPolicy {
             }
         }
 
-        tracing::warn!(
-            target: "compaction_policy::plan",
-            total_plans = plans.len(),
-            plans_by_level = ?plans.iter().map(|p| (p.level_from, p.level_to)).collect::<std::collections::HashMap<_, _>>(),
-            plans_by_uid = ?plans.iter().map(|p| (&p.uid, p.input_segment_labels.len())).collect::<std::collections::HashMap<_, _>>(),
-            leftover_segments_by_level = ?all_leftover_segments_by_level.iter().map(|(level, uids)| (level.clone(), uids.iter().map(|(uid, segs)| (uid.clone(), segs.len())).collect::<std::collections::HashMap<_, _>>())).collect::<std::collections::HashMap<_, _>>(),
-            "Generated compaction plans"
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            tracing::info!(
+                target: "compaction_policy::plan",
+                total_plans = plans.len(),
+                plans_by_level = ?plans.iter().map(|p| (p.level_from, p.level_to)).collect::<std::collections::HashMap<_, _>>(),
+                plans_by_uid = ?plans.iter().map(|p| (&p.uid, p.input_segment_labels.len())).collect::<std::collections::HashMap<_, _>>(),
+                leftover_segments_by_level = ?all_leftover_segments_by_level.iter().map(|(level, uids)| (level.clone(), uids.iter().map(|(uid, segs)| (uid.clone(), segs.len())).collect::<std::collections::HashMap<_, _>>())).collect::<std::collections::HashMap<_, _>>(),
+                "Generated compaction plans"
+            );
+        }
 
         plans
     }

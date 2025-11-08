@@ -154,28 +154,34 @@ async fn compacts_multiple_uids_from_shared_segments_in_single_pass() {
     worker.run().await.unwrap();
 
     // Verify all three UIDs were compacted
+    // With k=2, 4 segments create 2 batches, so we expect 2 output segments
+    // But all UIDs from the same input segments should be in the same output segment
     let index_after = SegmentIndex::load(&shard_dir).await.unwrap();
     let mut seen_uids = HashSet::new();
+    // With k=2, we have 2 batches: [00001, 00002] and [00003, 00004]
+    // Each batch should produce one output segment with all 3 UIDs
+    assert_eq!(index_after.len(), 2, "With k=2, 4 segments should create 2 output segments");
     for entry in index_after.iter_all() {
-        assert_eq!(entry.uids.len(), 1, "Compacted entries should have one UID");
+        assert_eq!(entry.uids.len(), 3, "Each output segment should contain all three UIDs");
         assert!(
             entry.id >= 10_000,
             "Compacted entries must be L1 or higher"
         );
-        let uid = entry.uids.first().unwrap();
-        seen_uids.insert(uid.clone());
+        for uid in &entry.uids {
+            seen_uids.insert(uid.clone());
 
-        // Verify zones file exists
-        let label = entry.label();
-        let segment_dir = shard_dir.join(&label);
-        let zones_path = segment_dir.join(format!("{}.zones", uid));
-        assert!(
-            zones_path.exists(),
-            "Zones file for {uid} should exist at {:?}",
-            zones_path
-        );
-        let zones = ZoneMeta::load(&zones_path).unwrap();
-        assert!(!zones.is_empty(), "Compaction for {uid} should emit zones");
+            // Verify zones file exists
+            let label = entry.label();
+            let segment_dir = shard_dir.join(&label);
+            let zones_path = segment_dir.join(format!("{}.zones", uid));
+            assert!(
+                zones_path.exists(),
+                "Zones file for {uid} should exist at {:?}",
+                zones_path
+            );
+            let zones = ZoneMeta::load(&zones_path).unwrap();
+            assert!(!zones.is_empty(), "Compaction for {uid} should emit zones");
+        }
     }
 
     assert_eq!(seen_uids.len(), 3, "All three UIDs should be compacted");
@@ -271,12 +277,19 @@ async fn handles_batch_with_many_uids_efficiently() {
     worker.run().await.unwrap();
 
     // Verify all UIDs were compacted
+    // With k=2, 4 segments create 2 batches, so we expect 2 output segments
+    // But all UIDs from the same input segments should be in the same output segment
     let index = SegmentIndex::load(&shard_dir).await.unwrap();
     let mut seen_uids = HashSet::new();
+    // With k=2, we have 2 batches: [00001, 00002] and [00003, 00004]
+    // Each batch should produce one output segment with all 10 UIDs
+    assert_eq!(index.len(), 2, "With k=2, 4 segments should create 2 output segments");
     for entry in index.iter_all() {
-        assert_eq!(entry.uids.len(), 1);
+        assert_eq!(entry.uids.len(), 10, "Each output segment should contain all 10 UIDs");
         assert!(entry.id >= 10_000);
-        seen_uids.insert(entry.uids.first().unwrap().clone());
+        for uid in &entry.uids {
+            seen_uids.insert(uid.clone());
+        }
     }
 
     assert_eq!(seen_uids.len(), 10, "All 10 UIDs should be compacted");

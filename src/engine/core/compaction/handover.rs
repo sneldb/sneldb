@@ -149,15 +149,17 @@ impl CompactionHandover {
                 })
                 .collect();
 
-            tracing::warn!(
-                target: "compaction_handover::commit_batch",
-                shard = self.shard_id,
-                input_labels = ?input_labels,
-                segments_before_retirement = segments_before.len(),
-                segment_states_before = ?segments_before,
-                total_entries_before = index.len(),
-                "About to retire UIDs from segments"
-            );
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                tracing::debug!(
+                    target: "compaction_handover::commit_batch",
+                    shard = self.shard_id,
+                    input_labels = ?input_labels,
+                    segments_before_retirement = segments_before.len(),
+                    segment_states_before = ?segments_before,
+                    total_entries_before = index.len(),
+                    "About to retire UIDs from segments"
+                );
+            }
 
             // Retire all UIDs from the input segments
             // We need to deduplicate drained segments since the same segment might be returned
@@ -165,26 +167,30 @@ impl CompactionHandover {
             let mut all_drained: Vec<crate::engine::core::SegmentEntry> = Vec::new();
             let mut seen_drained_labels: HashSet<String> = HashSet::new();
 
-            warn!(
-                target: "compaction_handover::commit_batch",
-                shard = self.shard_id,
-                uid_count = batch.uid_plans.len(),
-                uids_to_retire = ?batch.uid_plans.iter().map(|p| p.uid.clone()).collect::<Vec<_>>(),
-                input_segments = ?input_labels,
-                "Retiring multiple UIDs from shared segments"
-            );
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                debug!(
+                    target: "compaction_handover::commit_batch",
+                    shard = self.shard_id,
+                    uid_count = batch.uid_plans.len(),
+                    uids_to_retire = ?batch.uid_plans.iter().map(|p| p.uid.clone()).collect::<Vec<_>>(),
+                    input_segments = ?input_labels,
+                    "Retiring multiple UIDs from shared segments"
+                );
+            }
 
             for uid_plan in &batch.uid_plans {
                 let drained = index
                     .retire_uid_from_labels(&uid_plan.uid, input_labels.iter().map(|s| s.as_str()));
 
-                warn!(
-                    target: "compaction_handover::commit_batch",
-                    shard = self.shard_id,
-                    uid = %uid_plan.uid,
-                    drained_from_this_uid = drained.len(),
-                    "Retired UID from segments"
-                );
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    debug!(
+                        target: "compaction_handover::commit_batch",
+                        shard = self.shard_id,
+                        uid = %uid_plan.uid,
+                        drained_from_this_uid = drained.len(),
+                        "Retired UID from segments"
+                    );
+                }
 
                 // Only add segments that haven't been marked as drained yet
                 for entry in drained {
@@ -199,15 +205,17 @@ impl CompactionHandover {
             let drained_labels: Vec<String> =
                 all_drained.iter().map(|entry| entry.label()).collect();
 
-            warn!(
-                target: "compaction_handover::commit_batch",
-                shard = self.shard_id,
-                total_uids_retired = batch.uid_plans.len(),
-                total_drained_after_all_uids = drained_labels.len(),
-                drained_labels = ?drained_labels,
-                input_segments = ?input_labels,
-                "Completed retiring all UIDs from segments"
-            );
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                debug!(
+                    target: "compaction_handover::commit_batch",
+                    shard = self.shard_id,
+                    total_uids_retired = batch.uid_plans.len(),
+                    total_drained_after_all_uids = drained_labels.len(),
+                    drained_labels = ?drained_labels,
+                    input_segments = ?input_labels,
+                    "Completed retiring all UIDs from segments"
+                );
+            }
 
             // Log segment states after retirement
             let segments_after: Vec<_> = input_labels
@@ -220,16 +228,18 @@ impl CompactionHandover {
                 })
                 .collect();
 
-            tracing::warn!(
-                target: "compaction_handover::commit_batch",
-                shard = self.shard_id,
-                drained_count = drained_labels.len(),
-                drained_labels = ?drained_labels,
-                segments_remaining = segments_after.len(),
-                segment_states_after = ?segments_after,
-                total_entries_after_retirement = index.len(),
-                "Retired UIDs from input segments"
-            );
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                tracing::debug!(
+                    target: "compaction_handover::commit_batch",
+                    shard = self.shard_id,
+                    drained_count = drained_labels.len(),
+                    drained_labels = ?drained_labels,
+                    segments_remaining = segments_after.len(),
+                    segment_states_after = ?segments_after,
+                    total_entries_after_retirement = index.len(),
+                    "Retired UIDs from input segments"
+                );
+            }
 
             // Verify output segments exist before updating index (crash safety)
             // This ensures we never update the index to reference segments that don't exist
@@ -266,13 +276,15 @@ impl CompactionHandover {
 
             index.save(&self.shard_dir).await?;
 
-            tracing::warn!(
-                target: "compaction_handover::commit_batch",
-                shard = self.shard_id,
-                new_entries_count = new_entries.len(),
-                total_entries_final = index.len(),
-                "Inserted all entries and saved index"
-            );
+            if tracing::enabled!(tracing::Level::INFO) {
+                tracing::info!(
+                    target: "compaction_handover::commit_batch",
+                    shard = self.shard_id,
+                    new_entries_count = new_entries.len(),
+                    total_entries_final = index.len(),
+                    "Inserted all entries and saved index"
+                );
+            }
 
             drained_labels
         };

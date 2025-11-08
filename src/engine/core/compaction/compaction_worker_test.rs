@@ -292,10 +292,11 @@ async fn compaction_preserves_segments_shared_by_multiple_uids() {
     worker.run().await.unwrap();
 
     let index = SegmentIndex::load(&shard_dir).await.unwrap();
+    // With multi-UID compaction, both UIDs are written to a single output segment
     assert_eq!(
         index.len(),
-        2,
-        "Each UID should have exactly one compacted L1 segment"
+        1,
+        "Both UIDs should be compacted into a single shared L1 segment"
     );
     let mut seen = HashSet::new();
     for entry in index.iter_all() {
@@ -303,32 +304,37 @@ async fn compaction_preserves_segments_shared_by_multiple_uids() {
             entry.id >= 10_000,
             "Compacted entries must target L1 or higher"
         );
+        // Multi-UID compaction: both UIDs are in the same output segment
         assert_eq!(
             entry.uids.len(),
-            1,
-            "Compaction output should be per-UID"
+            2,
+            "Compaction output should contain both UIDs in a single segment"
         );
-        let uid = entry.uids.first().cloned().expect("uid must exist");
-        seen.insert(uid.clone());
+        assert!(entry.uids.contains(&uid_a));
+        assert!(entry.uids.contains(&uid_b));
+        seen.extend(entry.uids.clone());
         let label = entry.label();
         let segment_dir = shard_dir.join(&label);
-        let zones_path = segment_dir.join(format!("{}.zones", uid));
-        assert!(
-            zones_path.exists(),
-            "Zones file for {uid} should exist at {:?}",
-            zones_path
-        );
-        let zones = ZoneMeta::load(&zones_path).unwrap();
-        assert!(
-            !zones.is_empty(),
-            "Compaction for {uid} should emit zones"
-        );
+        // Verify zones files exist for both UIDs
+        for uid in &entry.uids {
+            let zones_path = segment_dir.join(format!("{}.zones", uid));
+            assert!(
+                zones_path.exists(),
+                "Zones file for {uid} should exist at {:?}",
+                zones_path
+            );
+            let zones = ZoneMeta::load(&zones_path).unwrap();
+            assert!(
+                !zones.is_empty(),
+                "Compaction for {uid} should emit zones"
+            );
+        }
     }
     assert!(seen.contains(&uid_a));
     assert!(seen.contains(&uid_b));
 
     let ids = segment_ids.read().unwrap().clone();
-    assert_eq!(ids.len(), 2, "Shared segment list should retain both outputs");
+    assert_eq!(ids.len(), 1, "Shared segment list should retain single output with both UIDs");
     assert!(
         ids.iter()
             .all(|label| label.parse::<u32>().unwrap() >= 10_000),

@@ -72,13 +72,15 @@ impl SegmentIndexTree {
             let level_map = match self.by_level.get_mut(&level) {
                 Some(map) => map,
                 None => {
-                    tracing::warn!(
-                        target: "segment_index::remove_uid",
-                        level = level,
-                        offset = offset,
-                        uid = %uid,
-                        "Level not found in index tree"
-                    );
+                    if tracing::enabled!(tracing::Level::DEBUG) {
+                        tracing::debug!(
+                            target: "segment_index::remove_uid",
+                            level = level,
+                            offset = offset,
+                            uid = %uid,
+                            "Level not found in index tree"
+                        );
+                    }
                     return None;
                 }
             };
@@ -90,36 +92,42 @@ impl SegmentIndexTree {
                 entry.uids.retain(|existing| existing != uid);
                 let after_count = entry.uids.len();
 
-                tracing::warn!(
-                    target: "segment_index::remove_uid",
-                    level = level,
-                    offset = offset,
-                    uid = %uid,
-                    uids_before = ?before_uids,
-                    uids_after = ?entry.uids,
-                    before_count = before_count,
-                    after_count = after_count,
-                    "Removed UID from segment entry"
-                );
-
-                if before_count != after_count && entry.uids.is_empty() {
-                    remove_offset = true;
-                    tracing::warn!(
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    tracing::debug!(
                         target: "segment_index::remove_uid",
                         level = level,
                         offset = offset,
                         uid = %uid,
-                        "Segment entry is now empty, will be removed"
+                        uids_before = ?before_uids,
+                        uids_after = ?entry.uids,
+                        before_count = before_count,
+                        after_count = after_count,
+                        "Removed UID from segment entry"
                     );
                 }
+
+                if before_count != after_count && entry.uids.is_empty() {
+                    remove_offset = true;
+                    if tracing::enabled!(tracing::Level::DEBUG) {
+                        tracing::debug!(
+                            target: "segment_index::remove_uid",
+                            level = level,
+                            offset = offset,
+                            uid = %uid,
+                            "Segment entry is now empty, will be removed"
+                        );
+                    }
+                }
             } else {
-                tracing::warn!(
-                    target: "segment_index::remove_uid",
-                    level = level,
-                    offset = offset,
-                    uid = %uid,
-                    "Offset not found in level map"
-                );
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    tracing::debug!(
+                        target: "segment_index::remove_uid",
+                        level = level,
+                        offset = offset,
+                        uid = %uid,
+                        "Offset not found in level map"
+                    );
+                }
                 return None;
             }
 
@@ -131,12 +139,14 @@ impl SegmentIndexTree {
 
         if should_remove_level {
             self.by_level.remove(&level);
-            tracing::warn!(
-                target: "segment_index::remove_uid",
-                level = level,
-                uid = %uid,
-                "Removed empty level from index tree"
-            );
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                tracing::debug!(
+                    target: "segment_index::remove_uid",
+                    level = level,
+                    uid = %uid,
+                    "Removed empty level from index tree"
+                );
+            }
         }
 
         removed_entry
@@ -203,7 +213,9 @@ impl SegmentIndex {
 
         // Clean up any leftover temporary files from crashed writes
         if tmp_path.exists() {
-            warn!(target: "segment_index::load", ?tmp_path, "Found leftover temporary index file, removing");
+            if tracing::enabled!(tracing::Level::INFO) {
+                info!(target: "segment_index::load", ?tmp_path, "Found leftover temporary index file, removing");
+            }
             let _ = std::fs::remove_file(&tmp_path);
         }
 
@@ -223,7 +235,9 @@ impl SegmentIndex {
                 }
             }
         } else {
-            warn!(target: "segment_index::load", ?path, "No existing segment index found, attempting recovery from disk");
+            if tracing::enabled!(tracing::Level::INFO) {
+                info!(target: "segment_index::load", ?path, "No existing segment index found, attempting recovery from disk");
+            }
             // When index is missing, try to recover from disk
             Self::recover_from_disk(shard_dir).await
         }
@@ -256,11 +270,13 @@ impl SegmentIndex {
     /// Recovers segment index by scanning disk for actual segment directories.
     /// This is a fallback when the index file is corrupted or missing.
     async fn recover_from_disk(shard_dir: &Path) -> Result<Self, StoreError> {
-        warn!(
-            target: "segment_index::recover_from_disk",
-            ?shard_dir,
-            "Recovering segment index by scanning disk"
-        );
+        if tracing::enabled!(tracing::Level::WARN) {
+            warn!(
+                target: "segment_index::recover_from_disk",
+                ?shard_dir,
+                "Recovering segment index by scanning disk"
+            );
+        }
 
         use std::fs;
         let mut tree = SegmentIndexTree::default();
@@ -311,12 +327,14 @@ impl SegmentIndex {
         // Save the recovered index
         if recovered_count > 0 {
             if let Err(e) = recovered_index.save(shard_dir).await {
-                warn!(
-                    target: "segment_index::recover_from_disk",
-                    ?shard_dir,
-                    error = %e,
-                    "Failed to save recovered index"
-                );
+                if tracing::enabled!(tracing::Level::WARN) {
+                    warn!(
+                        target: "segment_index::recover_from_disk",
+                        ?shard_dir,
+                        error = %e,
+                        "Failed to save recovered index"
+                    );
+                }
             }
         }
 
@@ -373,13 +391,15 @@ impl SegmentIndex {
         let mut drained = Vec::new();
         let labels_vec: Vec<&str> = labels.into_iter().collect();
 
-        tracing::warn!(
-            target: "segment_index::retire_uid_from_labels",
-            uid = %uid,
-            labels_to_process = labels_vec.len(),
-            labels = ?labels_vec,
-            "Starting UID retirement from labels"
-        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            tracing::debug!(
+                target: "segment_index::retire_uid_from_labels",
+                uid = %uid,
+                labels_to_process = labels_vec.len(),
+                labels = ?labels_vec,
+                "Starting UID retirement from labels"
+            );
+        }
 
         for label in &labels_vec {
             if let Some(seg) = SegmentId::from_str(label) {
@@ -395,43 +415,51 @@ impl SegmentIndex {
                     .map(|e| e.uids.clone());
 
                 if let Some(entry) = self.tree.remove_uid(level, offset, uid) {
-                    tracing::warn!(
-                        target: "segment_index::retire_uid_from_labels",
-                        uid = %uid,
-                        label = %label,
-                        level = level,
-                        offset = offset,
-                        uids_before = ?before_state,
-                        "Segment fully drained after UID retirement"
-                    );
+                    if tracing::enabled!(tracing::Level::DEBUG) {
+                        tracing::debug!(
+                            target: "segment_index::retire_uid_from_labels",
+                            uid = %uid,
+                            label = %label,
+                            level = level,
+                            offset = offset,
+                            uids_before = ?before_state,
+                            "Segment fully drained after UID retirement"
+                        );
+                    }
                     drained.push(entry);
                 } else if let Some(uids_before) = before_state {
-                    tracing::warn!(
-                        target: "segment_index::retire_uid_from_labels",
-                        uid = %uid,
-                        label = %label,
-                        level = level,
-                        offset = offset,
-                        uids_before = ?uids_before,
-                        "UID retired but segment still has other UIDs"
-                    );
+                    if tracing::enabled!(tracing::Level::DEBUG) {
+                        tracing::debug!(
+                            target: "segment_index::retire_uid_from_labels",
+                            uid = %uid,
+                            label = %label,
+                            level = level,
+                            offset = offset,
+                            uids_before = ?uids_before,
+                            "UID retired but segment still has other UIDs"
+                        );
+                    }
                 } else {
-                    tracing::warn!(
-                        target: "segment_index::retire_uid_from_labels",
-                        uid = %uid,
-                        label = %label,
-                        level = level,
-                        offset = offset,
-                        "Segment not found in index"
-                    );
+                    if tracing::enabled!(tracing::Level::DEBUG) {
+                        tracing::debug!(
+                            target: "segment_index::retire_uid_from_labels",
+                            uid = %uid,
+                            label = %label,
+                            level = level,
+                            offset = offset,
+                            "Segment not found in index"
+                        );
+                    }
                 }
             } else {
-                tracing::warn!(
-                    target: "segment_index::retire_uid_from_labels",
-                    uid = %uid,
-                    label = %label,
-                    "Failed to parse segment label"
-                );
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    tracing::debug!(
+                        target: "segment_index::retire_uid_from_labels",
+                        uid = %uid,
+                        label = %label,
+                        "Failed to parse segment label"
+                    );
+                }
             }
         }
 
@@ -444,13 +472,15 @@ impl SegmentIndex {
             );
         }
 
-        tracing::warn!(
-            target: "segment_index::retire_uid_from_labels",
-            uid = %uid,
-            total_drained = drained.len(),
-            drained_labels = ?drained.iter().map(|e| e.label()).collect::<Vec<_>>(),
-            "Completed UID retirement"
-        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            tracing::debug!(
+                target: "segment_index::retire_uid_from_labels",
+                uid = %uid,
+                total_drained = drained.len(),
+                drained_labels = ?drained.iter().map(|e| e.label()).collect::<Vec<_>>(),
+                "Completed UID retirement"
+            );
+        }
 
         drained
     }

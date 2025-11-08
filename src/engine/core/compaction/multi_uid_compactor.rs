@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Compacts multiple UIDs from the same input segments in a single pass.
 /// This is more efficient than processing each UID separately, as it:
@@ -42,6 +42,16 @@ impl MultiUidCompactor {
     /// All UIDs are written to the same output segment directory.
     /// Returns a map of UID to its compaction result.
     pub async fn run(&self) -> Result<HashMap<String, CompactionResult>, CompactorError> {
+        if self.batch.uid_plans.is_empty() {
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                debug!(
+                    target: "multi_uid_compactor::run",
+                    "Batch has no UID plans, returning empty results"
+                );
+            }
+            return Ok(HashMap::new());
+        }
+
         info!(
             target: "multi_uid_compactor::run",
             input_segments = ?self.batch.input_segment_labels,
@@ -60,27 +70,31 @@ impl MultiUidCompactor {
         std::fs::create_dir_all(&output_dir)
             .map_err(|e| CompactorError::ZoneWriter(e.to_string()))?;
 
-        warn!(
-            target: "multi_uid_compactor::run",
-            shared_output_segment_id = shared_output_segment_id,
-            output_dir = %output_dir.display(),
-            "Using shared output segment for all UIDs in batch"
-        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target: "multi_uid_compactor::run",
+                shared_output_segment_id = shared_output_segment_id,
+                output_dir = %output_dir.display(),
+                "Using shared output segment for all UIDs in batch"
+            );
+        }
 
         let mut results = HashMap::new();
 
         // Process each UID separately (they have different schemas)
         // But write them all to the same output segment directory
         for (uid_idx, uid_plan) in self.batch.uid_plans.iter().enumerate() {
-            warn!(
-                target: "multi_uid_compactor::run",
-                uid_index = uid_idx,
-                total_uids = self.batch.uid_count(),
-                uid = %uid_plan.uid,
-                shared_output_segment_id = shared_output_segment_id,
-                input_segments = ?self.batch.input_segment_labels,
-                "Compacting UID to shared output segment"
-            );
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                debug!(
+                    target: "multi_uid_compactor::run",
+                    uid_index = uid_idx,
+                    total_uids = self.batch.uid_count(),
+                    uid = %uid_plan.uid,
+                    shared_output_segment_id = shared_output_segment_id,
+                    input_segments = ?self.batch.input_segment_labels,
+                    "Compacting UID to shared output segment"
+                );
+            }
             let result = self
                 .compact_uid(uid_plan, shared_output_segment_id, &output_dir)
                 .await
@@ -88,14 +102,16 @@ impl MultiUidCompactor {
             results.insert(uid_plan.uid.clone(), result);
         }
 
-        warn!(
-            target: "multi_uid_compactor::run",
-            input_segments = ?self.batch.input_segment_labels,
-            shared_output_segment_id = shared_output_segment_id,
-            processed_uids = results.len(),
-            results = ?results.iter().map(|(uid, r)| (uid.clone(), r.zones_written)).collect::<HashMap<_, _>>(),
-            "Completed multi-UID compaction for batch"
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "multi_uid_compactor::run",
+                input_segments = ?self.batch.input_segment_labels,
+                shared_output_segment_id = shared_output_segment_id,
+                processed_uids = results.len(),
+                results = ?results.iter().map(|(uid, r)| (uid.clone(), r.zones_written)).collect::<HashMap<_, _>>(),
+                "Completed multi-UID compaction for batch"
+            );
+        }
 
         Ok(results)
     }
