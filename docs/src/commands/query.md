@@ -138,6 +138,16 @@ WHERE page_view.page="/checkout" AND order_created.status="done"
 QUERY order_created PRECEDED BY payment_failed LINKED BY user_id WHERE order_created.status="done"
 ```
 
+**Avoiding ambiguity**: If both event types have the same field name, use event-prefixed fields:
+
+```sneldb
+# This will return 400 Bad Request if both order_created and payment_failed have a "status" field
+QUERY order_created PRECEDED BY payment_failed LINKED BY user_id WHERE status="done"
+
+# Use event-prefixed fields to disambiguate
+QUERY order_created PRECEDED BY payment_failed LINKED BY user_id WHERE order_created.status="done"
+```
+
 **Different link fields**: Use order_id instead of user_id:
 
 ```sneldb
@@ -156,6 +166,7 @@ QUERY order_created FOLLOWED BY order_cancelled LINKED BY order_id
 - **Event-prefixed fields**: Use `event_type.field` to filter specific events (e.g., `page_view.page="/checkout"`)
 - **Common fields**: Fields without a prefix apply to all events (e.g., `timestamp > 1000`)
 - **Combined**: You can mix event-specific and common filters with `AND`/`OR`
+- **Ambiguity detection**: If a common field (without event prefix) exists in multiple event types within the sequence, the query will return a `400 Bad Request` error. Use event-prefixed fields to disambiguate (e.g., `order_created.status="done"` instead of `status="done"` when both `order_created` and `payment_failed` have a `status` field)
 
 ### Performance
 
@@ -181,3 +192,4 @@ Sequence queries are optimized for performance:
 - Unknown fields in `RETURN` are ignored; only schema-defined payload fields (plus core fields `context_id`, `event_type`, `timestamp`) are returned.
 - Temporal literals in `WHERE` (e.g., `created_at = "2025-01-01T00:00:01Z") are parsed and normalized to epoch seconds. Fractional seconds are truncated; ranges using only sub-second differences may collapse to empty after normalization.
 - In sequence queries, the `link_field` must exist in both event types' schemas.
+- In sequence queries, if a WHERE clause uses a common field (without event prefix) that exists in multiple event types, you must use event-prefixed fields to disambiguate. For example, if both `order_created` and `payment_failed` have a `status` field, use `order_created.status="done"` instead of `status="done"` to avoid ambiguity errors.
