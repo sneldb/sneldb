@@ -17,7 +17,6 @@ pub use column::column_loader::ColumnLoader;
 pub use column::column_reader::ColumnReader;
 pub use column::column_values::ColumnValues;
 pub use compaction::compaction_worker::CompactionWorker;
-pub use compaction::compactor::Compactor;
 pub use event::event::Event;
 pub use event::event_builder::EventBuilder;
 pub use event::event_id::{EventId, EventIdGenerator};
