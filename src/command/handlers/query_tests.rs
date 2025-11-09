@@ -2245,9 +2245,15 @@ async fn test_query_order_by_limit_with_large_dataset() {
         .expect("store should succeed");
     }
 
-    // Allow time for all stores to be processed and flushed
-    // With 150 events creating ~50 segments, we need substantial time for all RLTE indices to be built
-    sleep(Duration::from_millis(2000)).await;
+    // Explicitly flush all shards and wait for completion to ensure all data is persisted
+    // and indices are built before running queries. This prevents flakiness from relying
+    // on arbitrary sleep durations or background flush timing.
+    let flush_errors = shard_manager.flush_all(Arc::clone(&registry)).await;
+    assert!(
+        flush_errors.is_empty(),
+        "Flush should succeed without errors, got: {:?}",
+        flush_errors
+    );
 
     // Test 1: ORDER BY score DESC, LIMIT 5 - verify descending order strictly maintained
     let cmd =
@@ -5749,14 +5755,22 @@ async fn test_sequence_ambiguous_field_error() {
     factory
         .define_with_fields(
             "order_created",
-            &[("order_id", "int"), ("user_id", "string"), ("status", "string")],
+            &[
+                ("order_id", "int"),
+                ("user_id", "string"),
+                ("status", "string"),
+            ],
         )
         .await
         .unwrap();
     factory
         .define_with_fields(
             "payment_failed",
-            &[("user_id", "string"), ("amount", "int"), ("status", "string")],
+            &[
+                ("user_id", "string"),
+                ("amount", "int"),
+                ("status", "string"),
+            ],
         )
         .await
         .unwrap();
@@ -5802,7 +5816,8 @@ async fn test_sequence_ambiguous_field_error() {
 
     // Query with ambiguous field: status without event prefix
     // Both order_created and payment_failed have "status" field
-    let cmd_str = "QUERY order_created PRECEDED BY payment_failed LINKED BY user_id WHERE status=\"done\"";
+    let cmd_str =
+        "QUERY order_created PRECEDED BY payment_failed LINKED BY user_id WHERE status=\"done\"";
     let cmd = parse(cmd_str).expect("parse PRECEDED BY with ambiguous WHERE");
     let (mut reader, mut writer) = duplex(4096);
     execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
@@ -5846,7 +5861,11 @@ async fn test_sequence_non_ambiguous_field_passes() {
     factory
         .define_with_fields(
             "order_created",
-            &[("order_id", "int"), ("user_id", "string"), ("status", "string")],
+            &[
+                ("order_id", "int"),
+                ("user_id", "string"),
+                ("status", "string"),
+            ],
         )
         .await
         .unwrap();
@@ -5898,7 +5917,8 @@ async fn test_sequence_non_ambiguous_field_passes() {
     sleep(Duration::from_millis(500)).await;
 
     // Query with non-ambiguous field: status only exists in order_created
-    let cmd_str = "QUERY order_created PRECEDED BY payment_failed LINKED BY user_id WHERE status=\"done\"";
+    let cmd_str =
+        "QUERY order_created PRECEDED BY payment_failed LINKED BY user_id WHERE status=\"done\"";
     let cmd = parse(cmd_str).expect("parse PRECEDED BY with non-ambiguous WHERE");
     let (mut reader, mut writer) = duplex(4096);
     execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
@@ -5918,4 +5938,906 @@ async fn test_sequence_non_ambiguous_field_passes() {
         !body.contains("Ambiguous field") && !body.contains("ambiguous"),
         "Should not mention ambiguity when field exists in only one event type"
     );
+}
+
+/// Test basic IN operator with numeric values
+#[tokio::test]
+async fn test_query_in_operator_basic() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("in_test_evt", &[("id", "int")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store events with IDs 1-10
+    for i in 1..=10 {
+        let store_cmd = CommandFactory::store()
+            .with_event_type("in_test_evt")
+            .with_context_id(&format!("ctx{}", i))
+            .with_payload(serde_json::json!({ "id": i }))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+
+    sleep(Duration::from_millis(400)).await;
+
+    // Query: WHERE id IN (2, 4, 6, 8)
+    let cmd = parse("QUERY in_test_evt WHERE id IN (2, 4, 6, 8)").expect("parse IN query");
+    let (mut reader, mut writer) = duplex(4096);
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+    let json_start = body.find('{').unwrap_or(0);
+    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
+    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+
+    assert_eq!(
+        rows.len(),
+        4,
+        "Should return exactly 4 rows matching IN values"
+    );
+
+    // Verify we got the correct IDs
+    let mut ids: Vec<i64> = rows.iter().map(|r| r[3]["id"].as_i64().unwrap()).collect();
+    ids.sort();
+    assert_eq!(ids, vec![2, 4, 6, 8], "Should return correct IDs");
+}
+
+/// Test IN operator with string values
+#[tokio::test]
+async fn test_query_in_operator_string() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("in_string_evt", &[("status", "string"), ("value", "int")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store events with various statuses
+    for (i, status) in [
+        "pending",
+        "active",
+        "completed",
+        "cancelled",
+        "pending",
+        "active",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let store_cmd = CommandFactory::store()
+            .with_event_type("in_string_evt")
+            .with_context_id(&format!("ctx{}", i))
+            .with_payload(serde_json::json!({ "status": status, "value": i * 10 }))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+
+    sleep(Duration::from_millis(400)).await;
+
+    // Flush to ensure all data is persisted
+    let flush_cmd = crate::command::types::Command::Flush;
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::flush::handle(
+        &flush_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("flush should succeed");
+    // Wait for flush to complete and indices to be built
+    sleep(Duration::from_millis(1500)).await;
+
+    // Query: WHERE status IN ("active", "completed")
+    let cmd = parse("QUERY in_string_evt WHERE status IN (\"active\", \"completed\")")
+        .expect("parse IN query with string values");
+    let (mut reader, mut writer) = duplex(4096);
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+    let json_start = body.find('{').unwrap_or(0);
+    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
+
+    // Handle both streaming and non-streaming responses
+    // When no events match, response is: {"results":["No matching events found"]}
+    // When events match, response is: {"results":[{"rows":[...]}]}
+    let rows = if let Some(results) = json.get("results").and_then(|r| r.as_array()) {
+        if !results.is_empty() {
+            // Check if first result is a string (no matches) or object (has rows)
+            match results[0] {
+                JsonValue::String(ref msg) if msg.contains("No matching events found") => {
+                    panic!(
+                        "No matching events found. This suggests data wasn't persisted or query didn't match. Response: {}",
+                        json
+                    );
+                }
+                JsonValue::Object(_) => {
+                    if let Some(rows_array) = results[0].get("rows").and_then(|r| r.as_array()) {
+                        rows_array
+                    } else {
+                        panic!("No rows array in response. Results: {:?}", results[0]);
+                    }
+                }
+                _ => {
+                    panic!("Unexpected result format: {:?}", results[0]);
+                }
+            }
+        } else {
+            panic!("Empty results array. Full response: {}", json);
+        }
+    } else {
+        panic!("Unexpected response format: {}", json);
+    };
+
+    assert_eq!(
+        rows.len(),
+        3,
+        "Should return 3 rows (2 active + 1 completed). Got: {} rows. Response: {}",
+        rows.len(),
+        json
+    );
+
+    // Verify all returned rows have correct status
+    for row in rows {
+        let status = row[3]["status"].as_str().unwrap();
+        assert!(
+            status == "active" || status == "completed",
+            "All rows should have status 'active' or 'completed'"
+        );
+    }
+}
+
+/// Test IN operator combined with AND
+#[tokio::test]
+async fn test_query_in_operator_with_and() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("in_and_evt", &[("id", "int"), ("status", "string")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store events
+    for i in 1..=10 {
+        let status = if i % 2 == 0 { "active" } else { "inactive" };
+        let store_cmd = CommandFactory::store()
+            .with_event_type("in_and_evt")
+            .with_context_id(&format!("ctx{}", i))
+            .with_payload(serde_json::json!({ "id": i, "status": status }))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+
+    sleep(Duration::from_millis(400)).await;
+
+    // Flush to ensure all data is persisted
+    let flush_cmd = crate::command::types::Command::Flush;
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::flush::handle(
+        &flush_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("flush should succeed");
+    // Wait for flush to complete and indices to be built
+    sleep(Duration::from_millis(1500)).await;
+
+    // Query: WHERE id IN (2, 4, 6) AND status = "active"
+    let cmd = parse("QUERY in_and_evt WHERE id IN (2, 4, 6) AND status = \"active\"")
+        .expect("parse IN query with AND");
+    let (mut reader, mut writer) = duplex(4096);
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+    let json_start = body.find('{').unwrap_or(0);
+    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
+    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+
+    assert_eq!(
+        rows.len(),
+        3,
+        "Should return 3 rows matching both conditions"
+    );
+
+    // Verify all rows match both conditions
+    for row in rows {
+        let id = row[3]["id"].as_i64().unwrap();
+        let status = row[3]["status"].as_str().unwrap();
+        assert!(id == 2 || id == 4 || id == 6, "ID should be in (2, 4, 6)");
+        assert_eq!(status, "active", "Status should be 'active'");
+    }
+}
+
+/// Test IN operator combined with OR
+#[tokio::test]
+async fn test_query_in_operator_with_or() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("in_or_evt", &[("id", "int"), ("category", "string")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store events
+    for i in 1..=10 {
+        let category = if i <= 5 { "A" } else { "B" };
+        let store_cmd = CommandFactory::store()
+            .with_event_type("in_or_evt")
+            .with_context_id(&format!("ctx{}", i))
+            .with_payload(serde_json::json!({ "id": i, "category": category }))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+
+    sleep(Duration::from_millis(400)).await;
+
+    // Query: WHERE id IN (1, 2, 3) OR category = "B"
+    let cmd = parse("QUERY in_or_evt WHERE id IN (1, 2, 3) OR category = \"B\"")
+        .expect("parse IN query with OR");
+    let (mut reader, mut writer) = duplex(4096);
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+    let json_start = body.find('{').unwrap_or(0);
+    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
+    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+
+    // Should return rows where id IN (1,2,3) OR category = "B"
+    // That's: 1,2,3 (from IN) + 6,7,8,9,10 (from category="B") = 8 rows
+    assert_eq!(rows.len(), 8, "Should return 8 rows matching OR condition");
+}
+
+/// Test IN operator with ORDER BY and LIMIT
+#[tokio::test]
+async fn test_query_in_operator_with_order_by_limit() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("in_order_evt", &[("id", "int"), ("score", "int")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store events with scores
+    for i in 1..=10 {
+        let store_cmd = CommandFactory::store()
+            .with_event_type("in_order_evt")
+            .with_context_id(&format!("ctx{}", i))
+            .with_payload(serde_json::json!({ "id": i, "score": i * 10 }))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+
+    sleep(Duration::from_millis(400)).await;
+
+    // Flush to ensure all data is persisted
+    let flush_cmd = crate::command::types::Command::Flush;
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::flush::handle(
+        &flush_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("flush should succeed");
+    // Wait for flush to complete and indices to be built
+    sleep(Duration::from_millis(1500)).await;
+
+    // Query: WHERE id IN (2, 5, 8, 1, 9) ORDER BY score DESC LIMIT 3
+    let cmd = parse("QUERY in_order_evt WHERE id IN (2, 5, 8, 1, 9) ORDER BY score DESC LIMIT 3")
+        .expect("parse IN query with ORDER BY and LIMIT");
+    let (mut reader, mut writer) = duplex(4096);
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+    let json_start = body.find('{').unwrap_or(0);
+    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
+    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+
+    assert_eq!(rows.len(), 3, "Should return exactly 3 rows");
+
+    // Verify descending order
+    let mut prev_score = i64::MAX;
+    for row in rows {
+        let id = row[3]["id"].as_i64().unwrap();
+        let score = row[3]["score"].as_i64().unwrap();
+        assert!(
+            id == 2 || id == 5 || id == 8 || id == 1 || id == 9,
+            "ID should be in the IN list"
+        );
+        assert!(score <= prev_score, "Scores should be descending");
+        prev_score = score;
+    }
+}
+
+/// Test IN operator with NOT
+#[tokio::test]
+async fn test_query_in_operator_with_not() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("in_not_evt", &[("id", "int")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store events
+    for i in 1..=10 {
+        let store_cmd = CommandFactory::store()
+            .with_event_type("in_not_evt")
+            .with_context_id(&format!("ctx{}", i))
+            .with_payload(serde_json::json!({ "id": i }))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+
+    sleep(Duration::from_millis(400)).await;
+
+    // Flush to ensure all data is persisted
+    let flush_cmd = crate::command::types::Command::Flush;
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::flush::handle(
+        &flush_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("flush should succeed");
+    // Wait for flush to complete and indices to be built
+    sleep(Duration::from_millis(1500)).await;
+
+    // Query: WHERE NOT id IN (2, 4, 6, 8)
+    let cmd =
+        parse("QUERY in_not_evt WHERE NOT id IN (2, 4, 6, 8)").expect("parse IN query with NOT");
+    let (mut reader, mut writer) = duplex(4096);
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+    let json_start = body.find('{').unwrap_or(0);
+    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
+    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+
+    // Should return 6 rows (1, 3, 5, 7, 9, 10) - all IDs NOT in (2, 4, 6, 8)
+    assert_eq!(rows.len(), 6, "Should return 6 rows not in the IN list");
+
+    // Verify no IDs are in the excluded list
+    let excluded_ids: std::collections::HashSet<i64> = [2, 4, 6, 8].iter().cloned().collect();
+    for row in rows {
+        let id = row[3]["id"].as_i64().unwrap();
+        assert!(
+            !excluded_ids.contains(&id),
+            "ID {} should not be in the excluded list",
+            id
+        );
+    }
+}
+
+/// Test parentheses in WHERE clause - simple grouping
+#[tokio::test]
+async fn test_query_parentheses_simple() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("paren_evt", &[("id", "int"), ("status", "string")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store events
+    for i in 1..=5 {
+        let status = if i <= 3 { "active" } else { "inactive" };
+        let store_cmd = CommandFactory::store()
+            .with_event_type("paren_evt")
+            .with_context_id(&format!("ctx{}", i))
+            .with_payload(serde_json::json!({ "id": i, "status": status }))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+
+    sleep(Duration::from_millis(400)).await;
+
+    // Flush to ensure all data is persisted
+    let flush_cmd = crate::command::types::Command::Flush;
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::flush::handle(
+        &flush_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("flush should succeed");
+    sleep(Duration::from_millis(1500)).await;
+
+    // Query: WHERE (status = "active")
+    let cmd =
+        parse("QUERY paren_evt WHERE (status = \"active\")").expect("parse query with parentheses");
+    let (mut reader, mut writer) = duplex(4096);
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+    let json_start = body.find('{').unwrap_or(0);
+    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
+    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+
+    assert_eq!(rows.len(), 3, "Should return 3 active rows");
+}
+
+/// Test parentheses with AND expression
+#[tokio::test]
+async fn test_query_parentheses_with_and() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields(
+            "paren_and_evt",
+            &[("id", "int"), ("category", "string"), ("priority", "int")],
+        )
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store events
+    let events = vec![
+        (1, "A", 1),
+        (2, "A", 2),
+        (3, "B", 1),
+        (4, "B", 2),
+        (5, "A", 3),
+    ];
+    for (id, category, priority) in events {
+        let store_cmd = CommandFactory::store()
+            .with_event_type("paren_and_evt")
+            .with_context_id(&format!("ctx{}", id))
+            .with_payload(
+                serde_json::json!({ "id": id, "category": category, "priority": priority }),
+            )
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+
+    sleep(Duration::from_millis(400)).await;
+
+    // Flush to ensure all data is persisted
+    let flush_cmd = crate::command::types::Command::Flush;
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::flush::handle(
+        &flush_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("flush should succeed");
+    sleep(Duration::from_millis(1500)).await;
+
+    // Query: WHERE (id IN (1, 2, 3) AND category IN ("A", "B"))
+    let cmd = parse("QUERY paren_and_evt WHERE (id IN (1, 2, 3) AND category IN (\"A\", \"B\"))")
+        .expect("parse query with parentheses and AND");
+    let (mut reader, mut writer) = duplex(4096);
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+    let json_start = body.find('{').unwrap_or(0);
+    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
+    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+
+    // Should match: id IN (1,2,3) AND category IN (A,B) = (1,A), (2,A), (3,B)
+    assert_eq!(
+        rows.len(),
+        3,
+        "Should return 3 rows matching both conditions"
+    );
+}
+
+/// Test nested parentheses
+#[tokio::test]
+async fn test_query_parentheses_nested() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("paren_nested_evt", &[("id", "int"), ("category", "string")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store events
+    let events = vec![(1, "A"), (2, "A"), (3, "B"), (4, "B"), (5, "C")];
+    for (id, category) in events {
+        let store_cmd = CommandFactory::store()
+            .with_event_type("paren_nested_evt")
+            .with_context_id(&format!("ctx{}", id))
+            .with_payload(serde_json::json!({ "id": id, "category": category }))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+
+    sleep(Duration::from_millis(400)).await;
+
+    // Flush to ensure all data is persisted
+    let flush_cmd = crate::command::types::Command::Flush;
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::flush::handle(
+        &flush_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("flush should succeed");
+    sleep(Duration::from_millis(1500)).await;
+
+    // Query: WHERE ((id IN (1, 2) AND category = "A") OR (id IN (3, 4) AND category = "B"))
+    let cmd = parse("QUERY paren_nested_evt WHERE ((id IN (1, 2) AND category = \"A\") OR (id IN (3, 4) AND category = \"B\"))")
+        .expect("parse query with nested parentheses");
+    let (mut reader, mut writer) = duplex(4096);
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+    let json_start = body.find('{').unwrap_or(0);
+    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
+    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+
+    // Should match: (1,A), (2,A), (3,B), (4,B) = 4 rows
+    assert_eq!(
+        rows.len(),
+        4,
+        "Should return 4 rows matching nested conditions"
+    );
+}
+
+/// Test parentheses with NOT operator
+#[tokio::test]
+async fn test_query_parentheses_with_not() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("paren_not_evt", &[("id", "int"), ("status", "string")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store events
+    let events = vec![
+        (1, "cancelled"),
+        (2, "refunded"),
+        (3, "active"),
+        (4, "pending"),
+        (5, "cancelled"),
+    ];
+    for (id, status) in events {
+        let store_cmd = CommandFactory::store()
+            .with_event_type("paren_not_evt")
+            .with_context_id(&format!("ctx{}", id))
+            .with_payload(serde_json::json!({ "id": id, "status": status }))
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+
+    sleep(Duration::from_millis(400)).await;
+
+    // Flush to ensure all data is persisted
+    let flush_cmd = crate::command::types::Command::Flush;
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::flush::handle(
+        &flush_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("flush should succeed");
+    sleep(Duration::from_millis(1500)).await;
+
+    // Query: WHERE NOT (status = "cancelled" OR status = "refunded")
+    let cmd =
+        parse("QUERY paren_not_evt WHERE NOT (status = \"cancelled\" OR status = \"refunded\")")
+            .expect("parse query with parentheses and NOT");
+    let (mut reader, mut writer) = duplex(4096);
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+    let json_start = body.find('{').unwrap_or(0);
+    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
+    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+
+    // Should match: NOT (cancelled OR refunded) = active, pending = 2 rows
+    assert_eq!(
+        rows.len(),
+        2,
+        "Should return 2 rows not cancelled or refunded"
+    );
+    let mut ids: Vec<i64> = rows.iter().map(|r| r[3]["id"].as_i64().unwrap()).collect();
+    ids.sort();
+    assert_eq!(ids, vec![3, 4], "Should return ids 3 and 4");
+}
+
+/// Test complex parentheses expression matching the scenario
+#[tokio::test]
+async fn test_query_parentheses_complex() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields(
+            "paren_complex_evt",
+            &[("id", "int"), ("category", "string"), ("priority", "int")],
+        )
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store events
+    let events = vec![
+        (1, "A", 1),
+        (2, "B", 2),
+        (3, "A", 3),
+        (4, "C", 1),
+        (5, "B", 3),
+    ];
+    for (id, category, priority) in events {
+        let store_cmd = CommandFactory::store()
+            .with_event_type("paren_complex_evt")
+            .with_context_id(&format!("ctx{}", id))
+            .with_payload(
+                serde_json::json!({ "id": id, "category": category, "priority": priority }),
+            )
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+
+    sleep(Duration::from_millis(400)).await;
+
+    // Flush to ensure all data is persisted
+    let flush_cmd = crate::command::types::Command::Flush;
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::flush::handle(
+        &flush_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("flush should succeed");
+    sleep(Duration::from_millis(1500)).await;
+
+    // Query: WHERE (id IN (1, 2, 3) AND category IN ("A", "B")) OR priority IN (3)
+    let cmd = parse("QUERY paren_complex_evt WHERE (id IN (1, 2, 3) AND category IN (\"A\", \"B\")) OR priority IN (3)")
+        .expect("parse complex parentheses query");
+    let (mut reader, mut writer) = duplex(4096);
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+    let json_start = body.find('{').unwrap_or(0);
+    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
+    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+
+    // Should match:
+    // - (id IN (1,2,3) AND category IN (A,B)) = (1,A), (2,B), (3,A) = 3 rows
+    // - OR priority IN (3) = (3,A,3), (5,B,3) = 2 rows, but (3,A,3) already counted
+    // Total: (1,A), (2,B), (3,A), (5,B) = 4 rows
+    assert_eq!(
+        rows.len(),
+        4,
+        "Should return 4 rows matching complex expression"
+    );
+    let mut ids: Vec<i64> = rows.iter().map(|r| r[3]["id"].as_i64().unwrap()).collect();
+    ids.sort();
+    assert_eq!(ids, vec![1, 2, 3, 5], "Should return correct IDs");
 }

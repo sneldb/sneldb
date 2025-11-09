@@ -54,12 +54,16 @@ async fn query_plan_new_assigns_strategies_using_segment_with_catalog() {
     .await
     .unwrap();
 
-    assert!(!plan.filter_plans.is_empty());
-    assert!(
-        plan.filter_plans
-            .iter()
-            .all(|fp| fp.index_strategy.is_some())
-    );
+    assert!(!plan.filter_groups.is_empty());
+    assert!(plan.filter_groups.iter().all(|fg| {
+        match fg {
+            crate::engine::core::filter::filter_group::FilterGroup::Filter {
+                index_strategy,
+                ..
+            } => index_strategy.is_some(),
+            _ => false,
+        }
+    }));
 }
 
 #[tokio::test]
@@ -85,11 +89,17 @@ async fn query_plan_assigns_fullscan_when_no_catalogs() {
     .unwrap();
 
     use crate::engine::core::read::index_strategy::IndexStrategy;
-    assert!(
-        plan.filter_plans
-            .iter()
-            .all(|fp| matches!(fp.index_strategy, Some(IndexStrategy::FullScan)))
-    );
+    assert!(plan.filter_groups.iter().all(|fg| {
+        match fg {
+            crate::engine::core::filter::filter_group::FilterGroup::Filter {
+                index_strategy,
+                ..
+            } => {
+                matches!(index_strategy.as_ref(), Some(IndexStrategy::FullScan))
+            }
+            _ => false,
+        }
+    }));
 }
 
 #[tokio::test]
@@ -114,11 +124,15 @@ async fn query_plan_with_no_segments_skips_strategy_assignment() {
     .await
     .unwrap();
 
-    assert!(
-        plan.filter_plans
-            .iter()
-            .all(|fp| fp.index_strategy.is_none())
-    );
+    assert!(plan.filter_groups.iter().all(|fg| {
+        match fg {
+            crate::engine::core::filter::filter_group::FilterGroup::Filter {
+                index_strategy,
+                ..
+            } => index_strategy.is_none(),
+            _ => false,
+        }
+    }));
 }
 
 #[tokio::test]
@@ -147,13 +161,10 @@ async fn query_plan_aggregates_remove_implicit_since_filter() {
     .unwrap();
 
     // No Gte filter for the time field should remain
-    let has_implicit_since = plan.filter_plans.iter().any(|fp| {
-        fp.column == "timestamp"
-            && matches!(fp.operation, Some(crate::command::types::CompareOp::Gte))
-            && fp
-                .value
-                .as_ref()
-                .and_then(|v| v.as_str().map(|s| s.to_string()))
+    let has_implicit_since = plan.filter_groups.iter().any(|fg| {
+        fg.column() == Some("timestamp")
+            && matches!(fg.operation(), Some(crate::command::types::CompareOp::Gte))
+            && fg.value().and_then(|v| v.as_str().map(|s| s.to_string()))
                 == Some("2020-01-01T00:00:00Z".to_string())
     });
     assert!(!has_implicit_since);

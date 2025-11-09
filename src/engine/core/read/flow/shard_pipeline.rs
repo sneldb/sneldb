@@ -276,7 +276,7 @@ pub async fn build_segment_stream(
     let caches_for_task = Arc::clone(&caches);
     tasks.push(tokio::spawn(async move {
         let steps: Vec<ExecutionStep<'_>> = plan_for_task
-            .filter_plans
+            .filter_groups
             .iter()
             .map(|filter| ExecutionStep::new(filter.clone(), plan_for_task.as_ref()))
             .collect();

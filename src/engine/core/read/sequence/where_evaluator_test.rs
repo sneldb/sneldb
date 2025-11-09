@@ -484,3 +484,441 @@ async fn test_non_ambiguous_field_passes() {
         "Should not return error when field is not ambiguous"
     );
 }
+
+// =============================================================================
+// IN OPERATOR TESTS
+// =============================================================================
+
+#[tokio::test]
+async fn test_in_clause_with_event_specific_field() {
+    // Test: page_view.id IN (1, 2, 3)
+    let where_clause = Expr::In {
+        field: "page_view.id".to_string(),
+        values: vec![json!(1), json!(2), json!(3)],
+    };
+
+    let event_types = vec!["page_view".to_string(), "order_created".to_string()];
+    let registry =
+        create_test_registry(&[("page_view", &["id"]), ("order_created", &["status"])]).await;
+    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry)
+        .await
+        .expect("Should create evaluator");
+
+    // Create zone with id field matching IN list
+    let mut payload_fields = HashMap::new();
+    payload_fields.insert("id".to_string(), vec!["2".to_string()]); // id=2 is in [1,2,3]
+
+    let zone = create_zone_with_payload(0, "seg1", &["ctx1"], &["user1"], &[1000], &payload_fields);
+
+    let row_index = RowIndex {
+        zone_idx: 0,
+        row_idx: 0,
+    };
+
+    // Should pass: id=2 is in [1,2,3]
+    let result = evaluator.evaluate_row("page_view", &zone, &row_index);
+    assert!(result, "Should pass when id is in the IN list");
+
+    // Test with non-matching value
+    let mut payload_fields2 = HashMap::new();
+    payload_fields2.insert("id".to_string(), vec!["5".to_string()]); // id=5 is not in [1,2,3]
+
+    let zone2 =
+        create_zone_with_payload(0, "seg1", &["ctx1"], &["user1"], &[1000], &payload_fields2);
+
+    let result2 = evaluator.evaluate_row("page_view", &zone2, &row_index);
+    assert!(!result2, "Should fail when id is not in the IN list");
+}
+
+#[tokio::test]
+async fn test_in_clause_with_common_field() {
+    // Test: id IN (1, 2, 3) - common field, but only exists in one event type (not ambiguous)
+    let where_clause = Expr::In {
+        field: "id".to_string(),
+        values: vec![json!(1), json!(2), json!(3)],
+    };
+
+    let event_types = vec!["page_view".to_string(), "order_created".to_string()];
+    // Only page_view has "id", order_created has "status" - not ambiguous
+    let registry =
+        create_test_registry(&[("page_view", &["id"]), ("order_created", &["status"])]).await;
+    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry)
+        .await
+        .expect("Should create evaluator");
+
+    // Create zone for page_view with matching id
+    let mut payload_fields = HashMap::new();
+    payload_fields.insert("id".to_string(), vec!["2".to_string()]);
+
+    let page_zone =
+        create_zone_with_payload(0, "seg1", &["ctx1"], &["user1"], &[1000], &payload_fields);
+
+    let row_index = RowIndex {
+        zone_idx: 0,
+        row_idx: 0,
+    };
+
+    // page_view should pass: id=2 is in [1,2,3]
+    let page_result = evaluator.evaluate_row("page_view", &page_zone, &row_index);
+    assert!(page_result, "page_view should pass when id is in IN list");
+
+    // order_created gets an evaluator for "id" (common field applied to all event types)
+    // but since order_created zones don't have "id" field, evaluation fails
+    let mut order_payload = HashMap::new();
+    order_payload.insert("status".to_string(), vec!["done".to_string()]);
+    let order_zone =
+        create_zone_with_payload(0, "seg1", &["ctx2"], &["user1"], &[1500], &order_payload);
+    let order_result = evaluator.evaluate_row("order_created", &order_zone, &row_index);
+    // Common fields are applied to all event types, so order_created gets evaluator for "id"
+    // but since the zone doesn't have "id", the condition fails
+    assert!(!order_result, "order_created should fail (has evaluator for id but field missing)");
+}
+
+#[tokio::test]
+async fn test_in_clause_with_string_values() {
+    // Test: page_view.status IN ("active", "completed")
+    let where_clause = Expr::In {
+        field: "page_view.status".to_string(),
+        values: vec![json!("active"), json!("completed")],
+    };
+
+    let event_types = vec!["page_view".to_string()];
+    let registry = create_test_registry(&[("page_view", &["status"])]).await;
+    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry)
+        .await
+        .expect("Should create evaluator");
+
+    // Create zone with status="active" (in list)
+    let mut payload_fields = HashMap::new();
+    payload_fields.insert("status".to_string(), vec!["active".to_string()]);
+
+    let zone = create_zone_with_payload(0, "seg1", &["ctx1"], &["user1"], &[1000], &payload_fields);
+
+    let row_index = RowIndex {
+        zone_idx: 0,
+        row_idx: 0,
+    };
+
+    // Should pass: status="active" is in ["active", "completed"]
+    let result = evaluator.evaluate_row("page_view", &zone, &row_index);
+    assert!(result, "Should pass when status is in the IN list");
+
+    // Test with non-matching value
+    let mut payload_fields2 = HashMap::new();
+    payload_fields2.insert("status".to_string(), vec!["pending".to_string()]);
+
+    let zone2 =
+        create_zone_with_payload(0, "seg1", &["ctx1"], &["user1"], &[1000], &payload_fields2);
+
+    let result2 = evaluator.evaluate_row("page_view", &zone2, &row_index);
+    assert!(!result2, "Should fail when status is not in the IN list");
+}
+
+#[tokio::test]
+async fn test_in_clause_combined_with_and() {
+    // Test: page_view.id IN (1, 2, 3) AND page_view.status = "active"
+    let where_clause = Expr::And(
+        Box::new(Expr::In {
+            field: "page_view.id".to_string(),
+            values: vec![json!(1), json!(2), json!(3)],
+        }),
+        Box::new(Expr::Compare {
+            field: "page_view.status".to_string(),
+            op: CompareOp::Eq,
+            value: json!("active"),
+        }),
+    );
+
+    let event_types = vec!["page_view".to_string()];
+    let registry = create_test_registry(&[("page_view", &["id", "status"])]).await;
+    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry)
+        .await
+        .expect("Should create evaluator");
+
+    // Create zone with both conditions matching
+    let mut payload_fields = HashMap::new();
+    payload_fields.insert("id".to_string(), vec!["2".to_string()]);
+    payload_fields.insert("status".to_string(), vec!["active".to_string()]);
+
+    let zone = create_zone_with_payload(0, "seg1", &["ctx1"], &["user1"], &[1000], &payload_fields);
+
+    let row_index = RowIndex {
+        zone_idx: 0,
+        row_idx: 0,
+    };
+
+    // Should pass: both conditions match
+    let result = evaluator.evaluate_row("page_view", &zone, &row_index);
+    assert!(result, "Should pass when both IN and Compare conditions match");
+
+    // Test with IN condition failing
+    let mut payload_fields2 = HashMap::new();
+    payload_fields2.insert("id".to_string(), vec!["5".to_string()]); // Not in [1,2,3]
+    payload_fields2.insert("status".to_string(), vec!["active".to_string()]);
+
+    let zone2 =
+        create_zone_with_payload(0, "seg1", &["ctx1"], &["user1"], &[1000], &payload_fields2);
+
+    let result2 = evaluator.evaluate_row("page_view", &zone2, &row_index);
+    assert!(!result2, "Should fail when IN condition doesn't match");
+
+    // Test with Compare condition failing
+    let mut payload_fields3 = HashMap::new();
+    payload_fields3.insert("id".to_string(), vec!["2".to_string()]);
+    payload_fields3.insert("status".to_string(), vec!["pending".to_string()]); // Not "active"
+
+    let zone3 =
+        create_zone_with_payload(0, "seg1", &["ctx1"], &["user1"], &[1000], &payload_fields3);
+
+    let result3 = evaluator.evaluate_row("page_view", &zone3, &row_index);
+    assert!(!result3, "Should fail when Compare condition doesn't match");
+}
+
+#[tokio::test]
+async fn test_in_clause_combined_with_or() {
+    // Test: page_view.id IN (1, 2) OR page_view.status = "active"
+    // OR logic should now be preserved correctly
+    let where_clause = Expr::Or(
+        Box::new(Expr::In {
+            field: "page_view.id".to_string(),
+            values: vec![json!(1), json!(2)],
+        }),
+        Box::new(Expr::Compare {
+            field: "page_view.status".to_string(),
+            op: CompareOp::Eq,
+            value: json!("active"),
+        }),
+    );
+
+    let event_types = vec!["page_view".to_string()];
+    let registry = create_test_registry(&[("page_view", &["id", "status"])]).await;
+    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry)
+        .await
+        .expect("Should create evaluator");
+
+    // Create zone with both conditions matching (should pass)
+    let mut payload_fields1 = HashMap::new();
+    payload_fields1.insert("id".to_string(), vec!["2".to_string()]);
+    payload_fields1.insert("status".to_string(), vec!["active".to_string()]);
+
+    let zone1 =
+        create_zone_with_payload(0, "seg1", &["ctx1"], &["user1"], &[1000], &payload_fields1);
+
+    let row_index = RowIndex {
+        zone_idx: 0,
+        row_idx: 0,
+    };
+
+    // Should pass: both conditions match
+    let result1 = evaluator.evaluate_row("page_view", &zone1, &row_index);
+    assert!(result1, "Should pass when both conditions match");
+
+    // Create zone with only IN condition matching (should pass with OR logic)
+    let mut payload_fields2 = HashMap::new();
+    payload_fields2.insert("id".to_string(), vec!["2".to_string()]);
+    payload_fields2.insert("status".to_string(), vec!["pending".to_string()]); // Not "active"
+
+    let zone2 =
+        create_zone_with_payload(0, "seg1", &["ctx1"], &["user1"], &[1000], &payload_fields2);
+
+    // Should pass: one condition matches (OR logic)
+    let result2 = evaluator.evaluate_row("page_view", &zone2, &row_index);
+    assert!(result2, "Should pass when one condition matches (OR logic)");
+
+    // Create zone with only status matching (should pass with OR logic)
+    let mut payload_fields3 = HashMap::new();
+    payload_fields3.insert("id".to_string(), vec!["5".to_string()]); // Not in [1,2]
+    payload_fields3.insert("status".to_string(), vec!["active".to_string()]);
+
+    let zone3 =
+        create_zone_with_payload(0, "seg1", &["ctx1"], &["user1"], &[1000], &payload_fields3);
+
+    // Should pass: one condition matches (OR logic)
+    let result3 = evaluator.evaluate_row("page_view", &zone3, &row_index);
+    assert!(result3, "Should pass when status matches (OR logic)");
+
+    // Create zone with neither condition matching (should fail)
+    let mut payload_fields4 = HashMap::new();
+    payload_fields4.insert("id".to_string(), vec!["5".to_string()]); // Not in [1,2]
+    payload_fields4.insert("status".to_string(), vec!["pending".to_string()]); // Not "active"
+
+    let zone4 =
+        create_zone_with_payload(0, "seg1", &["ctx1"], &["user1"], &[1000], &payload_fields4);
+
+    // Should fail: neither condition matches
+    let result4 = evaluator.evaluate_row("page_view", &zone4, &row_index);
+    assert!(!result4, "Should fail when neither condition matches");
+}
+
+#[tokio::test]
+async fn test_in_clause_combined_with_not() {
+    // Test: NOT (page_view.id IN (1, 2, 3))
+    // NOT logic should now be preserved correctly
+    let where_clause = Expr::Not(Box::new(Expr::In {
+        field: "page_view.id".to_string(),
+        values: vec![json!(1), json!(2), json!(3)],
+    }));
+
+    let event_types = vec!["page_view".to_string()];
+    let registry = create_test_registry(&[("page_view", &["id"])]).await;
+    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry)
+        .await
+        .expect("Should create evaluator");
+
+    // Create zone with id in list (should fail with NOT logic)
+    let mut payload_fields = HashMap::new();
+    payload_fields.insert("id".to_string(), vec!["2".to_string()]); // In [1,2,3]
+
+    let zone = create_zone_with_payload(0, "seg1", &["ctx1"], &["user1"], &[1000], &payload_fields);
+
+    let row_index = RowIndex {
+        zone_idx: 0,
+        row_idx: 0,
+    };
+
+    // Should fail: id=2 is in [1,2,3], so NOT(id IN [1,2,3]) is false
+    let result = evaluator.evaluate_row("page_view", &zone, &row_index);
+    assert!(!result, "Should fail when id is in IN list (NOT logic)");
+
+    // Test with id not in list (should pass with NOT logic)
+    let mut payload_fields2 = HashMap::new();
+    payload_fields2.insert("id".to_string(), vec!["5".to_string()]); // Not in [1,2,3]
+
+    let zone2 =
+        create_zone_with_payload(0, "seg1", &["ctx1"], &["user1"], &[1000], &payload_fields2);
+
+    // Should pass: id=5 is not in [1,2,3], so NOT(id IN [1,2,3]) is true
+    let result2 = evaluator.evaluate_row("page_view", &zone2, &row_index);
+    assert!(result2, "Should pass when id is not in IN list (NOT logic)");
+}
+
+#[tokio::test]
+async fn test_in_clause_ambiguous_field_error() {
+    // Test that ambiguous IN fields (without event prefix) that exist in multiple event types
+    // cause an error
+    let where_clause = Expr::In {
+        field: "status".to_string(), // Common field without prefix
+        values: vec![json!("active"), json!("completed")],
+    };
+
+    let event_types = vec!["order_created".to_string(), "payment_failed".to_string()];
+    let registry = create_test_registry(&[
+        ("order_created", &["status"]),
+        ("payment_failed", &["status"]), // Both have "status" field
+    ])
+    .await;
+
+    let result = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry).await;
+
+    assert!(result.is_err(), "Should return error for ambiguous IN field");
+    if let Err(error_msg) = result {
+        assert!(
+            error_msg.contains("Ambiguous field 'status'"),
+            "Error message should mention ambiguous field"
+        );
+        assert!(
+            error_msg.contains("order_created") && error_msg.contains("payment_failed"),
+            "Error message should mention both event types"
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_in_clause_non_ambiguous_field_passes() {
+    // Test that a common IN field that exists in only one event type doesn't cause an error
+    let where_clause = Expr::In {
+        field: "status".to_string(),
+        values: vec![json!("active"), json!("completed")],
+    };
+
+    let event_types = vec!["order_created".to_string(), "payment_failed".to_string()];
+    let registry = create_test_registry(&[
+        ("order_created", &["status"]),
+        ("payment_failed", &["amount"]), // payment_failed has amount but not status
+    ])
+    .await;
+
+    let result = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry).await;
+
+    assert!(
+        result.is_ok(),
+        "Should not return error when IN field is not ambiguous"
+    );
+}
+
+#[tokio::test]
+async fn test_in_clause_with_multiple_event_types() {
+    // Test: page_view.id IN (1, 2) AND order_created.status IN ("done", "pending")
+    let where_clause = Expr::And(
+        Box::new(Expr::In {
+            field: "page_view.id".to_string(),
+            values: vec![json!(1), json!(2)],
+        }),
+        Box::new(Expr::In {
+            field: "order_created.status".to_string(),
+            values: vec![json!("done"), json!("pending")],
+        }),
+    );
+
+    let event_types = vec!["page_view".to_string(), "order_created".to_string()];
+    let registry =
+        create_test_registry(&[("page_view", &["id"]), ("order_created", &["status"])]).await;
+    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry)
+        .await
+        .expect("Should create evaluator");
+
+    // Create zones for both event types
+    let mut page_payload = HashMap::new();
+    page_payload.insert("id".to_string(), vec!["2".to_string()]);
+
+    let page_zone =
+        create_zone_with_payload(0, "seg1", &["ctx1"], &["user1"], &[1000], &page_payload);
+
+    let mut order_payload = HashMap::new();
+    order_payload.insert("status".to_string(), vec!["done".to_string()]);
+
+    let order_zone =
+        create_zone_with_payload(0, "seg1", &["ctx2"], &["user1"], &[1500], &order_payload);
+
+    let row_index = RowIndex {
+        zone_idx: 0,
+        row_idx: 0,
+    };
+
+    // Both should pass
+    let page_result = evaluator.evaluate_row("page_view", &page_zone, &row_index);
+    let order_result = evaluator.evaluate_row("order_created", &order_zone, &row_index);
+
+    assert!(page_result, "page_view should pass when id is in IN list");
+    assert!(order_result, "order_created should pass when status is in IN list");
+}
+
+#[tokio::test]
+async fn test_in_clause_with_single_value() {
+    // Test: page_view.id IN (42)
+    let where_clause = Expr::In {
+        field: "page_view.id".to_string(),
+        values: vec![json!(42)],
+    };
+
+    let event_types = vec!["page_view".to_string()];
+    let registry = create_test_registry(&[("page_view", &["id"])]).await;
+    let evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry)
+        .await
+        .expect("Should create evaluator");
+
+    // Create zone with matching id
+    let mut payload_fields = HashMap::new();
+    payload_fields.insert("id".to_string(), vec!["42".to_string()]);
+
+    let zone = create_zone_with_payload(0, "seg1", &["ctx1"], &["user1"], &[1000], &payload_fields);
+
+    let row_index = RowIndex {
+        zone_idx: 0,
+        row_idx: 0,
+    };
+
+    // Should pass: id=42 is in [42]
+    let result = evaluator.evaluate_row("page_view", &zone, &row_index);
+    assert!(result, "Should pass when id matches single value in IN list");
+}

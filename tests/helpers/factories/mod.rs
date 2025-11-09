@@ -12,7 +12,7 @@ pub mod event_factory;
 pub mod execution_step_factory;
 pub mod expr_factory;
 pub mod field_xor_filter_factory;
-pub mod filter_plan_factory;
+pub mod filter_group_factory;
 pub mod group_key_factory;
 pub mod memtable_factory;
 pub mod mini_schema_factory;
@@ -50,7 +50,7 @@ pub use event_factory::EventFactory;
 pub use execution_step_factory::ExecutionStepFactory;
 pub use expr_factory::ExprFactory;
 pub use field_xor_filter_factory::FieldXorFilterFactory;
-pub use filter_plan_factory::FilterPlanFactory;
+pub use filter_group_factory::FilterGroupFactory;
 pub use group_key_factory::GroupKeyFactory;
 pub use memtable_factory::MemTableFactory;
 pub use mini_schema_factory::MiniSchemaFactory;
@@ -99,7 +99,7 @@ mod expr_factory_test;
 #[cfg(test)]
 mod field_xor_filter_factory_test;
 #[cfg(test)]
-mod filter_plan_factory_test;
+mod filter_group_factory_test;
 #[cfg(test)]
 mod group_key_factory_test;
 #[cfg(test)]

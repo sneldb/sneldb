@@ -47,6 +47,8 @@ pub struct EngineConfig {
     pub segments_per_merge: usize,
     /// Max number of shards compacted concurrently (default 1 for serial across shards)
     pub compaction_max_shard_concurrency: usize,
+    /// System info cache refresh interval in seconds (default 5)
+    pub system_info_refresh_interval: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]

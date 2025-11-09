@@ -15,9 +15,12 @@ use super::global_column_handle_cache::GlobalColumnHandleCache;
 use super::global_temporal_index_cache::GlobalFieldTemporalIndexCache;
 use super::global_zone_index_cache::{CacheOutcome, GlobalZoneIndexCache};
 use super::global_zone_surf_cache::GlobalZoneSurfCache;
+use super::global_zone_xor_filter_cache::GlobalZoneXorFilterCache;
 use super::zone_surf_cache_key::ZoneSurfCacheKey;
+use super::zone_xor_filter_cache_key::ZoneXorFilterCacheKey;
 use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
 use crate::engine::core::time::{TemporalCalendarIndex, ZoneTemporalIndex};
+use crate::engine::core::zone::zone_xor_index::ZoneXorFilterIndex;
 use crate::shared::path::absolutize;
 
 #[derive(Debug)]
@@ -36,6 +39,8 @@ pub struct QueryCaches {
         Mutex<HashMap<(String, String, String, u32), Arc<DecompressedBlock>>>,
     // Per-query memoization for zone surf filters
     zone_surf_by_key: Mutex<HashMap<ZoneSurfCacheKey, Arc<ZoneSurfFilter>>>,
+    // Per-query memoization for zone XOR filter indexes
+    zone_xor_filter_by_key: Mutex<HashMap<ZoneXorFilterCacheKey, Arc<ZoneXorFilterIndex>>>,
     // Per-query memoization for field-aware calendars and temporal indexes
     field_calendar_by_key: Mutex<HashMap<(String, String, String), Arc<TemporalCalendarIndex>>>,
     field_temporal_index_by_key:
@@ -64,6 +69,7 @@ impl QueryCaches {
             column_handle_by_key: Mutex::new(HashMap::new()),
             decompressed_block_by_key: Mutex::new(HashMap::new()),
             zone_surf_by_key: Mutex::new(HashMap::new()),
+            zone_xor_filter_by_key: Mutex::new(HashMap::new()),
             field_calendar_by_key: Mutex::new(HashMap::new()),
             field_temporal_index_by_key: Mutex::new(HashMap::new()),
             zone_meta_by_key: Mutex::new(HashMap::new()),
@@ -301,6 +307,62 @@ impl QueryCaches {
         // Memoize for subsequent lookups within this query
         let mut map = self
             .zone_surf_by_key
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        map.entry(compact_key).or_insert_with(|| Arc::clone(&arc));
+
+        Ok(arc)
+    }
+
+    pub fn get_or_load_zone_xor_filter(
+        &self,
+        segment_id: &str,
+        uid: &str,
+        field: &str,
+    ) -> Result<Arc<ZoneXorFilterIndex>, std::io::Error> {
+        let compact_key = ZoneXorFilterCacheKey::from_context(self.shard_id, segment_id, uid, field);
+
+        // Fast path: per-query memoization
+        if let Some(v) = self
+            .zone_xor_filter_by_key
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(&compact_key)
+            .cloned()
+        {
+            if tracing::enabled!(tracing::Level::INFO) {
+                tracing::info!(target: "cache::zone_xor_filter", segment_id = %segment_id, uid = %uid, field = %field, "ZoneXorFilter per-query memoization HIT");
+            }
+            return Ok(v);
+        }
+
+        // Fallback to global cache
+        let segment_dir = self.segment_dir(segment_id);
+        let (arc, outcome) = GlobalZoneXorFilterCache::instance().load_from_file(
+            compact_key,
+            segment_id,
+            uid,
+            field,
+            &segment_dir.join(format!("{}_{}.zxf", uid, field)),
+        )?;
+
+        if tracing::enabled!(tracing::Level::INFO) {
+            match outcome {
+                super::global_zone_xor_filter_cache::CacheOutcome::Hit => {
+                    tracing::info!(target: "cache::zone_xor_filter", segment_id = %segment_id, uid = %uid, field = %field, "ZoneXorFilter global cache HIT");
+                }
+                super::global_zone_xor_filter_cache::CacheOutcome::Miss => {
+                    tracing::info!(target: "cache::zone_xor_filter", segment_id = %segment_id, uid = %uid, field = %field, "ZoneXorFilter global cache MISS");
+                }
+                super::global_zone_xor_filter_cache::CacheOutcome::Reload => {
+                    tracing::info!(target: "cache::zone_xor_filter", segment_id = %segment_id, uid = %uid, field = %field, "ZoneXorFilter global cache RELOAD");
+                }
+            }
+        }
+
+        // Memoize for subsequent lookups within this query
+        let mut map = self
+            .zone_xor_filter_by_key
             .lock()
             .unwrap_or_else(|p| p.into_inner());
         map.entry(compact_key).or_insert_with(|| Arc::clone(&arc));

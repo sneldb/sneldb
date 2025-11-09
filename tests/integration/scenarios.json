@@ -2536,4 +2536,1281 @@
       { "kind": "include_all", "value": ["u1"] }
     ]
   }
+  ,
+  {
+    "name": "query_in_operator_numeric_basic",
+    "input_commands": [
+      "DEFINE in_numeric FIELDS { \"id\": \"int\", \"value\": \"int\" }",
+      "STORE in_numeric FOR ctx1 PAYLOAD {\"id\":1,\"value\":10}",
+      "STORE in_numeric FOR ctx2 PAYLOAD {\"id\":2,\"value\":20}",
+      "STORE in_numeric FOR ctx3 PAYLOAD {\"id\":3,\"value\":30}",
+      "STORE in_numeric FOR ctx4 PAYLOAD {\"id\":4,\"value\":40}",
+      "STORE in_numeric FOR ctx5 PAYLOAD {\"id\":5,\"value\":50}",
+      "FLUSH",
+      "QUERY in_numeric WHERE id IN (2, 4, 6)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "ctx2",
+          "ctx4"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "ctx1",
+          "ctx3",
+          "ctx5"
+        ]
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_string_basic",
+    "input_commands": [
+      "DEFINE in_string FIELDS { \"status\": \"string\", \"value\": \"int\" }",
+      "STORE in_string FOR s1 PAYLOAD {\"status\":\"pending\",\"value\":10}",
+      "STORE in_string FOR s2 PAYLOAD {\"status\":\"active\",\"value\":20}",
+      "STORE in_string FOR s3 PAYLOAD {\"status\":\"completed\",\"value\":30}",
+      "STORE in_string FOR s4 PAYLOAD {\"status\":\"cancelled\",\"value\":40}",
+      "FLUSH",
+      "QUERY in_string WHERE status IN (\"active\", \"completed\")"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "s2",
+          "s3"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "s1",
+          "s4"
+        ]
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_single_value",
+    "input_commands": [
+      "DEFINE in_single FIELDS { \"id\": \"int\" }",
+      "STORE in_single FOR v1 PAYLOAD {\"id\":1}",
+      "STORE in_single FOR v2 PAYLOAD {\"id\":2}",
+      "STORE in_single FOR v3 PAYLOAD {\"id\":3}",
+      "FLUSH",
+      "QUERY in_single WHERE id IN (2)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "v2"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "v1",
+          "v3"
+        ]
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_no_matches",
+    "input_commands": [
+      "DEFINE in_no_match FIELDS { \"id\": \"int\" }",
+      "STORE in_no_match FOR n1 PAYLOAD {\"id\":1}",
+      "STORE in_no_match FOR n2 PAYLOAD {\"id\":2}",
+      "STORE in_no_match FOR n3 PAYLOAD {\"id\":3}",
+      "FLUSH",
+      "QUERY in_no_match WHERE id IN (10, 20, 30)"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "No matching events found"
+    }
+  }
+  ,
+  {
+    "name": "query_in_operator_with_and",
+    "input_commands": [
+      "DEFINE in_and FIELDS { \"id\": \"int\", \"status\": \"string\" }",
+      "STORE in_and FOR a1 PAYLOAD {\"id\":1,\"status\":\"active\"}",
+      "STORE in_and FOR a2 PAYLOAD {\"id\":2,\"status\":\"active\"}",
+      "STORE in_and FOR a3 PAYLOAD {\"id\":3,\"status\":\"inactive\"}",
+      "STORE in_and FOR a4 PAYLOAD {\"id\":4,\"status\":\"active\"}",
+      "FLUSH",
+      "QUERY in_and WHERE id IN (2, 4, 6) AND status=\"active\""
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "a2",
+          "a4"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "a1",
+          "a3"
+        ]
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_with_or",
+    "input_commands": [
+      "DEFINE in_or FIELDS { \"id\": \"int\", \"category\": \"string\" }",
+      "STORE in_or FOR o1 PAYLOAD {\"id\":1,\"category\":\"A\"}",
+      "STORE in_or FOR o2 PAYLOAD {\"id\":2,\"category\":\"A\"}",
+      "STORE in_or FOR o3 PAYLOAD {\"id\":3,\"category\":\"A\"}",
+      "STORE in_or FOR o4 PAYLOAD {\"id\":6,\"category\":\"B\"}",
+      "STORE in_or FOR o5 PAYLOAD {\"id\":7,\"category\":\"B\"}",
+      "FLUSH",
+      "QUERY in_or WHERE id IN (1, 2, 3) OR category=\"B\""
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "o1",
+          "o2",
+          "o3",
+          "o4",
+          "o5"
+        ]
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_with_not",
+    "input_commands": [
+      "DEFINE in_not FIELDS { \"id\": \"int\" }",
+      "STORE in_not FOR n1 PAYLOAD {\"id\":1}",
+      "STORE in_not FOR n2 PAYLOAD {\"id\":2}",
+      "STORE in_not FOR n3 PAYLOAD {\"id\":3}",
+      "STORE in_not FOR n4 PAYLOAD {\"id\":4}",
+      "STORE in_not FOR n5 PAYLOAD {\"id\":5}",
+      "FLUSH",
+      "QUERY in_not WHERE NOT id IN (2, 4, 6)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "n1",
+          "n3",
+          "n5"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "n2",
+          "n4"
+        ]
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_with_order_by_limit",
+    "input_commands": [
+      "DEFINE in_order FIELDS { \"id\": \"int\", \"score\": \"int\" }",
+      "STORE in_order FOR ord1 PAYLOAD {\"id\":2,\"score\":20}",
+      "STORE in_order FOR ord2 PAYLOAD {\"id\":5,\"score\":50}",
+      "STORE in_order FOR ord3 PAYLOAD {\"id\":8,\"score\":80}",
+      "STORE in_order FOR ord4 PAYLOAD {\"id\":1,\"score\":10}",
+      "STORE in_order FOR ord5 PAYLOAD {\"id\":9,\"score\":90}",
+      "FLUSH",
+      "QUERY in_order WHERE id IN (2, 5, 8, 1, 9) ORDER BY score DESC LIMIT 3"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "\"score\":90",
+          "\"score\":80",
+          "\"score\":50"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "\"score\":20",
+          "\"score\":10"
+        ]
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_with_aggregation",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE in_agg FIELDS { \"region\": \"string\", \"amount\": \"int\" }",
+      "STORE in_agg FOR agg1 PAYLOAD {\"region\":\"US\",\"amount\":10}",
+      "STORE in_agg FOR agg2 PAYLOAD {\"region\":\"EU\",\"amount\":20}",
+      "STORE in_agg FOR agg3 PAYLOAD {\"region\":\"ASIA\",\"amount\":30}",
+      "STORE in_agg FOR agg4 PAYLOAD {\"region\":\"US\",\"amount\":40}",
+      "STORE in_agg FOR agg5 PAYLOAD {\"region\":\"EU\",\"amount\":50}",
+      "FLUSH",
+      "QUERY in_agg WHERE region IN (\"US\", \"EU\") COUNT, TOTAL amount BY region"
+    ],
+    "matchers": [
+      {
+        "kind": "include",
+        "value": "\"US\",2,50"
+      },
+      {
+        "kind": "include",
+        "value": "\"EU\",2,70"
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "ASIA"
+        ]
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_negative_numbers",
+    "input_commands": [
+      "DEFINE in_neg FIELDS { \"id\": \"int\", \"value\": \"int\" }",
+      "STORE in_neg FOR neg1 PAYLOAD {\"id\":-5,\"value\":10}",
+      "STORE in_neg FOR neg2 PAYLOAD {\"id\":-3,\"value\":20}",
+      "STORE in_neg FOR neg3 PAYLOAD {\"id\":0,\"value\":30}",
+      "STORE in_neg FOR neg4 PAYLOAD {\"id\":2,\"value\":40}",
+      "STORE in_neg FOR neg5 PAYLOAD {\"id\":4,\"value\":50}",
+      "FLUSH",
+      "QUERY in_neg WHERE id IN (-3, -1, 0, 2, 4)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "neg2",
+          "neg3",
+          "neg4",
+          "neg5"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "neg1"
+        ]
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_memtable_only",
+    "config": {
+      "engine": { "fill_factor": 100 }
+    },
+    "input_commands": [
+      "DEFINE in_mem FIELDS { \"id\": \"int\" }",
+      "STORE in_mem FOR mem1 PAYLOAD {\"id\":1}",
+      "STORE in_mem FOR mem2 PAYLOAD {\"id\":2}",
+      "STORE in_mem FOR mem3 PAYLOAD {\"id\":3}",
+      "STORE in_mem FOR mem4 PAYLOAD {\"id\":4}",
+      "QUERY in_mem WHERE id IN (2, 4)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "mem2",
+          "mem4"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "mem1",
+          "mem3"
+        ]
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_numeric_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE in_stream_num FIELDS { \"id\": \"int\", \"value\": \"int\" }",
+      "STORE in_stream_num FOR s1 PAYLOAD {\"id\":1,\"value\":10}",
+      "STORE in_stream_num FOR s2 PAYLOAD {\"id\":2,\"value\":20}",
+      "STORE in_stream_num FOR s3 PAYLOAD {\"id\":3,\"value\":30}",
+      "STORE in_stream_num FOR s4 PAYLOAD {\"id\":4,\"value\":40}",
+      "STORE in_stream_num FOR s5 PAYLOAD {\"id\":5,\"value\":50}",
+      "FLUSH",
+      "QUERY in_stream_num WHERE id IN (2, 4, 6)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "s2",
+          "s4"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "s1",
+          "s3",
+          "s5"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_string_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE in_stream_str FIELDS { \"status\": \"string\", \"priority\": \"int\" }",
+      "STORE in_stream_str FOR str1 PAYLOAD {\"status\":\"pending\",\"priority\":1}",
+      "STORE in_stream_str FOR str2 PAYLOAD {\"status\":\"active\",\"priority\":2}",
+      "STORE in_stream_str FOR str3 PAYLOAD {\"status\":\"completed\",\"priority\":3}",
+      "STORE in_stream_str FOR str4 PAYLOAD {\"status\":\"cancelled\",\"priority\":4}",
+      "FLUSH",
+      "QUERY in_stream_str WHERE status IN (\"active\", \"completed\")"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "str2",
+          "str3"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "str1",
+          "str4"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_with_and_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE in_and_stream FIELDS { \"id\": \"int\", \"status\": \"string\" }",
+      "STORE in_and_stream FOR as1 PAYLOAD {\"id\":1,\"status\":\"active\"}",
+      "STORE in_and_stream FOR as2 PAYLOAD {\"id\":2,\"status\":\"active\"}",
+      "STORE in_and_stream FOR as3 PAYLOAD {\"id\":3,\"status\":\"inactive\"}",
+      "STORE in_and_stream FOR as4 PAYLOAD {\"id\":4,\"status\":\"active\"}",
+      "FLUSH",
+      "QUERY in_and_stream WHERE id IN (2, 4, 6) AND status=\"active\""
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "as2",
+          "as4"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "as1",
+          "as3"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_with_not_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE in_not_stream FIELDS { \"id\": \"int\" }",
+      "STORE in_not_stream FOR ns1 PAYLOAD {\"id\":1}",
+      "STORE in_not_stream FOR ns2 PAYLOAD {\"id\":2}",
+      "STORE in_not_stream FOR ns3 PAYLOAD {\"id\":3}",
+      "STORE in_not_stream FOR ns4 PAYLOAD {\"id\":4}",
+      "STORE in_not_stream FOR ns5 PAYLOAD {\"id\":5}",
+      "FLUSH",
+      "QUERY in_not_stream WHERE NOT id IN (2, 4, 6)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "ns1",
+          "ns3",
+          "ns5"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "ns2",
+          "ns4"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_with_order_by_limit_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE in_order_stream FIELDS { \"id\": \"int\", \"score\": \"int\" }",
+      "STORE in_order_stream FOR os1 PAYLOAD {\"id\":2,\"score\":20}",
+      "STORE in_order_stream FOR os2 PAYLOAD {\"id\":5,\"score\":50}",
+      "STORE in_order_stream FOR os3 PAYLOAD {\"id\":8,\"score\":80}",
+      "STORE in_order_stream FOR os4 PAYLOAD {\"id\":1,\"score\":10}",
+      "STORE in_order_stream FOR os5 PAYLOAD {\"id\":9,\"score\":90}",
+      "FLUSH",
+      "QUERY in_order_stream WHERE id IN (2, 5, 8, 1, 9) ORDER BY score DESC LIMIT 3"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "os5",
+          "os3",
+          "os2"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "os1",
+          "os4"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_memtable_and_segment_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE in_mix_stream FIELDS { \"id\": \"int\" }",
+      "STORE in_mix_stream FOR seg1 PAYLOAD {\"id\":1}",
+      "STORE in_mix_stream FOR seg2 PAYLOAD {\"id\":2}",
+      "FLUSH",
+      "STORE in_mix_stream FOR mem1 PAYLOAD {\"id\":3}",
+      "STORE in_mix_stream FOR mem2 PAYLOAD {\"id\":4}",
+      "QUERY in_mix_stream WHERE id IN (2, 4)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "seg2",
+          "mem2"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "seg1",
+          "mem1"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_with_or_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE in_or_stream FIELDS { \"id\": \"int\", \"category\": \"string\" }",
+      "STORE in_or_stream FOR ors1 PAYLOAD {\"id\":1,\"category\":\"A\"}",
+      "STORE in_or_stream FOR ors2 PAYLOAD {\"id\":2,\"category\":\"A\"}",
+      "STORE in_or_stream FOR ors3 PAYLOAD {\"id\":3,\"category\":\"A\"}",
+      "STORE in_or_stream FOR ors4 PAYLOAD {\"id\":6,\"category\":\"B\"}",
+      "STORE in_or_stream FOR ors5 PAYLOAD {\"id\":7,\"category\":\"B\"}",
+      "FLUSH",
+      "QUERY in_or_stream WHERE id IN (1, 2, 3) OR category=\"B\""
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "ors1",
+          "ors2",
+          "ors3",
+          "ors4",
+          "ors5"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_sequence_followed_by_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"status\": \"string\" }",
+      "STORE page_view FOR u1 PAYLOAD {\"page\":\"/checkout\",\"user_id\":\"u1\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\",\"status\":\"done\"}",
+      "STORE page_view FOR u2 PAYLOAD {\"page\":\"/home\",\"user_id\":\"u2\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u2 PAYLOAD {\"order_id\":2,\"user_id\":\"u2\",\"status\":\"done\"}",
+      "STORE page_view FOR u3 PAYLOAD {\"page\":\"/checkout\",\"user_id\":\"u3\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u3 PAYLOAD {\"order_id\":3,\"user_id\":\"u3\",\"status\":\"pending\"}",
+      "FLUSH",
+      "QUERY page_view FOLLOWED BY order_created LINKED BY user_id WHERE order_created.status IN (\"done\", \"completed\")"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "u1",
+          "u2"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "u3"
+        ]
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_sequence_with_event_specific_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\" }",
+      "STORE page_view FOR u1 PAYLOAD {\"page\":\"/checkout\",\"user_id\":\"u1\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\"}",
+      "STORE page_view FOR u2 PAYLOAD {\"page\":\"/home\",\"user_id\":\"u2\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u2 PAYLOAD {\"order_id\":2,\"user_id\":\"u2\"}",
+      "STORE page_view FOR u3 PAYLOAD {\"page\":\"/product\",\"user_id\":\"u3\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u3 PAYLOAD {\"order_id\":3,\"user_id\":\"u3\"}",
+      "FLUSH",
+      "QUERY page_view FOLLOWED BY order_created LINKED BY user_id WHERE page_view.page IN (\"/checkout\", \"/product\")"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "u1",
+          "u3"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "u2"
+        ]
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_multiple_in_clauses_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE multi_in FIELDS { \"id\": \"int\", \"status\": \"string\", \"region\": \"string\" }",
+      "STORE multi_in FOR mi1 PAYLOAD {\"id\":1,\"status\":\"active\",\"region\":\"US\"}",
+      "STORE multi_in FOR mi2 PAYLOAD {\"id\":2,\"status\":\"active\",\"region\":\"EU\"}",
+      "STORE multi_in FOR mi3 PAYLOAD {\"id\":3,\"status\":\"pending\",\"region\":\"US\"}",
+      "STORE multi_in FOR mi4 PAYLOAD {\"id\":4,\"status\":\"active\",\"region\":\"ASIA\"}",
+      "STORE multi_in FOR mi5 PAYLOAD {\"id\":5,\"status\":\"completed\",\"region\":\"EU\"}",
+      "FLUSH",
+      "QUERY multi_in WHERE id IN (1, 2, 3) AND status IN (\"active\", \"pending\") AND region IN (\"US\", \"EU\")"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "mi1",
+          "mi2",
+          "mi3"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "mi4",
+          "mi5"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_with_temporal_field_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE in_temporal FIELDS { \"id\": \"int\", \"created_at\": \"datetime\", \"status\": \"string\" }",
+      "STORE in_temporal FOR t1 PAYLOAD {\"id\":1,\"created_at\":\"2025-01-01T00:00:00Z\",\"status\":\"active\"}",
+      "STORE in_temporal FOR t2 PAYLOAD {\"id\":2,\"created_at\":\"2025-01-01T00:00:01Z\",\"status\":\"active\"}",
+      "STORE in_temporal FOR t3 PAYLOAD {\"id\":3,\"created_at\":\"2025-01-01T00:00:02Z\",\"status\":\"pending\"}",
+      "STORE in_temporal FOR t4 PAYLOAD {\"id\":4,\"created_at\":\"2025-01-01T00:00:03Z\",\"status\":\"active\"}",
+      "FLUSH",
+      "QUERY in_temporal WHERE created_at IN (\"2025-01-01T00:00:00Z\", \"2025-01-01T00:00:02Z\", \"2025-01-01T00:00:04Z\")"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "t1",
+          "t3"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "t2",
+          "t4"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_complex_and_or_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE complex_in FIELDS { \"id\": \"int\", \"category\": \"string\", \"priority\": \"int\" }",
+      "STORE complex_in FOR c1 PAYLOAD {\"id\":1,\"category\":\"A\",\"priority\":1}",
+      "STORE complex_in FOR c2 PAYLOAD {\"id\":2,\"category\":\"B\",\"priority\":2}",
+      "STORE complex_in FOR c3 PAYLOAD {\"id\":3,\"category\":\"A\",\"priority\":3}",
+      "STORE complex_in FOR c4 PAYLOAD {\"id\":4,\"category\":\"C\",\"priority\":1}",
+      "STORE complex_in FOR c5 PAYLOAD {\"id\":5,\"category\":\"B\",\"priority\":3}",
+      "FLUSH",
+      "QUERY complex_in WHERE (id IN (1, 2, 3) AND category IN (\"A\", \"B\")) OR priority IN (3)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "c1",
+          "c2",
+          "c3",
+          "c5"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "c4"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_with_aggregation_group_by_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE in_agg_group FIELDS { \"region\": \"string\", \"amount\": \"int\", \"status\": \"string\" }",
+      "STORE in_agg_group FOR ag1 PAYLOAD {\"region\":\"US\",\"amount\":10,\"status\":\"active\"}",
+      "STORE in_agg_group FOR ag2 PAYLOAD {\"region\":\"US\",\"amount\":20,\"status\":\"pending\"}",
+      "STORE in_agg_group FOR ag3 PAYLOAD {\"region\":\"EU\",\"amount\":30,\"status\":\"active\"}",
+      "STORE in_agg_group FOR ag4 PAYLOAD {\"region\":\"EU\",\"amount\":40,\"status\":\"completed\"}",
+      "STORE in_agg_group FOR ag5 PAYLOAD {\"region\":\"ASIA\",\"amount\":50,\"status\":\"active\"}",
+      "FLUSH",
+      "QUERY in_agg_group WHERE status IN (\"active\", \"pending\") COUNT, AVG amount BY region"
+    ],
+    "matchers": [
+      {
+        "kind": "include",
+        "value": "\"US\",2,15.0"
+      },
+      {
+        "kind": "include",
+        "value": "\"EU\",1,30.0"
+      },
+      {
+        "kind": "include",
+        "value": "\"ASIA\",1,50.0"
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_in_operator_sequence_with_in_and_not_streaming",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
+      "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"status\": \"string\" }",
+      "STORE page_view FOR u1 PAYLOAD {\"page\":\"/checkout\",\"user_id\":\"u1\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\",\"status\":\"done\"}",
+      "STORE page_view FOR u2 PAYLOAD {\"page\":\"/checkout\",\"user_id\":\"u2\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u2 PAYLOAD {\"order_id\":2,\"user_id\":\"u2\",\"status\":\"pending\"}",
+      "STORE page_view FOR u3 PAYLOAD {\"page\":\"/home\",\"user_id\":\"u3\"}",
+      "SLEEP 1000",
+      "STORE order_created FOR u3 PAYLOAD {\"order_id\":3,\"user_id\":\"u3\",\"status\":\"done\"}",
+      "FLUSH",
+      "QUERY page_view FOLLOWED BY order_created LINKED BY user_id WHERE page_view.page IN (\"/checkout\", \"/product\") AND NOT order_created.status IN (\"pending\", \"cancelled\")"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "u1"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "u2",
+          "u3"
+        ]
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_parentheses_with_or_and_and",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE paren_or_and FIELDS { \"id\": \"int\", \"status\": \"string\", \"priority\": \"int\" }",
+      "STORE paren_or_and FOR ctx1 PAYLOAD {\"id\":1,\"status\":\"active\",\"priority\":3}",
+      "STORE paren_or_and FOR ctx2 PAYLOAD {\"id\":2,\"status\":\"pending\",\"priority\":5}",
+      "STORE paren_or_and FOR ctx3 PAYLOAD {\"id\":3,\"status\":\"active\",\"priority\":7}",
+      "STORE paren_or_and FOR ctx4 PAYLOAD {\"id\":4,\"status\":\"completed\",\"priority\":2}",
+      "STORE paren_or_and FOR ctx5 PAYLOAD {\"id\":5,\"status\":\"cancelled\",\"priority\":6}",
+      "FLUSH",
+      "QUERY paren_or_and WHERE (status = \"active\" OR status = \"pending\") AND priority > 5"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "ctx3"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "ctx1",
+          "ctx2",
+          "ctx4",
+          "ctx5"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_parentheses_nested_or_and",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE nested_paren FIELDS { \"id\": \"int\", \"status\": \"string\", \"priority\": \"int\" }",
+      "STORE nested_paren FOR n1 PAYLOAD {\"id\":1,\"status\":\"active\",\"priority\":3}",
+      "STORE nested_paren FOR n2 PAYLOAD {\"id\":2,\"status\":\"pending\",\"priority\":5}",
+      "STORE nested_paren FOR n3 PAYLOAD {\"id\":3,\"status\":\"active\",\"priority\":7}",
+      "STORE nested_paren FOR n4 PAYLOAD {\"id\":4,\"status\":\"completed\",\"priority\":6}",
+      "STORE nested_paren FOR n5 PAYLOAD {\"id\":5,\"status\":\"cancelled\",\"priority\":4}",
+      "FLUSH",
+      "QUERY nested_paren WHERE (status = \"active\" OR status = \"pending\") AND (priority > 4 OR priority < 2)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "n2",
+          "n3"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "n1",
+          "n4",
+          "n5"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_parentheses_or_different_fields",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE diff_fields FIELDS { \"id\": \"int\", \"status\": \"string\", \"category\": \"string\" }",
+      "STORE diff_fields FOR d1 PAYLOAD {\"id\":1,\"status\":\"active\",\"category\":\"A\"}",
+      "STORE diff_fields FOR d2 PAYLOAD {\"id\":2,\"status\":\"pending\",\"category\":\"B\"}",
+      "STORE diff_fields FOR d3 PAYLOAD {\"id\":3,\"status\":\"completed\",\"category\":\"A\"}",
+      "STORE diff_fields FOR d4 PAYLOAD {\"id\":4,\"status\":\"active\",\"category\":\"C\"}",
+      "FLUSH",
+      "QUERY diff_fields WHERE (status = \"active\" OR category = \"B\")"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "d1",
+          "d2",
+          "d4"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "d3"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_parentheses_triple_nested",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE triple_nest FIELDS { \"id\": \"int\", \"status\": \"string\", \"priority\": \"int\", \"category\": \"string\" }",
+      "STORE triple_nest FOR t1 PAYLOAD {\"id\":1,\"status\":\"active\",\"priority\":3,\"category\":\"A\"}",
+      "STORE triple_nest FOR t2 PAYLOAD {\"id\":2,\"status\":\"pending\",\"priority\":5,\"category\":\"B\"}",
+      "STORE triple_nest FOR t3 PAYLOAD {\"id\":3,\"status\":\"active\",\"priority\":7,\"category\":\"A\"}",
+      "STORE triple_nest FOR t4 PAYLOAD {\"id\":4,\"status\":\"completed\",\"priority\":6,\"category\":\"B\"}",
+      "FLUSH",
+      "QUERY triple_nest WHERE ((status = \"active\" OR status = \"pending\") AND priority > 4) OR category = \"A\""
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "t1",
+          "t2",
+          "t3"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "t4"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_parentheses_with_in_operator",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE paren_in FIELDS { \"id\": \"int\", \"status\": \"string\", \"priority\": \"int\" }",
+      "STORE paren_in FOR pi1 PAYLOAD {\"id\":1,\"status\":\"active\",\"priority\":3}",
+      "STORE paren_in FOR pi2 PAYLOAD {\"id\":2,\"status\":\"pending\",\"priority\":5}",
+      "STORE paren_in FOR pi3 PAYLOAD {\"id\":3,\"status\":\"active\",\"priority\":7}",
+      "STORE paren_in FOR pi4 PAYLOAD {\"id\":4,\"status\":\"completed\",\"priority\":2}",
+      "FLUSH",
+      "QUERY paren_in WHERE (id IN (1, 2, 3) AND status = \"active\") OR priority > 6"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "pi1",
+          "pi3"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "pi2",
+          "pi4"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_parentheses_multiple_and_or",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE multi_and_or FIELDS { \"id\": \"int\", \"status\": \"string\", \"priority\": \"int\", \"category\": \"string\" }",
+      "STORE multi_and_or FOR m1 PAYLOAD {\"id\":1,\"status\":\"active\",\"priority\":3,\"category\":\"A\"}",
+      "STORE multi_and_or FOR m2 PAYLOAD {\"id\":2,\"status\":\"pending\",\"priority\":5,\"category\":\"B\"}",
+      "STORE multi_and_or FOR m3 PAYLOAD {\"id\":3,\"status\":\"active\",\"priority\":7,\"category\":\"A\"}",
+      "STORE multi_and_or FOR m4 PAYLOAD {\"id\":4,\"status\":\"completed\",\"priority\":6,\"category\":\"B\"}",
+      "STORE multi_and_or FOR m5 PAYLOAD {\"id\":5,\"status\":\"cancelled\",\"priority\":4,\"category\":\"C\"}",
+      "FLUSH",
+      "QUERY multi_and_or WHERE (status = \"active\" OR status = \"pending\") AND (priority > 4 OR category = \"A\")"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "m1",
+          "m2",
+          "m3"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "m4",
+          "m5"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_parentheses_with_not_and_or",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE not_paren FIELDS { \"id\": \"int\", \"status\": \"string\", \"priority\": \"int\" }",
+      "STORE not_paren FOR np1 PAYLOAD {\"id\":1,\"status\":\"active\",\"priority\":3}",
+      "STORE not_paren FOR np2 PAYLOAD {\"id\":2,\"status\":\"pending\",\"priority\":5}",
+      "STORE not_paren FOR np3 PAYLOAD {\"id\":3,\"status\":\"active\",\"priority\":7}",
+      "STORE not_paren FOR np4 PAYLOAD {\"id\":4,\"status\":\"completed\",\"priority\":2}",
+      "FLUSH",
+      "QUERY not_paren WHERE NOT (status = \"active\" OR status = \"pending\") AND priority > 1"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "np4"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "np1",
+          "np2",
+          "np3"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_not_with_and_de_morgan",
+    "input_commands": [
+      "DEFINE not_and FIELDS { \"id\": \"int\", \"status\": \"string\", \"priority\": \"int\" }",
+      "STORE not_and FOR na1 PAYLOAD {\"id\":1,\"status\":\"active\",\"priority\":3}",
+      "STORE not_and FOR na2 PAYLOAD {\"id\":2,\"status\":\"active\",\"priority\":5}",
+      "STORE not_and FOR na3 PAYLOAD {\"id\":3,\"status\":\"pending\",\"priority\":3}",
+      "STORE not_and FOR na4 PAYLOAD {\"id\":4,\"status\":\"pending\",\"priority\":5}",
+      "FLUSH",
+      "QUERY not_and WHERE NOT (status = \"active\" AND priority > 4)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "na1",
+          "na3",
+          "na4"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "na2"
+        ]
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_double_negation",
+    "input_commands": [
+      "DEFINE double_not FIELDS { \"id\": \"int\", \"status\": \"string\" }",
+      "STORE double_not FOR dn1 PAYLOAD {\"id\":1,\"status\":\"active\"}",
+      "STORE double_not FOR dn2 PAYLOAD {\"id\":2,\"status\":\"pending\"}",
+      "STORE double_not FOR dn3 PAYLOAD {\"id\":3,\"status\":\"completed\"}",
+      "FLUSH",
+      "QUERY double_not WHERE NOT NOT status = \"active\""
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "dn1"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "dn2",
+          "dn3"
+        ]
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_parentheses_with_not_and_or_non_streaming",
+    "input_commands": [
+      "DEFINE not_paren_ns FIELDS { \"id\": \"int\", \"status\": \"string\", \"priority\": \"int\" }",
+      "STORE not_paren_ns FOR np1 PAYLOAD {\"id\":1,\"status\":\"active\",\"priority\":3}",
+      "STORE not_paren_ns FOR np2 PAYLOAD {\"id\":2,\"status\":\"pending\",\"priority\":5}",
+      "STORE not_paren_ns FOR np3 PAYLOAD {\"id\":3,\"status\":\"active\",\"priority\":7}",
+      "STORE not_paren_ns FOR np4 PAYLOAD {\"id\":4,\"status\":\"completed\",\"priority\":2}",
+      "FLUSH",
+      "QUERY not_paren_ns WHERE NOT (status = \"active\" OR status = \"pending\") AND priority > 1"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "np4"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "np1",
+          "np2",
+          "np3"
+        ]
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_parentheses_deeply_nested",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE deep_nest FIELDS { \"id\": \"int\", \"status\": \"string\", \"priority\": \"int\" }",
+      "STORE deep_nest FOR dn1 PAYLOAD {\"id\":1,\"status\":\"active\",\"priority\":3}",
+      "STORE deep_nest FOR dn2 PAYLOAD {\"id\":2,\"status\":\"pending\",\"priority\":5}",
+      "STORE deep_nest FOR dn3 PAYLOAD {\"id\":3,\"status\":\"active\",\"priority\":7}",
+      "STORE deep_nest FOR dn4 PAYLOAD {\"id\":4,\"status\":\"completed\",\"priority\":6}",
+      "FLUSH",
+      "QUERY deep_nest WHERE ((status = \"active\" OR status = \"pending\") AND priority > 4) OR (status = \"completed\" AND priority > 5)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "dn2",
+          "dn3",
+          "dn4"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "dn1"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
+    ]
+  }
+  ,
+  {
+    "name": "query_parentheses_or_same_field_multiple_values",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE multi_or FIELDS { \"id\": \"int\", \"status\": \"string\" }",
+      "STORE multi_or FOR mo1 PAYLOAD {\"id\":1,\"status\":\"active\"}",
+      "STORE multi_or FOR mo2 PAYLOAD {\"id\":2,\"status\":\"pending\"}",
+      "STORE multi_or FOR mo3 PAYLOAD {\"id\":3,\"status\":\"completed\"}",
+      "STORE multi_or FOR mo4 PAYLOAD {\"id\":4,\"status\":\"cancelled\"}",
+      "STORE multi_or FOR mo5 PAYLOAD {\"id\":5,\"status\":\"active\"}",
+      "FLUSH",
+      "QUERY multi_or WHERE status = \"active\" OR status = \"pending\" OR status = \"completed\""
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "mo1",
+          "mo2",
+          "mo3",
+          "mo5"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "mo4"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
+    ]
+  }
 ]

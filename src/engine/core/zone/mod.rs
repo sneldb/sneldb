@@ -9,6 +9,7 @@ pub mod selector;
 pub mod zone_artifacts;
 pub mod zone_batch_sizer;
 pub mod zone_collector;
+pub mod zone_group_collector;
 pub mod zone_combiner;
 pub mod zone_cursor;
 pub mod zone_cursor_loader;
@@ -46,6 +47,8 @@ mod segment_zone_id_test;
 mod zone_batch_sizer_test;
 #[cfg(test)]
 mod zone_collector_tests;
+#[cfg(test)]
+mod zone_group_collector_test;
 #[cfg(test)]
 mod zone_combiner_tests;
 #[cfg(test)]

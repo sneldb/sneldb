@@ -10,6 +10,8 @@ pub enum Token {
     Semicolon,          // ;
     LeftSquareBracket,  // [
     RightSquareBracket, // ]
+    LeftParen,          // (
+    RightParen,         // )
 }
 
 pub fn tokenize(input: &str) -> Vec<Token> {
@@ -50,6 +52,14 @@ pub fn tokenize(input: &str) -> Vec<Token> {
                 chars.next();
                 tokens.push(Token::RightSquareBracket);
             }
+            '(' => {
+                chars.next();
+                tokens.push(Token::LeftParen);
+            }
+            ')' => {
+                chars.next();
+                tokens.push(Token::RightParen);
+            }
             _ => {
                 let word = parse_word(&mut chars);
                 tokens.push(word);
@@ -76,8 +86,15 @@ where
             '\\' => {
                 chars.next(); // consume '\'
                 if let Some(&escaped) = chars.peek() {
-                    string.push(escaped);
                     chars.next();
+                    match escaped {
+                        'n' => string.push('\n'),
+                        't' => string.push('\t'),
+                        'r' => string.push('\r'),
+                        '\\' => string.push('\\'),
+                        '"' => string.push('"'),
+                        _ => string.push(escaped), // Unknown escape, keep as-is
+                    }
                 }
             }
             _ => {

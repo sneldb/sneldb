@@ -12,7 +12,7 @@ use crate::engine::schema::registry::SchemaRegistry;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, info, trace};
 
 /// Evaluates WHERE clauses for sequence queries with event-specific field references.
 ///
@@ -68,37 +68,35 @@ impl SequenceWhereEvaluator {
                 );
             }
 
-            // Validate field ambiguity before extracting conditions
+            // Validate field ambiguity before transforming
             Self::validate_field_ambiguity(expr, event_types, registry).await?;
 
-            // Parse WHERE clause and extract event-specific conditions
-            let conditions_by_event = Self::extract_event_conditions(expr, event_types);
+            // Transform WHERE clause for each event type, preserving logical structure (OR/NOT/AND)
+            use crate::engine::core::read::sequence::utils::transform_where_clause_for_event_type;
 
             if tracing::enabled!(tracing::Level::DEBUG) {
                 debug!(
                     target: "sneldb::sequence::where_evaluator",
-                    event_types_with_conditions = ?conditions_by_event.keys().collect::<Vec<_>>(),
-                    "Extracted event-specific conditions"
+                    "Transforming WHERE clause for each event type"
                 );
             }
 
             // Build evaluators for each event type
             for event_type in event_types {
-                if let Some(conditions) = conditions_by_event.get(event_type) {
+                if let Some(transformed_expr) =
+                    transform_where_clause_for_event_type(expr, event_type)
+                {
                     if tracing::enabled!(tracing::Level::DEBUG) {
                         debug!(
                             target: "sneldb::sequence::where_evaluator",
                             event_type = %event_type,
-                            condition_count = conditions.len(),
-                            conditions = ?conditions,
-                            "Building evaluator for event type"
+                            transformed_expr = ?transformed_expr,
+                            "Building evaluator for event type with transformed expression"
                         );
                     }
 
                     let mut builder = ConditionEvaluatorBuilder::new();
-                    for condition in conditions {
-                        builder.add_where_clause(condition);
-                    }
+                    builder.add_where_clause(&transformed_expr);
                     evaluators_by_event_type.insert(event_type.clone(), builder.into_evaluator());
                 } else {
                     if tracing::enabled!(tracing::Level::DEBUG) {
@@ -157,7 +155,10 @@ impl SequenceWhereEvaluator {
         let registry_read = registry.read().await;
         for field in &common_fields {
             // Skip core fields that are expected to exist in all event types
-            if matches!(field.as_str(), "timestamp" | "context_id" | "event_type" | "event_id") {
+            if matches!(
+                field.as_str(),
+                "timestamp" | "context_id" | "event_type" | "event_id"
+            ) {
                 continue;
             }
 
@@ -192,6 +193,12 @@ impl SequenceWhereEvaluator {
     fn collect_common_fields(expr: &Expr, common_fields: &mut HashSet<String>) {
         match expr {
             Expr::Compare { field, .. } => {
+                // Only collect fields without event prefix
+                if Self::parse_event_field(field).is_none() {
+                    common_fields.insert(field.clone());
+                }
+            }
+            Expr::In { field, .. } => {
                 // Only collect fields without event prefix
                 if Self::parse_event_field(field).is_none() {
                     common_fields.insert(field.clone());
@@ -260,100 +267,6 @@ impl SequenceWhereEvaluator {
         }
 
         result
-    }
-
-    /// Extracts event-specific conditions from a WHERE clause expression.
-    ///
-    /// Parses expressions like `page_view.page = "/checkout"` and groups them
-    /// by event type. Fields without event prefix are applied to all event types.
-    ///
-    /// # Arguments
-    ///
-    /// * `expr` - The WHERE clause expression
-    /// * `event_types` - List of event types in the sequence
-    ///
-    /// # Returns
-    ///
-    /// Map from event type to its conditions (as Expr nodes)
-    fn extract_event_conditions(expr: &Expr, event_types: &[String]) -> HashMap<String, Vec<Expr>> {
-        let mut conditions_by_event: HashMap<String, Vec<Expr>> = HashMap::new();
-
-        Self::extract_event_conditions_recursive(expr, event_types, &mut conditions_by_event);
-
-        conditions_by_event
-    }
-
-    /// Recursively extracts event-specific conditions from an expression.
-    fn extract_event_conditions_recursive(
-        expr: &Expr,
-        event_types: &[String],
-        conditions_by_event: &mut HashMap<String, Vec<Expr>>,
-    ) {
-        match expr {
-            Expr::Compare { field, op, value } => {
-                // Check if field has event prefix (e.g., "page_view.page")
-                if let Some((event_type, field_name)) = Self::parse_event_field(field) {
-                    // Event-specific condition
-                    if event_types.contains(&event_type) {
-                        if tracing::enabled!(tracing::Level::TRACE) {
-                            trace!(
-                                target: "sneldb::sequence::where_evaluator",
-                                event_type = %event_type,
-                                field = %field_name,
-                                "Found event-specific condition"
-                            );
-                        }
-                        conditions_by_event
-                            .entry(event_type)
-                            .or_insert_with(Vec::new)
-                            .push(Expr::Compare {
-                                field: field_name,
-                                op: op.clone(),
-                                value: value.clone(),
-                            });
-                    } else if tracing::enabled!(tracing::Level::WARN) {
-                        warn!(
-                            target: "sneldb::sequence::where_evaluator",
-                            event_type = %event_type,
-                            field = %field,
-                            "Event type in WHERE clause not found in sequence"
-                        );
-                    }
-                } else {
-                    // Common field - apply to all event types
-                    if tracing::enabled!(tracing::Level::TRACE) {
-                        trace!(
-                            target: "sneldb::sequence::where_evaluator",
-                            field = %field,
-                            "Found common field condition, applying to all event types"
-                        );
-                    }
-                    for event_type in event_types {
-                        conditions_by_event
-                            .entry(event_type.clone())
-                            .or_insert_with(Vec::new)
-                            .push(Expr::Compare {
-                                field: field.clone(),
-                                op: op.clone(),
-                                value: value.clone(),
-                            });
-                    }
-                }
-            }
-            Expr::And(left, right) => {
-                Self::extract_event_conditions_recursive(left, event_types, conditions_by_event);
-                Self::extract_event_conditions_recursive(right, event_types, conditions_by_event);
-            }
-            Expr::Or(left, right) => {
-                // For OR, we need to handle it differently - for now, extract both sides
-                // TODO: Handle OR properly (may need to restructure evaluator)
-                Self::extract_event_conditions_recursive(left, event_types, conditions_by_event);
-                Self::extract_event_conditions_recursive(right, event_types, conditions_by_event);
-            }
-            Expr::Not(inner) => {
-                Self::extract_event_conditions_recursive(inner, event_types, conditions_by_event);
-            }
-        }
     }
 
     /// Parses an event-prefixed field name.

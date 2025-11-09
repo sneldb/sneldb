@@ -201,6 +201,7 @@ impl ZoneXorFilterIndex {
             filters,
         })
     }
+
 }
 
 fn parse_uid_field_from_filename(path: &Path) -> (String, String) {
@@ -221,8 +222,6 @@ fn value_to_string(value: &ScalarValue) -> Option<String> {
         ScalarValue::Timestamp(ts) => Some(ts.to_string()),
         ScalarValue::Float64(f) => Some(f.to_string()),
         ScalarValue::Boolean(b) => Some(b.to_string()),
-        // All JSON values are now Utf8 strings
-        ScalarValue::Utf8(s) => Some(s.clone()),
         _ => None,
     }
 }

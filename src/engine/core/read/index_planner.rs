@@ -1,4 +1,4 @@
-use crate::engine::core::filter::filter_plan::FilterPlan;
+use crate::engine::core::filter::filter_group::FilterGroup;
 use crate::engine::core::read::catalog::{IndexKind, IndexRegistry};
 use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::engine::schema::registry::SchemaRegistry;
@@ -24,8 +24,24 @@ impl<'a> IndexPlanner<'a> {
         }
     }
 
-    pub async fn choose(&self, plan: &FilterPlan, segment_id: &str) -> IndexStrategy {
-        let field = plan.column.clone();
+    pub async fn choose(&self, plan: &FilterGroup, segment_id: &str) -> IndexStrategy {
+        // Only single filters can have index strategies
+        let (column, operation, index_strategy) = match plan {
+            FilterGroup::Filter {
+                column,
+                operation,
+                index_strategy,
+                ..
+            } => (column.clone(), operation.clone(), index_strategy.clone()),
+            _ => return IndexStrategy::FullScan, // Logical groups use FullScan
+        };
+
+        // If the filter already has an index strategy set (e.g., FullScan for OR conditions),
+        // respect that choice instead of choosing a new one.
+        if let Some(ref strategy) = index_strategy {
+            return strategy.clone();
+        }
+        let field = column;
         // If no catalog for this segment, avoid choosing any index to prevent fs probing
         if !self.index_registry.has_catalog(segment_id) {
             return IndexStrategy::FullScan;
@@ -59,7 +75,12 @@ impl<'a> IndexPlanner<'a> {
             }
         };
         if is_temporal {
-            if matches!(plan.operation, Some(crate::command::types::CompareOp::Eq)) {
+            // IN operations require checking multiple values, which temporal range indexes can't efficiently handle.
+            // Use FullScan and let the condition evaluator filter events.
+            if matches!(operation, Some(crate::command::types::CompareOp::In)) {
+                return IndexStrategy::FullScan;
+            }
+            if matches!(operation, Some(crate::command::types::CompareOp::Eq)) {
                 return IndexStrategy::TemporalEq { field };
             } else {
                 return IndexStrategy::TemporalRange { field };
@@ -68,10 +89,7 @@ impl<'a> IndexPlanner<'a> {
 
         // Enum
         let is_enum = if let Some(uid) = &self.event_type_uid {
-            self.registry
-                .read()
-                .await
-                .is_enum_field_by_uid(uid, &plan.column)
+            self.registry.read().await.is_enum_field_by_uid(uid, &field)
         } else {
             false
         };
@@ -80,10 +98,15 @@ impl<'a> IndexPlanner<'a> {
         }
 
         // Range
-        if let Some(op) = &plan.operation {
+        if let Some(op) = &operation {
             use crate::command::types::CompareOp::*;
             if matches!(op, Gt | Gte | Lt | Lte) && kinds.contains(IndexKind::ZONE_SURF) {
                 return IndexStrategy::ZoneSuRF { field };
+            }
+            // IN operations require checking multiple values, which XOR filters can't efficiently handle.
+            // Use FullScan and let the condition evaluator filter events.
+            if matches!(op, In) {
+                return IndexStrategy::FullScan;
             }
         }
 

@@ -2,7 +2,7 @@ use crate::command::types::{CompareOp, Expr};
 use crate::engine::core::ExecutionStep;
 use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::test_helpers::factories::{
-    CommandFactory, FieldXorFilterFactory, FilterPlanFactory, QueryPlanFactory,
+    CommandFactory, FieldXorFilterFactory, FilterGroupFactory, QueryPlanFactory,
     SchemaRegistryFactory,
 };
 use serde_json::json;
@@ -58,17 +58,19 @@ async fn execution_step_resolves_candidate_zones_from_filter_and_plan() {
         .create()
         .await;
 
-    // Step 4: Create FilterPlan
-    let mut filter = FilterPlanFactory::new()
+    // Step 4: Create FilterGroup
+    let mut filter = FilterGroupFactory::new()
         .with_column("plan")
         .with_operation(CompareOp::Eq)
         .with_value(json!("premium"))
         .with_uid(&uid)
         .with_priority(2)
         .create();
-    filter.index_strategy = Some(IndexStrategy::XorPresence {
-        field: "plan".to_string(),
-    });
+    if let Some(strategy) = filter.index_strategy_mut() {
+        *strategy = Some(IndexStrategy::XorPresence {
+            field: "plan".to_string(),
+        });
+    }
 
     let xor_filter = FieldXorFilterFactory::new().with(json!("premium")).build();
 
@@ -135,15 +137,17 @@ async fn execution_step_respects_provided_segment_subset() {
         .expect("save xf");
 
     // Filter plan (plan == "yes")
-    let mut filter = FilterPlanFactory::new()
+    let mut filter = FilterGroupFactory::new()
         .with_column("plan")
         .with_operation(CompareOp::Eq)
         .with_value(json!("yes"))
         .with_uid(&uid)
         .create();
-    filter.index_strategy = Some(IndexStrategy::XorPresence {
-        field: "plan".to_string(),
-    });
+    if let Some(strategy) = filter.index_strategy_mut() {
+        *strategy = Some(IndexStrategy::XorPresence {
+            field: "plan".to_string(),
+        });
+    }
 
     let mut step = ExecutionStep::new(filter, &plan);
 
@@ -153,7 +157,7 @@ async fn execution_step_respects_provided_segment_subset() {
     assert!(step.candidate_zones.iter().all(|z| z.segment_id == "seg1"));
 
     // Only seg2 yields none
-    let f2 = FilterPlanFactory::new()
+    let f2 = FilterGroupFactory::new()
         .with_column("plan")
         .with_operation(CompareOp::Eq)
         .with_value(json!("yes"))
@@ -189,15 +193,17 @@ async fn execution_step_empty_segments_list_yields_no_zones() {
         .create()
         .await;
 
-    let mut filter = FilterPlanFactory::new()
+    let mut filter = FilterGroupFactory::new()
         .with_column("plan")
         .with_operation(CompareOp::Eq)
         .with_value(json!("x"))
         .with_uid(&uid)
         .create();
-    filter.index_strategy = Some(IndexStrategy::XorPresence {
-        field: "plan".to_string(),
-    });
+    if let Some(strategy) = filter.index_strategy_mut() {
+        *strategy = Some(IndexStrategy::XorPresence {
+            field: "plan".to_string(),
+        });
+    }
 
     let mut step = ExecutionStep::new(filter, &plan);
     step.get_candidate_zones_with_segments(None, &[]);
@@ -241,15 +247,17 @@ async fn execution_step_multiple_segments_aggregate_zones() {
         .create()
         .await;
 
-    let mut filter = FilterPlanFactory::new()
+    let mut filter = FilterGroupFactory::new()
         .with_column("plan")
         .with_operation(CompareOp::Eq)
         .with_value(json!("y"))
         .with_uid(&uid)
         .create();
-    filter.index_strategy = Some(IndexStrategy::XorPresence {
-        field: "plan".to_string(),
-    });
+    if let Some(strategy) = filter.index_strategy_mut() {
+        *strategy = Some(IndexStrategy::XorPresence {
+            field: "plan".to_string(),
+        });
+    }
     let mut step = ExecutionStep::new(filter, &plan);
     step.get_candidate_zones_with_segments(None, &["seg1".into(), "seg2".into()]);
     assert!(step.candidate_zones.len() >= 2);
@@ -309,7 +317,7 @@ async fn execution_step_context_id_respects_subset() {
         .create()
         .await;
 
-    let filter = FilterPlanFactory::new()
+    let filter = FilterGroupFactory::new()
         .with_column("context_id")
         .with_operation(CompareOp::Eq)
         .with_value(json!("ctxA"))
@@ -323,7 +331,7 @@ async fn execution_step_context_id_respects_subset() {
     assert!(step.candidate_zones.iter().all(|z| z.segment_id == "seg1"));
 
     let mut step_none = ExecutionStep::new(
-        FilterPlanFactory::new()
+        FilterGroupFactory::new()
             .with_column("context_id")
             .with_operation(CompareOp::Eq)
             .with_value(json!("ctxA"))

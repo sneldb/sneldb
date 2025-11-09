@@ -335,6 +335,12 @@ impl ZoneRangeIndex<i64> for ZoneTemporalIndex {
             CompareOp::Gte => v <= self.max_ts,
             CompareOp::Lt => v > self.min_ts,
             CompareOp::Lte => v >= self.min_ts,
+            CompareOp::In => {
+                // IN operations require multiple values and should be handled at a higher level
+                // (e.g., in filter plan or condition evaluator) where the full list is available.
+                // This method only accepts a single value, so IN should not reach here.
+                unreachable!("IN operations should not use single-value may_match")
+            }
         }
     }
 

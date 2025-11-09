@@ -6,7 +6,7 @@ use crate::engine::core::zone::selector::builder::ZoneSelectorBuilder;
 use crate::engine::core::zone::selector::selection_context::SelectionContext;
 
 use crate::test_helpers::factories::command_factory::CommandFactory;
-use crate::test_helpers::factories::filter_plan_factory::FilterPlanFactory;
+use crate::test_helpers::factories::filter_group_factory::FilterGroupFactory;
 use crate::test_helpers::factories::query_plan_factory::QueryPlanFactory;
 use crate::test_helpers::factories::schema_factory::SchemaRegistryFactory;
 
@@ -25,7 +25,7 @@ async fn builder_returns_empty_when_event_type_missing_uid() {
         .await;
 
     // FilterPlan for event_type without uid
-    let filter = FilterPlanFactory::new()
+    let filter = FilterGroupFactory::new()
         .with_column("event_type")
         .with_value(serde_json::json!("ev"))
         .create();
@@ -60,7 +60,7 @@ async fn builder_returns_all_zones_when_context_id_missing_uid() {
         .await;
 
     // FilterPlan for context_id without uid
-    let filter = FilterPlanFactory::new()
+    let filter = FilterGroupFactory::new()
         .with_column("context_id")
         .with_value(serde_json::json!("ctx"))
         .create();
@@ -106,7 +106,7 @@ async fn builder_returns_field_selector_for_regular_column() {
         .create()
         .await;
 
-    let filter = FilterPlanFactory::new()
+    let filter = FilterGroupFactory::new()
         .with_column("plan")
         .with_value(serde_json::json!("yes"))
         .with_uid(&uid)
@@ -175,7 +175,7 @@ async fn builder_routes_event_type_and_context_to_index_selector() {
         .with_segment_ids(vec!["shard-0/001".into()])
         .create()
         .await;
-    let fp = FilterPlanFactory::new()
+    let fp = FilterGroupFactory::new()
         .with_column("event_type")
         .with_operation(crate::command::types::CompareOp::Eq)
         .with_value(serde_json::json!(event_type))
@@ -193,7 +193,7 @@ async fn builder_routes_event_type_and_context_to_index_selector() {
     assert!(!zones.is_empty());
 
     // context_id filter -> IndexZoneSelector with policy AllZones
-    let fp2 = FilterPlanFactory::new()
+    let fp2 = FilterGroupFactory::new()
         .with_column("context_id")
         .with_operation(crate::command::types::CompareOp::Eq)
         .with_value(serde_json::json!("c1"))

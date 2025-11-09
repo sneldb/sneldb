@@ -1,17 +1,18 @@
-use crate::engine::core::{CandidateZone, FilterPlan, QueryCaches, QueryPlan, ZoneFinder};
+use crate::engine::core::{CandidateZone, QueryCaches, QueryPlan, ZoneFinder};
+use crate::engine::core::filter::filter_group::FilterGroup;
 use tracing::debug;
 
 /// Represents a single step in the query execution
 #[derive(Debug, Clone)]
 pub struct ExecutionStep<'a> {
-    pub filter: FilterPlan,
+    pub filter: FilterGroup,
     pub plan: &'a QueryPlan,
     pub candidate_zones: Vec<CandidateZone>,
 }
 
 impl<'a> ExecutionStep<'a> {
-    /// Create a new execution step with the provided filter plan and query plan
-    pub fn new(filter: FilterPlan, plan: &'a QueryPlan) -> Self {
+    /// Create a new execution step with the provided filter group and query plan
+    pub fn new(filter: FilterGroup, plan: &'a QueryPlan) -> Self {
         Self {
             filter,
             plan,
@@ -25,9 +26,10 @@ impl<'a> ExecutionStep<'a> {
         _caches: Option<&QueryCaches>,
         segments: &[String],
     ) {
+        let column = self.filter.column().unwrap_or("unknown");
         debug!(
             target: "sneldb::query::step",
-            column = %self.filter.column,
+            column = %column,
             segments = segments.len(),
             "Finding candidate zones (pruned segments)"
         );
@@ -44,7 +46,7 @@ impl<'a> ExecutionStep<'a> {
 
         debug!(
             target: "sneldb::query::step",
-            column = %self.filter.column,
+            column = %column,
             zones = self.candidate_zones.len(),
             "Found candidate zones (pruned segments)"
         );

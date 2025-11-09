@@ -21,7 +21,7 @@ pub struct QueryExecution<'a> {
 impl<'a> QueryExecution<'a> {
     pub fn new(plan: &'a QueryPlan) -> Self {
         let steps: Vec<ExecutionStep<'a>> = plan
-            .filter_plans
+            .filter_groups
             .iter()
             .map(|filter| ExecutionStep::new(filter.clone(), plan))
             .collect();
@@ -69,7 +69,7 @@ impl<'a> QueryExecution<'a> {
     }
 
     pub fn find_step_for_column(&self, column: &str) -> Option<&ExecutionStep<'a>> {
-        self.steps.iter().find(|step| step.filter.column == column)
+        self.steps.iter().find(|step| step.filter.column().map(|c| c == column).unwrap_or(false))
     }
 
     pub fn set_metadata(&mut self, key: String, value: String) {

@@ -291,6 +291,325 @@ mod query_peg_tests {
     }
 
     // ─────────────────────────────
+    // 5.1. Parentheses in WHERE Clauses
+    // ─────────────────────────────
+    #[test]
+    fn test_parse_query_where_simple_parentheses() {
+        let input = r#"QUERY order_created WHERE (status = "done")"#;
+        let command = parse(input);
+
+        assert_eq!(
+            command,
+            Command::Query {
+                event_type: "order_created".to_string(),
+                context_id: None,
+                since: None,
+                time_field: None,
+                sequence_time_field: None,
+                where_clause: Some(Expr::Compare {
+                    field: "status".to_string(),
+                    op: CompareOp::Eq,
+                    value: Value::String("done".to_string()),
+                }),
+                limit: None,
+                offset: None,
+                order_by: None,
+                picked_zones: None,
+                return_fields: None,
+                link_field: None,
+                aggs: None,
+                time_bucket: None,
+                group_by: None,
+                event_sequence: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_query_where_parentheses_around_and() {
+        let input = r#"QUERY order_created WHERE (id IN (1, 2, 3) AND category IN ("A", "B"))"#;
+        let command = parse(input);
+
+        assert_eq!(
+            command,
+            Command::Query {
+                event_type: "order_created".to_string(),
+                context_id: None,
+                since: None,
+                time_field: None,
+                sequence_time_field: None,
+                where_clause: Some(Expr::And(
+                    Box::new(Expr::In {
+                        field: "id".to_string(),
+                        values: vec![
+                            Value::Number(1.into()),
+                            Value::Number(2.into()),
+                            Value::Number(3.into())
+                        ],
+                    }),
+                    Box::new(Expr::In {
+                        field: "category".to_string(),
+                        values: vec![
+                            Value::String("A".to_string()),
+                            Value::String("B".to_string())
+                        ],
+                    })
+                )),
+                limit: None,
+                offset: None,
+                order_by: None,
+                picked_zones: None,
+                return_fields: None,
+                link_field: None,
+                aggs: None,
+                time_bucket: None,
+                group_by: None,
+                event_sequence: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_query_where_parentheses_with_or() {
+        let input = r#"QUERY order_created WHERE (status = "active" OR status = "pending") AND priority > 5"#;
+        let command = parse(input);
+
+        assert_eq!(
+            command,
+            Command::Query {
+                event_type: "order_created".to_string(),
+                context_id: None,
+                since: None,
+                time_field: None,
+                sequence_time_field: None,
+                where_clause: Some(Expr::And(
+                    Box::new(Expr::Or(
+                        Box::new(Expr::Compare {
+                            field: "status".to_string(),
+                            op: CompareOp::Eq,
+                            value: Value::String("active".to_string()),
+                        }),
+                        Box::new(Expr::Compare {
+                            field: "status".to_string(),
+                            op: CompareOp::Eq,
+                            value: Value::String("pending".to_string()),
+                        })
+                    )),
+                    Box::new(Expr::Compare {
+                        field: "priority".to_string(),
+                        op: CompareOp::Gt,
+                        value: Value::Number(5.into()),
+                    })
+                )),
+                limit: None,
+                offset: None,
+                order_by: None,
+                picked_zones: None,
+                return_fields: None,
+                link_field: None,
+                aggs: None,
+                time_bucket: None,
+                group_by: None,
+                event_sequence: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_query_where_nested_parentheses() {
+        let input = r#"QUERY order_created WHERE ((id IN (1, 2) AND category = "A") OR (id IN (3, 4) AND category = "B"))"#;
+        let command = parse(input);
+
+        assert_eq!(
+            command,
+            Command::Query {
+                event_type: "order_created".to_string(),
+                context_id: None,
+                since: None,
+                time_field: None,
+                sequence_time_field: None,
+                where_clause: Some(Expr::Or(
+                    Box::new(Expr::And(
+                        Box::new(Expr::In {
+                            field: "id".to_string(),
+                            values: vec![Value::Number(1.into()), Value::Number(2.into())],
+                        }),
+                        Box::new(Expr::Compare {
+                            field: "category".to_string(),
+                            op: CompareOp::Eq,
+                            value: Value::String("A".to_string()),
+                        })
+                    )),
+                    Box::new(Expr::And(
+                        Box::new(Expr::In {
+                            field: "id".to_string(),
+                            values: vec![Value::Number(3.into()), Value::Number(4.into())],
+                        }),
+                        Box::new(Expr::Compare {
+                            field: "category".to_string(),
+                            op: CompareOp::Eq,
+                            value: Value::String("B".to_string()),
+                        })
+                    ))
+                )),
+                limit: None,
+                offset: None,
+                order_by: None,
+                picked_zones: None,
+                return_fields: None,
+                link_field: None,
+                aggs: None,
+                time_bucket: None,
+                group_by: None,
+                event_sequence: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_query_where_parentheses_with_not() {
+        let input =
+            r#"QUERY order_created WHERE NOT (status = "cancelled" OR status = "refunded")"#;
+        let command = parse(input);
+
+        assert_eq!(
+            command,
+            Command::Query {
+                event_type: "order_created".to_string(),
+                context_id: None,
+                since: None,
+                time_field: None,
+                sequence_time_field: None,
+                where_clause: Some(Expr::Not(Box::new(Expr::Or(
+                    Box::new(Expr::Compare {
+                        field: "status".to_string(),
+                        op: CompareOp::Eq,
+                        value: Value::String("cancelled".to_string()),
+                    }),
+                    Box::new(Expr::Compare {
+                        field: "status".to_string(),
+                        op: CompareOp::Eq,
+                        value: Value::String("refunded".to_string()),
+                    })
+                )))),
+                limit: None,
+                offset: None,
+                order_by: None,
+                picked_zones: None,
+                return_fields: None,
+                link_field: None,
+                aggs: None,
+                time_bucket: None,
+                group_by: None,
+                event_sequence: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_query_where_complex_parentheses_expression() {
+        let input = r#"QUERY order_created WHERE (id IN (1, 2, 3) AND category IN ("A", "B")) OR priority IN (3)"#;
+        let command = parse(input);
+
+        assert_eq!(
+            command,
+            Command::Query {
+                event_type: "order_created".to_string(),
+                context_id: None,
+                since: None,
+                time_field: None,
+                sequence_time_field: None,
+                where_clause: Some(Expr::Or(
+                    Box::new(Expr::And(
+                        Box::new(Expr::In {
+                            field: "id".to_string(),
+                            values: vec![
+                                Value::Number(1.into()),
+                                Value::Number(2.into()),
+                                Value::Number(3.into())
+                            ],
+                        }),
+                        Box::new(Expr::In {
+                            field: "category".to_string(),
+                            values: vec![
+                                Value::String("A".to_string()),
+                                Value::String("B".to_string())
+                            ],
+                        })
+                    )),
+                    Box::new(Expr::In {
+                        field: "priority".to_string(),
+                        values: vec![Value::Number(3.into())],
+                    })
+                )),
+                limit: None,
+                offset: None,
+                order_by: None,
+                picked_zones: None,
+                return_fields: None,
+                link_field: None,
+                aggs: None,
+                time_bucket: None,
+                group_by: None,
+                event_sequence: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_query_where_multiple_parentheses_groups() {
+        let input = r#"QUERY order_created WHERE (status = "active" OR status = "pending") AND (priority > 5 OR priority < 2)"#;
+        let command = parse(input);
+
+        assert_eq!(
+            command,
+            Command::Query {
+                event_type: "order_created".to_string(),
+                context_id: None,
+                since: None,
+                time_field: None,
+                sequence_time_field: None,
+                where_clause: Some(Expr::And(
+                    Box::new(Expr::Or(
+                        Box::new(Expr::Compare {
+                            field: "status".to_string(),
+                            op: CompareOp::Eq,
+                            value: Value::String("active".to_string()),
+                        }),
+                        Box::new(Expr::Compare {
+                            field: "status".to_string(),
+                            op: CompareOp::Eq,
+                            value: Value::String("pending".to_string()),
+                        })
+                    )),
+                    Box::new(Expr::Or(
+                        Box::new(Expr::Compare {
+                            field: "priority".to_string(),
+                            op: CompareOp::Gt,
+                            value: Value::Number(5.into()),
+                        }),
+                        Box::new(Expr::Compare {
+                            field: "priority".to_string(),
+                            op: CompareOp::Lt,
+                            value: Value::Number(2.into()),
+                        })
+                    ))
+                )),
+                limit: None,
+                offset: None,
+                order_by: None,
+                picked_zones: None,
+                return_fields: None,
+                link_field: None,
+                aggs: None,
+                time_bucket: None,
+                group_by: None,
+                event_sequence: None,
+            }
+        );
+    }
+
+    // ─────────────────────────────
     // 6. RETURN Clause
     // ─────────────────────────────
     #[test]
@@ -596,6 +915,24 @@ mod query_peg_tests {
     #[test]
     fn test_parse_query_unterminated_string_in_return_should_fail() {
         let input = r#"QUERY e RETURN ["id, total]"#;
+        assert!(parse_query_peg(input).is_err());
+    }
+
+    #[test]
+    fn test_parse_query_unmatched_opening_parenthesis_should_fail() {
+        let input = r#"QUERY order_created WHERE (status = "done""#;
+        assert!(parse_query_peg(input).is_err());
+    }
+
+    #[test]
+    fn test_parse_query_unmatched_closing_parenthesis_should_fail() {
+        let input = r#"QUERY order_created WHERE status = "done")"#;
+        assert!(parse_query_peg(input).is_err());
+    }
+
+    #[test]
+    fn test_parse_query_mismatched_parentheses_should_fail() {
+        let input = r#"QUERY order_created WHERE ((status = "done")"#;
         assert!(parse_query_peg(input).is_err());
     }
 

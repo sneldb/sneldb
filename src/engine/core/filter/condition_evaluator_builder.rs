@@ -60,6 +60,56 @@ impl ConditionEvaluatorBuilder {
                     );
                 }
             }
+            Expr::In { field, values } => {
+                info!(target: "sneldb::evaluator", "Processing IN expression for field '{}' with {} values", field, values.len());
+
+                // Try to convert all values to numeric first
+                let mut numeric_values = Vec::new();
+                let mut all_numeric = true;
+
+                for value in values {
+                    let scalar_value = ScalarValue::from(value.clone());
+
+                    // Try temporal parsing first
+                    let parsed_temporal = if let ScalarValue::Utf8(s) = &scalar_value {
+                        TimeParser::parse_str_to_epoch_seconds(s, TimeKind::DateTime)
+                            .or_else(|| TimeParser::parse_str_to_epoch_seconds(s, TimeKind::Date))
+                    } else {
+                        None
+                    };
+
+                    if let Some(parsed) = parsed_temporal {
+                        numeric_values.push(parsed);
+                    } else if let Some(num) = scalar_value.as_i64() {
+                        numeric_values.push(num);
+                    } else {
+                        all_numeric = false;
+                        break;
+                    }
+                }
+
+                if all_numeric && !numeric_values.is_empty() {
+                    info!(target: "sneldb::evaluator", "Adding IN numeric condition: {} IN ({:?})", field, numeric_values);
+                    self.evaluator
+                        .add_in_numeric_condition(field.clone(), numeric_values);
+                } else {
+                    // Convert to strings
+                    let string_values: Vec<String> = values
+                        .iter()
+                        .map(|v| {
+                            let scalar_value = ScalarValue::from(v.clone());
+                            scalar_value
+                                .as_str()
+                                .map(|s| s.to_string())
+                                .unwrap_or_else(|| v.to_string())
+                        })
+                        .collect();
+
+                    info!(target: "sneldb::evaluator", "Adding IN string condition: {} IN ({:?})", field, string_values);
+                    self.evaluator
+                        .add_in_string_condition(field.clone(), string_values);
+                }
+            }
             Expr::And(left, right) => {
                 info!(target: "sneldb::evaluator", "Parsing AND expression");
                 let mut left_builder = ConditionEvaluatorBuilder::new();

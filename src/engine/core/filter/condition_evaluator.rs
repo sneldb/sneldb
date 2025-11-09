@@ -2,8 +2,8 @@ use crate::engine::core::column::format::PhysicalType;
 use crate::engine::core::filter::condition::{FieldAccessor, PreparedAccessor};
 use crate::engine::core::filter::direct_event_accessor::DirectEventAccessor;
 use crate::engine::core::{
-    CandidateZone, Condition, Event, EventBuilder, LogicalCondition, NumericCondition,
-    StringCondition,
+    CandidateZone, Condition, Event, EventBuilder, InNumericCondition, InStringCondition,
+    LogicalCondition, NumericCondition, StringCondition,
 };
 use std::collections::HashSet;
 use std::simd::Simd;
@@ -45,6 +45,17 @@ impl ConditionEvaluator {
     ) {
         self.conditions
             .push(Box::new(StringCondition::new(field, operation, value)));
+    }
+
+    pub fn add_in_numeric_condition(&mut self, field: String, values: Vec<i64>) {
+        self.numeric_fields.insert(field.clone());
+        self.conditions
+            .push(Box::new(InNumericCondition::new(field, values)));
+    }
+
+    pub fn add_in_string_condition(&mut self, field: String, values: Vec<String>) {
+        self.conditions
+            .push(Box::new(InStringCondition::new(field, values)));
     }
 
     pub fn add_logical_condition(&mut self, condition: LogicalCondition) {
@@ -120,7 +131,9 @@ impl ConditionEvaluator {
 
             // Materialize passing rows
             // Check once per zone if event_id column is missing/empty to avoid per-event checks
-            let event_id_missing = zone.values.get("event_id")
+            let event_id_missing = zone
+                .values
+                .get("event_id")
                 .map(|vals| vals.len() == 0)
                 .unwrap_or(true);
 
@@ -296,6 +309,10 @@ fn simd_scan_u64(
             super::condition::CompareOp::Lte => vals.simd_le(Simd::splat(cmp_val)),
             super::condition::CompareOp::Eq => vals.simd_eq(Simd::splat(cmp_val)),
             super::condition::CompareOp::Neq => vals.simd_ne(Simd::splat(cmp_val)),
+            super::condition::CompareOp::In => {
+                // IN operations use InNumericCondition, not SIMD paths
+                unreachable!("IN operation should not use SIMD path")
+            }
         };
         let bits = m.to_bitmask();
         apply_bitmask(mask, i, bits as u16, LANES);
@@ -312,6 +329,10 @@ fn simd_scan_u64(
                 super::condition::CompareOp::Lte => col[i] <= cmp_val,
                 super::condition::CompareOp::Eq => col[i] == cmp_val,
                 super::condition::CompareOp::Neq => col[i] != cmp_val,
+                super::condition::CompareOp::In => {
+                    // IN operations use InNumericCondition, not SIMD paths
+                    unreachable!("IN operation should not use SIMD path")
+                }
             };
             if !keep {
                 mask[i] = false;
@@ -349,6 +370,10 @@ fn simd_scan_i64(
             super::condition::CompareOp::Lte => vals.simd_le(Simd::splat(cmp_val)),
             super::condition::CompareOp::Eq => vals.simd_eq(Simd::splat(cmp_val)),
             super::condition::CompareOp::Neq => vals.simd_ne(Simd::splat(cmp_val)),
+            super::condition::CompareOp::In => {
+                // IN operations use InNumericCondition, not SIMD paths
+                unreachable!("IN operation should not use SIMD path")
+            }
         };
         let bits = m.to_bitmask();
         apply_bitmask(mask, i, bits as u16, LANES);
@@ -392,6 +417,10 @@ fn simd_scan_f64(
             super::condition::CompareOp::Lte => vals.simd_le(Simd::splat(cmp_val)),
             super::condition::CompareOp::Eq => vals.simd_eq(Simd::splat(cmp_val)),
             super::condition::CompareOp::Neq => vals.simd_ne(Simd::splat(cmp_val)),
+            super::condition::CompareOp::In => {
+                // IN operations use InNumericCondition, not SIMD paths
+                unreachable!("IN operation should not use SIMD path")
+            }
         };
         let bits = m.to_bitmask();
         apply_bitmask(mask, i, bits as u16, LANES);
@@ -416,6 +445,10 @@ fn scalar_cmp_i64(lhs: i64, rhs: i64, op: super::condition::CompareOp) -> bool {
         super::condition::CompareOp::Lte => lhs <= rhs,
         super::condition::CompareOp::Eq => lhs == rhs,
         super::condition::CompareOp::Neq => lhs != rhs,
+        super::condition::CompareOp::In => {
+            // IN operations use InNumericCondition, not scalar comparison
+            unreachable!("IN operation should not use scalar comparison")
+        }
     }
 }
 
@@ -428,5 +461,9 @@ fn scalar_cmp_f64(lhs: f64, rhs: f64, op: super::condition::CompareOp) -> bool {
         super::condition::CompareOp::Lte => lhs <= rhs,
         super::condition::CompareOp::Eq => lhs == rhs,
         super::condition::CompareOp::Neq => lhs != rhs,
+        super::condition::CompareOp::In => {
+            // IN operations use InNumericCondition, not scalar comparison
+            unreachable!("IN operation should not use scalar comparison")
+        }
     }
 }

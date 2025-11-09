@@ -1,7 +1,7 @@
 use crate::engine::core::ExecutionStep;
 use crate::engine::core::zone::zone_step_planner::ZoneStepPlanner;
 use crate::test_helpers::factories::{
-    CommandFactory, FilterPlanFactory, QueryPlanFactory, SchemaRegistryFactory,
+    CommandFactory, FilterGroupFactory, QueryPlanFactory, SchemaRegistryFactory,
 };
 use serde_json::json;
 use std::sync::Arc;
@@ -41,13 +41,13 @@ async fn planner_places_context_first_on_and() {
 
     // Build two steps: id and context_id
     let uid = plan.event_type_uid().await.expect("uid");
-    let fp_ctx = FilterPlanFactory::new()
+    let fp_ctx = FilterGroupFactory::new()
         .with_column("context_id")
         .with_operation(crate::command::types::CompareOp::Eq)
         .with_value(json!("ctx-1"))
         .with_uid(&uid)
         .create();
-    let fp_id = FilterPlanFactory::new()
+    let fp_id = FilterGroupFactory::new()
         .with_column("id")
         .with_operation(crate::command::types::CompareOp::Eq)
         .with_value(json!(1))
@@ -97,13 +97,13 @@ async fn planner_keeps_order_when_no_context() {
         .await;
 
     let uid = plan.event_type_uid().await.expect("uid");
-    let fp_id = FilterPlanFactory::new()
+    let fp_id = FilterGroupFactory::new()
         .with_column("id")
         .with_operation(crate::command::types::CompareOp::Eq)
         .with_value(json!(1))
         .with_uid(&uid)
         .create();
-    let fp_other = FilterPlanFactory::new()
+    let fp_other = FilterGroupFactory::new()
         .with_column("timestamp")
         .with_operation(crate::command::types::CompareOp::Gt)
         .with_value(json!(0))
@@ -164,13 +164,13 @@ async fn planner_keeps_order_on_or_even_with_context() {
         .await;
 
     let uid = plan.event_type_uid().await.expect("uid");
-    let fp_ctx = FilterPlanFactory::new()
+    let fp_ctx = FilterGroupFactory::new()
         .with_column("context_id")
         .with_operation(crate::command::types::CompareOp::Eq)
         .with_value(serde_json::json!("ctx-1"))
         .with_uid(&uid)
         .create();
-    let fp_id = FilterPlanFactory::new()
+    let fp_id = FilterGroupFactory::new()
         .with_column("id")
         .with_operation(crate::command::types::CompareOp::Eq)
         .with_value(serde_json::json!(1))
@@ -227,7 +227,7 @@ async fn planner_keeps_order_on_not() {
         .await;
 
     let uid = plan.event_type_uid().await.expect("uid");
-    let fp_id = FilterPlanFactory::new()
+    let fp_id = FilterGroupFactory::new()
         .with_column("id")
         .with_operation(crate::command::types::CompareOp::Eq)
         .with_value(serde_json::json!(1))
@@ -302,13 +302,13 @@ async fn planner_preserves_when_context_already_first() {
         .await;
 
     let uid = plan.event_type_uid().await.expect("uid");
-    let fp_ctx = FilterPlanFactory::new()
+    let fp_ctx = FilterGroupFactory::new()
         .with_column("context_id")
         .with_operation(crate::command::types::CompareOp::Eq)
         .with_value(serde_json::json!("ctx1"))
         .with_uid(&uid)
         .create();
-    let fp_id = FilterPlanFactory::new()
+    let fp_id = FilterGroupFactory::new()
         .with_column("id")
         .with_operation(crate::command::types::CompareOp::Eq)
         .with_value(serde_json::json!(1))

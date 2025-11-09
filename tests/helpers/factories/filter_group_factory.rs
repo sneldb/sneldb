@@ -1,9 +1,9 @@
 use crate::command::types::CompareOp;
-use crate::engine::core::FilterPlan;
+use crate::engine::core::filter::filter_group::FilterGroup;
 use crate::engine::types::ScalarValue;
 
-/// Factory for creating `FilterPlan` objects in tests
-pub struct FilterPlanFactory {
+/// Factory for creating `FilterGroup` objects in tests
+pub struct FilterGroupFactory {
     column: String,
     operation: Option<CompareOp>,
     value: Option<ScalarValue>,
@@ -11,7 +11,7 @@ pub struct FilterPlanFactory {
     uid: Option<String>,
 }
 
-impl FilterPlanFactory {
+impl FilterGroupFactory {
     pub fn new() -> Self {
         Self {
             column: "default_field".to_string(),
@@ -47,8 +47,8 @@ impl FilterPlanFactory {
         self
     }
 
-    pub fn create(self) -> FilterPlan {
-        FilterPlan {
+    pub fn create(self) -> FilterGroup {
+        FilterGroup::Filter {
             column: self.column,
             operation: self.operation,
             value: self.value,

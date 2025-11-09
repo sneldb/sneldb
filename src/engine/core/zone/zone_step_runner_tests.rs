@@ -3,7 +3,7 @@ use crate::engine::core::zone::{
     zone_step_planner::ZoneStepPlanner, zone_step_runner::ZoneStepRunner,
 };
 use crate::test_helpers::factories::{
-    CommandFactory, FilterPlanFactory, QueryPlanFactory, SchemaRegistryFactory,
+    CommandFactory, FilterGroupFactory, QueryPlanFactory, SchemaRegistryFactory,
 };
 use serde_json::json;
 use std::sync::Arc;
@@ -41,13 +41,13 @@ async fn runner_derives_pruned_segments_when_context_first_and_and() {
 
     let uid = plan.event_type_uid().await.expect("uid");
 
-    let fp_ctx = FilterPlanFactory::new()
+    let fp_ctx = FilterGroupFactory::new()
         .with_column("context_id")
         .with_operation(crate::command::types::CompareOp::Eq)
         .with_value(json!("ctx-keep"))
         .with_uid(&uid)
         .create();
-    let fp_id = FilterPlanFactory::new()
+    let fp_id = FilterGroupFactory::new()
         .with_column("id")
         .with_operation(crate::command::types::CompareOp::Eq)
         .with_value(json!(1))
@@ -108,7 +108,7 @@ async fn runner_does_not_prune_under_or() {
 
     let uid = plan.event_type_uid().await.expect("uid");
 
-    let fp_id = FilterPlanFactory::new()
+    let fp_id = FilterGroupFactory::new()
         .with_column("id")
         .with_operation(crate::command::types::CompareOp::Eq)
         .with_value(json!(1))
@@ -192,13 +192,13 @@ async fn runner_respects_explicit_subset_in_plan() {
 
     let uid = plan.event_type_uid().await.expect("uid");
 
-    let fp_ctx = FilterPlanFactory::new()
+    let fp_ctx = FilterGroupFactory::new()
         .with_column("context_id")
         .with_operation(crate::command::types::CompareOp::Eq)
         .with_value(json!("ctx-keep"))
         .with_uid(&uid)
         .create();
-    let fp_id = FilterPlanFactory::new()
+    let fp_id = FilterGroupFactory::new()
         .with_column("id")
         .with_operation(crate::command::types::CompareOp::Eq)
         .with_value(json!(1))
@@ -256,7 +256,7 @@ async fn runner_pruned_empty_first_step_still_executes_following_steps() {
         .await;
 
     let uid = plan.event_type_uid().await.expect("uid");
-    let fp_ctx = FilterPlanFactory::new()
+    let fp_ctx = FilterGroupFactory::new()
         .with_column("context_id")
         .with_operation(crate::command::types::CompareOp::Eq)
         .with_value(json!("ctx-will-prune-to-empty"))
@@ -264,7 +264,7 @@ async fn runner_pruned_empty_first_step_still_executes_following_steps() {
         .create();
 
     // A second step that should still run (over empty segment list)
-    let fp_id = FilterPlanFactory::new()
+    let fp_id = FilterGroupFactory::new()
         .with_column("id")
         .with_operation(crate::command::types::CompareOp::Eq)
         .with_value(json!(1))

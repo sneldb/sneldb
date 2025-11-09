@@ -601,3 +601,511 @@ async fn since_microseconds_string_normalizes_to_seconds_inclusive() {
     assert!(!evaluator.evaluate_event(&before));
     assert!(evaluator.evaluate_event(&at));
 }
+
+// =============================================================================
+// IN OPERATOR TESTS
+// =============================================================================
+
+#[tokio::test]
+async fn builds_in_numeric_condition_from_integer_values() {
+    let expr = Expr::In {
+        field: "id".into(),
+        values: vec![json!(2), json!(4), json!(6), json!(8)],
+    };
+
+    let command = CommandFactory::query()
+        .with_event_type("test_event")
+        .with_context_id("ctx1")
+        .with_where_clause(expr)
+        .with_since("123000")
+        .create();
+
+    let registry_factory = SchemaRegistryFactory::new();
+    let registry = registry_factory.registry();
+    let plan = QueryPlanFactory::new()
+        .with_command(command.clone())
+        .with_registry(registry)
+        .create()
+        .await;
+
+    let mut builder = ConditionEvaluatorBuilder::new();
+    builder.add_special_fields(&plan);
+    if let Some(expr) = plan.where_clause() {
+        builder.add_where_clause(expr);
+    }
+
+    let evaluator = builder.into_evaluator();
+
+    // Events with IDs in the IN list should pass
+    let pass1 = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "id": 2 }))
+        .create();
+    let pass2 = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "id": 6 }))
+        .create();
+
+    // Events with IDs not in the IN list should fail
+    let fail1 = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "id": 1 }))
+        .create();
+    let fail2 = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "id": 10 }))
+        .create();
+
+    assert!(evaluator.evaluate_event(&pass1));
+    assert!(evaluator.evaluate_event(&pass2));
+    assert!(!evaluator.evaluate_event(&fail1));
+    assert!(!evaluator.evaluate_event(&fail2));
+}
+
+#[tokio::test]
+async fn builds_in_string_condition_from_string_values() {
+    let expr = Expr::In {
+        field: "status".into(),
+        values: vec![json!("active"), json!("completed"), json!("pending")],
+    };
+
+    let command = CommandFactory::query()
+        .with_event_type("test_event")
+        .with_context_id("ctx1")
+        .with_where_clause(expr)
+        .with_since("123000")
+        .create();
+
+    let registry_factory = SchemaRegistryFactory::new();
+    let registry = registry_factory.registry();
+    let plan = QueryPlanFactory::new()
+        .with_command(command.clone())
+        .with_registry(registry)
+        .create()
+        .await;
+
+    let mut builder = ConditionEvaluatorBuilder::new();
+    builder.add_special_fields(&plan);
+    if let Some(expr) = plan.where_clause() {
+        builder.add_where_clause(expr);
+    }
+
+    let evaluator = builder.into_evaluator();
+
+    // Events with status in the IN list should pass
+    let pass1 = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "status": "active" }))
+        .create();
+    let pass2 = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "status": "completed" }))
+        .create();
+
+    // Events with status not in the IN list should fail
+    let fail = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "status": "cancelled" }))
+        .create();
+
+    assert!(evaluator.evaluate_event(&pass1));
+    assert!(evaluator.evaluate_event(&pass2));
+    assert!(!evaluator.evaluate_event(&fail));
+}
+
+#[tokio::test]
+async fn builds_in_numeric_condition_from_temporal_values() {
+    let registry_factory = SchemaRegistryFactory::new();
+    registry_factory
+        .define_with_fields("evt_temporal", &[("id", "int"), ("created_at", "datetime")])
+        .await
+        .unwrap();
+    let registry = registry_factory.registry();
+
+    // IN with ISO-8601 datetime strings should be parsed to epoch seconds
+    let expr = Expr::In {
+        field: "created_at".into(),
+        values: vec![
+            json!("2025-01-01T00:00:00Z"),
+            json!("2025-01-02T00:00:00Z"),
+            json!("2025-01-03T00:00:00Z"),
+        ],
+    };
+
+    let command = CommandFactory::query()
+        .with_event_type("evt_temporal")
+        .with_context_id("ctx1")
+        .with_where_clause(expr)
+        .create();
+
+    let plan = QueryPlanFactory::new()
+        .with_command(command)
+        .with_registry(registry.clone())
+        .create()
+        .await;
+
+    let mut builder = ConditionEvaluatorBuilder::new();
+    if let Some(expr) = plan.where_clause() {
+        builder.add_where_clause(expr);
+    }
+    let evaluator = builder.into_evaluator();
+
+    let ts1 = chrono::DateTime::parse_from_rfc3339("2025-01-01T00:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc)
+        .timestamp();
+    let ts2 = chrono::DateTime::parse_from_rfc3339("2025-01-02T00:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc)
+        .timestamp();
+    let ts_other = chrono::DateTime::parse_from_rfc3339("2025-01-05T00:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc)
+        .timestamp();
+
+    // Events with created_at in the IN list should pass
+    let pass1 = EventFactory::new()
+        .with("event_type", "evt_temporal")
+        .with("context_id", "ctx1")
+        .with("timestamp", 0)
+        .with("payload", json!({ "id": 1, "created_at": ts1 }))
+        .create();
+    let pass2 = EventFactory::new()
+        .with("event_type", "evt_temporal")
+        .with("context_id", "ctx1")
+        .with("timestamp", 0)
+        .with("payload", json!({ "id": 2, "created_at": ts2 }))
+        .create();
+
+    // Event with created_at not in the IN list should fail
+    let fail = EventFactory::new()
+        .with("event_type", "evt_temporal")
+        .with("context_id", "ctx1")
+        .with("timestamp", 0)
+        .with("payload", json!({ "id": 3, "created_at": ts_other }))
+        .create();
+
+    assert!(evaluator.evaluate_event(&pass1));
+    assert!(evaluator.evaluate_event(&pass2));
+    assert!(!evaluator.evaluate_event(&fail));
+}
+
+#[tokio::test]
+async fn builds_in_string_condition_when_mixed_types_present() {
+    // When IN list contains both numeric and non-numeric values, it should fall back to string
+    let expr = Expr::In {
+        field: "value".into(),
+        values: vec![json!(123), json!("abc"), json!(456)], // Mixed: number, string, number
+    };
+
+    let command = CommandFactory::query()
+        .with_event_type("test_event")
+        .with_context_id("ctx1")
+        .with_where_clause(expr)
+        .with_since("123000")
+        .create();
+
+    let registry_factory = SchemaRegistryFactory::new();
+    let registry = registry_factory.registry();
+    let plan = QueryPlanFactory::new()
+        .with_command(command.clone())
+        .with_registry(registry)
+        .create()
+        .await;
+
+    let mut builder = ConditionEvaluatorBuilder::new();
+    builder.add_special_fields(&plan);
+    if let Some(expr) = plan.where_clause() {
+        builder.add_where_clause(expr);
+    }
+
+    let evaluator = builder.into_evaluator();
+
+    // Events matching string values should pass
+    let pass1 = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "value": "123" })) // String "123" matches
+        .create();
+    let pass2 = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "value": "abc" }))
+        .create();
+
+    // Event not matching any string value should fail
+    let fail = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "value": "xyz" }))
+        .create();
+
+    assert!(evaluator.evaluate_event(&pass1));
+    assert!(evaluator.evaluate_event(&pass2));
+    assert!(!evaluator.evaluate_event(&fail));
+}
+
+#[tokio::test]
+async fn builds_in_condition_with_and_operator() {
+    // id IN (2, 4, 6) AND status = "active"
+    let expr = Expr::And(
+        Box::new(Expr::In {
+            field: "id".into(),
+            values: vec![json!(2), json!(4), json!(6)],
+        }),
+        Box::new(Expr::Compare {
+            field: "status".into(),
+            op: CompareOp::Eq,
+            value: json!("active"),
+        }),
+    );
+
+    let command = CommandFactory::query()
+        .with_event_type("test_event")
+        .with_context_id("ctx1")
+        .with_where_clause(expr)
+        .with_since("123000")
+        .create();
+
+    let registry_factory = SchemaRegistryFactory::new();
+    let registry = registry_factory.registry();
+    let plan = QueryPlanFactory::new()
+        .with_command(command.clone())
+        .with_registry(registry)
+        .create()
+        .await;
+
+    let mut builder = ConditionEvaluatorBuilder::new();
+    builder.add_special_fields(&plan);
+    if let Some(expr) = plan.where_clause() {
+        builder.add_where_clause(expr);
+    }
+
+    let evaluator = builder.into_evaluator();
+
+    // Both conditions satisfied -> pass
+    let pass = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "id": 4, "status": "active" }))
+        .create();
+
+    // Only IN condition satisfied -> fail
+    let fail1 = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "id": 4, "status": "inactive" }))
+        .create();
+
+    // Only status condition satisfied -> fail
+    let fail2 = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "id": 1, "status": "active" }))
+        .create();
+
+    assert!(evaluator.evaluate_event(&pass));
+    assert!(!evaluator.evaluate_event(&fail1));
+    assert!(!evaluator.evaluate_event(&fail2));
+}
+
+#[tokio::test]
+async fn builds_in_condition_with_or_operator() {
+    // id IN (1, 2, 3) OR status = "completed"
+    let expr = Expr::Or(
+        Box::new(Expr::In {
+            field: "id".into(),
+            values: vec![json!(1), json!(2), json!(3)],
+        }),
+        Box::new(Expr::Compare {
+            field: "status".into(),
+            op: CompareOp::Eq,
+            value: json!("completed"),
+        }),
+    );
+
+    let command = CommandFactory::query()
+        .with_event_type("test_event")
+        .with_context_id("ctx1")
+        .with_where_clause(expr)
+        .with_since("123000")
+        .create();
+
+    let registry_factory = SchemaRegistryFactory::new();
+    let registry = registry_factory.registry();
+    let plan = QueryPlanFactory::new()
+        .with_command(command.clone())
+        .with_registry(registry)
+        .create()
+        .await;
+
+    let mut builder = ConditionEvaluatorBuilder::new();
+    builder.add_special_fields(&plan);
+    if let Some(expr) = plan.where_clause() {
+        builder.add_where_clause(expr);
+    }
+
+    let evaluator = builder.into_evaluator();
+
+    // IN condition satisfied -> pass
+    let pass1 = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "id": 2, "status": "pending" }))
+        .create();
+
+    // Status condition satisfied -> pass
+    let pass2 = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "id": 10, "status": "completed" }))
+        .create();
+
+    // Neither condition satisfied -> fail
+    let fail = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "id": 10, "status": "pending" }))
+        .create();
+
+    assert!(evaluator.evaluate_event(&pass1));
+    assert!(evaluator.evaluate_event(&pass2));
+    assert!(!evaluator.evaluate_event(&fail));
+}
+
+#[tokio::test]
+async fn builds_in_condition_with_not_operator() {
+    // NOT id IN (2, 4, 6, 8)
+    let expr = Expr::Not(Box::new(Expr::In {
+        field: "id".into(),
+        values: vec![json!(2), json!(4), json!(6), json!(8)],
+    }));
+
+    let command = CommandFactory::query()
+        .with_event_type("test_event")
+        .with_context_id("ctx1")
+        .with_where_clause(expr)
+        .with_since("123000")
+        .create();
+
+    let registry_factory = SchemaRegistryFactory::new();
+    let registry = registry_factory.registry();
+    let plan = QueryPlanFactory::new()
+        .with_command(command.clone())
+        .with_registry(registry)
+        .create()
+        .await;
+
+    let mut builder = ConditionEvaluatorBuilder::new();
+    builder.add_special_fields(&plan);
+    if let Some(expr) = plan.where_clause() {
+        builder.add_where_clause(expr);
+    }
+
+    let evaluator = builder.into_evaluator();
+
+    // IDs NOT in the list -> pass
+    let pass1 = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "id": 1 }))
+        .create();
+    let pass2 = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "id": 5 }))
+        .create();
+
+    // IDs in the list -> fail
+    let fail1 = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "id": 4 }))
+        .create();
+    let fail2 = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "id": 8 }))
+        .create();
+
+    assert!(evaluator.evaluate_event(&pass1));
+    assert!(evaluator.evaluate_event(&pass2));
+    assert!(!evaluator.evaluate_event(&fail1));
+    assert!(!evaluator.evaluate_event(&fail2));
+}
+
+#[tokio::test]
+async fn builds_in_condition_with_single_value() {
+    // Single value IN list should work
+    let expr = Expr::In {
+        field: "id".into(),
+        values: vec![json!(42)],
+    };
+
+    let command = CommandFactory::query()
+        .with_event_type("test_event")
+        .with_context_id("ctx1")
+        .with_where_clause(expr)
+        .with_since("123000")
+        .create();
+
+    let registry_factory = SchemaRegistryFactory::new();
+    let registry = registry_factory.registry();
+    let plan = QueryPlanFactory::new()
+        .with_command(command.clone())
+        .with_registry(registry)
+        .create()
+        .await;
+
+    let mut builder = ConditionEvaluatorBuilder::new();
+    builder.add_special_fields(&plan);
+    if let Some(expr) = plan.where_clause() {
+        builder.add_where_clause(expr);
+    }
+
+    let evaluator = builder.into_evaluator();
+
+    let pass = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "id": 42 }))
+        .create();
+
+    let fail = EventFactory::new()
+        .with("event_type", "test_event")
+        .with("context_id", "ctx1")
+        .with("timestamp", 123456)
+        .with("payload", json!({ "id": 43 }))
+        .create();
+
+    assert!(evaluator.evaluate_event(&pass));
+    assert!(!evaluator.evaluate_event(&fail));
+}

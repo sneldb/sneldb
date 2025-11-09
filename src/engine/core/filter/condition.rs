@@ -274,6 +274,10 @@ impl NumericCondition {
             CompareOp::Lte => lhs <= self.value,
             CompareOp::Eq => lhs == self.value,
             CompareOp::Neq => lhs != self.value,
+            CompareOp::In => {
+                // IN operation should use InNumericCondition, not NumericCondition
+                unreachable!("IN operation should not be used with NumericCondition")
+            }
         }
     }
 }
@@ -291,6 +295,10 @@ impl Condition for NumericCondition {
                         CompareOp::Lte => num <= self.value,
                         CompareOp::Eq => num == self.value,
                         CompareOp::Neq => num != self.value,
+                        CompareOp::In => {
+                            // IN operation should use InNumericCondition, not NumericCondition
+                            unreachable!("IN operation should not be used with NumericCondition")
+                        }
                     }
                 } else {
                     false
@@ -316,6 +324,10 @@ impl Condition for NumericCondition {
                 CompareOp::Lte => u <= rhs,
                 CompareOp::Eq => u == rhs,
                 CompareOp::Neq => u != rhs,
+                CompareOp::In => {
+                    // IN operation should use InNumericCondition, not NumericCondition
+                    unreachable!("IN operation should not be used with NumericCondition")
+                }
             };
         }
         if let Some(num) = accessor.get_i64_at(&self.field, index) {
@@ -326,6 +338,10 @@ impl Condition for NumericCondition {
                 CompareOp::Lte => num <= self.value,
                 CompareOp::Eq => num == self.value,
                 CompareOp::Neq => num != self.value,
+                CompareOp::In => {
+                    // IN operation should use InNumericCondition, not NumericCondition
+                    unreachable!("IN operation should not be used with NumericCondition")
+                }
             };
         }
         if let Some(f) = accessor.get_f64_at(&self.field, index) {
@@ -337,6 +353,10 @@ impl Condition for NumericCondition {
                 CompareOp::Lte => f <= rhs,
                 CompareOp::Eq => f == rhs,
                 CompareOp::Neq => f != rhs,
+                CompareOp::In => {
+                    // IN operation should use InNumericCondition, not NumericCondition
+                    unreachable!("IN operation should not be used with NumericCondition")
+                }
             };
         }
         false
@@ -354,6 +374,10 @@ impl Condition for NumericCondition {
                 CompareOp::Lte => num <= self.value,
                 CompareOp::Eq => num == self.value,
                 CompareOp::Neq => num != self.value,
+                CompareOp::In => {
+                    // IN operation should use InNumericCondition, not NumericCondition
+                    unreachable!("IN operation should not be used with NumericCondition")
+                }
             }
         } else {
             false
@@ -397,6 +421,10 @@ impl Condition for StringCondition {
             field_values.iter().any(|v| match self.operation {
                 CompareOp::Eq => v == &self.value,
                 CompareOp::Neq => v != &self.value,
+                CompareOp::In => {
+                    // IN operation should use InStringCondition, not StringCondition
+                    unreachable!("IN operation should not be used with StringCondition")
+                }
                 _ => false, // Other operations don't make sense for strings
             })
         } else {
@@ -409,6 +437,10 @@ impl Condition for StringCondition {
             match self.operation {
                 CompareOp::Eq => val == self.value,
                 CompareOp::Neq => val != self.value,
+                CompareOp::In => {
+                    // IN operation should use InStringCondition, not StringCondition
+                    unreachable!("IN operation should not be used with StringCondition")
+                }
                 _ => false,
             }
         } else {
@@ -424,8 +456,156 @@ impl Condition for StringCondition {
         match self.operation {
             CompareOp::Eq => val == self.value,
             CompareOp::Neq => val != self.value,
+            CompareOp::In => {
+                // IN operation should use InStringCondition, not StringCondition
+                unreachable!("IN operation should not be used with StringCondition")
+            }
             _ => false,
         }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// IN condition for numeric values (uses HashSet for efficient lookups)
+#[derive(Debug)]
+pub struct InNumericCondition {
+    field: String,
+    values: HashSet<i64>,
+}
+
+impl InNumericCondition {
+    pub fn new(field: String, values: Vec<i64>) -> Self {
+        Self {
+            field,
+            values: values.into_iter().collect(),
+        }
+    }
+
+    #[inline]
+    pub fn field(&self) -> &str {
+        &self.field
+    }
+
+    #[inline]
+    pub fn contains(&self, value: i64) -> bool {
+        self.values.contains(&value)
+    }
+}
+
+impl Condition for InNumericCondition {
+    fn evaluate(&self, values: &HashMap<String, Vec<String>>) -> bool {
+        if let Some(field_values) = values.get(&self.field) {
+            field_values.iter().any(|v| {
+                if let Ok(num) = v.parse::<i64>() {
+                    self.values.contains(&num)
+                } else {
+                    false
+                }
+            })
+        } else {
+            false
+        }
+    }
+
+    fn evaluate_at(&self, accessor: &dyn FieldAccessor, index: usize) -> bool {
+        // Try u64 first for performance
+        if let Some(u) = accessor.get_u64_at(&self.field, index) {
+            // Check if u64 value can fit in i64 and is in the set
+            if u <= i64::MAX as u64 {
+                return self.values.contains(&(u as i64));
+            }
+            return false;
+        }
+        // Try i64
+        if let Some(num) = accessor.get_i64_at(&self.field, index) {
+            return self.values.contains(&num);
+        }
+        // Try f64 (with conversion)
+        if let Some(f) = accessor.get_f64_at(&self.field, index) {
+            let rounded = f.round() as i64;
+            if (f - rounded as f64).abs() < f64::EPSILON {
+                return self.values.contains(&rounded);
+            }
+        }
+        false
+    }
+
+    fn evaluate_event_direct(
+        &self,
+        accessor: &crate::engine::core::filter::direct_event_accessor::DirectEventAccessor,
+    ) -> bool {
+        if let Some(num) = accessor.get_field_as_i64(&self.field) {
+            self.values.contains(&num)
+        } else {
+            false
+        }
+    }
+
+    fn is_numeric(&self) -> bool {
+        true
+    }
+
+    fn collect_numeric_fields(&self, out: &mut HashSet<String>) {
+        out.insert(self.field.clone());
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// IN condition for string values (uses HashSet for efficient lookups)
+#[derive(Debug)]
+pub struct InStringCondition {
+    field: String,
+    values: HashSet<String>,
+}
+
+impl InStringCondition {
+    pub fn new(field: String, values: Vec<String>) -> Self {
+        Self {
+            field,
+            values: values.into_iter().collect(),
+        }
+    }
+
+    #[inline]
+    pub fn field(&self) -> &str {
+        &self.field
+    }
+
+    #[inline]
+    pub fn contains(&self, value: &str) -> bool {
+        self.values.contains(value)
+    }
+}
+
+impl Condition for InStringCondition {
+    fn evaluate(&self, values: &HashMap<String, Vec<String>>) -> bool {
+        if let Some(field_values) = values.get(&self.field) {
+            field_values.iter().any(|v| self.values.contains(v))
+        } else {
+            false
+        }
+    }
+
+    fn evaluate_at(&self, accessor: &dyn FieldAccessor, index: usize) -> bool {
+        if let Some(val) = accessor.get_str_at(&self.field, index) {
+            self.values.contains(val)
+        } else {
+            false
+        }
+    }
+
+    fn evaluate_event_direct(
+        &self,
+        accessor: &crate::engine::core::filter::direct_event_accessor::DirectEventAccessor,
+    ) -> bool {
+        let val = accessor.get_field_value(&self.field);
+        self.values.contains(&val)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -512,6 +692,7 @@ pub enum CompareOp {
     Lte,
     Eq,
     Neq,
+    In,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -529,6 +710,7 @@ impl LogicalOp {
             Some(Expr::Or(_, _)) => LogicalOp::Or,
             Some(Expr::Not(_)) => LogicalOp::Not,
             Some(Expr::Compare { .. }) => LogicalOp::And, // Single comparison is treated as AND
+            Some(Expr::In { .. }) => LogicalOp::And,      // Single IN is treated as AND
             None => LogicalOp::And,                       // Default to AND if no where clause
         }
     }
@@ -548,6 +730,7 @@ impl From<CommandCompareOp> for CompareOp {
             CommandCompareOp::Lte => CompareOp::Lte,
             CommandCompareOp::Eq => CompareOp::Eq,
             CommandCompareOp::Neq => CompareOp::Neq,
+            CommandCompareOp::In => CompareOp::In,
         }
     }
 }

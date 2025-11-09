@@ -56,10 +56,18 @@ impl ZoneCombiner {
                 all
             }
             LogicalOp::Not => {
-                if tracing::enabled!(tracing::Level::WARN) {
-                    warn!(target: "sneldb::zone_combiner", "ZoneCombiner: NOT operation not implemented");
+                // For NOT operations, we can't efficiently filter zones at the zone level
+                // because NOT means "all zones except those matching". Instead, we return
+                // all zones (union) and let the condition evaluator handle the filtering.
+                // This is safe because the condition evaluator correctly handles NOT operations.
+                let mut all = HashMap::new();
+                for m in maps {
+                    all.extend(m);
                 }
-                HashMap::new()
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    debug!(target: "sneldb::zone_combiner", count = %all.len(), "Combined map size for NOT (returning all zones for condition evaluator)");
+                }
+                all
             }
         };
 
