@@ -61,6 +61,8 @@ More examples: [Query](../commands/query.md) and [Replay](../commands/replay.md)
 3. Per shard, scan MemTable and pick relevant segments.
 4. Prune zones by time and per‑field filters; read only needed columns.
    - Range predicates (`>`, `>=`, `<`, `<=`) are pruned using Zone SuRF (`{uid}_{field}.zsrf`) when present, falling back to XOR/EBM only if unavailable. SuRF is an order‑preserving trie using succinct arrays for fast range overlap checks.
+   - Equality predicates (`=`, `IN`) use Zone XOR indexes (`{uid}_{field}.zxf`) for fast zone lookup.
+   - Complex WHERE clauses with parentheses, AND/OR/NOT are transformed into a FilterGroup tree, and zones are combined using set operations (intersection for AND, union for OR, complement for NOT). See [Filter Architecture](./filter_architecture.md) for details.
 5. Evaluate predicates and apply `WHERE` condition.
 6. If aggregations are present:
 
@@ -134,6 +136,7 @@ See the diagram:
 ## Further Reading
 
 - [Read flow overview](./storage_engine.md)
+- [Filter Architecture and Zone Collection](./filter_architecture.md)
 - [Segments and zones](../architecture/segments_zones.md)
 
 SnelDB’s read path is simple to reason about: prune aggressively, read only what you need, and merge efficiently—whether you’re slicing across many contexts or replaying one.

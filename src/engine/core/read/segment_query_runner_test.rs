@@ -75,9 +75,9 @@ async fn segment_query_runner_returns_matching_events() {
         .create()
         .await;
 
-    // Manually create execution steps from filter plans
+    // Manually create execution steps from filter groups
     let steps: Vec<ExecutionStep> = plan
-        .filter_plans
+        .filter_groups
         .iter()
         .map(|filter| ExecutionStep::new(filter.clone(), &plan))
         .collect();
@@ -152,7 +152,7 @@ async fn segment_query_runner_respects_limit_across_zones() {
         .await;
 
     let steps: Vec<ExecutionStep> = plan
-        .filter_plans
+        .filter_groups
         .iter()
         .map(|f| ExecutionStep::new(f.clone(), &plan))
         .collect();
@@ -221,7 +221,7 @@ async fn segment_query_runner_limit_zero_returns_empty() {
         .await;
 
     let steps: Vec<ExecutionStep> = plan
-        .filter_plans
+        .filter_groups
         .iter()
         .map(|f| ExecutionStep::new(f.clone(), &plan))
         .collect();

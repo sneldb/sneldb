@@ -47,20 +47,27 @@ impl<'a> ZoneSelectorBuilder<'a> {
 
     pub fn build(&self) -> Box<dyn ZoneSelector + 'a> {
         let artifacts = self.make_artifacts();
-        match self.inputs.plan.column.as_str() {
+        let column = self.inputs.plan.column().unwrap_or("");
+        match column {
             "event_type" => {
-                let Some(uid) = self.inputs.plan.uid.as_deref() else {
+                let uid = self.inputs.plan.value().and_then(|v| v.as_str()).and_then(|_| {
+                    // Get uid from FilterGroup
+                    match self.inputs.plan {
+                        crate::engine::core::filter::filter_group::FilterGroup::Filter { uid, .. } => uid.as_deref(),
+                        _ => None,
+                    }
+                });
+                let Some(uid) = uid else {
                     return Box::new(EmptySelector {});
                 };
-                let Some(event_type) = self.inputs.plan.value.as_ref().and_then(|v| v.as_str())
-                else {
+                let Some(event_type) = self.inputs.plan.value().and_then(|v| v.as_str()) else {
                     return Box::new(EmptySelector {});
                 };
                 let context_id = self
                     .inputs
                     .query_plan
                     .context_id_plan()
-                    .and_then(|p| p.value.as_ref().and_then(|v| v.as_str()));
+                    .and_then(|p| p.value().and_then(|v| v.as_str()));
                 // If no catalog for this segment, disable index usage to avoid fs probing; use AllZones policy
                 Box::new(IndexZoneSelector {
                     plan: self.inputs.query_plan,
@@ -77,10 +84,14 @@ impl<'a> ZoneSelectorBuilder<'a> {
                     .inputs
                     .query_plan
                     .event_type_plan()
-                    .and_then(|p| p.value.as_ref().and_then(|v| v.as_str()));
-                let context_id = self.inputs.plan.value.as_ref().and_then(|v| v.as_str());
+                    .and_then(|p| p.value().and_then(|v| v.as_str()));
+                let context_id = self.inputs.plan.value().and_then(|v| v.as_str());
+                let uid = match self.inputs.plan {
+                    crate::engine::core::filter::filter_group::FilterGroup::Filter { uid, .. } => uid.as_deref(),
+                    _ => None,
+                };
 
-                match (self.inputs.plan.uid.as_deref(), event_type) {
+                match (uid, event_type) {
                     (Some(uid), Some(et)) => Box::new(IndexZoneSelector {
                         plan: self.inputs.query_plan,
                         caches: self.inputs.caches,

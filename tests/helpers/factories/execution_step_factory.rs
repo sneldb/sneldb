@@ -1,8 +1,9 @@
-use crate::engine::core::{ExecutionStep, FilterPlan, QueryPlan};
+use crate::engine::core::{ExecutionStep, QueryPlan};
+use crate::engine::core::filter::filter_group::FilterGroup;
 
 #[derive(Default)]
 pub struct ExecutionStepFactory<'a> {
-    filter: Option<FilterPlan>,
+    filter: Option<FilterGroup>,
     plan: Option<&'a QueryPlan>,
 }
 
@@ -11,7 +12,7 @@ impl<'a> ExecutionStepFactory<'a> {
         Self::default()
     }
 
-    pub fn with_filter(mut self, filter: FilterPlan) -> Self {
+    pub fn with_filter(mut self, filter: FilterGroup) -> Self {
         self.filter = Some(filter);
         self
     }

@@ -1,12 +1,12 @@
 use crate::engine::core::compaction::handover::CompactionHandover;
 use crate::engine::core::{CompactionWorker, IoMonitor, SegmentIndex};
+use crate::engine::core::utils::system_info_cache::get_system_info_cache;
 use crate::engine::schema::SchemaRegistry;
 use crate::shared::config::CONFIG;
 use once_cell::sync::Lazy;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock as StdRwLock};
 use std::time::Duration;
-use sysinfo::{Disks, System};
 use tokio::sync::Semaphore;
 use tokio::time::sleep;
 use tracing::{error, warn};
@@ -22,9 +22,14 @@ pub async fn start_background_compactor(
     flush_lock: Arc<tokio::sync::Mutex<()>>,
 ) {
     tokio::spawn(async move {
-        let mut sys = System::new_all();
-        let disks = Disks::new_with_refreshed_list();
-        let mut monitor = IoMonitor::new(&disks);
+        // Get cached system info (refreshed in background)
+        let system_info_cache = get_system_info_cache();
+
+        // Initialize monitor with initial disks snapshot
+        let disks_guard = system_info_cache.get_disks().await;
+        let mut monitor = IoMonitor::new(&*disks_guard);
+        drop(disks_guard); // Release guard after initialization
+
         let handover = Arc::new(CompactionHandover::new(
             shard_id,
             shard_dir.clone(),
@@ -35,12 +40,14 @@ pub async fn start_background_compactor(
         loop {
             sleep(Duration::from_secs(CONFIG.engine.compaction_interval)).await;
 
-            sys.refresh_all();
-            let disks = Disks::new_with_refreshed_list();
-            if monitor.is_under_pressure(&disks) {
+            // Use cached disks info (fast, non-blocking)
+            let disks_guard = system_info_cache.get_disks().await;
+            if monitor.is_under_pressure(&*disks_guard) {
                 warn!(shard_id, "IO pressure detected — skipping compaction");
+                drop(disks_guard);
                 continue;
             }
+            drop(disks_guard);
 
             match SegmentIndex::load(&shard_dir).await {
                 Ok(segment_index) => {

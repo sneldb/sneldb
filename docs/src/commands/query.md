@@ -42,7 +42,15 @@ QUERY order_created WHERE country="NL" OR country="FR"
 ```
 
 ```sneldb
-QUERY login FOR user-1 WHERE device="android"
+QUERY order_created WHERE id IN (1, 2, 3)
+```
+
+```sneldb
+QUERY order_created WHERE (status = "active" OR status = "pending") AND priority > 5
+```
+
+```sneldb
+QUERY order_created WHERE NOT status = "cancelled"
 ```
 
 ```sneldb
@@ -85,6 +93,9 @@ QUERY orders MIN amount, MAX amount BY country
 - Field names in `RETURN` can be bare words or quoted strings.
 - Works across in-memory and on-disk segments.
 - If nothing matches, returns: No matching events found.
+- `IN` operator: `WHERE id IN (1, 2, 3)` is equivalent to `WHERE id = 1 OR id = 2 OR id = 3`. Each value uses zone indexes for efficient pruning.
+- Parentheses: Complex WHERE clauses with parentheses are supported. Example: `WHERE (status = "active" OR status = "pending") AND priority > 5`.
+- `NOT` operator: `WHERE NOT status = "cancelled"` returns all events except those matching the condition. Supports De Morgan's laws for complex expressions like `NOT (A AND B)` and `NOT (A OR B)`.
 
 ### Aggregation notes
 

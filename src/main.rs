@@ -2,6 +2,7 @@
 use snel_db::engine::core::read::cache::{
     GlobalColumnBlockCache, GlobalZoneIndexCache, GlobalZoneSurfCache,
 };
+use snel_db::engine::core::utils::system_info_cache::get_system_info_cache;
 use snel_db::frontend::start_all;
 use snel_db::logging;
 use snel_db::shared::config::CONFIG;
@@ -11,6 +12,11 @@ use tracing::info;
 async fn main() -> anyhow::Result<()> {
     info!("Starting SnelDB");
     logging::init()?;
+
+    // Initialize system info cache at startup to avoid initialization cost in query path
+    // This pre-initializes the cache and starts background refresh task
+    let _system_info_cache = get_system_info_cache();
+    info!("System info cache initialized");
 
     // Configure process-wide cache capacities from config at startup
     if let Some(q) = CONFIG.query.as_ref() {

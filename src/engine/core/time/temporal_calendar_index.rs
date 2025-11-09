@@ -138,6 +138,12 @@ impl FieldIndex<i64> for TemporalCalendarIndex {
                 };
                 &all - &eq
             }
+            CompareOp::In => {
+                // IN operations require multiple values and should be handled at a higher level
+                // (e.g., in filter plan or condition evaluator) where the full list is available.
+                // This method only accepts a single value, so IN should not reach here.
+                unreachable!("IN operations should not use single-value zones_intersecting")
+            }
         }
     }
 

@@ -1,4 +1,4 @@
-use crate::engine::core::filter::filter_plan::FilterPlan;
+use crate::engine::core::filter::filter_group::FilterGroup;
 use crate::engine::core::read::catalog::{IndexKind, IndexRegistry, SegmentIndexCatalog};
 use crate::engine::core::read::index_planner::IndexPlanner;
 use crate::engine::core::read::index_strategy::IndexStrategy;
@@ -49,7 +49,7 @@ async fn planner_fullscan_when_no_catalog_for_segment() {
     let index_registry = IndexRegistry::new();
     let planner = IndexPlanner::new(&registry, &index_registry, Some(uid));
 
-    let fp = FilterPlan {
+    let fp = FilterGroup::Filter {
         column: "id".to_string(),
         operation: None,
         value: None,
@@ -71,7 +71,7 @@ async fn planner_temporal_eq_and_range_for_timestamp() {
     idx.insert_catalog(make_catalog(&uid, "S1", |_| {}));
     let planner = IndexPlanner::new(&registry, &idx, Some(uid.clone()));
 
-    let fp_eq = FilterPlan {
+    let fp_eq = FilterGroup::Filter {
         column: "timestamp".to_string(),
         operation: Some(crate::command::types::CompareOp::Eq),
         value: None,
@@ -82,7 +82,7 @@ async fn planner_temporal_eq_and_range_for_timestamp() {
     let s_eq = planner.choose(&fp_eq, "S1").await;
     assert!(matches!(s_eq, IndexStrategy::TemporalEq { .. }));
 
-    let fp_ge = FilterPlan {
+    let fp_ge = FilterGroup::Filter {
         column: "timestamp".to_string(),
         operation: Some(crate::command::types::CompareOp::Gte),
         value: None,
@@ -104,7 +104,7 @@ async fn planner_temporal_for_non_timestamp_field_uses_schema() {
     idx.insert_catalog(make_catalog(&uid, "S1", |_| {}));
     let planner = IndexPlanner::new(&registry, &idx, Some(uid.clone()));
 
-    let fp = FilterPlan {
+    let fp = FilterGroup::Filter {
         column: "created_at".to_string(),
         operation: Some(crate::command::types::CompareOp::Lt),
         value: None,
@@ -128,7 +128,7 @@ async fn planner_enum_bitmap_when_available() {
     }));
     let planner = IndexPlanner::new(&registry, &idx, Some(uid.clone()));
 
-    let fp = FilterPlan {
+    let fp = FilterGroup::Filter {
         column: "kind".to_string(),
         operation: Some(crate::command::types::CompareOp::Eq),
         value: None,
@@ -152,7 +152,7 @@ async fn planner_range_prefers_surf_when_available() {
     }));
     let planner = IndexPlanner::new(&registry, &idx, Some(uid.clone()));
 
-    let fp = FilterPlan {
+    let fp = FilterGroup::Filter {
         column: "id".to_string(),
         operation: Some(crate::command::types::CompareOp::Gt),
         value: None,
@@ -179,7 +179,7 @@ async fn planner_equality_prefers_zxf_then_xf_then_fullscan() {
         );
     }));
     let planner = IndexPlanner::new(&registry, &idx, Some(uid.clone()));
-    let fp = FilterPlan {
+    let fp = FilterGroup::Filter {
         column: "id".to_string(),
         operation: Some(crate::command::types::CompareOp::Eq),
         value: None,

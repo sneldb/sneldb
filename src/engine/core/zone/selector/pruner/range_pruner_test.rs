@@ -13,7 +13,7 @@ use crate::engine::core::zone::zone_artifacts::ZoneArtifacts;
 use crate::engine::schema::FieldType;
 use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::{
-    CommandFactory, EventFactory, FilterPlanFactory, MemTableFactory, QueryPlanFactory,
+    CommandFactory, EventFactory, FilterGroupFactory, MemTableFactory, QueryPlanFactory,
     SchemaRegistryFactory,
 };
 
@@ -102,15 +102,17 @@ async fn surf_ge_and_le_inclusive_boundaries_id_field() {
         .await;
 
     // Gte 100 should include both segments
-    let mut f_gte = FilterPlanFactory::new()
+    let mut f_gte = FilterGroupFactory::new()
         .with_column("order_id")
         .with_operation(CompareOp::Gte)
         .with_uid(&uid)
         .with_value(json!(100))
         .create();
-    f_gte.index_strategy = Some(IndexStrategy::ZoneSuRF {
-        field: "order_id".to_string(),
-    });
+    if let Some(strategy) = f_gte.index_strategy_mut() {
+        *strategy = Some(IndexStrategy::ZoneSuRF {
+            field: "order_id".to_string(),
+        });
+    }
     let ctx1 = SelectionContext {
         plan: &f_gte,
         query_plan: &q,
@@ -124,15 +126,17 @@ async fn surf_ge_and_le_inclusive_boundaries_id_field() {
     assert!(!g2.is_empty());
 
     // Lte 100 should include both segments
-    let mut f_lte = FilterPlanFactory::new()
+    let mut f_lte = FilterGroupFactory::new()
         .with_column("order_id")
         .with_operation(CompareOp::Lte)
         .with_uid(&uid)
         .with_value(json!(100))
         .create();
-    f_lte.index_strategy = Some(IndexStrategy::ZoneSuRF {
-        field: "order_id".to_string(),
-    });
+    if let Some(strategy) = f_lte.index_strategy_mut() {
+        *strategy = Some(IndexStrategy::ZoneSuRF {
+            field: "order_id".to_string(),
+        });
+    }
     let ctx2 = SelectionContext {
         plan: &f_lte,
         query_plan: &q,
@@ -219,15 +223,17 @@ async fn surf_gt_and_lt_exclusive_boundaries_id_field() {
         .await;
 
     // Gt 10 -> seg1 only
-    let mut f_gt = FilterPlanFactory::new()
+    let mut f_gt = FilterGroupFactory::new()
         .with_column("user_id")
         .with_operation(CompareOp::Gt)
         .with_uid(&uid)
         .with_value(json!(10))
         .create();
-    f_gt.index_strategy = Some(IndexStrategy::ZoneSuRF {
-        field: "user_id".to_string(),
-    });
+    if let Some(strategy) = f_gt.index_strategy_mut() {
+        *strategy = Some(IndexStrategy::ZoneSuRF {
+            field: "user_id".to_string(),
+        });
+    }
     let ctx1 = SelectionContext {
         plan: &f_gt,
         query_plan: &q,
@@ -241,15 +247,17 @@ async fn surf_gt_and_lt_exclusive_boundaries_id_field() {
     assert!(z2.is_empty());
 
     // Lt 10 -> seg2 only
-    let mut f_lt = FilterPlanFactory::new()
+    let mut f_lt = FilterGroupFactory::new()
         .with_column("user_id")
         .with_operation(CompareOp::Lt)
         .with_uid(&uid)
         .with_value(json!(10))
         .create();
-    f_lt.index_strategy = Some(IndexStrategy::ZoneSuRF {
-        field: "user_id".to_string(),
-    });
+    if let Some(strategy) = f_lt.index_strategy_mut() {
+        *strategy = Some(IndexStrategy::ZoneSuRF {
+            field: "user_id".to_string(),
+        });
+    }
     let ctx2 = SelectionContext {
         plan: &f_lt,
         query_plan: &q,

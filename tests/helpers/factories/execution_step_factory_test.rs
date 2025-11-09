@@ -1,6 +1,6 @@
 use crate::command::types::{CompareOp, Expr};
 use crate::test_helpers::factories::{
-    CommandFactory, ExecutionStepFactory, FilterPlanFactory, QueryPlanFactory,
+    CommandFactory, ExecutionStepFactory, FilterGroupFactory, QueryPlanFactory,
     SchemaRegistryFactory,
 };
 
@@ -41,7 +41,7 @@ async fn builds_execution_step_with_valid_filter_and_plan() {
         .await;
 
     // Create FilterPlan
-    let filter = FilterPlanFactory::new()
+    let filter = FilterGroupFactory::new()
         .with_column("status")
         .with_operation(CompareOp::Eq)
         .with_value(json!("ok"))
@@ -55,7 +55,12 @@ async fn builds_execution_step_with_valid_filter_and_plan() {
         .create();
 
     // Verify
-    assert_eq!(step.filter.column, "status");
-    assert_eq!(step.filter.uid.as_deref(), Some(uid.as_str()));
+    assert_eq!(step.filter.column(), Some("status"));
+    match &step.filter {
+        crate::engine::core::filter::filter_group::FilterGroup::Filter { uid: filter_uid, .. } => {
+            assert_eq!(filter_uid.as_deref(), Some(uid.as_str()));
+        }
+        _ => panic!("Expected Filter variant"),
+    }
     assert!(step.candidate_zones.is_empty());
 }

@@ -24,11 +24,11 @@ impl<'a> ProjectionContext<'a> {
     pub fn filter_columns(&self) -> Vec<String> {
         let mut cols: Vec<String> = self
             .plan
-            .filter_plans
+            .filter_groups
             .iter()
             .filter_map(|filter| {
-                if filter.operation.is_some() {
-                    Some(filter.column.clone())
+                if filter.operation().is_some() {
+                    filter.column().map(|c| c.to_string())
                 } else {
                     None
                 }

@@ -71,29 +71,19 @@ async fn hydrates_candidate_zones_with_values() {
         .create()
         .await;
 
-    // Create one execution step
-    let step1 = ExecutionStepFactory::new()
+    // Create execution steps from all filter groups in the plan
+    let steps: Vec<_> = plan.filter_groups
+        .iter()
+        .map(|filter_group| {
+            ExecutionStepFactory::new()
         .with_plan(&plan)
-        .with_filter(plan.filter_plans[0].clone())
-        .create();
-
-    let step2 = ExecutionStepFactory::new()
-        .with_plan(&plan)
-        .with_filter(plan.filter_plans[1].clone())
-        .create();
-
-    let step3 = ExecutionStepFactory::new()
-        .with_plan(&plan)
-        .with_filter(plan.filter_plans[2].clone())
-        .create();
-
-    let step4 = ExecutionStepFactory::new()
-        .with_plan(&plan)
-        .with_filter(plan.filter_plans[3].clone())
-        .create();
+                .with_filter(filter_group.clone())
+                .create()
+        })
+        .collect();
 
     // Run hydrator
-    let hydrator = ZoneHydrator::new(&plan, vec![step1, step2, step3, step4]);
+    let hydrator = ZoneHydrator::new(&plan, steps);
     let zones = hydrator.hydrate().await;
 
     // Assert zones are returned and enriched

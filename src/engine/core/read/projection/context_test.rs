@@ -2,7 +2,7 @@ use super::context::ProjectionContext;
 use crate::command::types::CompareOp;
 use crate::engine::core::read::query_plan::QueryPlan;
 use crate::test_helpers::factories::{
-    CommandFactory, FilterPlanFactory, QueryPlanFactory, SchemaRegistryFactory,
+    CommandFactory, FilterGroupFactory, QueryPlanFactory, SchemaRegistryFactory,
 };
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -51,17 +51,17 @@ async fn filter_columns_includes_only_active_filters_and_dedupes() {
         .with_segment_base_dir(tempdir().unwrap().path())
         .create()
         .await;
-    plan.filter_plans = vec![
-        FilterPlanFactory::new()
+    plan.filter_groups = vec![
+        FilterGroupFactory::new()
             .with_column("a")
             .with_operation(CompareOp::Eq)
             .create(),
-        FilterPlanFactory::new().with_column("b").create(), // operation None -> excluded
-        FilterPlanFactory::new()
+        FilterGroupFactory::new().with_column("b").create(), // operation None -> excluded
+        FilterGroupFactory::new()
             .with_column("timestamp")
             .with_operation(CompareOp::Gt)
             .create(),
-        FilterPlanFactory::new()
+        FilterGroupFactory::new()
             .with_column("a")
             .with_operation(CompareOp::Eq)
             .create(), // duplicate, should dedupe

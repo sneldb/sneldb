@@ -255,8 +255,15 @@ fn transform_where_clause_or_one_matching_removes_entire_or() {
     );
 
     let result = transform_where_clause_for_event_type(&expr, "purchase");
-    // OR requires both sides, so if one is removed, entire OR is removed
-    assert_eq!(result, None);
+    // OR with one side removed: keep the remaining side (A OR nothing = A)
+    // So we get: purchase.amount > 100 OR purchase.status = "completed" (simplified)
+    assert!(result.is_some());
+    // Result should be the matching side: purchase.amount > 100
+    if let Some(Expr::Compare { field, .. }) = result {
+        assert_eq!(field, "amount");
+    } else {
+        panic!("Expected single Compare expression");
+    }
 }
 
 #[test]
@@ -315,12 +322,20 @@ fn transform_where_clause_nested_and_or() {
     );
 
     let result = transform_where_clause_for_event_type(&expr, "purchase");
-    // The OR will be removed (one side doesn't match), so only the amount condition remains
+    // AND(purchase.amount > 100, OR(purchase.status = "completed", page_view.page = "/checkout"))
+    // Transforms to: AND(amount > 100, status = "completed") because OR keeps the matching side
     assert!(result.is_some());
-    if let Some(Expr::Compare { field, .. }) = result {
-        assert_eq!(field, "amount");
+    match result {
+        Some(Expr::And(left, right)) => {
+            // Both sides should be Compare expressions
+            if let (Expr::Compare { field: field_left, .. }, Expr::Compare { field: field_right, .. }) = (*left, *right) {
+                assert!(field_left == "amount" || field_right == "amount", "Should have amount field");
+                assert!(field_left == "status" || field_right == "status", "Should have status field");
     } else {
-        panic!("Expected single Compare expression");
+                panic!("Expected both sides to be Compare expressions");
+            }
+        }
+        _ => panic!("Expected AND expression with both conditions"),
     }
 }
 

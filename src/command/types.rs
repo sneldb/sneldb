@@ -125,11 +125,15 @@ pub enum Expr {
         op: CompareOp,
         value: Value,
     },
+    In {
+        field: String,
+        values: Vec<Value>,
+    },
     And(Box<Expr>, Box<Expr>),
     Or(Box<Expr>, Box<Expr>),
     Not(Box<Expr>),
 }
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CompareOp {
     Eq,
     Neq,
@@ -137,6 +141,7 @@ pub enum CompareOp {
     Gte,
     Lt,
     Lte,
+    In,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

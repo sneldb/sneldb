@@ -1,11 +1,12 @@
 use crate::engine::core::zone::selector::builder::ZoneSelectorBuilder;
 use crate::engine::core::zone::selector::selection_context::SelectionContext;
-use crate::engine::core::{CandidateZone, FilterPlan, QueryCaches, QueryPlan};
+use crate::engine::core::{CandidateZone, QueryCaches, QueryPlan};
+use crate::engine::core::filter::filter_group::FilterGroup;
 use std::path::PathBuf;
 use tracing::debug;
 
 pub struct ZoneFinder<'a> {
-    plan: &'a FilterPlan,
+    plan: &'a FilterGroup,
     query_plan: &'a QueryPlan,
     segment_ids: &'a [String],
     base_dir: &'a PathBuf,
@@ -14,7 +15,7 @@ pub struct ZoneFinder<'a> {
 
 impl<'a> ZoneFinder<'a> {
     pub fn new(
-        plan: &'a FilterPlan,
+        plan: &'a FilterGroup,
         query_plan: &'a QueryPlan,
         segment_ids: &'a [String],
         base_dir: &'a PathBuf,
@@ -55,13 +56,14 @@ impl<'a> ZoneFinder<'a> {
         let selector = ZoneSelectorBuilder::new(ctx).build();
         let mut segments_checked = 0usize;
         let mut total_zones_found = 0usize;
+        let column = self.plan.column().unwrap_or("unknown");
 
         for segment_id in self.segment_ids.iter() {
             segments_checked += 1;
             let zones = selector.select_for_segment(segment_id);
             total_zones_found += zones.len();
             if tracing::enabled!(tracing::Level::DEBUG) {
-                debug!(target: "sneldb::query", segment = %segment_id, column = %self.plan.column, zones = zones.len(), "Segment zones computed");
+                debug!(target: "sneldb::query", segment = %segment_id, column = %column, zones = zones.len(), "Segment zones computed");
             }
             out.extend(zones);
         }
@@ -71,7 +73,7 @@ impl<'a> ZoneFinder<'a> {
             if tracing::enabled!(tracing::Level::INFO) {
                 tracing::info!(
                     target: "sneldb::zone_finder",
-                    column = %self.plan.column,
+                    column = %column,
                     segments_checked = segments_checked,
                     total_zones_found = total_zones_found,
                     find_time_ms = find_time.as_millis(),

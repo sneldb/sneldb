@@ -341,3 +341,325 @@ fn generates_synthetic_ids_across_multiple_zones() {
     assert_eq!(results[0].event_id().raw(), (10u64 << 32) | 0u64);
     assert_eq!(results[1].event_id().raw(), (20u64 << 32) | 0u64);
 }
+
+// =============================================================================
+// IN OPERATOR TESTS
+// =============================================================================
+
+fn make_i64_column(values: &[i64]) -> ColumnValues {
+    // Build a fake typed-i64 ColumnValues backed by a single block
+    let mut buf: Vec<u8> = Vec::with_capacity(values.len() * 8);
+    for v in values {
+        buf.extend_from_slice(&v.to_le_bytes());
+    }
+    let block = DecompressedBlock::from_bytes(buf);
+    ColumnValues::new_typed_i64(std::sync::Arc::new(block), 0, values.len(), None)
+}
+
+#[test]
+fn in_numeric_condition_filters_u64_column() {
+    // id column contains values: 1, 2, 3, 5, 7, 9, 10
+    let mut zone = CandidateZone::new(0, "00000".into());
+    let mut cols: HashMap<String, ColumnValues> = HashMap::new();
+    cols.insert("id".into(), make_u64_column(&[1, 2, 3, 5, 7, 9, 10]));
+    zone.set_values(cols);
+
+    let mut ev = ConditionEvaluator::new();
+    ev.add_in_numeric_condition("id".into(), vec![2, 5, 8, 10]);
+    let out = ev.evaluate_zones(vec![zone]);
+    // Should match: 2, 5, 10 (3 rows)
+    assert_eq!(out.len(), 3, "should match rows with id in [2, 5, 8, 10]");
+}
+
+#[test]
+fn in_numeric_condition_filters_i64_column() {
+    // id column contains values: -5, -2, 0, 2, 5, 8
+    let mut zone = CandidateZone::new(0, "00000".into());
+    let mut cols: HashMap<String, ColumnValues> = HashMap::new();
+    cols.insert("id".into(), make_i64_column(&[-5, -2, 0, 2, 5, 8]));
+    zone.set_values(cols);
+
+    let mut ev = ConditionEvaluator::new();
+    ev.add_in_numeric_condition("id".into(), vec![-2, 2, 5, 9]);
+    let out = ev.evaluate_zones(vec![zone]);
+    // Should match: -2, 2, 5 (3 rows)
+    assert_eq!(out.len(), 3, "should match rows with id in [-2, 2, 5, 9]");
+}
+
+#[test]
+fn in_numeric_condition_no_matches() {
+    let mut zone = CandidateZone::new(0, "00000".into());
+    let mut cols: HashMap<String, ColumnValues> = HashMap::new();
+    cols.insert("id".into(), make_u64_column(&[1, 2, 3]));
+    zone.set_values(cols);
+
+    let mut ev = ConditionEvaluator::new();
+    ev.add_in_numeric_condition("id".into(), vec![10, 20, 30]);
+    let out = ev.evaluate_zones(vec![zone]);
+    assert_eq!(out.len(), 0, "should match no rows when values not in list");
+}
+
+#[test]
+fn in_numeric_condition_all_matches() {
+    let mut zone = CandidateZone::new(0, "00000".into());
+    let mut cols: HashMap<String, ColumnValues> = HashMap::new();
+    cols.insert("id".into(), make_u64_column(&[1, 2, 3]));
+    zone.set_values(cols);
+
+    let mut ev = ConditionEvaluator::new();
+    ev.add_in_numeric_condition("id".into(), vec![1, 2, 3, 4, 5]);
+    let out = ev.evaluate_zones(vec![zone]);
+    assert_eq!(out.len(), 3, "should match all rows when all values in list");
+}
+
+#[test]
+fn in_string_condition_filters_correctly() {
+    let mut values = HashMap::new();
+    values.insert(
+        "status".to_string(),
+        vec!["active".into(), "pending".into(), "completed".into(), "cancelled".into()],
+    );
+    values.insert(
+        "context_id".to_string(),
+        vec!["ctx1".into(), "ctx2".into(), "ctx3".into(), "ctx4".into()],
+    );
+
+    let zone = CandidateZoneFactory::new()
+        .with("zone_id", 1)
+        .with("segment_id", "seg-1")
+        .with_values(values)
+        .create();
+
+    let mut ev = ConditionEvaluator::new();
+    ev.add_in_string_condition("status".into(), vec!["active".into(), "completed".into()]);
+    let out = ev.evaluate_zones(vec![zone]);
+    // Should match: active, completed (2 rows)
+    assert_eq!(out.len(), 2);
+    assert_eq!(out[0].get_field_value("status"), "active");
+    assert_eq!(out[1].get_field_value("status"), "completed");
+}
+
+#[test]
+fn in_string_condition_no_matches() {
+    let mut values = HashMap::new();
+    values.insert(
+        "status".to_string(),
+        vec!["pending".into(), "cancelled".into()],
+    );
+
+    let zone = CandidateZoneFactory::new()
+        .with("zone_id", 1)
+        .with("segment_id", "seg-1")
+        .with_values(values)
+        .create();
+
+    let mut ev = ConditionEvaluator::new();
+    ev.add_in_string_condition("status".into(), vec!["active".into(), "completed".into()]);
+    let out = ev.evaluate_zones(vec![zone]);
+    assert_eq!(out.len(), 0);
+}
+
+#[test]
+fn in_numeric_condition_with_limit() {
+    let mut zone = CandidateZone::new(0, "00000".into());
+    let mut cols: HashMap<String, ColumnValues> = HashMap::new();
+    cols.insert("id".into(), make_u64_column(&[1, 2, 3, 5, 7, 9, 10]));
+    zone.set_values(cols);
+
+    let mut ev = ConditionEvaluator::new();
+    ev.add_in_numeric_condition("id".into(), vec![2, 5, 8, 10]);
+    let out = ev.evaluate_zones_with_limit(vec![zone], Some(2));
+    // Should match only first 2: 2, 5
+    assert_eq!(out.len(), 2);
+}
+
+#[test]
+fn in_numeric_condition_with_evaluate_row_at() {
+    use crate::engine::core::filter::condition::PreparedAccessor;
+    let mut values = HashMap::new();
+    values.insert("id".to_string(), vec!["1".into(), "2".into(), "3".into(), "5".into()]);
+
+    let zone = CandidateZoneFactory::new()
+        .with("zone_id", 1)
+        .with("segment_id", "seg-1")
+        .with_values(values)
+        .create();
+
+    let accessor = PreparedAccessor::new(&zone.values);
+    let mut evaluator = ConditionEvaluator::new();
+    evaluator.add_in_numeric_condition("id".into(), vec![2, 5, 8]);
+
+    // Row 0: id=1 -> should fail
+    assert!(!evaluator.evaluate_row_at(&accessor, 0));
+    // Row 1: id=2 -> should pass
+    assert!(evaluator.evaluate_row_at(&accessor, 1));
+    // Row 2: id=3 -> should fail
+    assert!(!evaluator.evaluate_row_at(&accessor, 2));
+    // Row 3: id=5 -> should pass
+    assert!(evaluator.evaluate_row_at(&accessor, 3));
+}
+
+#[test]
+fn in_string_condition_with_evaluate_row_at() {
+    use crate::engine::core::filter::condition::PreparedAccessor;
+    let mut values = HashMap::new();
+    values.insert(
+        "status".to_string(),
+        vec!["active".into(), "pending".into(), "completed".into()],
+    );
+
+    let zone = CandidateZoneFactory::new()
+        .with("zone_id", 1)
+        .with("segment_id", "seg-1")
+        .with_values(values)
+        .create();
+
+    let accessor = PreparedAccessor::new(&zone.values);
+    let mut evaluator = ConditionEvaluator::new();
+    evaluator.add_in_string_condition("status".into(), vec!["active".into(), "completed".into()]);
+
+    // Row 0: status="active" -> should pass
+    assert!(evaluator.evaluate_row_at(&accessor, 0));
+    // Row 1: status="pending" -> should fail
+    assert!(!evaluator.evaluate_row_at(&accessor, 1));
+    // Row 2: status="completed" -> should pass
+    assert!(evaluator.evaluate_row_at(&accessor, 2));
+}
+
+#[test]
+fn in_numeric_condition_with_evaluate_event() {
+    use crate::test_helpers::factories::EventFactory;
+    use serde_json::json;
+
+    let event1 = EventFactory::new()
+        .with("payload", json!({ "id": 5 }))
+        .create();
+
+    let event2 = EventFactory::new()
+        .with("payload", json!({ "id": 10 }))
+        .create();
+
+    let event3 = EventFactory::new()
+        .with("payload", json!({ "id": 15 }))
+        .create();
+
+    let mut evaluator = ConditionEvaluator::new();
+    evaluator.add_in_numeric_condition("id".into(), vec![5, 10, 12]);
+
+    assert!(evaluator.evaluate_event(&event1)); // id=5 in list
+    assert!(evaluator.evaluate_event(&event2)); // id=10 in list
+    assert!(!evaluator.evaluate_event(&event3)); // id=15 not in list
+}
+
+#[test]
+fn in_string_condition_with_evaluate_event() {
+    use crate::test_helpers::factories::EventFactory;
+    use serde_json::json;
+
+    let event1 = EventFactory::new()
+        .with("payload", json!({ "status": "active" }))
+        .create();
+
+    let event2 = EventFactory::new()
+        .with("payload", json!({ "status": "pending" }))
+        .create();
+
+    let mut evaluator = ConditionEvaluator::new();
+    evaluator.add_in_string_condition("status".into(), vec!["active".into(), "completed".into()]);
+
+    assert!(evaluator.evaluate_event(&event1)); // status="active" in list
+    assert!(!evaluator.evaluate_event(&event2)); // status="pending" not in list
+}
+
+#[test]
+fn in_condition_combined_with_other_conditions() {
+    let mut values = HashMap::new();
+    values.insert(
+        "id".to_string(),
+        vec!["1".into(), "2".into(), "3".into(), "5".into(), "7".into()],
+    );
+    values.insert(
+        "status".to_string(),
+        vec!["active".into(), "active".into(), "pending".into(), "active".into(), "completed".into()],
+    );
+
+    let zone = CandidateZoneFactory::new()
+        .with("zone_id", 1)
+        .with("segment_id", "seg-1")
+        .with_values(values)
+        .create();
+
+    let mut evaluator = ConditionEvaluator::new();
+    // id IN (2, 5, 8) AND status = "active"
+    evaluator.add_in_numeric_condition("id".into(), vec![2, 5, 8]);
+    evaluator.add_string_condition("status".into(), CompareOp::Eq, "active".into());
+
+    let results = evaluator.evaluate_zones(vec![zone]);
+    // Should match: id=2 with status="active", id=5 with status="active" (2 rows)
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0].get_field_value("id"), "2");
+    assert_eq!(results[0].get_field_value("status"), "active");
+    assert_eq!(results[1].get_field_value("id"), "5");
+    assert_eq!(results[1].get_field_value("status"), "active");
+}
+
+#[test]
+fn in_condition_across_multiple_zones() {
+    // Zone 1: ids 1, 2, 3
+    let mut zone1_values = HashMap::new();
+    zone1_values.insert("id".to_string(), vec!["1".into(), "2".into(), "3".into()]);
+    let zone1 = CandidateZoneFactory::new()
+        .with("zone_id", 1)
+        .with("segment_id", "seg-1")
+        .with_values(zone1_values)
+        .create();
+
+    // Zone 2: ids 5, 7, 9
+    let mut zone2_values = HashMap::new();
+    zone2_values.insert("id".to_string(), vec!["5".into(), "7".into(), "9".into()]);
+    let zone2 = CandidateZoneFactory::new()
+        .with("zone_id", 2)
+        .with("segment_id", "seg-2")
+        .with_values(zone2_values)
+        .create();
+
+    let mut evaluator = ConditionEvaluator::new();
+    evaluator.add_in_numeric_condition("id".into(), vec![2, 5, 8, 10]);
+
+    let results = evaluator.evaluate_zones(vec![zone1, zone2]);
+    // Should match: id=2 from zone1, id=5 from zone2 (2 rows)
+    assert_eq!(results.len(), 2);
+}
+
+#[test]
+fn in_numeric_condition_single_value() {
+    let mut zone = CandidateZone::new(0, "00000".into());
+    let mut cols: HashMap<String, ColumnValues> = HashMap::new();
+    cols.insert("id".into(), make_u64_column(&[1, 2, 3, 5]));
+    zone.set_values(cols);
+
+    let mut ev = ConditionEvaluator::new();
+    ev.add_in_numeric_condition("id".into(), vec![2]);
+    let out = ev.evaluate_zones(vec![zone]);
+    assert_eq!(out.len(), 1, "should match exactly one row with id=2");
+}
+
+#[test]
+fn in_string_condition_single_value() {
+    let mut values = HashMap::new();
+    values.insert(
+        "status".to_string(),
+        vec!["active".into(), "pending".into(), "active".into()],
+    );
+
+    let zone = CandidateZoneFactory::new()
+        .with("zone_id", 1)
+        .with("segment_id", "seg-1")
+        .with_values(values)
+        .create();
+
+    let mut ev = ConditionEvaluator::new();
+    ev.add_in_string_condition("status".into(), vec!["active".into()]);
+    let out = ev.evaluate_zones(vec![zone]);
+    assert_eq!(out.len(), 2, "should match 2 rows with status='active'");
+}

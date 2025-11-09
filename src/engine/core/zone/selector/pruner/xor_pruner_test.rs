@@ -11,7 +11,7 @@ use crate::engine::core::zone::selector::selection_context::SelectionContext;
 use crate::engine::core::zone::zone_artifacts::ZoneArtifacts;
 use crate::engine::schema::FieldType;
 use crate::test_helpers::factories::{
-    CommandFactory, EventFactory, FilterPlanFactory, MemTableFactory, QueryPlanFactory,
+    CommandFactory, EventFactory, FilterGroupFactory, MemTableFactory, QueryPlanFactory,
     SchemaRegistryFactory,
 };
 

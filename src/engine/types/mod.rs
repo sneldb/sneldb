@@ -100,6 +100,29 @@ pub enum ScalarValue {
     Binary(Vec<u8>),
 }
 
+impl Eq for ScalarValue {}
+
+impl std::hash::Hash for ScalarValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            ScalarValue::Null => 0u8.hash(state),
+            ScalarValue::Boolean(b) => (1u8, b).hash(state),
+            ScalarValue::Int64(i) => (2u8, i).hash(state),
+            ScalarValue::Float64(f) => {
+                // Handle NaN and infinity for hashing
+                if f.is_nan() {
+                    (3u8, 0u64).hash(state); // All NaNs hash to same value
+                } else {
+                    (3u8, f.to_bits()).hash(state);
+                }
+            }
+            ScalarValue::Timestamp(t) => (4u8, t).hash(state),
+            ScalarValue::Utf8(s) => (5u8, s).hash(state),
+            ScalarValue::Binary(b) => (6u8, b).hash(state),
+        }
+    }
+}
+
 impl ScalarValue {
     pub fn logical_type(&self) -> LogicalType {
         match self {

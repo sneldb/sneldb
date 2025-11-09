@@ -203,7 +203,9 @@ peg::parser! {
 
         rule factor() -> Expr
             = ci("NOT") _ x:factor() { Expr::Not(Box::new(x)) }
+            / "(" _ e:expr() _ ")" { e }
             / comparison()
+            / in_expr()
             / atom()
 
         rule atom() -> Expr
@@ -218,6 +220,11 @@ peg::parser! {
         rule comparison() -> Expr
             = f:field() _ op:cmp_op() _ v:value() {
                 Expr::Compare { field: f, op, value: v }
+            }
+
+        rule in_expr() -> Expr
+            = f:field() _ ci("IN") _ "(" _ values:(value() ** (_ "," _)) _ ")" {
+                Expr::In { field: f, values }
             }
 
         rule cmp_op() -> CompareOp

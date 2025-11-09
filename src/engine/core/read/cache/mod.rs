@@ -11,6 +11,7 @@ pub mod global_materialized_frame_cache;
 pub mod global_temporal_index_cache;
 pub mod global_zone_index_cache;
 pub mod global_zone_surf_cache;
+pub mod global_zone_xor_filter_cache;
 pub mod ident_intern;
 pub mod materialized_frame_cache_entry;
 pub mod materialized_frame_cache_key;
@@ -22,6 +23,8 @@ pub mod zone_index_cache_types;
 pub mod zone_index_key;
 pub mod zone_surf_cache_entry;
 pub mod zone_surf_cache_key;
+pub mod zone_xor_filter_cache_entry;
+pub mod zone_xor_filter_cache_key;
 
 pub use column_block_cache::GlobalColumnBlockCache;
 pub use column_block_cache_key::ColumnBlockCacheKey;
@@ -40,6 +43,9 @@ pub use global_zone_index_cache::{CacheOutcome, GlobalZoneIndexCache, ZoneIndexC
 pub use global_zone_surf_cache::{
     CacheOutcome as SurfCacheOutcome, GlobalZoneSurfCache, ZoneSurfCacheStats,
 };
+pub use global_zone_xor_filter_cache::{
+    CacheOutcome as XorFilterCacheOutcome, GlobalZoneXorFilterCache, ZoneXorFilterCacheStats,
+};
 pub use materialized_frame_cache_entry::MaterializedFrameCacheEntry;
 pub use materialized_frame_cache_key::MaterializedFrameCacheKey;
 pub use materialized_frame_cache_stats::MaterializedFrameCacheStats;
@@ -50,6 +56,8 @@ pub use zone_index_cache_types::{ZoneIndexCacheKey, ZoneIndexEntry};
 pub use zone_index_key::ZoneIndexKey;
 pub use zone_surf_cache_entry::ZoneSurfCacheEntry;
 pub use zone_surf_cache_key::ZoneSurfCacheKey;
+pub use zone_xor_filter_cache_entry::ZoneXorFilterCacheEntry;
+pub use zone_xor_filter_cache_key::ZoneXorFilterCacheKey;
 
 #[cfg(test)]
 mod column_block_cache_test;

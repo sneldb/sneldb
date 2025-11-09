@@ -50,6 +50,27 @@ pub(crate) fn transform_where_clause_for_event_type(
                 })
             }
         }
+        Expr::In { field, values } => {
+            // Check if field has event prefix (e.g., "purchase.amount")
+            if let Some((event_type, field_name)) = parse_event_field(field) {
+                if event_type == target_event_type {
+                    // This condition applies to the target event type - replace with plain field name
+                    Some(Expr::In {
+                        field: field_name,
+                        values: values.clone(),
+                    })
+                } else {
+                    // This condition applies to a different event type - remove it
+                    None
+                }
+            } else {
+                // Common field (no prefix) - keep as-is
+                Some(Expr::In {
+                    field: field.clone(),
+                    values: values.clone(),
+                })
+            }
+        }
         Expr::And(left, right) => {
             let left_transformed = transform_where_clause_for_event_type(left, target_event_type);
             let right_transformed = transform_where_clause_for_event_type(right, target_event_type);
@@ -62,13 +83,15 @@ pub(crate) fn transform_where_clause_for_event_type(
             }
         }
         Expr::Or(left, right) => {
-            // For OR, we need both sides to be valid
+            // Transform both sides
             let left_transformed = transform_where_clause_for_event_type(left, target_event_type);
             let right_transformed = transform_where_clause_for_event_type(right, target_event_type);
 
             match (left_transformed, right_transformed) {
                 (Some(l), Some(r)) => Some(Expr::Or(Box::new(l), Box::new(r))),
-                _ => None, // If either side is removed, remove the whole OR
+                (Some(l), None) => Some(l), // If right side removed, keep left (A OR nothing = A)
+                (None, Some(r)) => Some(r), // If left side removed, keep right (nothing OR B = B)
+                (None, None) => None,       // If both removed, remove the whole OR
             }
         }
         Expr::Not(inner) => transform_where_clause_for_event_type(inner, target_event_type)
@@ -95,4 +118,3 @@ pub(crate) fn parse_event_field(field: &str) -> Option<(String, String)> {
         None
     }
 }
-

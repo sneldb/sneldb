@@ -110,6 +110,7 @@ impl From<JsonCommand> for Command {
 #[serde(untagged)]
 pub enum JsonExpr {
     Compare(JsonCompare),
+    In(JsonIn),
     Logical(JsonLogical),
 }
 
@@ -118,6 +119,13 @@ pub struct JsonCompare {
     pub field: String,
     pub op: String,
     pub value: Value,
+}
+
+#[derive(Deserialize)]
+pub struct JsonIn {
+    pub field: String,
+    #[serde(rename = "in")]
+    pub values: Vec<Value>,
 }
 
 #[derive(Deserialize)]
@@ -150,6 +158,12 @@ impl From<JsonExpr> for Expr {
                     field,
                     op: compare_op,
                     value,
+                }
+            }
+            JsonExpr::In(JsonIn { field, values }) => {
+                Expr::In {
+                    field,
+                    values,
                 }
             }
             JsonExpr::Logical(JsonLogical { and, or, not }) => {

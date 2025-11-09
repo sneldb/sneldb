@@ -1,5 +1,6 @@
 use crate::command::types::{Command, Expr};
-use crate::engine::core::FilterPlan;
+use crate::engine::core::filter::filter_group::FilterGroup;
+use crate::engine::core::filter::filter_group_builder::FilterGroupBuilder;
 use crate::engine::core::read::aggregate::plan::AggregatePlan;
 use crate::engine::core::read::cache::GlobalIndexCatalogCache;
 use crate::engine::core::read::catalog::IndexRegistry;
@@ -16,7 +17,8 @@ use tracing::{error, info, warn};
 pub struct QueryPlan {
     pub command: Command,
     pub metadata: HashMap<String, String>,
-    pub filter_plans: Vec<FilterPlan>,
+    pub filter_groups: Vec<FilterGroup>, // Individual filters extracted from filter_group tree
+    pub filter_group: Option<FilterGroup>, // Logical tree for WHERE clause
     pub registry: Arc<RwLock<SchemaRegistry>>,
     pub segment_base_dir: PathBuf,
     pub segment_ids: Arc<std::sync::RwLock<Vec<String>>>,
@@ -33,13 +35,32 @@ impl QueryPlan {
         segment_ids: &Arc<std::sync::RwLock<Vec<String>>>,
     ) -> Option<Self> {
         match &command {
-            Command::Query { .. } => {
-                let mut filter_plans = FilterPlan::build_all(&command, registry).await;
+            Command::Query {
+                where_clause, event_type, ..
+            } => {
+                // Build FilterGroup from WHERE clause to preserve logical structure
+                let event_type_uid = registry
+                    .read()
+                    .await
+                    .get_uid(event_type)
+                    .clone();
+                let filter_group = where_clause
+                    .as_ref()
+                    .and_then(|expr| FilterGroupBuilder::build(expr, &event_type_uid));
+
+                // Extract individual FilterGroups from FilterGroup tree or build all filters
+                let mut filter_groups = if let Some(ref group) = filter_group {
+                    group.extract_individual_filters()
+                } else {
+                    FilterGroupBuilder::build_all(&command, registry).await
+                };
+
                 if tracing::enabled!(tracing::Level::INFO) {
                     info!(
                         target: "sneldb::query_plan",
-                        filters = ?filter_plans,
-                        "Built filter plans for query"
+                        filters = filter_groups.len(),
+                        has_filter_group = filter_group.is_some(),
+                        "Built filter groups for query"
                     );
                 }
                 let aggregate_plan = AggregatePlan::from_command(&command);
@@ -50,13 +71,28 @@ impl QueryPlan {
                     {
                         let tf = time_field.as_deref().unwrap_or("timestamp");
                         // Remove implicit 'since' time filter for aggregations
-                        FilterPlan::remove_implicit_since(&mut filter_plans, tf, since);
+                        filter_groups.retain(|fg| {
+                            match fg {
+                                FilterGroup::Filter { column, operation, value, .. } => {
+                                    if column != tf {
+                                        return true;
+                                    }
+                                    match (operation, value) {
+                                        (Some(crate::command::types::CompareOp::Gte), Some(crate::engine::types::ScalarValue::Utf8(s)))
+                                            if since.as_deref() == Some(s.as_str()) => false,
+                                        _ => true,
+                                    }
+                                }
+                                _ => true,
+                            }
+                        });
                     }
                 }
                 let mut plan = Self {
                     command,
                     metadata: HashMap::new(),
-                    filter_plans,
+                    filter_groups,
+                    filter_group,
                     registry: Arc::clone(registry),
                     segment_base_dir: segment_base_dir.to_path_buf(),
                     segment_ids: Arc::clone(segment_ids),
@@ -85,9 +121,15 @@ impl QueryPlan {
                             &plan.index_registry,
                             Some(uid.clone()),
                         );
-                        for fp in &mut plan.filter_plans {
-                            let strat = planner.choose(fp, rep).await;
-                            fp.index_strategy = Some(strat);
+                        for fg in &mut plan.filter_groups {
+                            let strat = planner.choose(fg, rep).await;
+                            if let Some(strategy_mut) = fg.index_strategy_mut() {
+                                *strategy_mut = Some(strat);
+                            }
+                        }
+                        // Sync strategies from flat list to tree to keep them in sync
+                        if let Some(ref mut filter_group) = plan.filter_group {
+                            filter_group.sync_index_strategies_from(&plan.filter_groups);
                         }
                     }
                 }
@@ -146,12 +188,12 @@ impl QueryPlan {
         }
     }
 
-    pub fn context_id_plan(&self) -> Option<&FilterPlan> {
-        self.filter_plans.iter().find(|plan| plan.is_context_id())
+    pub fn context_id_plan(&self) -> Option<&FilterGroup> {
+        self.filter_groups.iter().find(|plan| plan.is_context_id())
     }
 
-    pub fn event_type_plan(&self) -> Option<&FilterPlan> {
-        self.filter_plans.iter().find(|plan| plan.is_event_type())
+    pub fn event_type_plan(&self) -> Option<&FilterGroup> {
+        self.filter_groups.iter().find(|plan| plan.is_event_type())
     }
 
     pub fn where_clause(&self) -> Option<&Expr> {
@@ -174,29 +216,54 @@ impl QueryPlan {
         let guard = self.registry.read().await;
         let uid = guard.get_uid(self.event_type());
         if uid.is_none() {
-            warn!(
-                target: "sneldb::query_plan",
-                event_type = %self.event_type(),
-                "UID not found in schema registry"
-            );
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                tracing::debug!(
+                    target: "sneldb::query_plan",
+                    event_type = %self.event_type(),
+                    "UID not found in schema registry"
+                );
+            }
         }
         uid
     }
 
     pub async fn build(command: &Command, registry: Arc<RwLock<SchemaRegistry>>) -> Self {
-        let filter_plans = FilterPlan::build_all(command, &registry).await;
+        // Build FilterGroup from WHERE clause if present
+        let filter_group = if let Command::Query {
+            where_clause, event_type, ..
+        } = command {
+            let event_type_uid = registry
+                .read()
+                .await
+                .get_uid(event_type)
+                .clone();
+            where_clause
+                .as_ref()
+                .and_then(|expr| FilterGroupBuilder::build(expr, &event_type_uid))
+        } else {
+            None
+        };
+
+        // Extract individual FilterGroups from FilterGroup tree or build all filters
+        let filter_groups = if let Some(ref group) = filter_group {
+            group.extract_individual_filters()
+        } else {
+            FilterGroupBuilder::build_all(command, &registry).await
+        };
+
         let aggregate_plan = AggregatePlan::from_command(command);
         if tracing::enabled!(tracing::Level::INFO) {
             info!(
                 target: "sneldb::query_plan",
                 "Building inline query plan with {} filters",
-                filter_plans.len()
+                filter_groups.len()
             );
         }
         Self {
             command: command.clone(),
             registry,
-            filter_plans,
+            filter_groups,
+            filter_group,
             metadata: HashMap::new(),
             segment_base_dir: PathBuf::new(),
             segment_ids: Arc::new(std::sync::RwLock::new(Vec::new())),
