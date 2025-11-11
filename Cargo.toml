@@ -89,6 +89,10 @@ name = "stress_tcp"
 path = "src/bin/stress_tcp.rs"
 
 [[bin]]
+name = "retail_showcase"
+path = "src/bin/retail_showcase.rs"
+
+[[bin]]
 name = "wal_archive_manager"
 path = "src/bin/wal_archive_manager.rs"
 
