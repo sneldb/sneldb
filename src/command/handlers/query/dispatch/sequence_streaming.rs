@@ -41,10 +41,7 @@ impl SequenceStreamingDispatcher {
     /// Creates a sub-query command for a specific event type.
     ///
     /// Transforms the WHERE clause to only include conditions relevant to this event type.
-    fn create_sub_query(
-        base_command: &Command,
-        event_type: &str,
-    ) -> Result<Command, String> {
+    fn create_sub_query(base_command: &Command, event_type: &str) -> Result<Command, String> {
         let Command::Query {
             context_id: _,
             since,
@@ -125,11 +122,8 @@ impl StreamingDispatch for SequenceStreamingDispatcher {
             let sub_command = Self::create_sub_query(ctx.command, event_type)?;
 
             // Create new context for sub-query
-            let sub_ctx = QueryContext::new(
-                &sub_command,
-                ctx.shard_manager,
-                Arc::clone(&ctx.registry),
-            );
+            let sub_ctx =
+                QueryContext::new(&sub_command, ctx.shard_manager, Arc::clone(&ctx.registry));
 
             // Build plan for sub-query
             let planner = QueryPlannerBuilder::new(&sub_command).build();
@@ -235,11 +229,8 @@ impl SequenceStreamingDispatcher {
             let sub_command = Self::create_sub_query(ctx.command, event_type)?;
 
             // Create new context for sub-query
-            let sub_ctx = QueryContext::new(
-                &sub_command,
-                ctx.shard_manager,
-                Arc::clone(&ctx.registry),
-            );
+            let sub_ctx =
+                QueryContext::new(&sub_command, ctx.shard_manager, Arc::clone(&ctx.registry));
 
             // Build plan for sub-query
             let planner = QueryPlannerBuilder::new(&sub_command).build();
@@ -313,4 +304,3 @@ impl SequenceStreamingDispatcher {
         })
     }
 }
-

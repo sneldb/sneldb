@@ -1,3 +1,4 @@
+pub mod compare;
 pub mod define;
 pub mod flush;
 pub mod kway_merger;

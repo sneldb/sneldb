@@ -72,11 +72,12 @@ async fn hydrates_candidate_zones_with_values() {
         .await;
 
     // Create execution steps from all filter groups in the plan
-    let steps: Vec<_> = plan.filter_groups
+    let steps: Vec<_> = plan
+        .filter_groups
         .iter()
         .map(|filter_group| {
             ExecutionStepFactory::new()
-        .with_plan(&plan)
+                .with_plan(&plan)
                 .with_filter(filter_group.clone())
                 .create()
         })

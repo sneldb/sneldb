@@ -50,13 +50,21 @@ impl<'a> ZoneSelectorBuilder<'a> {
         let column = self.inputs.plan.column().unwrap_or("");
         match column {
             "event_type" => {
-                let uid = self.inputs.plan.value().and_then(|v| v.as_str()).and_then(|_| {
-                    // Get uid from FilterGroup
-                    match self.inputs.plan {
-                        crate::engine::core::filter::filter_group::FilterGroup::Filter { uid, .. } => uid.as_deref(),
-                        _ => None,
-                    }
-                });
+                let uid = self
+                    .inputs
+                    .plan
+                    .value()
+                    .and_then(|v| v.as_str())
+                    .and_then(|_| {
+                        // Get uid from FilterGroup
+                        match self.inputs.plan {
+                            crate::engine::core::filter::filter_group::FilterGroup::Filter {
+                                uid,
+                                ..
+                            } => uid.as_deref(),
+                            _ => None,
+                        }
+                    });
                 let Some(uid) = uid else {
                     return Box::new(EmptySelector {});
                 };
@@ -87,7 +95,9 @@ impl<'a> ZoneSelectorBuilder<'a> {
                     .and_then(|p| p.value().and_then(|v| v.as_str()));
                 let context_id = self.inputs.plan.value().and_then(|v| v.as_str());
                 let uid = match self.inputs.plan {
-                    crate::engine::core::filter::filter_group::FilterGroup::Filter { uid, .. } => uid.as_deref(),
+                    crate::engine::core::filter::filter_group::FilterGroup::Filter {
+                        uid, ..
+                    } => uid.as_deref(),
                     _ => None,
                 };
 

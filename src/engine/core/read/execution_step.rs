@@ -1,5 +1,5 @@
-use crate::engine::core::{CandidateZone, QueryCaches, QueryPlan, ZoneFinder};
 use crate::engine::core::filter::filter_group::FilterGroup;
+use crate::engine::core::{CandidateZone, QueryCaches, QueryPlan, ZoneFinder};
 use tracing::debug;
 
 /// Represents a single step in the query execution

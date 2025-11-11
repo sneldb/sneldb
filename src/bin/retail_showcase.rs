@@ -133,7 +133,7 @@ async fn main() -> Result<()> {
                 event_type
             ),
             "payment_succeeded" => format!(
-                "DEFINE {} FIELDS {{ context_id: \"string\", customer_id: \"string\", price: \"u64\", currency: \"string\", created_at: \"datetime\" }}\n",
+                "DEFINE {} FIELDS {{ context_id: \"string\", customer_id: \"string\", product_id: \"string\", price: \"u64\", currency: \"string\", created_at: \"datetime\" }}\n",
                 event_type
             ),
             "order_created" => format!(
@@ -380,6 +380,7 @@ fn generate_session_events(
                     json!({
                         "context_id": session.context_id,
                         "customer_id": session.customer_id,
+                        "product_id": session.product_id,
                         "price": session.price,
                         "currency": session.currency,
                         "created_at": current_time

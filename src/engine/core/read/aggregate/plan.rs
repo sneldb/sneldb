@@ -1,4 +1,4 @@
-use crate::command::types::{AggSpec, Command, TimeGranularity};
+use crate::command::types::{AggSpec, Command, QueryCommand, TimeGranularity};
 
 /// Describes a single aggregate operation requested by the query
 #[derive(Debug, Clone, PartialEq)]
@@ -74,5 +74,43 @@ impl AggregatePlan {
         } else {
             None
         }
+    }
+
+    /// Builds an `AggregatePlan` from a `QueryCommand` if any aggregates are present
+    pub fn from_query_command(query: &QueryCommand) -> Option<Self> {
+        let Some(aggs_vec) = query.aggs.as_ref() else {
+            return None;
+        };
+
+        let mut ops: Vec<AggregateOpSpec> = Vec::with_capacity(aggs_vec.len());
+        for spec in aggs_vec {
+            match spec {
+                AggSpec::Count { unique_field } => match unique_field {
+                    Some(f) => ops.push(AggregateOpSpec::CountUnique { field: f.clone() }),
+                    None => ops.push(AggregateOpSpec::CountAll),
+                },
+                AggSpec::CountField { field } => ops.push(AggregateOpSpec::CountField {
+                    field: field.clone(),
+                }),
+                AggSpec::Total { field } => ops.push(AggregateOpSpec::Total {
+                    field: field.clone(),
+                }),
+                AggSpec::Avg { field } => ops.push(AggregateOpSpec::Avg {
+                    field: field.clone(),
+                }),
+                AggSpec::Min { field } => ops.push(AggregateOpSpec::Min {
+                    field: field.clone(),
+                }),
+                AggSpec::Max { field } => ops.push(AggregateOpSpec::Max {
+                    field: field.clone(),
+                }),
+            }
+        }
+
+        Some(Self {
+            ops,
+            group_by: query.group_by.clone(),
+            time_bucket: query.time_bucket.clone(),
+        })
     }
 }

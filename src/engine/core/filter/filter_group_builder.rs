@@ -86,7 +86,9 @@ impl FilterGroupBuilder {
                             index_strategy: None,
                         };
                         // Insert with precedence (lower priority = higher precedence)
-                        unique_filters.entry(field.clone()).or_insert_with(|| filter);
+                        unique_filters
+                            .entry(field.clone())
+                            .or_insert_with(|| filter);
                     }
                 }
             }
@@ -102,19 +104,14 @@ impl FilterGroupBuilder {
     }
 
     /// Builds a FilterGroup from an Expr, preserving logical structure.
-    pub fn build(
-        expr: &Expr,
-        event_type_uid: &Option<String>,
-    ) -> Option<FilterGroup> {
+    pub fn build(expr: &Expr, event_type_uid: &Option<String>) -> Option<FilterGroup> {
         match expr {
-            Expr::Compare { field, op, value } => {
-                Some(FilterGroup::new_filter(
-                    field.clone(),
-                    Some(op.clone()),
-                    Some(ScalarValue::from(value.clone())),
-                    event_type_uid.clone(),
-                ))
-            }
+            Expr::Compare { field, op, value } => Some(FilterGroup::new_filter(
+                field.clone(),
+                Some(op.clone()),
+                Some(ScalarValue::from(value.clone())),
+                event_type_uid.clone(),
+            )),
             Expr::In { field, values } => {
                 InExpansion::expand_in(field.clone(), values, event_type_uid)
             }
@@ -128,7 +125,11 @@ impl FilterGroupBuilder {
                 // This allows efficient zone collection: each equality uses ZoneXorIndex,
                 // then zones are unioned by ZoneGroupCollector
                 if let Some((field, values)) = Self::extract_or_equality_values(left, right) {
-                    return Some(InExpansion::expand_or_equalities(field, values, event_type_uid));
+                    return Some(InExpansion::expand_or_equalities(
+                        field,
+                        values,
+                        event_type_uid,
+                    ));
                 }
 
                 // Otherwise, preserve OR structure
@@ -221,22 +222,26 @@ impl FilterGroupBuilder {
                 && matches!(op_left, CompareOp::Eq)
                 && matches!(op_right, CompareOp::Eq) =>
             {
-                Some((field_left.clone(), vec![value_left.clone(), value_right.clone()]))
+                Some((
+                    field_left.clone(),
+                    vec![value_left.clone(), value_right.clone()],
+                ))
             }
             // Handle nested OR expressions: (A OR B) OR C
             (Expr::Or(left_inner, right_inner), Expr::Compare { field, op, value })
             | (Expr::Compare { field, op, value }, Expr::Or(left_inner, right_inner))
                 if matches!(op, CompareOp::Eq) =>
             {
-                Self::extract_or_equality_values(left_inner, right_inner)
-                    .and_then(|(field_inner, mut values_inner)| {
+                Self::extract_or_equality_values(left_inner, right_inner).and_then(
+                    |(field_inner, mut values_inner)| {
                         if field_inner == *field {
                             values_inner.push(value.clone());
                             Some((field.clone(), values_inner))
                         } else {
                             None
                         }
-                    })
+                    },
+                )
             }
             _ => None,
         }
@@ -299,7 +304,9 @@ impl FilterGroupBuilder {
             event_type_uid.clone(),
         );
         // Insert with precedence (lower priority = higher precedence)
-        unique_filters.entry(time_field.to_string()).or_insert_with(|| filter);
+        unique_filters
+            .entry(time_field.to_string())
+            .or_insert_with(|| filter);
     }
 
     /// Normalizes temporal literals in an Expr to epoch seconds
@@ -310,10 +317,9 @@ impl FilterGroupBuilder {
                     .field_type(field)
                     .map(|ft| match ft {
                         FieldType::Timestamp | FieldType::Date => true,
-                        FieldType::Optional(inner) => matches!(
-                            **inner,
-                            FieldType::Timestamp | FieldType::Date
-                        ),
+                        FieldType::Optional(inner) => {
+                            matches!(**inner, FieldType::Timestamp | FieldType::Date)
+                        }
                         _ => false,
                     })
                     .unwrap_or(false);
@@ -348,10 +354,9 @@ impl FilterGroupBuilder {
                     .field_type(field)
                     .map(|ft| match ft {
                         FieldType::Timestamp | FieldType::Date => true,
-                        FieldType::Optional(inner) => matches!(
-                            **inner,
-                            FieldType::Timestamp | FieldType::Date
-                        ),
+                        FieldType::Optional(inner) => {
+                            matches!(**inner, FieldType::Timestamp | FieldType::Date)
+                        }
                         _ => false,
                     })
                     .unwrap_or(false);
@@ -425,4 +430,3 @@ impl FilterGroupBuilder {
         }
     }
 }
-

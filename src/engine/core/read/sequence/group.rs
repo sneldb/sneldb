@@ -53,7 +53,10 @@ impl ColumnarGrouper {
     /// * `link_field` - The field name to use for grouping events (e.g., "user_id")
     /// * `time_field` - The field name to use for time-based sorting (e.g., "created_at", defaults to "timestamp")
     pub fn new(link_field: String, time_field: String) -> Self {
-        Self { link_field, time_field }
+        Self {
+            link_field,
+            time_field,
+        }
     }
 
     /// Groups row indices by link field value across all zones.
@@ -245,7 +248,8 @@ impl ColumnarGrouper {
                 if let Some(zones) = zones_by_event_type.get(event_type) {
                     // OPTIMIZATION: Pre-extract all timestamps to avoid repeated accessor creation
                     // Create a vector of (timestamp, original_index) pairs
-                    let mut timestamped_indices: Vec<(u64, usize)> = Vec::with_capacity(row_indices.len());
+                    let mut timestamped_indices: Vec<(u64, usize)> =
+                        Vec::with_capacity(row_indices.len());
                     for (idx, row_index) in row_indices.iter().enumerate() {
                         let ts = self.get_timestamp(zones, row_index);
                         timestamped_indices.push((ts, idx));
@@ -263,7 +267,8 @@ impl ColumnarGrouper {
 
                     if tracing::enabled!(tracing::Level::TRACE) {
                         let first_ts = self.get_timestamp(zones, &row_indices[0]);
-                        let last_ts = self.get_timestamp(zones, &row_indices[row_indices.len() - 1]);
+                        let last_ts =
+                            self.get_timestamp(zones, &row_indices[row_indices.len() - 1]);
                         trace!(
                             target: "sneldb::sequence::group",
                             event_type = %event_type,

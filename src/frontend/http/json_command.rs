@@ -160,12 +160,7 @@ impl From<JsonExpr> for Expr {
                     value,
                 }
             }
-            JsonExpr::In(JsonIn { field, values }) => {
-                Expr::In {
-                    field,
-                    values,
-                }
-            }
+            JsonExpr::In(JsonIn { field, values }) => Expr::In { field, values },
             JsonExpr::Logical(JsonLogical { and, or, not }) => {
                 if !and.is_empty() {
                     and.into_iter()

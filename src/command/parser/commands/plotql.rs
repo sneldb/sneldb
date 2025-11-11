@@ -23,14 +23,38 @@ peg::parser! {
 
         pub rule plot_query() -> PlotQueryInputs
             = _ ci("PLOT") _ metric:metric_expr()
-              _ of_clause:(ci("OF") _ events:event_sequence() { events })?
-              clauses:( _ clause:plot_clause() { clause } )* _ {
+              _ ci("OF") _ events:event_sequence()
+              before_vs_clauses:( _ clause:plot_clause_before_vs() { clause } )*
+              comparison_sides:( _ ci("VS") _ side:comparison_side() { side } )*
+              after_vs_clauses:( _ clause:plot_clause_after_vs() { clause } )* _ {
                 PlotQueryInputs {
                     metric,
-                    events: of_clause.unwrap_or_else(|| vec![]),
+                    events,
+                    before_vs_clauses,
+                    comparison_sides,
+                    after_vs_clauses,
+                }
+            }
+
+        rule comparison_side() -> ComparisonSide
+            = metric:metric_expr() _ ci("OF") _ events:event_sequence()
+              clauses:( _ clause:plot_clause_before_vs() { clause } )* {
+                ComparisonSide {
+                    metric,
+                    events,
                     clauses,
                 }
             }
+
+        rule plot_clause_before_vs() -> PlotClause
+            = filter_clause()
+            / top_clause()
+            // breakdown_clause() removed - breakdown must come after vs to be shared
+
+        rule plot_clause_after_vs() -> PlotClause
+            = breakdown_clause()
+            / time_clause()
+            / top_clause()
 
         // ==========
         // METRIC EXPRESSION
@@ -61,8 +85,11 @@ peg::parser! {
         // EVENT SEQUENCE
         // ==========
 
+        rule sequence_separator()
+            = "->" / ci("THEN")
+
         rule event_sequence() -> Vec<String>
-            = head:identifier() tail:( _? "->" _? id:identifier() { id } )* {
+            = head:identifier() tail:( _? sequence_separator() _? id:identifier() { id } )* {
                 let mut events = Vec::with_capacity(1 + tail.len());
                 events.push(head.to_string());
                 for t in tail {
@@ -80,7 +107,6 @@ peg::parser! {
             / time_clause()
             / filter_clause()
             / top_clause()
-            / compare_clause()
 
         rule breakdown_clause() -> PlotClause
             = ci("BREAKDOWN") _ ci("BY") _ fields:field_list() {
@@ -107,10 +133,6 @@ peg::parser! {
             = m:metric_expr() { TopByTarget::Metric(m) }
             / f:field() { TopByTarget::Field(f) }
 
-        rule compare_clause() -> PlotClause
-            = ci("VS") _ metric:metric_expr() _ ci("OF") _ events:event_sequence() {
-                PlotClause::Compare { metric, events }
-            }
 
         // ==========
         // EXPRESSIONS
@@ -245,10 +267,46 @@ peg::parser! {
 
 pub fn parse(input: &str) -> Result<Command, ParseError> {
     let inputs = plotql_parser::plot_query(input).map_err(map_peg_error)?;
-    let mut parts = PlotQueryParts::new(inputs.metric, inputs.events);
-    for clause in inputs.clauses {
-        parts.apply_clause(clause);
+
+    // Validate that all metrics are the same
+    for side in &inputs.comparison_sides {
+        if !inputs.metric.equals(&side.metric) {
+            return Err(ParseError::UnexpectedToken(
+                "All sides of a comparison query must use the same metric function".to_string(),
+            ));
+        }
     }
+
+    let mut parts = PlotQueryParts::new(inputs.metric, inputs.events);
+
+    // Apply clauses before vs to main query
+    for clause in inputs.before_vs_clauses {
+        parts.apply_clause_to_main(clause);
+    }
+
+    // Process comparison sides
+    for side in inputs.comparison_sides {
+        let mut side_parts = ComparisonSideParts {
+            metric: side.metric,
+            events: side.events,
+            filter: None,
+            breakdown: None,
+            top: None,
+            top_by_target: None,
+        };
+
+        for clause in side.clauses {
+            side_parts.apply_clause(clause);
+        }
+
+        parts.comparison_sides.push(side_parts);
+    }
+
+    // Apply shared clauses (after vs)
+    for clause in inputs.after_vs_clauses {
+        parts.apply_shared_clause(clause);
+    }
+
     Ok(parts.into_command())
 }
 
@@ -260,6 +318,15 @@ fn map_peg_error(e: peg::error::ParseError<peg::str::LineCol>) -> ParseError {
 struct PlotQueryInputs {
     metric: MetricSpec,
     events: Vec<String>,
+    before_vs_clauses: Vec<PlotClause>,
+    comparison_sides: Vec<ComparisonSide>,
+    after_vs_clauses: Vec<PlotClause>,
+}
+
+#[derive(Debug)]
+struct ComparisonSide {
+    metric: MetricSpec,
+    events: Vec<String>,
     clauses: Vec<PlotClause>,
 }
 
@@ -268,17 +335,10 @@ enum PlotClause {
     Breakdown(Vec<String>),
     Time(TimeGranularity, String),
     Filter(Expr),
-    Top {
-        value: u32,
-        by: Option<TopByTarget>,
-    },
-    Compare {
-        metric: MetricSpec,
-        events: Vec<String>,
-    },
+    Top { value: u32, by: Option<TopByTarget> },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum TopByTarget {
     Field(String),
     Metric(MetricSpec),
@@ -305,37 +365,38 @@ enum AggFunc {
 }
 
 struct PlotQueryParts {
+    // Main query side
     metric: MetricSpec,
     events: Vec<String>,
     filter: Option<Expr>,
     breakdown: Option<Vec<String>>,
-    time: Option<(TimeGranularity, String)>,
     top: Option<u32>,
-    order_by: Option<OrderSpec>,
-    compare: Option<(MetricSpec, Vec<String>)>,
+    top_by_target: Option<TopByTarget>,
+
+    // Comparison sides (N-way)
+    comparison_sides: Vec<ComparisonSideParts>,
+
+    // Shared clauses (apply to all sides)
+    shared_time: Option<(TimeGranularity, String)>,
+    shared_breakdown: Option<Vec<String>>,
+    shared_top: Option<u32>,
+    shared_top_by_target: Option<TopByTarget>,
 }
 
-impl PlotQueryParts {
-    fn new(metric: MetricSpec, events: Vec<String>) -> Self {
-        Self {
-            metric,
-            events,
-            filter: None,
-            breakdown: None,
-            time: None,
-            top: None,
-            order_by: None,
-            compare: None,
-        }
-    }
+struct ComparisonSideParts {
+    metric: MetricSpec,
+    events: Vec<String>,
+    filter: Option<Expr>,
+    breakdown: Option<Vec<String>>,
+    top: Option<u32>,
+    top_by_target: Option<TopByTarget>,
+}
 
+impl ComparisonSideParts {
     fn apply_clause(&mut self, clause: PlotClause) {
         match clause {
             PlotClause::Breakdown(fields) => {
                 self.breakdown = Some(fields);
-            }
-            PlotClause::Time(gran, field) => {
-                self.time = Some((gran, field));
             }
             PlotClause::Filter(expr) => {
                 self.filter = Some(match self.filter.take() {
@@ -345,87 +406,249 @@ impl PlotQueryParts {
             }
             PlotClause::Top { value, by } => {
                 self.top = Some(value);
-                // Default ordering: by main metric descending, unless overridden
-                if let Some(target) = by {
-                    self.order_by = Some(OrderSpec {
-                        field: target.into_field_name(&self.metric),
-                        desc: true,
-                    });
-                } else {
-                    // Default: order by main metric descending
-                    self.order_by = Some(OrderSpec {
-                        field: self.metric.field_name(),
-                        desc: true,
-                    });
-                }
+                self.top_by_target = by;
             }
-            PlotClause::Compare { metric, events } => {
-                self.compare = Some((metric, events));
-                // Note: Comparison queries will need special handling in the executor
-                // For now, we store it but the executor will need to handle it
+            PlotClause::Time(_, _) => {
+                // Time clause should not appear before vs
+            }
+        }
+    }
+}
+
+impl PlotQueryParts {
+    fn new(metric: MetricSpec, events: Vec<String>) -> Self {
+        Self {
+            metric,
+            events,
+            filter: None,
+            breakdown: None,
+            top: None,
+            top_by_target: None,
+            comparison_sides: Vec::new(),
+            shared_time: None,
+            shared_breakdown: None,
+            shared_top: None,
+            shared_top_by_target: None,
+        }
+    }
+
+    fn apply_clause_to_main(&mut self, clause: PlotClause) {
+        match clause {
+            PlotClause::Breakdown(fields) => {
+                self.breakdown = Some(fields);
+            }
+            PlotClause::Filter(expr) => {
+                self.filter = Some(match self.filter.take() {
+                    Some(existing) => Expr::And(Box::new(existing), Box::new(expr)),
+                    None => expr,
+                });
+            }
+            PlotClause::Top { value, by } => {
+                self.top = Some(value);
+                self.top_by_target = by;
+            }
+            PlotClause::Time(_, _) => {
+                // Time clause should not appear before vs
+            }
+        }
+    }
+
+    fn apply_shared_clause(&mut self, clause: PlotClause) {
+        match clause {
+            PlotClause::Breakdown(fields) => {
+                self.shared_breakdown = Some(fields);
+            }
+            PlotClause::Time(gran, field) => {
+                self.shared_time = Some((gran, field));
+            }
+            PlotClause::Top { value, by } => {
+                self.shared_top = Some(value);
+                self.shared_top_by_target = by;
+            }
+            PlotClause::Filter(_) => {
+                // Filters are per-side, not shared
             }
         }
     }
 
     fn into_command(self) -> Command {
-        let mut events_iter = self.events.into_iter();
-        let event_type = events_iter.next().unwrap_or_else(|| "*".to_string());
-        let remaining: Vec<String> = events_iter.collect();
-        let event_sequence = if remaining.is_empty() {
-            None
-        } else {
-            let mut links = Vec::with_capacity(remaining.len());
-            for evt in remaining {
-                links.push((
-                    SequenceLink::FollowedBy,
-                    EventTarget {
-                        event: evt,
-                        field: None,
-                    },
-                ));
-            }
-            Some(EventSequence {
-                head: EventTarget {
-                    event: event_type.clone(),
-                    field: None,
-                },
-                links,
-            })
-        };
+        // Extract all values before moving self
+        let main_metric = self.metric.clone();
+        let main_events = self.events.clone();
+        let main_filter = self.filter.clone();
+        let main_breakdown = self.breakdown.clone();
+        let main_top = self.top;
+        let main_top_by_target = self.top_by_target.clone();
 
-        let (time_bucket, time_field) = match self.time {
-            Some((gran, field)) => (Some(gran), Some(field)),
+        let shared_time = self.shared_time.clone();
+        let shared_breakdown = self.shared_breakdown.clone();
+        let shared_top = self.shared_top;
+        let shared_top_by_target = self.shared_top_by_target.clone();
+
+        let comparison_sides = self.comparison_sides;
+
+        // Build main query as QueryCommand
+        let main_query = Self::build_query_command_static(
+            main_metric,
+            main_events,
+            main_filter,
+            main_breakdown,
+            main_top,
+            main_top_by_target,
+            &shared_time,
+            &shared_breakdown,
+            shared_top,
+            &shared_top_by_target,
+        );
+
+        // If no comparison sides, return as regular Query
+        if comparison_sides.is_empty() {
+            return Command::from(main_query);
+        }
+
+        // Build comparison queries
+        let mut queries = Vec::with_capacity(1 + comparison_sides.len());
+        queries.push(main_query);
+
+        for side in comparison_sides {
+            queries.push(Self::build_query_command_static(
+                side.metric,
+                side.events,
+                side.filter,
+                side.breakdown,
+                side.top,
+                side.top_by_target,
+                &shared_time,
+                &shared_breakdown,
+                shared_top,
+                &shared_top_by_target,
+            ));
+        }
+
+        Command::Compare { queries }
+    }
+
+    fn build_query_command_static(
+        metric: MetricSpec,
+        events: Vec<String>,
+        filter: Option<Expr>,
+        breakdown: Option<Vec<String>>,
+        top: Option<u32>,
+        top_by_target: Option<TopByTarget>,
+        shared_time: &Option<(TimeGranularity, String)>,
+        shared_breakdown: &Option<Vec<String>>,
+        shared_top: Option<u32>,
+        shared_top_by_target: &Option<TopByTarget>,
+    ) -> crate::command::types::QueryCommand {
+        let (event_type, event_sequence) = Self::build_event_sequence(events);
+
+        let (time_bucket, time_field) = match shared_time {
+            Some((gran, field)) => (Some(gran.clone()), Some(field.clone())),
             None => (None, None),
         };
 
-        // If no explicit order_by but we have a top clause, default to ordering by metric
-        let order_by = if self.order_by.is_none() && self.top.is_some() {
-            Some(OrderSpec {
-                field: self.metric.field_name(),
-                desc: true,
-            })
-        } else {
-            self.order_by
-        };
+        // Use shared breakdown/time/top if present, otherwise use per-side values
+        let breakdown = shared_breakdown.clone().or(breakdown);
+        let top = shared_top.or(top);
+        let top_by_target = shared_top_by_target.clone().or(top_by_target);
 
-        Command::Query {
+        // Build aggs list: start with metric, add ordering metric if different
+        let mut aggs = vec![metric.clone().into()];
+        let order_by = Self::build_order_spec_for_metrics(&metric, top, &top_by_target, &mut aggs);
+
+        crate::command::types::QueryCommand {
             event_type,
             context_id: None,
             since: None,
             time_field,
             sequence_time_field: None,
-            where_clause: self.filter,
-            limit: self.top,
+            where_clause: filter,
+            limit: top,
             offset: None,
             order_by,
             picked_zones: None,
             return_fields: None,
             link_field: None,
-            aggs: Some(vec![self.metric.into()]),
+            aggs: Some(aggs),
             time_bucket,
-            group_by: self.breakdown,
+            group_by: breakdown,
             event_sequence,
         }
+    }
+
+    fn build_event_sequence(events: Vec<String>) -> (String, Option<EventSequence>) {
+        let mut events_iter = events.into_iter();
+        let event_type = events_iter.next().unwrap_or_else(|| "*".to_string());
+        let remaining: Vec<String> = events_iter.collect();
+
+        if remaining.is_empty() {
+            (event_type, None)
+        } else {
+            let links: Vec<(SequenceLink, EventTarget)> = remaining
+                .into_iter()
+                .map(|evt| {
+                    (
+                        SequenceLink::FollowedBy,
+                        EventTarget {
+                            event: evt,
+                            field: None,
+                        },
+                    )
+                })
+                .collect();
+
+            let event_sequence = EventSequence {
+                head: EventTarget {
+                    event: event_type.clone(),
+                    field: None,
+                },
+                links,
+            };
+
+            (event_type, Some(event_sequence))
+        }
+    }
+
+    /// Builds the OrderSpec and ensures the ordering metric is in the aggs list.
+    /// If ordering by a metric that differs from the main metric, adds it to aggs.
+    fn build_order_spec_for_metrics(
+        main_metric: &MetricSpec,
+        top: Option<u32>,
+        top_by_target: &Option<TopByTarget>,
+        aggs: &mut Vec<AggSpec>,
+    ) -> Option<OrderSpec> {
+        if top.is_none() {
+            return None;
+        }
+
+        let order_by = match top_by_target {
+            Some(TopByTarget::Field(field)) => {
+                // Ordering by a field (column) - no need to add to aggs
+                OrderSpec {
+                    field: field.clone(),
+                    desc: true,
+                }
+            }
+            Some(TopByTarget::Metric(metric)) => {
+                // Ordering by a metric - ensure it's in aggs if different from main metric
+                if !main_metric.equals(metric) {
+                    aggs.push(metric.clone().into());
+                }
+                OrderSpec {
+                    field: metric.field_name(),
+                    desc: true,
+                }
+            }
+            None => {
+                // Default: order by main metric descending
+                OrderSpec {
+                    field: main_metric.field_name(),
+                    desc: true,
+                }
+            }
+        };
+
+        Some(order_by)
     }
 }
 
@@ -445,15 +668,6 @@ impl From<MetricSpec> for AggSpec {
     }
 }
 
-impl TopByTarget {
-    fn into_field_name(self, _main_metric: &MetricSpec) -> String {
-        match self {
-            TopByTarget::Field(f) => f,
-            TopByTarget::Metric(metric) => metric.field_name(),
-        }
-    }
-}
-
 impl MetricSpec {
     fn field_name(&self) -> String {
         match self {
@@ -464,6 +678,20 @@ impl MetricSpec {
             MetricSpec::Avg(field) => format!("avg_{}", field),
             MetricSpec::Min(field) => format!("min_{}", field),
             MetricSpec::Max(field) => format!("max_{}", field),
+        }
+    }
+
+    /// Checks if two MetricSpec values are equal.
+    fn equals(&self, other: &MetricSpec) -> bool {
+        match (self, other) {
+            (MetricSpec::CountAll, MetricSpec::CountAll) => true,
+            (MetricSpec::CountField(a), MetricSpec::CountField(b)) => a == b,
+            (MetricSpec::CountUnique(a), MetricSpec::CountUnique(b)) => a == b,
+            (MetricSpec::Total(a), MetricSpec::Total(b)) => a == b,
+            (MetricSpec::Avg(a), MetricSpec::Avg(b)) => a == b,
+            (MetricSpec::Min(a), MetricSpec::Min(b)) => a == b,
+            (MetricSpec::Max(a), MetricSpec::Max(b)) => a == b,
+            _ => false,
         }
     }
 }

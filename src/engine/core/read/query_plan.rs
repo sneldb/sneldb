@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 /// The main query plan structure that holds all query information
 #[derive(Debug, Clone)]
@@ -36,14 +36,12 @@ impl QueryPlan {
     ) -> Option<Self> {
         match &command {
             Command::Query {
-                where_clause, event_type, ..
+                where_clause,
+                event_type,
+                ..
             } => {
                 // Build FilterGroup from WHERE clause to preserve logical structure
-                let event_type_uid = registry
-                    .read()
-                    .await
-                    .get_uid(event_type)
-                    .clone();
+                let event_type_uid = registry.read().await.get_uid(event_type).clone();
                 let filter_group = where_clause
                     .as_ref()
                     .and_then(|expr| FilterGroupBuilder::build(expr, &event_type_uid));
@@ -71,20 +69,25 @@ impl QueryPlan {
                     {
                         let tf = time_field.as_deref().unwrap_or("timestamp");
                         // Remove implicit 'since' time filter for aggregations
-                        filter_groups.retain(|fg| {
-                            match fg {
-                                FilterGroup::Filter { column, operation, value, .. } => {
-                                    if column != tf {
-                                        return true;
-                                    }
-                                    match (operation, value) {
-                                        (Some(crate::command::types::CompareOp::Gte), Some(crate::engine::types::ScalarValue::Utf8(s)))
-                                            if since.as_deref() == Some(s.as_str()) => false,
-                                        _ => true,
-                                    }
+                        filter_groups.retain(|fg| match fg {
+                            FilterGroup::Filter {
+                                column,
+                                operation,
+                                value,
+                                ..
+                            } => {
+                                if column != tf {
+                                    return true;
                                 }
-                                _ => true,
+                                match (operation, value) {
+                                    (
+                                        Some(crate::command::types::CompareOp::Gte),
+                                        Some(crate::engine::types::ScalarValue::Utf8(s)),
+                                    ) if since.as_deref() == Some(s.as_str()) => false,
+                                    _ => true,
+                                }
                             }
+                            _ => true,
                         });
                     }
                 }
@@ -188,6 +191,24 @@ impl QueryPlan {
         }
     }
 
+    /// Returns the OrderSpec if ordering should happen at the shard level (before aggregation).
+    /// Returns None if ordering should be deferred to the merger (after aggregation).
+    ///
+    /// For aggregate queries, ordering must happen after aggregation because:
+    /// 1. Metric columns don't exist until after aggregation
+    /// 2. Partial aggregates from multiple shards must be merged first
+    /// 3. Final ordering happens on merged results in AggregateStreamMerger
+    ///
+    /// For non-aggregate queries, ordering can happen at the shard level.
+    pub fn order_by_for_shard_level(&self) -> Option<&crate::command::types::OrderSpec> {
+        // If there's an aggregate plan, ordering must happen after aggregation
+        if self.aggregate_plan.is_some() {
+            return None;
+        }
+        // For non-aggregate queries, ordering can happen at shard level
+        self.order_by()
+    }
+
     pub fn context_id_plan(&self) -> Option<&FilterGroup> {
         self.filter_groups.iter().find(|plan| plan.is_context_id())
     }
@@ -230,13 +251,12 @@ impl QueryPlan {
     pub async fn build(command: &Command, registry: Arc<RwLock<SchemaRegistry>>) -> Self {
         // Build FilterGroup from WHERE clause if present
         let filter_group = if let Command::Query {
-            where_clause, event_type, ..
-        } = command {
-            let event_type_uid = registry
-                .read()
-                .await
-                .get_uid(event_type)
-                .clone();
+            where_clause,
+            event_type,
+            ..
+        } = command
+        {
+            let event_type_uid = registry.read().await.get_uid(event_type).clone();
             where_clause
                 .as_ref()
                 .and_then(|expr| FilterGroupBuilder::build(expr, &event_type_uid))

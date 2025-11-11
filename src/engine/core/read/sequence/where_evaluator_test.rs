@@ -571,7 +571,10 @@ async fn test_in_clause_with_common_field() {
     let order_result = evaluator.evaluate_row("order_created", &order_zone, &row_index);
     // Common fields are applied to all event types, so order_created gets evaluator for "id"
     // but since the zone doesn't have "id", the condition fails
-    assert!(!order_result, "order_created should fail (has evaluator for id but field missing)");
+    assert!(
+        !order_result,
+        "order_created should fail (has evaluator for id but field missing)"
+    );
 }
 
 #[tokio::test]
@@ -649,7 +652,10 @@ async fn test_in_clause_combined_with_and() {
 
     // Should pass: both conditions match
     let result = evaluator.evaluate_row("page_view", &zone, &row_index);
-    assert!(result, "Should pass when both IN and Compare conditions match");
+    assert!(
+        result,
+        "Should pass when both IN and Compare conditions match"
+    );
 
     // Test with IN condition failing
     let mut payload_fields2 = HashMap::new();
@@ -810,7 +816,10 @@ async fn test_in_clause_ambiguous_field_error() {
 
     let result = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry).await;
 
-    assert!(result.is_err(), "Should return error for ambiguous IN field");
+    assert!(
+        result.is_err(),
+        "Should return error for ambiguous IN field"
+    );
     if let Err(error_msg) = result {
         assert!(
             error_msg.contains("Ambiguous field 'status'"),
@@ -890,7 +899,10 @@ async fn test_in_clause_with_multiple_event_types() {
     let order_result = evaluator.evaluate_row("order_created", &order_zone, &row_index);
 
     assert!(page_result, "page_view should pass when id is in IN list");
-    assert!(order_result, "order_created should pass when status is in IN list");
+    assert!(
+        order_result,
+        "order_created should pass when status is in IN list"
+    );
 }
 
 #[tokio::test]
@@ -920,5 +932,8 @@ async fn test_in_clause_with_single_value() {
 
     // Should pass: id=42 is in [42]
     let result = evaluator.evaluate_row("page_view", &zone, &row_index);
-    assert!(result, "Should pass when id matches single value in IN list");
+    assert!(
+        result,
+        "Should pass when id matches single value in IN list"
+    );
 }

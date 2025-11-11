@@ -320,7 +320,8 @@ impl QueryCaches {
         uid: &str,
         field: &str,
     ) -> Result<Arc<ZoneXorFilterIndex>, std::io::Error> {
-        let compact_key = ZoneXorFilterCacheKey::from_context(self.shard_id, segment_id, uid, field);
+        let compact_key =
+            ZoneXorFilterCacheKey::from_context(self.shard_id, segment_id, uid, field);
 
         // Fast path: per-query memoization
         if let Some(v) = self

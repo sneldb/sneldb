@@ -48,12 +48,102 @@ pub enum Command {
     Ping,
     Flush,
     Batch(Vec<Command>),
+    Compare {
+        queries: Vec<QueryCommand>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MaterializedQuerySpec {
     pub name: String,
     pub query: Box<Command>,
+}
+
+/// Represents a single query command, used both in Command::Query and Command::Compare
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct QueryCommand {
+    pub event_type: String,
+    pub context_id: Option<String>,
+    pub since: Option<String>,
+    pub time_field: Option<String>,
+    pub sequence_time_field: Option<String>,
+    pub where_clause: Option<Expr>,
+    pub limit: Option<u32>,
+    pub offset: Option<u32>,
+    pub order_by: Option<OrderSpec>,
+    pub picked_zones: Option<PickedZones>,
+    pub return_fields: Option<Vec<String>>,
+    pub link_field: Option<String>,
+    pub aggs: Option<Vec<AggSpec>>,
+    pub time_bucket: Option<TimeGranularity>,
+    pub group_by: Option<Vec<String>>,
+    pub event_sequence: Option<EventSequence>,
+}
+
+impl From<&Command> for QueryCommand {
+    fn from(cmd: &Command) -> Self {
+        match cmd {
+            Command::Query {
+                event_type,
+                context_id,
+                since,
+                time_field,
+                sequence_time_field,
+                where_clause,
+                limit,
+                offset,
+                order_by,
+                picked_zones,
+                return_fields,
+                link_field,
+                aggs,
+                time_bucket,
+                group_by,
+                event_sequence,
+            } => QueryCommand {
+                event_type: event_type.clone(),
+                context_id: context_id.clone(),
+                since: since.clone(),
+                time_field: time_field.clone(),
+                sequence_time_field: sequence_time_field.clone(),
+                where_clause: where_clause.clone(),
+                limit: *limit,
+                offset: *offset,
+                order_by: order_by.clone(),
+                picked_zones: picked_zones.clone(),
+                return_fields: return_fields.clone(),
+                link_field: link_field.clone(),
+                aggs: aggs.clone(),
+                time_bucket: time_bucket.clone(),
+                group_by: group_by.clone(),
+                event_sequence: event_sequence.clone(),
+            },
+            _ => panic!("Command is not a Query"),
+        }
+    }
+}
+
+impl From<QueryCommand> for Command {
+    fn from(qc: QueryCommand) -> Self {
+        Command::Query {
+            event_type: qc.event_type,
+            context_id: qc.context_id,
+            since: qc.since,
+            time_field: qc.time_field,
+            sequence_time_field: qc.sequence_time_field,
+            where_clause: qc.where_clause,
+            limit: qc.limit,
+            offset: qc.offset,
+            order_by: qc.order_by,
+            picked_zones: qc.picked_zones,
+            return_fields: qc.return_fields,
+            link_field: qc.link_field,
+            aggs: qc.aggs,
+            time_bucket: qc.time_bucket,
+            group_by: qc.group_by,
+            event_sequence: qc.event_sequence,
+        }
+    }
 }
 
 impl Command {
@@ -101,6 +191,18 @@ impl Command {
         match self {
             Command::Query { context_id, .. } => context_id.as_deref(),
             Command::Replay { context_id, .. } => Some(context_id),
+            _ => None,
+        }
+    }
+
+    pub fn is_comparison_query(&self) -> bool {
+        matches!(self, Command::Compare { .. })
+    }
+
+    pub fn to_query_commands(&self) -> Option<Vec<QueryCommand>> {
+        match self {
+            Command::Compare { queries } => Some(queries.clone()),
+            Command::Query { .. } => Some(vec![QueryCommand::from(self)]),
             _ => None,
         }
     }

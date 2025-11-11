@@ -215,7 +215,7 @@ impl AggregateStreamMerger {
     }
 
     /// Parses a single aggregate row to extract GroupKey and AggState values.
-    pub(crate) fn parse_aggregate_row(
+    pub fn parse_aggregate_row(
         column_views: &[&[ScalarValue]],
         column_names: &[String],
         row_idx: usize,
@@ -660,7 +660,7 @@ impl AggregateStreamMerger {
     }
 
     /// Converts AggState back to ScalarValue for output.
-    pub(crate) fn agg_state_to_scalar(
+    pub fn agg_state_to_scalar(
         state: &AggState,
         spec: &AggregateOpSpec,
     ) -> Result<ScalarValue, String> {

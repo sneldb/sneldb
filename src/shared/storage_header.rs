@@ -204,4 +204,3 @@ pub fn open_and_header_offset(
     }
     Ok((file, BinaryHeader::TOTAL_LEN))
 }
-

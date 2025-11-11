@@ -44,9 +44,10 @@ impl ShardFlowMerger {
             None => Self::infer_schema(ctx).await?,
         };
 
-        let order_spec = ctx.plan().order_by().cloned();
-
-        if let Some(order_spec) = order_spec {
+        // For aggregate queries, ordering happens after aggregation in AggregateStreamMerger.
+        // For non-aggregate queries, ordering can happen at the shard level.
+        if let Some(order_spec) = ctx.plan().order_by_for_shard_level() {
+            let order_spec = order_spec.clone();
             if receivers.is_empty() {
                 drop(merged_tx);
             } else {

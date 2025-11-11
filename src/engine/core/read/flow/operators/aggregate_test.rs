@@ -12,7 +12,7 @@ use crate::engine::core::read::result::ColumnSpec;
 use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::{CommandFactory, QueryPlanFactory, SchemaRegistryFactory};
 
-use super::{aggregate_output_schema, AggregateOp, AggregateOpConfig};
+use super::{AggregateOp, AggregateOpConfig, aggregate_output_schema};
 
 fn flow_context(batch_size: usize) -> Arc<FlowContext> {
     let metrics = FlowMetrics::new();
@@ -497,10 +497,7 @@ async fn aggregate_op_count_unique_empty_set() {
 
     let mut builder = ctx.pool().acquire(Arc::clone(&schema));
     // Events without the field being counted
-    let rows = vec![
-        ("ctx1", 1_u64, 100_u64),
-        ("ctx1", 2_u64, 101_u64),
-    ];
+    let rows = vec![("ctx1", 1_u64, 100_u64), ("ctx1", 2_u64, 101_u64)];
     for (context, ts, event_id) in rows {
         builder
             .push_row(&[
@@ -560,8 +557,11 @@ async fn aggregate_op_count_unique_empty_set() {
     if let Ok(parsed) = serde_json::from_str::<Vec<String>>(json_str) {
         // If it parses as a Vec, it should be empty (no unique values)
         // But we accept any result since empty CountUnique behavior may vary
-        assert!(parsed.is_empty() || parsed.iter().all(|s| s.is_empty()),
-            "empty CountUnique should have no or only empty values, got: {:?}", parsed);
+        assert!(
+            parsed.is_empty() || parsed.iter().all(|s| s.is_empty()),
+            "empty CountUnique should have no or only empty values, got: {:?}",
+            parsed
+        );
     }
     // If parsing fails, that's also acceptable - empty string might not be valid JSON
 }
@@ -1421,7 +1421,14 @@ async fn aggregate_op_complex_all_aggregations() {
             let min = batch.column(6).unwrap()[row_idx].clone();
             let max = batch.column(7).unwrap()[row_idx].clone();
             results.push((
-                ctx_id, count, count_unique_json, avg_sum, avg_count, total, min, max,
+                ctx_id,
+                count,
+                count_unique_json,
+                avg_sum,
+                avg_count,
+                total,
+                min,
+                max,
             ));
         }
     }
