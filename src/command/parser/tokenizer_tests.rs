@@ -387,7 +387,10 @@ mod tokenizer_tests {
     #[test]
     fn test_tokenize_square_brackets_pair() {
         let tokens = tokenize("[]");
-        assert_eq!(tokens, vec![Token::LeftSquareBracket, Token::RightSquareBracket]);
+        assert_eq!(
+            tokens,
+            vec![Token::LeftSquareBracket, Token::RightSquareBracket]
+        );
     }
 
     #[test]
@@ -480,25 +483,37 @@ mod tokenizer_tests {
     #[test]
     fn test_tokenize_string_with_escape_sequence() {
         let tokens = tokenize(r#""hello\nworld""#);
-        assert_eq!(tokens, vec![Token::StringLiteral("hello\nworld".to_string())]);
+        assert_eq!(
+            tokens,
+            vec![Token::StringLiteral("hello\nworld".to_string())]
+        );
     }
 
     #[test]
     fn test_tokenize_string_with_backslash() {
         let tokens = tokenize(r#""path\\to\\file""#);
-        assert_eq!(tokens, vec![Token::StringLiteral("path\\to\\file".to_string())]);
+        assert_eq!(
+            tokens,
+            vec![Token::StringLiteral("path\\to\\file".to_string())]
+        );
     }
 
     #[test]
     fn test_tokenize_string_with_escaped_quote() {
         let tokens = tokenize(r#""say \"hello\"""#);
-        assert_eq!(tokens, vec![Token::StringLiteral("say \"hello\"".to_string())]);
+        assert_eq!(
+            tokens,
+            vec![Token::StringLiteral("say \"hello\"".to_string())]
+        );
     }
 
     #[test]
     fn test_tokenize_string_with_tab() {
         let tokens = tokenize(r#""hello\tworld""#);
-        assert_eq!(tokens, vec![Token::StringLiteral("hello\tworld".to_string())]);
+        assert_eq!(
+            tokens,
+            vec![Token::StringLiteral("hello\tworld".to_string())]
+        );
     }
 
     #[test]
@@ -534,7 +549,10 @@ mod tokenizer_tests {
     #[test]
     fn test_tokenize_string_with_newline_char() {
         let tokens = tokenize(r#""line1\nline2""#);
-        assert_eq!(tokens, vec![Token::StringLiteral("line1\nline2".to_string())]);
+        assert_eq!(
+            tokens,
+            vec![Token::StringLiteral("line1\nline2".to_string())]
+        );
     }
 
     // ─────────────────────────────
@@ -588,23 +606,14 @@ mod tokenizer_tests {
         let tokens = tokenize("123abc");
         assert_eq!(
             tokens,
-            vec![
-                Token::Number(123.0),
-                Token::Word("abc".to_string()),
-            ]
+            vec![Token::Number(123.0), Token::Word("abc".to_string()),]
         );
     }
 
     #[test]
     fn test_tokenize_number_followed_by_symbol() {
         let tokens = tokenize("42=");
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Number(42.0),
-                Token::Symbol('='),
-            ]
-        );
+        assert_eq!(tokens, vec![Token::Number(42.0), Token::Symbol('='),]);
     }
 
     #[test]
@@ -612,11 +621,7 @@ mod tokenizer_tests {
         let tokens = tokenize("1 2 3");
         assert_eq!(
             tokens,
-            vec![
-                Token::Number(1.0),
-                Token::Number(2.0),
-                Token::Number(3.0),
-            ]
+            vec![Token::Number(1.0), Token::Number(2.0), Token::Number(3.0),]
         );
     }
 
@@ -678,10 +683,7 @@ mod tokenizer_tests {
         // Numbers are parsed first, so this becomes Number(123) + Word("abc")
         assert_eq!(
             tokens,
-            vec![
-                Token::Number(123.0),
-                Token::Word("abc".to_string()),
-            ]
+            vec![Token::Number(123.0), Token::Word("abc".to_string()),]
         );
     }
 
@@ -715,10 +717,7 @@ mod tokenizer_tests {
         let tokens = tokenize("hello=");
         assert_eq!(
             tokens,
-            vec![
-                Token::Word("hello".to_string()),
-                Token::Symbol('='),
-            ]
+            vec![Token::Word("hello".to_string()), Token::Symbol('='),]
         );
     }
 
@@ -941,13 +940,7 @@ mod tokenizer_tests {
     fn test_tokenize_dot_followed_by_number() {
         // Dot is a symbol, so this becomes Symbol('.') + Number(5)
         let tokens = tokenize(".5");
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Symbol('.'),
-                Token::Number(5.0),
-            ]
-        );
+        assert_eq!(tokens, vec![Token::Symbol('.'), Token::Number(5.0),]);
     }
 
     #[test]

@@ -78,9 +78,9 @@ fn file_gateway_uses_config_directory() {
             // This can happen in CI environments or when data_dir doesn't exist yet
             let err_msg = err.message();
             assert!(
-                err_msg.contains("Permission denied") ||
-                err_msg.contains("No such file") ||
-                err_msg.contains("not found"),
+                err_msg.contains("Permission denied")
+                    || err_msg.contains("No such file")
+                    || err_msg.contains("not found"),
                 "Unexpected error loading catalog: {}",
                 err_msg
             );

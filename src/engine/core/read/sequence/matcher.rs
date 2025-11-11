@@ -1,6 +1,6 @@
 use crate::command::types::{EventSequence, SequenceLink};
-use crate::engine::core::filter::condition::{FieldAccessor, PreparedAccessor};
 use crate::engine::core::CandidateZone;
+use crate::engine::core::filter::condition::{FieldAccessor, PreparedAccessor};
 use crate::engine::core::read::sequence::group::{GroupedRowIndices, RowIndex};
 use crate::engine::core::read::sequence::where_evaluator::SequenceWhereEvaluator;
 use crate::engine::types::ScalarValue;
@@ -100,7 +100,8 @@ impl SequenceMatcher {
         // Sort groups by earliest timestamp to ensure chronological processing
         // This ensures LIMIT returns the first N matches by time, not arbitrary groups
         // OPTIMIZATION: Pre-extract earliest timestamps to avoid repeated accessor creation during sorting
-        let mut groups_with_timestamps: Vec<(u64, String, GroupedRowIndices)> = Vec::with_capacity(groups.len());
+        let mut groups_with_timestamps: Vec<(u64, String, GroupedRowIndices)> =
+            Vec::with_capacity(groups.len());
         for (link_key, group) in groups.into_iter() {
             // Get the earliest timestamp across all event types in this group
             // Since rows are already sorted by timestamp within each event type,
@@ -111,7 +112,9 @@ impl SequenceMatcher {
                     if let Some(zones) = zones_by_event_type.get(event_type) {
                         if let Some(zone) = zones.get(first_row.zone_idx) {
                             let accessor = PreparedAccessor::new(&zone.values);
-                            if let Some(ts) = accessor.get_i64_at(&self.time_field, first_row.row_idx) {
+                            if let Some(ts) =
+                                accessor.get_i64_at(&self.time_field, first_row.row_idx)
+                            {
                                 earliest_ts = earliest_ts.min(ts as u64);
                             }
                         }
@@ -284,18 +287,12 @@ impl SequenceMatcher {
             }
 
             match link_type {
-                SequenceLink::FollowedBy => self.match_followed_by(
-                    group,
-                    event_type_a,
-                    event_type_b,
-                    zones_by_event_type,
-                ),
-                SequenceLink::PrecededBy => self.match_preceded_by(
-                    group,
-                    event_type_a,
-                    event_type_b,
-                    zones_by_event_type,
-                ),
+                SequenceLink::FollowedBy => {
+                    self.match_followed_by(group, event_type_a, event_type_b, zones_by_event_type)
+                }
+                SequenceLink::PrecededBy => {
+                    self.match_preceded_by(group, event_type_a, event_type_b, zones_by_event_type)
+                }
             }
         } else {
             // Multiple links - for now, return empty (Phase 4 feature)
@@ -745,4 +742,3 @@ impl SequenceMatcher {
         }
     }
 }
-

@@ -196,8 +196,8 @@ async fn compacts_l0_segments_into_l1() {
 
 #[tokio::test]
 async fn compaction_preserves_segments_shared_by_multiple_uids() {
-    use crate::logging::init_for_tests;
     use crate::engine::core::ZoneMeta;
+    use crate::logging::init_for_tests;
     init_for_tests();
 
     let tmp_dir = tempdir().unwrap();
@@ -324,17 +324,18 @@ async fn compaction_preserves_segments_shared_by_multiple_uids() {
                 zones_path
             );
             let zones = ZoneMeta::load(&zones_path).unwrap();
-            assert!(
-                !zones.is_empty(),
-                "Compaction for {uid} should emit zones"
-            );
+            assert!(!zones.is_empty(), "Compaction for {uid} should emit zones");
         }
     }
     assert!(seen.contains(&uid_a));
     assert!(seen.contains(&uid_b));
 
     let ids = segment_ids.read().unwrap().clone();
-    assert_eq!(ids.len(), 1, "Shared segment list should retain single output with both UIDs");
+    assert_eq!(
+        ids.len(),
+        1,
+        "Shared segment list should retain single output with both UIDs"
+    );
     assert!(
         ids.iter()
             .all(|label| label.parse::<u32>().unwrap() >= 10_000),
@@ -350,9 +351,7 @@ async fn compaction_preserves_segments_shared_by_multiple_uids() {
             "column cache should be invalidated for {label}"
         );
         assert!(
-            zone_stub
-                .recorded()
-                .contains(&format!("zone_surf:{label}")),
+            zone_stub.recorded().contains(&format!("zone_surf:{label}")),
             "zone surf cache should be invalidated for {label}"
         );
         assert!(

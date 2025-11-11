@@ -1,5 +1,5 @@
 use crate::command::types::{Command, CompareOp};
-use crate::engine::core::filter::filter_group::{filter_key, FilterGroup};
+use crate::engine::core::filter::filter_group::{FilterGroup, filter_key};
 use crate::engine::core::read::query_plan::QueryPlan;
 use crate::engine::core::zone::zone_group_collector::ZoneGroupCollector;
 use crate::engine::core::{CandidateZone, QueryCaches};
@@ -30,7 +30,10 @@ fn create_test_filter(column: &str, op: CompareOp, value: ScalarValue) -> Filter
 
 /// Helper to create zones for testing
 fn create_zones(zone_ids: &[u32], segment_id: &str) -> Vec<CandidateZone> {
-    zone_ids.iter().map(|&id| CandidateZone::new(id, segment_id.to_string())).collect()
+    zone_ids
+        .iter()
+        .map(|&id| CandidateZone::new(id, segment_id.to_string()))
+        .collect()
 }
 
 /// Helper to create a minimal QueryPlan for testing
@@ -69,7 +72,7 @@ fn create_test_plan_with_segments(segment_ids: Vec<String>) -> QueryPlan {
     TEMP_DIR.with(|tempdir| {
         let path = tempdir.path().join("schemas.bin");
         let registry = Arc::new(RwLock::new(
-            SchemaRegistry::new_with_path(path).expect("Failed to initialize SchemaRegistry")
+            SchemaRegistry::new_with_path(path).expect("Failed to initialize SchemaRegistry"),
         ));
         let segment_base_dir = PathBuf::from("/tmp/test");
         let segment_ids_arc = Arc::new(StdRwLock::new(segment_ids));
@@ -77,7 +80,12 @@ fn create_test_plan_with_segments(segment_ids: Vec<String>) -> QueryPlan {
         // Use tokio runtime to create plan synchronously
         tokio::runtime::Runtime::new()
             .unwrap()
-            .block_on(QueryPlan::new(command, &registry, &segment_base_dir, &segment_ids_arc))
+            .block_on(QueryPlan::new(
+                command,
+                &registry,
+                &segment_base_dir,
+                &segment_ids_arc,
+            ))
             .unwrap()
     })
 }
@@ -89,11 +97,7 @@ fn create_test_plan_with_segments(segment_ids: Vec<String>) -> QueryPlan {
 #[test]
 fn extract_unique_filters_deduplicates_same_filter() {
     // Create filter A
-    let filter_a = create_test_filter(
-        "status",
-        CompareOp::Eq,
-        ScalarValue::from(json!("active")),
-    );
+    let filter_a = create_test_filter("status", CompareOp::Eq, ScalarValue::from(json!("active")));
 
     // Create tree: (A AND A) OR A
     let tree = FilterGroup::Or(vec![
@@ -110,17 +114,9 @@ fn extract_unique_filters_deduplicates_same_filter() {
 #[test]
 fn extract_unique_filters_preserves_different_filters() {
     // Create different filters
-    let filter_a = create_test_filter(
-        "status",
-        CompareOp::Eq,
-        ScalarValue::from(json!("active")),
-    );
+    let filter_a = create_test_filter("status", CompareOp::Eq, ScalarValue::from(json!("active")));
 
-    let filter_b = create_test_filter(
-        "priority",
-        CompareOp::Gt,
-        ScalarValue::from(json!(5)),
-    );
+    let filter_b = create_test_filter("priority", CompareOp::Gt, ScalarValue::from(json!(5)));
 
     let filter_c = create_test_filter(
         "status",
@@ -153,7 +149,11 @@ fn extract_unique_filters_handles_in_expansion() {
     let tree = FilterGroup::Or(vec![filter_1, filter_2, filter_3]);
 
     let unique = tree.extract_unique_filters();
-    assert_eq!(unique.len(), 3, "Should preserve all unique values from IN expansion");
+    assert_eq!(
+        unique.len(),
+        3,
+        "Should preserve all unique values from IN expansion"
+    );
 }
 
 #[test]
@@ -178,10 +178,26 @@ fn extract_unique_filters_handles_nested_duplicates() {
 
 #[test]
 fn filter_key_creates_unique_keys() {
-    let key1 = filter_key("status", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("active"))));
-    let key2 = filter_key("status", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("active"))));
-    let key3 = filter_key("status", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("pending"))));
-    let key4 = filter_key("priority", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("active"))));
+    let key1 = filter_key(
+        "status",
+        &Some(CompareOp::Eq),
+        &Some(ScalarValue::from(json!("active"))),
+    );
+    let key2 = filter_key(
+        "status",
+        &Some(CompareOp::Eq),
+        &Some(ScalarValue::from(json!("active"))),
+    );
+    let key3 = filter_key(
+        "status",
+        &Some(CompareOp::Eq),
+        &Some(ScalarValue::from(json!("pending"))),
+    );
+    let key4 = filter_key(
+        "priority",
+        &Some(CompareOp::Eq),
+        &Some(ScalarValue::from(json!("active"))),
+    );
 
     assert_eq!(key1, key2, "Same filter should have same key");
     assert_ne!(key1, key3, "Different values should have different keys");
@@ -191,7 +207,11 @@ fn filter_key_creates_unique_keys() {
 #[test]
 fn filter_key_handles_none_operation() {
     let key1 = filter_key("field", &None, &Some(ScalarValue::from(json!("value"))));
-    let key2 = filter_key("field", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("value"))));
+    let key2 = filter_key(
+        "field",
+        &Some(CompareOp::Eq),
+        &Some(ScalarValue::from(json!("value"))),
+    );
 
     assert_ne!(key1, key2, "None operation should differ from Eq operation");
 }
@@ -199,7 +219,11 @@ fn filter_key_handles_none_operation() {
 #[test]
 fn filter_key_handles_none_value() {
     let key1 = filter_key("field", &Some(CompareOp::Eq), &None);
-    let key2 = filter_key("field", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("value"))));
+    let key2 = filter_key(
+        "field",
+        &Some(CompareOp::Eq),
+        &Some(ScalarValue::from(json!("value"))),
+    );
 
     assert_ne!(key1, key2, "None value should differ from Some value");
 }
@@ -224,7 +248,10 @@ fn filter_key_handles_all_operations() {
     // All keys should be unique
     for i in 0..keys.len() {
         for j in (i + 1)..keys.len() {
-            assert_ne!(keys[i], keys[j], "Different operations should have different keys");
+            assert_ne!(
+                keys[i], keys[j],
+                "Different operations should have different keys"
+            );
         }
     }
 }
@@ -232,10 +259,22 @@ fn filter_key_handles_all_operations() {
 #[test]
 fn filter_key_handles_special_scalar_values() {
     let key_null = filter_key("field", &Some(CompareOp::Eq), &Some(ScalarValue::Null));
-    let key_bool_true = filter_key("field", &Some(CompareOp::Eq), &Some(ScalarValue::Boolean(true)));
-    let key_bool_false = filter_key("field", &Some(CompareOp::Eq), &Some(ScalarValue::Boolean(false)));
+    let key_bool_true = filter_key(
+        "field",
+        &Some(CompareOp::Eq),
+        &Some(ScalarValue::Boolean(true)),
+    );
+    let key_bool_false = filter_key(
+        "field",
+        &Some(CompareOp::Eq),
+        &Some(ScalarValue::Boolean(false)),
+    );
     let key_int = filter_key("field", &Some(CompareOp::Eq), &Some(ScalarValue::Int64(42)));
-    let key_float = filter_key("field", &Some(CompareOp::Eq), &Some(ScalarValue::Float64(3.14)));
+    let key_float = filter_key(
+        "field",
+        &Some(CompareOp::Eq),
+        &Some(ScalarValue::Float64(3.14)),
+    );
 
     // All should be different
     assert_ne!(key_null, key_bool_true);
@@ -245,8 +284,16 @@ fn filter_key_handles_special_scalar_values() {
 
 #[test]
 fn filter_key_handles_nan_float() {
-    let key_nan = filter_key("field", &Some(CompareOp::Eq), &Some(ScalarValue::Float64(f64::NAN)));
-    let key_normal = filter_key("field", &Some(CompareOp::Eq), &Some(ScalarValue::Float64(3.14)));
+    let key_nan = filter_key(
+        "field",
+        &Some(CompareOp::Eq),
+        &Some(ScalarValue::Float64(f64::NAN)),
+    );
+    let key_normal = filter_key(
+        "field",
+        &Some(CompareOp::Eq),
+        &Some(ScalarValue::Float64(3.14)),
+    );
 
     assert_ne!(key_nan, key_normal, "NaN should be handled specially");
     assert!(key_nan.contains("NaN"), "NaN key should contain 'NaN'");
@@ -266,15 +313,27 @@ fn zone_group_collector_combines_and_then_or() {
     // Build cache
     let mut cache = HashMap::new();
     cache.insert(
-        filter_key("status", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("active")))),
+        filter_key(
+            "status",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!("active"))),
+        ),
         zones_a,
     );
     cache.insert(
-        filter_key("priority", &Some(CompareOp::Gt), &Some(ScalarValue::from(json!(5)))),
+        filter_key(
+            "priority",
+            &Some(CompareOp::Gt),
+            &Some(ScalarValue::from(json!(5))),
+        ),
         zones_b,
     );
     cache.insert(
-        filter_key("type", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("test")))),
+        filter_key(
+            "type",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!("test"))),
+        ),
         zones_c,
     );
 
@@ -283,10 +342,7 @@ fn zone_group_collector_combines_and_then_or() {
     let filter_b = create_test_filter("priority", CompareOp::Gt, ScalarValue::from(json!(5)));
     let filter_c = create_test_filter("type", CompareOp::Eq, ScalarValue::from(json!("test")));
 
-    let tree = FilterGroup::Or(vec![
-        FilterGroup::And(vec![filter_a, filter_b]),
-        filter_c,
-    ]);
+    let tree = FilterGroup::Or(vec![FilterGroup::And(vec![filter_a, filter_b]), filter_c]);
 
     // Collect zones
     let plan = create_test_plan();
@@ -297,7 +353,10 @@ fn zone_group_collector_combines_and_then_or() {
     let zone_ids: Vec<u32> = result.iter().map(|z| z.zone_id).collect();
     assert_eq!(zone_ids.len(), 3, "Should have 3 zones after deduplication");
     assert!(zone_ids.contains(&2), "Should include zone 2 from A AND B");
-    assert!(zone_ids.contains(&3), "Should include zone 3 from A AND B and C");
+    assert!(
+        zone_ids.contains(&3),
+        "Should include zone 3 from A AND B and C"
+    );
     assert!(zone_ids.contains(&5), "Should include zone 5 from C");
 }
 
@@ -307,7 +366,11 @@ fn zone_group_collector_handles_single_filter() {
 
     let mut cache = HashMap::new();
     cache.insert(
-        filter_key("status", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("active")))),
+        filter_key(
+            "status",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!("active"))),
+        ),
         zones.clone(),
     );
 
@@ -341,7 +404,11 @@ fn zone_group_collector_handles_duplicate_filters_in_tree() {
     // Build cache with single entry for A
     let mut cache = HashMap::new();
     cache.insert(
-        filter_key("status", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("active")))),
+        filter_key(
+            "status",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!("active"))),
+        ),
         zones_a.clone(),
     );
 
@@ -366,7 +433,11 @@ fn zone_group_collector_handles_duplicate_filters_in_tree() {
 fn zone_group_collector_handles_empty_zones() {
     let mut cache = HashMap::new();
     cache.insert(
-        filter_key("status", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("active")))),
+        filter_key(
+            "status",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!("active"))),
+        ),
         vec![], // Empty zones
     );
 
@@ -374,7 +445,11 @@ fn zone_group_collector_handles_empty_zones() {
     let filter_b = create_test_filter("priority", CompareOp::Gt, ScalarValue::from(json!(5)));
 
     cache.insert(
-        filter_key("priority", &Some(CompareOp::Gt), &Some(ScalarValue::from(json!(5)))),
+        filter_key(
+            "priority",
+            &Some(CompareOp::Gt),
+            &Some(ScalarValue::from(json!(5))),
+        ),
         create_zones(&[1], "seg1"),
     );
 
@@ -391,11 +466,19 @@ fn zone_group_collector_handles_empty_zones() {
 fn zone_group_collector_handles_all_empty_zones_in_or() {
     let mut cache = HashMap::new();
     cache.insert(
-        filter_key("status", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("active")))),
+        filter_key(
+            "status",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!("active"))),
+        ),
         vec![],
     );
     cache.insert(
-        filter_key("priority", &Some(CompareOp::Gt), &Some(ScalarValue::from(json!(5)))),
+        filter_key(
+            "priority",
+            &Some(CompareOp::Gt),
+            &Some(ScalarValue::from(json!(5))),
+        ),
         vec![],
     );
 
@@ -407,7 +490,11 @@ fn zone_group_collector_handles_all_empty_zones_in_or() {
     let collector = ZoneGroupCollector::new(cache, &plan, None);
     let result = collector.collect_zones_from_group(&tree);
 
-    assert_eq!(result.len(), 0, "OR with all empty zones should return empty");
+    assert_eq!(
+        result.len(),
+        0,
+        "OR with all empty zones should return empty"
+    );
 }
 
 #[test]
@@ -427,11 +514,19 @@ fn zone_group_collector_deduplicates_after_operations() {
 
     let mut cache = HashMap::new();
     cache.insert(
-        filter_key("status", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("active")))),
+        filter_key(
+            "status",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!("active"))),
+        ),
         zones_a,
     );
     cache.insert(
-        filter_key("priority", &Some(CompareOp::Gt), &Some(ScalarValue::from(json!(5)))),
+        filter_key(
+            "priority",
+            &Some(CompareOp::Gt),
+            &Some(ScalarValue::from(json!(5))),
+        ),
         zones_b,
     );
 
@@ -462,19 +557,35 @@ fn zone_group_collector_handles_nested_and_or() {
 
     let mut cache = HashMap::new();
     cache.insert(
-        filter_key("a", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(1)))),
+        filter_key(
+            "a",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(1))),
+        ),
         zones_a,
     );
     cache.insert(
-        filter_key("b", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(2)))),
+        filter_key(
+            "b",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(2))),
+        ),
         zones_b,
     );
     cache.insert(
-        filter_key("c", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(3)))),
+        filter_key(
+            "c",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(3))),
+        ),
         zones_c,
     );
     cache.insert(
-        filter_key("d", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(4)))),
+        filter_key(
+            "d",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(4))),
+        ),
         zones_d,
     );
 
@@ -485,10 +596,7 @@ fn zone_group_collector_handles_nested_and_or() {
     let filter_d = create_test_filter("d", CompareOp::Eq, ScalarValue::from(json!(4)));
 
     let tree = FilterGroup::And(vec![
-        FilterGroup::Or(vec![
-            FilterGroup::And(vec![filter_a, filter_b]),
-            filter_c,
-        ]),
+        FilterGroup::Or(vec![FilterGroup::And(vec![filter_a, filter_b]), filter_c]),
         filter_d,
     ]);
 
@@ -497,7 +605,11 @@ fn zone_group_collector_handles_nested_and_or() {
     let result = collector.collect_zones_from_group(&tree);
 
     // Expected: (A AND B) = empty (no intersection), OR C = [zone_3], AND D = empty (no intersection)
-    assert_eq!(result.len(), 0, "Complex nested query should handle correctly");
+    assert_eq!(
+        result.len(),
+        0,
+        "Complex nested query should handle correctly"
+    );
 }
 
 #[test]
@@ -516,11 +628,19 @@ fn zone_group_collector_handles_cross_segment_zones() {
 
     let mut cache = HashMap::new();
     cache.insert(
-        filter_key("status", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("active")))),
+        filter_key(
+            "status",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!("active"))),
+        ),
         zones_a,
     );
     cache.insert(
-        filter_key("priority", &Some(CompareOp::Gt), &Some(ScalarValue::from(json!(5)))),
+        filter_key(
+            "priority",
+            &Some(CompareOp::Gt),
+            &Some(ScalarValue::from(json!(5))),
+        ),
         zones_b,
     );
 
@@ -537,7 +657,11 @@ fn zone_group_collector_handles_cross_segment_zones() {
     let result = collector.collect_zones_from_group(&tree);
 
     // Should have zone_2 from seg1 (only intersection)
-    assert_eq!(result.len(), 1, "AND should intersect zones by both zone_id and segment_id");
+    assert_eq!(
+        result.len(),
+        1,
+        "AND should intersect zones by both zone_id and segment_id"
+    );
     assert_eq!(result[0].zone_id, 2);
     assert_eq!(result[0].segment_id, "seg1");
 }
@@ -551,7 +675,11 @@ fn zone_group_collector_handles_not_operation() {
 
     let mut cache = HashMap::new();
     cache.insert(
-        filter_key("status", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("active")))),
+        filter_key(
+            "status",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!("active"))),
+        ),
         matching_zones.clone(),
     );
 
@@ -564,7 +692,10 @@ fn zone_group_collector_handles_not_operation() {
 
     // NOT should return complement: all zones [0, 1, 2] - matching [1, 2] = [0]
     assert_eq!(result.len(), 1, "NOT should return complement zones");
-    assert_eq!(result[0].zone_id, 0, "Should return zone 0 (not in matching zones)");
+    assert_eq!(
+        result[0].zone_id, 0,
+        "Should return zone 0 (not in matching zones)"
+    );
     assert_eq!(result[0].segment_id, "seg1");
 }
 
@@ -577,7 +708,11 @@ fn zone_group_collector_handles_nested_not() {
 
     let mut cache = HashMap::new();
     cache.insert(
-        filter_key("status", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("active")))),
+        filter_key(
+            "status",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!("active"))),
+        ),
         matching_zones.clone(),
     );
 
@@ -602,15 +737,21 @@ fn zone_group_collector_handles_large_or_with_many_filters() {
 
     for (i, field) in filters.iter().enumerate() {
         cache.insert(
-            filter_key(field, &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(i)))),
+            filter_key(
+                field,
+                &Some(CompareOp::Eq),
+                &Some(ScalarValue::from(json!(i))),
+            ),
             create_zones(&[i as u32, (i + 10) as u32], "seg1"),
         );
     }
 
     let filter_group = FilterGroup::Or(
-        filters.iter().enumerate().map(|(i, field)| {
-            create_test_filter(field, CompareOp::Eq, ScalarValue::from(json!(i)))
-        }).collect()
+        filters
+            .iter()
+            .enumerate()
+            .map(|(i, field)| create_test_filter(field, CompareOp::Eq, ScalarValue::from(json!(i))))
+            .collect(),
     );
 
     let plan = create_test_plan();
@@ -629,15 +770,20 @@ fn zone_group_collector_handles_large_and_with_many_filters() {
 
     for field in &filters {
         cache.insert(
-            filter_key(field, &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(1)))),
+            filter_key(
+                field,
+                &Some(CompareOp::Eq),
+                &Some(ScalarValue::from(json!(1))),
+            ),
             create_zones(&[10], "seg1"), // All have only zone 10 for intersection
         );
     }
 
     let filter_group = FilterGroup::And(
-        filters.iter().map(|field| {
-            create_test_filter(field, CompareOp::Eq, ScalarValue::from(json!(1)))
-        }).collect()
+        filters
+            .iter()
+            .map(|field| create_test_filter(field, CompareOp::Eq, ScalarValue::from(json!(1))))
+            .collect(),
     );
 
     let plan = create_test_plan();
@@ -654,11 +800,19 @@ fn zone_group_collector_handles_and_with_no_intersection() {
     // A AND B where they don't intersect
     let mut cache = HashMap::new();
     cache.insert(
-        filter_key("a", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(1)))),
+        filter_key(
+            "a",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(1))),
+        ),
         create_zones(&[1, 2], "seg1"),
     );
     cache.insert(
-        filter_key("b", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(2)))),
+        filter_key(
+            "b",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(2))),
+        ),
         create_zones(&[3, 4], "seg1"), // No intersection
     );
 
@@ -670,7 +824,11 @@ fn zone_group_collector_handles_and_with_no_intersection() {
     let collector = ZoneGroupCollector::new(cache, &plan, None);
     let result = collector.collect_zones_from_group(&tree);
 
-    assert_eq!(result.len(), 0, "AND with no intersection should return empty");
+    assert_eq!(
+        result.len(),
+        0,
+        "AND with no intersection should return empty"
+    );
 }
 
 #[test]
@@ -679,19 +837,35 @@ fn zone_group_collector_handles_or_with_in_expansion() {
     // This simulates what happens after IN expansion
     let mut cache = HashMap::new();
     cache.insert(
-        filter_key("id", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(1)))),
+        filter_key(
+            "id",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(1))),
+        ),
         create_zones(&[1], "seg1"),
     );
     cache.insert(
-        filter_key("id", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(2)))),
+        filter_key(
+            "id",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(2))),
+        ),
         create_zones(&[2], "seg1"),
     );
     cache.insert(
-        filter_key("id", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(3)))),
+        filter_key(
+            "id",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(3))),
+        ),
         create_zones(&[3], "seg1"),
     );
     cache.insert(
-        filter_key("status", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("active")))),
+        filter_key(
+            "status",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!("active"))),
+        ),
         create_zones(&[4], "seg1"),
     );
 
@@ -699,7 +873,8 @@ fn zone_group_collector_handles_or_with_in_expansion() {
     let filter_1 = create_test_filter("id", CompareOp::Eq, ScalarValue::from(json!(1)));
     let filter_2 = create_test_filter("id", CompareOp::Eq, ScalarValue::from(json!(2)));
     let filter_3 = create_test_filter("id", CompareOp::Eq, ScalarValue::from(json!(3)));
-    let filter_status = create_test_filter("status", CompareOp::Eq, ScalarValue::from(json!("active")));
+    let filter_status =
+        create_test_filter("status", CompareOp::Eq, ScalarValue::from(json!("active")));
 
     let tree = FilterGroup::Or(vec![filter_1, filter_2, filter_3, filter_status]);
     let plan = create_test_plan();
@@ -721,30 +896,51 @@ fn zone_group_collector_handles_complex_nested_with_in_expansion() {
     // After expansion: ((id=1 OR id=2) AND status="active") OR (id=3 OR id=4)
     let mut cache = HashMap::new();
     cache.insert(
-        filter_key("id", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(1)))),
+        filter_key(
+            "id",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(1))),
+        ),
         create_zones(&[1, 10], "seg1"),
     );
     cache.insert(
-        filter_key("id", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(2)))),
+        filter_key(
+            "id",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(2))),
+        ),
         create_zones(&[2, 10], "seg1"), // Intersects with id=1 at zone 10
     );
     cache.insert(
-        filter_key("status", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("active")))),
+        filter_key(
+            "status",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!("active"))),
+        ),
         create_zones(&[10, 20], "seg1"), // Intersects with id=1 and id=2 at zone 10
     );
     cache.insert(
-        filter_key("id", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(3)))),
+        filter_key(
+            "id",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(3))),
+        ),
         create_zones(&[3], "seg1"),
     );
     cache.insert(
-        filter_key("id", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(4)))),
+        filter_key(
+            "id",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(4))),
+        ),
         create_zones(&[4], "seg1"),
     );
 
     // Build tree: ((id=1 OR id=2) AND status="active") OR (id=3 OR id=4)
     let filter_id1 = create_test_filter("id", CompareOp::Eq, ScalarValue::from(json!(1)));
     let filter_id2 = create_test_filter("id", CompareOp::Eq, ScalarValue::from(json!(2)));
-    let filter_status = create_test_filter("status", CompareOp::Eq, ScalarValue::from(json!("active")));
+    let filter_status =
+        create_test_filter("status", CompareOp::Eq, ScalarValue::from(json!("active")));
     let filter_id3 = create_test_filter("id", CompareOp::Eq, ScalarValue::from(json!(3)));
     let filter_id4 = create_test_filter("id", CompareOp::Eq, ScalarValue::from(json!(4)));
 
@@ -799,7 +995,11 @@ fn zone_group_collector_handles_single_child_and() {
     let zones = create_zones(&[1, 2], "seg1");
     let mut cache = HashMap::new();
     cache.insert(
-        filter_key("status", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("active")))),
+        filter_key(
+            "status",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!("active"))),
+        ),
         zones.clone(),
     );
 
@@ -819,7 +1019,11 @@ fn zone_group_collector_handles_single_child_or() {
     let zones = create_zones(&[1, 2], "seg1");
     let mut cache = HashMap::new();
     cache.insert(
-        filter_key("status", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("active")))),
+        filter_key(
+            "status",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!("active"))),
+        ),
         zones.clone(),
     );
 
@@ -842,7 +1046,11 @@ fn zone_group_collector_handles_very_large_zone_sets() {
 
     let mut cache = HashMap::new();
     cache.insert(
-        filter_key("status", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("active")))),
+        filter_key(
+            "status",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!("active"))),
+        ),
         zones,
     );
 
@@ -868,11 +1076,19 @@ fn zone_group_collector_handles_multiple_segments() {
 
     let mut cache = HashMap::new();
     cache.insert(
-        filter_key("a", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(1)))),
+        filter_key(
+            "a",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(1))),
+        ),
         zones_a,
     );
     cache.insert(
-        filter_key("b", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(2)))),
+        filter_key(
+            "b",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(2))),
+        ),
         zones_b,
     );
 
@@ -881,7 +1097,11 @@ fn zone_group_collector_handles_multiple_segments() {
 
     // A OR B should union across segments
     let tree = FilterGroup::Or(vec![filter_a, filter_b]);
-    let plan = create_test_plan_with_segments(vec!["seg1".to_string(), "seg2".to_string(), "seg3".to_string()]);
+    let plan = create_test_plan_with_segments(vec![
+        "seg1".to_string(),
+        "seg2".to_string(),
+        "seg3".to_string(),
+    ]);
     let collector = ZoneGroupCollector::new(cache, &plan, None);
     let result = collector.collect_zones_from_group(&tree);
 
@@ -897,11 +1117,19 @@ fn zone_group_collector_handles_and_early_exit_optimization() {
     // A AND B where A has empty zones - should early exit
     let mut cache = HashMap::new();
     cache.insert(
-        filter_key("a", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(1)))),
+        filter_key(
+            "a",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(1))),
+        ),
         vec![], // Empty
     );
     cache.insert(
-        filter_key("b", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(2)))),
+        filter_key(
+            "b",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(2))),
+        ),
         create_zones(&[1, 2, 3], "seg1"),
     );
 
@@ -921,19 +1149,35 @@ fn zone_group_collector_handles_and_with_many_children_early_exit() {
     // A AND B AND C AND D where B has empty zones
     let mut cache = HashMap::new();
     cache.insert(
-        filter_key("a", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(1)))),
+        filter_key(
+            "a",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(1))),
+        ),
         create_zones(&[1, 2], "seg1"),
     );
     cache.insert(
-        filter_key("b", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(2)))),
+        filter_key(
+            "b",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(2))),
+        ),
         vec![], // Empty - should trigger early exit
     );
     cache.insert(
-        filter_key("c", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(3)))),
+        filter_key(
+            "c",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(3))),
+        ),
         create_zones(&[1, 2], "seg1"),
     );
     cache.insert(
-        filter_key("d", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(4)))),
+        filter_key(
+            "d",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(4))),
+        ),
         create_zones(&[1, 2], "seg1"),
     );
 
@@ -949,7 +1193,11 @@ fn zone_group_collector_handles_and_with_many_children_early_exit() {
     let collector = ZoneGroupCollector::new(cache, &plan, None);
     let result = collector.collect_zones_from_group(&tree);
 
-    assert_eq!(result.len(), 0, "Should early exit and not process remaining filters");
+    assert_eq!(
+        result.len(),
+        0,
+        "Should early exit and not process remaining filters"
+    );
 }
 
 #[test]
@@ -958,22 +1206,35 @@ fn zone_group_collector_handles_nested_or_with_different_fields() {
     // This verifies that preserved nested OR structures (with different fields) are handled correctly
     let mut cache = HashMap::new();
     cache.insert(
-        filter_key("id", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!(1)))),
+        filter_key(
+            "id",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!(1))),
+        ),
         create_zones(&[1, 5], "seg1"),
     );
     cache.insert(
-        filter_key("status", &Some(CompareOp::Eq), &Some(ScalarValue::from(json!("active")))),
+        filter_key(
+            "status",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::from(json!("active"))),
+        ),
         create_zones(&[2, 5], "seg1"), // Intersects with id=1 at zone 5
     );
     cache.insert(
-        filter_key("amount", &Some(CompareOp::Gt), &Some(ScalarValue::from(json!(100)))),
+        filter_key(
+            "amount",
+            &Some(CompareOp::Gt),
+            &Some(ScalarValue::from(json!(100))),
+        ),
         create_zones(&[3, 6], "seg1"),
     );
 
     // Build tree: ((id=1 OR status="active") OR amount>100)
     // The nested OR should be preserved (not flattened) because fields differ
     let filter_id = create_test_filter("id", CompareOp::Eq, ScalarValue::from(json!(1)));
-    let filter_status = create_test_filter("status", CompareOp::Eq, ScalarValue::from(json!("active")));
+    let filter_status =
+        create_test_filter("status", CompareOp::Eq, ScalarValue::from(json!("active")));
     let filter_amount = create_test_filter("amount", CompareOp::Gt, ScalarValue::from(json!(100)));
 
     let tree = FilterGroup::Or(vec![
@@ -987,12 +1248,18 @@ fn zone_group_collector_handles_nested_or_with_different_fields() {
 
     // Expected: (id=1 OR status="active") = [zone_1, zone_2, zone_5] (union)
     // Then OR amount>100 = [zone_1, zone_2, zone_3, zone_5, zone_6] (union)
-    assert_eq!(result.len(), 5, "Should correctly process preserved nested OR structure");
+    assert_eq!(
+        result.len(),
+        5,
+        "Should correctly process preserved nested OR structure"
+    );
     let zone_ids: Vec<u32> = result.iter().map(|z| z.zone_id).collect();
     assert!(zone_ids.contains(&1), "Should include zone from id=1");
-    assert!(zone_ids.contains(&2), "Should include zone from status='active'");
+    assert!(
+        zone_ids.contains(&2),
+        "Should include zone from status='active'"
+    );
     assert!(zone_ids.contains(&3), "Should include zone from amount>100");
     assert!(zone_ids.contains(&5), "Should include intersection zone");
     assert!(zone_ids.contains(&6), "Should include zone from amount>100");
 }
-

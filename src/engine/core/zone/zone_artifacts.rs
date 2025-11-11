@@ -177,7 +177,7 @@ impl<'a> ZoneArtifacts<'a> {
             .join()
             .map_err(|_| "Thread join failed".to_string())?
         } else {
-        ZoneXorFilterIndex::load(&path).map_err(|e| format!("{:?}", e))
+            ZoneXorFilterIndex::load(&path).map_err(|e| format!("{:?}", e))
         }
     }
 

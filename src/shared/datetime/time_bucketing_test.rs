@@ -284,8 +284,14 @@ fn calendar_year_bucketing() {
     let test_cases = vec![
         ("January 15, 2024", TimestampFactory::utc_date(2024, 1, 15)),
         ("June 15, 2024", TimestampFactory::utc_date(2024, 6, 15)),
-        ("December 31, 2024", TimestampFactory::utc_date(2024, 12, 31)),
-        ("February 29, 2024 (leap year)", TimestampFactory::utc_date(2024, 2, 29)),
+        (
+            "December 31, 2024",
+            TimestampFactory::utc_date(2024, 12, 31),
+        ),
+        (
+            "February 29, 2024 (leap year)",
+            TimestampFactory::utc_date(2024, 2, 29),
+        ),
     ];
 
     for (description, input) in test_cases {
@@ -485,8 +491,14 @@ fn naive_vs_calendar_year_comparison() {
         // (description, timestamp)
         ("January 15, 2024", TimestampFactory::utc_date(2024, 1, 15)),
         ("June 15, 2024", TimestampFactory::utc_date(2024, 6, 15)),
-        ("December 31, 2024", TimestampFactory::utc_date(2024, 12, 31)),
-        ("February 29, 2024 (leap year)", TimestampFactory::utc_date(2024, 2, 29)),
+        (
+            "December 31, 2024",
+            TimestampFactory::utc_date(2024, 12, 31),
+        ),
+        (
+            "February 29, 2024 (leap year)",
+            TimestampFactory::utc_date(2024, 2, 29),
+        ),
     ];
 
     for (description, ts) in test_cases {
@@ -512,7 +524,8 @@ fn naive_vs_calendar_year_comparison() {
         assert!(
             days_diff <= 366, // Allow up to a full year difference for naive approximation
             "Naive bucketing for {} should be reasonably close (diff: {} days)",
-            description, days_diff
+            description,
+            days_diff
         );
     }
 }

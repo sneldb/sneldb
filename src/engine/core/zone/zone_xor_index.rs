@@ -201,7 +201,6 @@ impl ZoneXorFilterIndex {
             filters,
         })
     }
-
 }
 
 fn parse_uid_field_from_filename(path: &Path) -> (String, String) {

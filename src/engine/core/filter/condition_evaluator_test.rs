@@ -277,9 +277,18 @@ fn preserves_valid_event_id_when_present() {
 fn generates_unique_synthetic_ids_per_row() {
     // Zone with multiple rows, missing event_id
     let mut values = HashMap::new();
-    values.insert("status".to_string(), vec!["ok".into(), "ok".into(), "ok".into()]);
-    values.insert("context_id".to_string(), vec!["ctx1".into(), "ctx2".into(), "ctx3".into()]);
-    values.insert("event_type".to_string(), vec!["test".into(), "test".into(), "test".into()]);
+    values.insert(
+        "status".to_string(),
+        vec!["ok".into(), "ok".into(), "ok".into()],
+    );
+    values.insert(
+        "context_id".to_string(),
+        vec!["ctx1".into(), "ctx2".into(), "ctx3".into()],
+    );
+    values.insert(
+        "event_type".to_string(),
+        vec!["test".into(), "test".into(), "test".into()],
+    );
 
     let zone = CandidateZoneFactory::new()
         .with("zone_id", 5)
@@ -409,7 +418,11 @@ fn in_numeric_condition_all_matches() {
     let mut ev = ConditionEvaluator::new();
     ev.add_in_numeric_condition("id".into(), vec![1, 2, 3, 4, 5]);
     let out = ev.evaluate_zones(vec![zone]);
-    assert_eq!(out.len(), 3, "should match all rows when all values in list");
+    assert_eq!(
+        out.len(),
+        3,
+        "should match all rows when all values in list"
+    );
 }
 
 #[test]
@@ -417,7 +430,12 @@ fn in_string_condition_filters_correctly() {
     let mut values = HashMap::new();
     values.insert(
         "status".to_string(),
-        vec!["active".into(), "pending".into(), "completed".into(), "cancelled".into()],
+        vec![
+            "active".into(),
+            "pending".into(),
+            "completed".into(),
+            "cancelled".into(),
+        ],
     );
     values.insert(
         "context_id".to_string(),
@@ -477,7 +495,10 @@ fn in_numeric_condition_with_limit() {
 fn in_numeric_condition_with_evaluate_row_at() {
     use crate::engine::core::filter::condition::PreparedAccessor;
     let mut values = HashMap::new();
-    values.insert("id".to_string(), vec!["1".into(), "2".into(), "3".into(), "5".into()]);
+    values.insert(
+        "id".to_string(),
+        vec!["1".into(), "2".into(), "3".into(), "5".into()],
+    );
 
     let zone = CandidateZoneFactory::new()
         .with("zone_id", 1)
@@ -580,7 +601,13 @@ fn in_condition_combined_with_other_conditions() {
     );
     values.insert(
         "status".to_string(),
-        vec!["active".into(), "active".into(), "pending".into(), "active".into(), "completed".into()],
+        vec![
+            "active".into(),
+            "active".into(),
+            "pending".into(),
+            "active".into(),
+            "completed".into(),
+        ],
     );
 
     let zone = CandidateZoneFactory::new()

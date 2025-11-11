@@ -1,5 +1,5 @@
-use super::segment_batch::SegmentBatch;
 use super::merge_plan::MergePlan;
+use super::segment_batch::SegmentBatch;
 
 #[tokio::test]
 async fn groups_plans_with_identical_input_segments() {
@@ -127,4 +127,3 @@ async fn preserves_segment_label_ordering() {
     // The batch will have the order from the first plan
     assert_eq!(batches[0].input_segment_labels.len(), 2);
 }
-

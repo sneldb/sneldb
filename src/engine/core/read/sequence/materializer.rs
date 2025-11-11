@@ -1,10 +1,10 @@
+use crate::engine::core::CandidateZone;
+use crate::engine::core::Event;
 use crate::engine::core::event::event_builder::EventBuilder;
 use crate::engine::core::event::event_id::EventId;
 use crate::engine::core::filter::condition::{FieldAccessor, PreparedAccessor};
-use crate::engine::core::CandidateZone;
 use crate::engine::core::read::sequence::group::RowIndex;
 use crate::engine::core::read::sequence::matcher::MatchedSequenceIndices;
-use crate::engine::core::Event;
 use crate::engine::types::ScalarValue;
 use std::collections::HashMap;
 use tracing::{debug, info, trace, warn};
@@ -83,11 +83,7 @@ impl SequenceMaterializer {
                 .matched_rows
                 .iter()
                 .filter_map(|(event_type, row_index)| {
-                    self.build_event_from_row_index(
-                        event_type,
-                        row_index,
-                        zones_by_event_type,
-                    )
+                    self.build_event_from_row_index(event_type, row_index, zones_by_event_type)
                 })
                 .collect();
 
@@ -240,4 +236,3 @@ impl Default for SequenceMaterializer {
         Self::new()
     }
 }
-

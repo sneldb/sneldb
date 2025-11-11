@@ -9,12 +9,12 @@ pub mod selector;
 pub mod zone_artifacts;
 pub mod zone_batch_sizer;
 pub mod zone_collector;
-pub mod zone_group_collector;
 pub mod zone_combiner;
 pub mod zone_cursor;
 pub mod zone_cursor_loader;
 pub mod zone_filter;
 pub mod zone_finder;
+pub mod zone_group_collector;
 pub mod zone_hydrator;
 pub mod zone_index;
 pub mod zone_merger;
@@ -48,8 +48,6 @@ mod zone_batch_sizer_test;
 #[cfg(test)]
 mod zone_collector_tests;
 #[cfg(test)]
-mod zone_group_collector_test;
-#[cfg(test)]
 mod zone_combiner_tests;
 #[cfg(test)]
 mod zone_cursor_loader_test;
@@ -59,6 +57,8 @@ mod zone_cursor_test;
 mod zone_filter_test;
 #[cfg(test)]
 mod zone_finder_test;
+#[cfg(test)]
+mod zone_group_collector_test;
 #[cfg(test)]
 mod zone_hydrator_test;
 #[cfg(test)]

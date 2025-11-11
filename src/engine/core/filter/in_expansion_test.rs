@@ -20,21 +20,16 @@ mod in_expansion_tests {
 
     #[test]
     fn test_expand_in_empty_list_with_uid_returns_none() {
-        let result = InExpansion::expand_in(
-            "status".to_string(),
-            &[],
-            &Some("uid123".to_string()),
+        let result = InExpansion::expand_in("status".to_string(), &[], &Some("uid123".to_string()));
+        assert!(
+            result.is_none(),
+            "Empty IN list should return None even with UID"
         );
-        assert!(result.is_none(), "Empty IN list should return None even with UID");
     }
 
     #[test]
     fn test_expand_in_single_value_creates_equality_filter() {
-        let result = InExpansion::expand_in(
-            "status".to_string(),
-            &[json!("active")],
-            &None,
-        );
+        let result = InExpansion::expand_in("status".to_string(), &[json!("active")], &None);
 
         assert!(result.is_some());
         match result.unwrap() {
@@ -140,11 +135,8 @@ mod in_expansion_tests {
 
     #[test]
     fn test_expand_in_multiple_values_creates_correct_filters() {
-        let result = InExpansion::expand_in(
-            "id".to_string(),
-            &[json!(1), json!(2), json!(3)],
-            &None,
-        );
+        let result =
+            InExpansion::expand_in("id".to_string(), &[json!(1), json!(2), json!(3)], &None);
 
         match result.unwrap() {
             FilterGroup::Or(children) => {
@@ -292,11 +284,8 @@ mod in_expansion_tests {
 
     #[test]
     fn test_expand_in_preserves_priority_for_timestamp() {
-        let result = InExpansion::expand_in(
-            "timestamp".to_string(),
-            &[json!(1000), json!(2000)],
-            &None,
-        );
+        let result =
+            InExpansion::expand_in("timestamp".to_string(), &[json!(1000), json!(2000)], &None);
 
         match result.unwrap() {
             FilterGroup::Or(children) => {
@@ -315,11 +304,7 @@ mod in_expansion_tests {
 
     #[test]
     fn test_expand_in_single_value_preserves_priority() {
-        let result = InExpansion::expand_in(
-            "timestamp".to_string(),
-            &[json!(1000)],
-            &None,
-        );
+        let result = InExpansion::expand_in("timestamp".to_string(), &[json!(1000)], &None);
 
         match result.unwrap() {
             FilterGroup::Filter { priority, .. } => {
@@ -353,11 +338,8 @@ mod in_expansion_tests {
 
     #[test]
     fn test_expand_in_unicode_strings() {
-        let result = InExpansion::expand_in(
-            "name".to_string(),
-            &[json!("café"), json!("naïve")],
-            &None,
-        );
+        let result =
+            InExpansion::expand_in("name".to_string(), &[json!("café"), json!("naïve")], &None);
 
         match result.unwrap() {
             FilterGroup::Or(children) => {
@@ -401,11 +383,7 @@ mod in_expansion_tests {
 
     #[test]
     fn test_expand_or_equalities_empty_list() {
-        let result = InExpansion::expand_or_equalities(
-            "status".to_string(),
-            vec![],
-            &None,
-        );
+        let result = InExpansion::expand_or_equalities("status".to_string(), vec![], &None);
 
         match result {
             FilterGroup::Or(children) => {
@@ -417,11 +395,8 @@ mod in_expansion_tests {
 
     #[test]
     fn test_expand_or_equalities_single_value() {
-        let result = InExpansion::expand_or_equalities(
-            "status".to_string(),
-            vec![json!("active")],
-            &None,
-        );
+        let result =
+            InExpansion::expand_or_equalities("status".to_string(), vec![json!("active")], &None);
 
         match result {
             FilterGroup::Or(children) => {
@@ -571,11 +546,8 @@ mod in_expansion_tests {
     #[test]
     fn test_expand_or_equalities_always_returns_or() {
         // Even for single value, expand_or_equalities returns OR (unlike expand_in)
-        let result = InExpansion::expand_or_equalities(
-            "status".to_string(),
-            vec![json!("active")],
-            &None,
-        );
+        let result =
+            InExpansion::expand_or_equalities("status".to_string(), vec![json!("active")], &None);
 
         assert!(matches!(result, FilterGroup::Or(_)));
     }
@@ -629,11 +601,8 @@ mod in_expansion_tests {
         assert!(matches!(result_in.unwrap(), FilterGroup::Filter { .. }));
 
         // expand_or_equalities returns OR even for single value
-        let result_or = InExpansion::expand_or_equalities(
-            "status".to_string(),
-            vec![json!("active")],
-            &None,
-        );
+        let result_or =
+            InExpansion::expand_or_equalities("status".to_string(), vec![json!("active")], &None);
         assert!(matches!(result_or, FilterGroup::Or(_)));
     }
 
@@ -653,4 +622,3 @@ mod in_expansion_tests {
         }
     }
 }
-
