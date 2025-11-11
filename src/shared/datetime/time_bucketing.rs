@@ -24,6 +24,7 @@ impl CalendarTimeBucketer {
                 TimeGranularity::Day => self.bucket_day(dt),
                 TimeGranularity::Week => self.bucket_week(dt),
                 TimeGranularity::Month => self.bucket_month(dt),
+                TimeGranularity::Year => self.bucket_year(dt),
             };
 
             bucket_dt.timestamp() as u64
@@ -36,6 +37,7 @@ impl CalendarTimeBucketer {
                 TimeGranularity::Day => self.bucket_day(dt),
                 TimeGranularity::Week => self.bucket_week(dt),
                 TimeGranularity::Month => self.bucket_month(dt),
+                TimeGranularity::Year => self.bucket_year(dt),
             };
 
             bucket_dt.timestamp() as u64
@@ -80,6 +82,18 @@ impl CalendarTimeBucketer {
             .and_local_timezone(dt.timezone())
             .unwrap()
     }
+
+    fn bucket_year<T: TimeZone>(&self, dt: DateTime<T>) -> DateTime<T> {
+        dt.date_naive()
+            .with_month(1)
+            .unwrap()
+            .with_day(1)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_local_timezone(dt.timezone())
+            .unwrap()
+    }
 }
 
 /// Fallback to naive implementation for performance-critical paths
@@ -89,6 +103,7 @@ pub fn naive_bucket_of(ts: u64, gran: &TimeGranularity) -> u64 {
         TimeGranularity::Day => (ts / 86_400) * 86_400,
         TimeGranularity::Week => (ts / 604_800) * 604_800,
         TimeGranularity::Month => (ts / 2_592_000) * 2_592_000, // naive 30-day month bucket
+        TimeGranularity::Year => (ts / 31_536_000) * 31_536_000, // naive 365-day year bucket
     }
 }
 

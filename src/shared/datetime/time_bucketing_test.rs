@@ -277,6 +277,45 @@ fn calendar_month_bucketing_different_month_lengths() {
 }
 
 #[test]
+fn calendar_year_bucketing() {
+    let bucketer = create_bucketer(None, Weekday::Mon, true);
+
+    // Test various dates throughout the year
+    let test_cases = vec![
+        ("January 15, 2024", TimestampFactory::utc_date(2024, 1, 15)),
+        ("June 15, 2024", TimestampFactory::utc_date(2024, 6, 15)),
+        ("December 31, 2024", TimestampFactory::utc_date(2024, 12, 31)),
+        ("February 29, 2024 (leap year)", TimestampFactory::utc_date(2024, 2, 29)),
+    ];
+
+    for (description, input) in test_cases {
+        let result = bucketer.bucket_of(input, &TimeGranularity::Year);
+
+        // Should bucket to January 1, 2024 00:00:00 UTC
+        let expected = TimestampFactory::utc_date(2024, 1, 1);
+        assert_eq!(
+            result, expected,
+            "{} should bucket to start of year",
+            description
+        );
+    }
+}
+
+#[test]
+fn calendar_year_bucketing_timezone() {
+    let bucketer = create_bucketer(Some("US/Eastern"), Weekday::Mon, true);
+
+    // Test timezone-aware year bucketing
+    // 2024-06-15 14:30:45 UTC = 2024-06-15 10:30:45 EDT
+    let utc_ts = TimestampFactory::utc_datetime(2024, 6, 15, 14, 30, 45);
+    let result = bucketer.bucket_of(utc_ts, &TimeGranularity::Year);
+
+    // Should bucket to start of year in EST = 05:00:00 UTC (Jan 1, 2024)
+    let expected = TimestampFactory::utc_datetime(2024, 1, 1, 5, 0, 0);
+    assert_eq!(result, expected);
+}
+
+#[test]
 fn calendar_month_bucketing_timezone() {
     let bucketer = create_bucketer(Some("US/Eastern"), Weekday::Mon, true);
 
@@ -420,6 +459,7 @@ fn calendar_bucketing_all_granularities() {
         TimeGranularity::Day,
         TimeGranularity::Week,
         TimeGranularity::Month,
+        TimeGranularity::Year,
     ];
 
     for gran in granularities {
@@ -436,6 +476,46 @@ fn calendar_bucketing_all_granularities() {
 // ============================================================================
 // Naive vs Calendar Comparison Tests
 // ============================================================================
+
+#[test]
+fn naive_vs_calendar_year_comparison() {
+    let calendar_bucketer = create_bucketer(None, Weekday::Mon, true);
+
+    let test_cases = vec![
+        // (description, timestamp)
+        ("January 15, 2024", TimestampFactory::utc_date(2024, 1, 15)),
+        ("June 15, 2024", TimestampFactory::utc_date(2024, 6, 15)),
+        ("December 31, 2024", TimestampFactory::utc_date(2024, 12, 31)),
+        ("February 29, 2024 (leap year)", TimestampFactory::utc_date(2024, 2, 29)),
+    ];
+
+    for (description, ts) in test_cases {
+        let naive_result = naive_bucket_of(ts, &TimeGranularity::Year);
+        let calendar_result = calendar_bucketer.bucket_of(ts, &TimeGranularity::Year);
+
+        // Calendar should always bucket to January 1st of the year
+        let expected = TimestampFactory::utc_date(2024, 1, 1);
+        assert_eq!(
+            calendar_result, expected,
+            "Calendar bucketing for {} should be accurate",
+            description
+        );
+
+        // Naive bucketing should be close but may differ due to leap years
+        // It uses a fixed 365-day year approximation, so dates near year end
+        // can be off by more days
+        let days_diff = if naive_result > calendar_result {
+            (naive_result - calendar_result) / 86_400
+        } else {
+            (calendar_result - naive_result) / 86_400
+        };
+        assert!(
+            days_diff <= 366, // Allow up to a full year difference for naive approximation
+            "Naive bucketing for {} should be reasonably close (diff: {} days)",
+            description, days_diff
+        );
+    }
+}
 
 #[test]
 fn naive_vs_calendar_month_comparison() {
@@ -661,10 +741,16 @@ fn calendar_bucketing_debug_output() {
         week_bucket >= month_bucket,
         "Week bucket should be >= month bucket"
     );
+    let year_bucket = bucketer.bucket_of(test_ts, &TimeGranularity::Year);
+    assert!(
+        month_bucket >= year_bucket,
+        "Month bucket should be >= year bucket"
+    );
 
     // All buckets should be valid timestamps
     assert!(hour_bucket > 0);
     assert!(day_bucket > 0);
     assert!(week_bucket > 0);
     assert!(month_bucket > 0);
+    assert!(year_bucket > 0);
 }

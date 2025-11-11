@@ -152,6 +152,7 @@ peg::parser! {
                 / ci("DAY")   { TimeGranularity::Day }
                 / ci("WEEK")  { TimeGranularity::Week }
                 / ci("MONTH") { TimeGranularity::Month }
+                / ci("YEAR")  { TimeGranularity::Year }
               )
               _ using:(ci("USING") _ f:field() { f })? {
                 Clause::Time(tg, using)

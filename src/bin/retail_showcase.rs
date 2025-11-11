@@ -145,7 +145,7 @@ async fn main() -> Result<()> {
                 event_type
             ),
             "order_delivered" => format!(
-                "DEFINE {} FIELDS {{ context_id: \"string\", region: \"string\", created_at: \"datetime\" }}\n",
+                "DEFINE {} FIELDS {{ context_id: \"string\", customer_id: \"string\", region: \"string\", created_at: \"datetime\" }}\n",
                 event_type
             ),
             "review_submitted" => format!(
@@ -422,6 +422,7 @@ fn generate_session_events(
                             "order_delivered",
                             json!({
                                 "context_id": session.context_id,
+                                "customer_id": session.customer_id,
                                 "region": session.region,
                                 "created_at": current_time
                             })

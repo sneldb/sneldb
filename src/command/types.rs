@@ -176,6 +176,7 @@ pub enum TimeGranularity {
     Day,
     Week,
     Month,
+    Year,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
