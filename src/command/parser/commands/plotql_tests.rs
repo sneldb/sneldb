@@ -170,6 +170,221 @@ fn parses_top_clause_without_order() {
 }
 
 #[test]
+fn parses_top_by_count() {
+    let cmd =
+        plotql::parse("plot count of orders breakdown by product_id top 10 by count").unwrap();
+    if let Command::Query {
+        limit,
+        order_by,
+        aggs,
+        ..
+    } = cmd
+    {
+        assert_eq!(limit, Some(10));
+        assert_eq!(
+            order_by,
+            Some(OrderSpec {
+                field: "count".to_string(),
+                desc: true
+            })
+        );
+        assert_eq!(aggs, Some(vec![AggSpec::Count { unique_field: None }]));
+    } else {
+        panic!("expected query command");
+    }
+}
+
+#[test]
+fn parses_top_by_avg() {
+    let cmd = plotql::parse(
+        "plot avg(rating) of review_submitted breakdown by product_id top 5 by avg(rating)",
+    )
+    .unwrap();
+    if let Command::Query {
+        limit,
+        order_by,
+        aggs,
+        ..
+    } = cmd
+    {
+        assert_eq!(limit, Some(5));
+        assert_eq!(
+            order_by,
+            Some(OrderSpec {
+                field: "avg_rating".to_string(),
+                desc: true
+            })
+        );
+        assert_eq!(
+            aggs,
+            Some(vec![AggSpec::Avg {
+                field: "rating".to_string()
+            }])
+        );
+    } else {
+        panic!("expected query command");
+    }
+}
+
+#[test]
+fn parses_top_by_count_field() {
+    let cmd = plotql::parse(
+        "plot count(customer_id) of orders breakdown by product_id top 10 by count(customer_id)",
+    )
+    .unwrap();
+    if let Command::Query {
+        limit,
+        order_by,
+        aggs,
+        ..
+    } = cmd
+    {
+        assert_eq!(limit, Some(10));
+        assert_eq!(
+            order_by,
+            Some(OrderSpec {
+                field: "count_customer_id".to_string(),
+                desc: true
+            })
+        );
+        assert_eq!(
+            aggs,
+            Some(vec![AggSpec::CountField {
+                field: "customer_id".to_string()
+            }])
+        );
+    } else {
+        panic!("expected query command");
+    }
+}
+
+#[test]
+fn parses_top_by_unique() {
+    let cmd = plotql::parse(
+        "plot unique(customer_id) of orders breakdown by product_id top 10 by unique(customer_id)",
+    )
+    .unwrap();
+    if let Command::Query {
+        limit,
+        order_by,
+        aggs,
+        ..
+    } = cmd
+    {
+        assert_eq!(limit, Some(10));
+        assert_eq!(
+            order_by,
+            Some(OrderSpec {
+                field: "count_unique_customer_id".to_string(),
+                desc: true
+            })
+        );
+        assert_eq!(
+            aggs,
+            Some(vec![AggSpec::Count {
+                unique_field: Some("customer_id".to_string())
+            }])
+        );
+    } else {
+        panic!("expected query command");
+    }
+}
+
+#[test]
+fn parses_top_by_min() {
+    let cmd =
+        plotql::parse("plot min(price) of products breakdown by category top 5 by min(price)")
+            .unwrap();
+    if let Command::Query {
+        limit,
+        order_by,
+        aggs,
+        ..
+    } = cmd
+    {
+        assert_eq!(limit, Some(5));
+        assert_eq!(
+            order_by,
+            Some(OrderSpec {
+                field: "min_price".to_string(),
+                desc: true
+            })
+        );
+        assert_eq!(
+            aggs,
+            Some(vec![AggSpec::Min {
+                field: "price".to_string()
+            }])
+        );
+    } else {
+        panic!("expected query command");
+    }
+}
+
+#[test]
+fn parses_top_by_max() {
+    let cmd =
+        plotql::parse("plot max(price) of products breakdown by category top 5 by max(price)")
+            .unwrap();
+    if let Command::Query {
+        limit,
+        order_by,
+        aggs,
+        ..
+    } = cmd
+    {
+        assert_eq!(limit, Some(5));
+        assert_eq!(
+            order_by,
+            Some(OrderSpec {
+                field: "max_price".to_string(),
+                desc: true
+            })
+        );
+        assert_eq!(
+            aggs,
+            Some(vec![AggSpec::Max {
+                field: "price".to_string()
+            }])
+        );
+    } else {
+        panic!("expected query command");
+    }
+}
+
+#[test]
+fn parses_top_by_sum() {
+    let cmd = plotql::parse(
+        "plot sum(price) of payment_succeeded breakdown by product_id top 10 by sum(price)",
+    )
+    .unwrap();
+    if let Command::Query {
+        limit,
+        order_by,
+        aggs,
+        ..
+    } = cmd
+    {
+        assert_eq!(limit, Some(10));
+        assert_eq!(
+            order_by,
+            Some(OrderSpec {
+                field: "total_price".to_string(),
+                desc: true
+            })
+        );
+        assert_eq!(
+            aggs,
+            Some(vec![AggSpec::Total {
+                field: "price".to_string()
+            }])
+        );
+    } else {
+        panic!("expected query command");
+    }
+}
+
+#[test]
 fn parse_command_routes_plotql_queries() {
     let cmd = parse_command("plot count(customer_id) of page_view->add_to_cart->checkout_started->payment_succeeded over day(created_at)").unwrap();
     match cmd {
