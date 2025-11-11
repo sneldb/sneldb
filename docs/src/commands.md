@@ -11,6 +11,12 @@ Core verbs:
 - `FLUSH` — force a memtable → segment flush
 - `PING` — health check
 
-If a command returns no rows, you’ll see: `No matching events found`.
+User management:
+
+- `CREATE USER` — create a new authentication user
+- `REVOKE KEY` — revoke a user's authentication key
+- `LIST USERS` — list all registered users
+
+If a command returns no rows, you'll see: `No matching events found`.
 
 See pages below for full syntax and examples.

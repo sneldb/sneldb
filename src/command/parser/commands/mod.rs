@@ -1,20 +1,27 @@
 pub mod batch;
+pub mod create_user;
 pub mod define;
 pub mod flush;
+pub mod list_users;
 pub mod ping;
 pub mod plotql;
 pub mod query;
 pub mod remember;
 pub mod replay;
+pub mod revoke_key;
 pub mod show;
 pub mod store;
 
 #[cfg(test)]
 mod batch_tests;
 #[cfg(test)]
+mod create_user_tests;
+#[cfg(test)]
 mod define_tests;
 #[cfg(test)]
 mod flush_tests;
+#[cfg(test)]
+mod list_users_tests;
 #[cfg(test)]
 mod plotql_tests;
 #[cfg(test)]
@@ -23,6 +30,8 @@ mod query_tests;
 mod remember_tests;
 #[cfg(test)]
 mod replay_tests;
+#[cfg(test)]
+mod revoke_key_tests;
 #[cfg(test)]
 mod show_tests;
 #[cfg(test)]

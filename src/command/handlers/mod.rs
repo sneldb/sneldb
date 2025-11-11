@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod compare;
 pub mod define;
 pub mod flush;
@@ -13,6 +14,8 @@ pub mod shard_command_builder;
 pub mod show;
 pub mod store;
 
+#[cfg(test)]
+mod auth_test;
 #[cfg(test)]
 mod define_tests;
 #[cfg(test)]

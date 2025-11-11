@@ -1,17 +1,22 @@
 use anyhow::{Context, Result};
+use hex;
+use hmac::{Hmac, Mac};
 use rand::Rng;
 use rand::distributions::{Alphanumeric, DistString};
 use serde_json::{Value, json};
+use sha2::Sha256;
 use snel_db::shared::config::CONFIG;
 use std::io::ErrorKind;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use sysinfo::System;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, timeout};
+
+type HmacSha256 = Hmac<Sha256>;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -94,9 +99,52 @@ async fn main() -> Result<()> {
         .await
         .with_context(|| format!("failed to connect to {}", addr))?;
     control.set_nodelay(true)?;
-    let mut control_reader = BufReader::new(control);
+    let (control_reader_half, control_writer_half) = control.into_split();
+    let mut control_reader = BufReader::new(control_reader_half);
+    let mut control_writer = control_writer_half;
 
-    // Define schemas for all event types
+    // Create a user for authentication first (doesn't require auth)
+    let user_id = "stress_user".to_string();
+    println!("Creating user '{}'...", user_id);
+    let create_user_cmd = format!("CREATE USER {}\n", user_id);
+    let secret_key = match send_and_extract_secret_key(
+        &mut control_reader,
+        &mut control_writer,
+        &create_user_cmd,
+        wait_dur,
+    )
+    .await
+    {
+        Ok(key) => {
+            println!("User created successfully. Secret key: {}", key);
+            key
+        }
+        Err(e) => {
+            eprintln!("Failed to create user: {}. Continuing without auth...", e);
+            return Err(e);
+        }
+    };
+
+    // Authenticate the control connection before defining schemas
+    println!("Authenticating control connection...");
+    let auth_signature = compute_hmac(&secret_key, &user_id);
+    let auth_cmd = format!("AUTH {}:{}\n", user_id, auth_signature);
+    match send_and_check_ok(
+        &mut control_reader,
+        &mut control_writer,
+        &auth_cmd,
+        wait_dur,
+    )
+    .await
+    {
+        Ok(_) => println!("Control connection authenticated"),
+        Err(e) => {
+            eprintln!("Failed to authenticate control connection: {}", e);
+            return Err(e);
+        }
+    }
+
+    // Define schemas for all event types (now authenticated)
     // All event types share the same schema with link_field for sequence queries
     println!(
         "Defining schemas for {} event type(s): {:?}",
@@ -108,7 +156,17 @@ async fn main() -> Result<()> {
             "DEFINE {} FIELDS {{ id: \"u64\", v: \"string\", flag: \"bool\", created_at: \"datetime\", {}: \"u64\", plan: [\"type01\", \"type02\", \"type03\", \"type04\", \"type05\", \"type06\", \"type07\", \"type08\", \"type09\", \"type10\", \"type11\", \"type12\", \"type13\", \"type14\", \"type15\", \"type16\", \"type17\", \"type18\", \"type19\", \"type20\"] }}\n",
             event_type, link_field
         );
-        send_and_drain(&mut control_reader, &schema_cmd, wait_dur).await?;
+        // Sign the DEFINE command
+        let cmd_trimmed = schema_cmd.trim();
+        let signature = compute_hmac(&secret_key, cmd_trimmed);
+        let authenticated_cmd = format!("{}:{}\n", signature, cmd_trimmed);
+        send_and_drain(
+            &mut control_reader,
+            &mut control_writer,
+            &authenticated_cmd,
+            wait_dur,
+        )
+        .await?;
     }
 
     // Pre-generate contexts
@@ -189,6 +247,8 @@ async fn main() -> Result<()> {
     for mut rx_local in rxs {
         let addr_clone = addr.clone();
         let sent_inner = sent.clone();
+        let user_id_clone = user_id.clone();
+        let secret_key_clone = secret_key.clone();
         let handle = tokio::spawn(async move {
             let stream = match TcpStream::connect(addr_clone.clone()).await {
                 Ok(s) => s,
@@ -199,6 +259,25 @@ async fn main() -> Result<()> {
             // Split stream into reader and writer
             let (reader_half, writer_half) = stream.into_split();
             let mut reader = BufReader::new(reader_half);
+            let mut writer = writer_half;
+
+            // Authenticate this connection
+            let auth_signature = compute_hmac(&secret_key_clone, &user_id_clone);
+            let auth_cmd = format!("AUTH {}:{}\n", user_id_clone, auth_signature);
+            if let Err(_) = writer.write_all(auth_cmd.as_bytes()).await {
+                return; // Failed to authenticate
+            }
+            if let Err(_) = writer.flush().await {
+                return;
+            }
+            // Read OK response
+            let mut response = String::new();
+            if let Err(_) = read_line_with_timeout(&mut reader, &mut response, None).await {
+                return; // Failed to read response
+            }
+            if !response.trim().starts_with("OK") {
+                return; // Authentication failed
+            }
 
             // Spawn background task to drain responses (abortable)
             let response_drainer = tokio::spawn(async move {
@@ -233,9 +312,13 @@ async fn main() -> Result<()> {
             let drainer_abort = response_drainer.abort_handle();
 
             // Main writer loop - pipeline requests without waiting
-            let mut writer = writer_half;
             while let Some(cmd) = rx_local.recv().await {
-                match writer.write_all(cmd.as_bytes()).await {
+                // Compute signature for the command (without newline)
+                let cmd_trimmed = cmd.trim();
+                let signature = compute_hmac(&secret_key_clone, cmd_trimmed);
+                let authenticated_cmd = format!("{}:{}\n", signature, cmd_trimmed);
+
+                match writer.write_all(authenticated_cmd.as_bytes()).await {
                     Ok(_) => {
                         sent_inner.fetch_add(1, Ordering::Relaxed);
                     }
@@ -243,9 +326,32 @@ async fn main() -> Result<()> {
                         // Try to reconnect once
                         if let Ok(fresh) = TcpStream::connect(addr_clone.clone()).await {
                             let _ = fresh.set_nodelay(true);
-                            let (_, new_writer) = fresh.into_split();
-                            writer = new_writer;
-                            let _ = writer.write_all(cmd.as_bytes()).await;
+                            let (new_reader_half, mut new_writer_half) = fresh.into_split();
+                            let mut new_reader = BufReader::new(new_reader_half);
+
+                            // Re-authenticate
+                            let auth_signature = compute_hmac(&secret_key_clone, &user_id_clone);
+                            let auth_cmd = format!("AUTH {}:{}\n", user_id_clone, auth_signature);
+                            if let Err(_) = new_writer_half.write_all(auth_cmd.as_bytes()).await {
+                                break;
+                            }
+                            if let Err(_) = new_writer_half.flush().await {
+                                break;
+                            }
+                            let mut response = String::new();
+                            if let Err(_) =
+                                read_line_with_timeout(&mut new_reader, &mut response, None).await
+                            {
+                                break;
+                            }
+                            if !response.trim().starts_with("OK") {
+                                break;
+                            }
+
+                            writer = new_writer_half;
+                            let signature = compute_hmac(&secret_key_clone, cmd_trimmed);
+                            let authenticated_cmd = format!("{}:{}\n", signature, cmd_trimmed);
+                            let _ = writer.write_all(authenticated_cmd.as_bytes()).await;
                             sent_inner.fetch_add(1, Ordering::Relaxed);
                         }
                         break; // Give up if reconnect fails
@@ -302,9 +408,19 @@ async fn main() -> Result<()> {
     if let Some(first_event_type) = event_types.first() {
         if let Ok(replay_result) = timeout(Duration::from_secs(2), async {
             let replay_cmd = format!("REPLAY {} FOR {}\n", first_event_type, sample_ctx);
+            // Sign the REPLAY command
+            let cmd_trimmed = replay_cmd.trim();
+            let signature = compute_hmac(&secret_key, cmd_trimmed);
+            let authenticated_cmd = format!("{}:{}\n", signature, cmd_trimmed);
             let t0 = Instant::now();
-            send_and_collect_json_with_timeout(&mut control_reader, &replay_cmd, 10, wait_dur)
-                .await?;
+            send_and_collect_json_with_timeout(
+                &mut control_reader,
+                &mut control_writer,
+                &authenticated_cmd,
+                10,
+                wait_dur,
+            )
+            .await?;
             println!(
                 "Replay latency: {:.2} ms",
                 t0.elapsed().as_secs_f64() * 1000.0
@@ -328,9 +444,19 @@ async fn main() -> Result<()> {
                 "QUERY {} SINCE {} USING created_at WHERE id < 100\n",
                 first_event_type, since_secs
             );
+            // Sign the QUERY command
+            let cmd_trimmed = query_cmd.trim();
+            let signature = compute_hmac(&secret_key, cmd_trimmed);
+            let authenticated_cmd = format!("{}:{}\n", signature, cmd_trimmed);
             let t1 = Instant::now();
-            send_and_collect_json_with_timeout(&mut control_reader, &query_cmd, 10, wait_dur)
-                .await?;
+            send_and_collect_json_with_timeout(
+                &mut control_reader,
+                &mut control_writer,
+                &authenticated_cmd,
+                10,
+                wait_dur,
+            )
+            .await?;
             println!(
                 "Query latency: {:.2} ms",
                 t1.elapsed().as_secs_f64() * 1000.0
@@ -375,25 +501,27 @@ fn random_event_payload(
     obj.to_string()
 }
 
-async fn send_and_drain(
-    reader: &mut BufReader<TcpStream>,
+async fn send_and_drain<R: AsyncRead + Unpin, W: AsyncWriteExt + Unpin>(
+    reader: &mut BufReader<R>,
+    writer: &mut W,
     cmd: &str,
     wait: Option<Duration>,
 ) -> Result<()> {
-    write_all_with_timeout(reader, cmd.as_bytes(), wait).await?;
+    write_all_with_timeout_stream(writer, cmd.as_bytes(), wait).await?;
     let mut header = String::new();
     read_line_with_timeout(reader, &mut header, wait).await?;
     // Drain any following body lines until next prompt absence; here we assume single-line body for ok-lines
     Ok(())
 }
 
-async fn send_and_collect_json_with_timeout(
-    reader: &mut BufReader<TcpStream>,
+async fn send_and_collect_json_with_timeout<R: AsyncRead + Unpin, W: AsyncWriteExt + Unpin>(
+    reader: &mut BufReader<R>,
+    writer: &mut W,
     cmd: &str,
     max_lines: usize,
     wait: Option<Duration>,
 ) -> Result<Vec<Value>> {
-    write_all_with_timeout(reader, cmd.as_bytes(), wait).await?;
+    write_all_with_timeout_stream(writer, cmd.as_bytes(), wait).await?;
     let mut header = String::new();
     read_line_with_timeout(reader, &mut header, wait).await?; // e.g., "200 OK"
     let mut out = Vec::new();
@@ -415,23 +543,23 @@ async fn send_and_collect_json_with_timeout(
     Ok(out)
 }
 
-async fn write_all_with_timeout(
-    reader: &mut BufReader<TcpStream>,
+async fn write_all_with_timeout_stream<W: AsyncWriteExt + Unpin>(
+    writer: &mut W,
     buf: &[u8],
     wait: Option<Duration>,
 ) -> std::io::Result<()> {
     if let Some(dur) = wait {
-        match tokio::time::timeout(dur, reader.get_mut().write_all(buf)).await {
+        match tokio::time::timeout(dur, writer.write_all(buf)).await {
             Ok(res) => res,
             Err(_) => Err(std::io::Error::new(ErrorKind::TimedOut, "write timeout")),
         }
     } else {
-        reader.get_mut().write_all(buf).await
+        writer.write_all(buf).await
     }
 }
 
-async fn read_line_with_timeout(
-    reader: &mut BufReader<TcpStream>,
+async fn read_line_with_timeout<R: AsyncRead + Unpin>(
+    reader: &mut BufReader<R>,
     line: &mut String,
     wait: Option<Duration>,
 ) -> std::io::Result<usize> {
@@ -442,5 +570,62 @@ async fn read_line_with_timeout(
         }
     } else {
         reader.read_line(line).await
+    }
+}
+
+/// Compute HMAC-SHA256 signature
+fn compute_hmac(secret_key: &str, message: &str) -> String {
+    let mut mac =
+        HmacSha256::new_from_slice(secret_key.as_bytes()).expect("HMAC can take key of any size");
+    mac.update(message.as_bytes());
+    hex::encode(mac.finalize().into_bytes())
+}
+
+/// Send CREATE USER command and extract the secret key from response
+async fn send_and_extract_secret_key<R: AsyncRead + Unpin, W: AsyncWriteExt + Unpin>(
+    reader: &mut BufReader<R>,
+    writer: &mut W,
+    cmd: &str,
+    wait: Option<Duration>,
+) -> Result<String> {
+    write_all_with_timeout_stream(writer, cmd.as_bytes(), wait).await?;
+
+    // Read status line (e.g., "200 OK")
+    let mut status = String::new();
+    read_line_with_timeout(reader, &mut status, wait).await?;
+
+    // Read "User '...' created" line
+    let mut user_line = String::new();
+    read_line_with_timeout(reader, &mut user_line, wait).await?;
+
+    // Read "Secret key: ..." line
+    let mut key_line = String::new();
+    read_line_with_timeout(reader, &mut key_line, wait).await?;
+
+    // Extract secret key from "Secret key: <key>"
+    if let Some(key_part) = key_line.strip_prefix("Secret key: ") {
+        Ok(key_part.trim().to_string())
+    } else {
+        Err(anyhow::anyhow!(
+            "Failed to parse secret key from response: {}",
+            key_line
+        ))
+    }
+}
+
+/// Send command and check for OK response
+async fn send_and_check_ok<R: AsyncRead + Unpin, W: AsyncWriteExt + Unpin>(
+    reader: &mut BufReader<R>,
+    writer: &mut W,
+    cmd: &str,
+    wait: Option<Duration>,
+) -> Result<()> {
+    write_all_with_timeout_stream(writer, cmd.as_bytes(), wait).await?;
+    let mut response = String::new();
+    read_line_with_timeout(reader, &mut response, wait).await?;
+    if response.trim().starts_with("OK") {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("Expected OK, got: {}", response.trim()))
     }
 }

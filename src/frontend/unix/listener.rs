@@ -29,6 +29,7 @@ pub async fn run_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
 
     let registry = Arc::clone(&ctx.registry);
     let shard_manager = Arc::clone(&ctx.shard_manager);
+    let auth_manager = ctx.auth_manager.clone();
 
     loop {
         match listener.accept().await {
@@ -36,6 +37,7 @@ pub async fn run_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
                 tracing::info!("Accepted new connection");
                 let shard_manager = Arc::clone(&shard_manager);
                 let registry = Arc::clone(&registry);
+                let auth_manager = auth_manager.clone();
                 let renderer: Arc<dyn Renderer + Send + Sync> =
                     match CONFIG.server.output_format.as_str() {
                         "json" => Arc::new(JsonRenderer),
@@ -52,6 +54,7 @@ pub async fn run_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
                         shard_manager,
                         registry,
                         renderer,
+                        auth_manager,
                     };
                     if let Err(e) = conn.run().await {
                         tracing::error!("Connection error: {e}");

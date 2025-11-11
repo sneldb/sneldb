@@ -1,9 +1,4 @@
-use bytes::Bytes;
-use http_body_util::{BodyExt, Full};
-use hyper::{Request, Response, StatusCode, body::Incoming, header};
-use std::{convert::Infallible, sync::Arc, time::Instant};
-use tokio::sync::RwLock;
-
+use crate::engine::auth::AuthManager;
 use crate::command::dispatcher::dispatch_command;
 use crate::command::parser::parse_command;
 use crate::command::types::Command;
@@ -15,6 +10,11 @@ use crate::shared::config::CONFIG;
 use crate::shared::response::{
     ArrowRenderer, JsonRenderer, Response as ResponseType, render::Renderer, unix::UnixRenderer,
 };
+use bytes::Bytes;
+use http_body_util::{BodyExt, Full};
+use hyper::{Request, Response, StatusCode, body::Incoming, header};
+use std::{convert::Infallible, sync::Arc, time::Instant};
+use tokio::sync::RwLock;
 use tracing::info;
 
 fn is_authorized(req: &Request<Incoming>) -> bool {
@@ -49,11 +49,103 @@ fn is_authorized(req: &Request<Incoming>) -> bool {
         )
 }
 
+/// Case-insensitive byte comparison helper
+#[inline]
+fn bytes_eq_ignore_ascii_case(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len()
+        && a.iter()
+            .zip(b.iter())
+            .all(|(x, y)| x.eq_ignore_ascii_case(y))
+}
+
+/// Extract authentication from HTTP headers
+/// Returns (user_id, signature) if found in headers, None otherwise
+fn extract_auth_from_headers(req: &Request<Incoming>) -> Option<(String, String)> {
+    let user_id = req
+        .headers()
+        .get("X-Auth-User")
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string())?;
+
+    let signature = req
+        .headers()
+        .get("X-Auth-Signature")
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string())?;
+
+    if user_id.is_empty() || signature.is_empty() {
+        return None;
+    }
+
+    Some((user_id, signature))
+}
+
+/// Check authentication before parsing command
+/// Supports both header-based (X-Auth-User, X-Auth-Signature) and inline format (user_id:signature:command)
+/// Returns command if authenticated, or None if auth check failed
+async fn check_auth_with_headers<'a>(
+    input: &'a str,
+    auth_from_headers: Option<(String, String)>,
+    auth_manager: Option<&'a Arc<AuthManager>>,
+) -> Option<&'a str> {
+    // Cache trimmed input and use case-insensitive byte checks
+    let trimmed = input.trim();
+    let trimmed_bytes = trimmed.as_bytes();
+
+    // Auth commands don't require authentication (case-insensitive byte checks)
+    if trimmed_bytes.len() >= 11 && bytes_eq_ignore_ascii_case(&trimmed_bytes[..11], b"CREATE USER")
+    {
+        return Some(input);
+    }
+    if trimmed_bytes.len() >= 10 && bytes_eq_ignore_ascii_case(&trimmed_bytes[..10], b"REVOKE KEY")
+    {
+        return Some(input);
+    }
+    if trimmed_bytes.len() >= 10 && bytes_eq_ignore_ascii_case(&trimmed_bytes[..10], b"LIST USERS")
+    {
+        return Some(input);
+    }
+
+    // If auth manager is not configured, allow all commands
+    let auth_mgr = match auth_manager {
+        Some(am) => am,
+        None => return Some(input),
+    };
+
+    // Try header-based authentication first (for HTTP)
+    if let Some((user_id, signature)) = auth_from_headers {
+        // Verify signature against the command body
+        match auth_mgr
+            .verify_signature(trimmed, &user_id, &signature)
+            .await
+        {
+            Ok(_) => return Some(input),
+            Err(_) => return None,
+        }
+    }
+
+    // Fall back to inline format: user_id:signature:command (for backward compatibility)
+    match auth_mgr.parse_auth(trimmed) {
+        Ok((user_id, signature, command)) => {
+            // Verify signature
+            match auth_mgr.verify_signature(command, user_id, signature).await {
+                Ok(_) => Some(command),
+                Err(_) => None,
+            }
+        }
+        Err(_) => {
+            // If parsing fails, authentication is required for all commands
+            None
+        }
+    }
+}
+
 pub async fn handle_line_command(
     req: Request<Incoming>,
     registry: Arc<RwLock<SchemaRegistry>>,
     shard_manager: Arc<ShardManager>,
     server_state: Arc<ServerState>,
+    auth_manager: Option<Arc<AuthManager>>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
     if req.method() != hyper::Method::POST {
         return method_not_allowed();
@@ -61,6 +153,9 @@ pub async fn handle_line_command(
     if !is_authorized(&req) {
         return unauthorized();
     }
+
+    // Extract auth headers before consuming the request body
+    let auth_from_headers = extract_auth_from_headers(&req);
 
     let body = req.collect().await.unwrap().to_bytes();
     let input = String::from_utf8_lossy(&body).trim().to_string();
@@ -74,12 +169,28 @@ pub async fn handle_line_command(
         return render_error("Empty command", StatusCode::BAD_REQUEST, renderer);
     }
 
-    match parse_command(&input) {
+    // Check authentication before parsing
+    let command_to_parse =
+        match check_auth_with_headers(&input, auth_from_headers, auth_manager.as_ref()).await {
+            Some(cmd) => cmd,
+            None => {
+                return render_error("Authentication failed", StatusCode::UNAUTHORIZED, renderer);
+            }
+        };
+
+    match parse_command(command_to_parse) {
         Ok(cmd) => {
             // Increment pending operations before dispatch
             server_state.increment_pending();
             let start = Instant::now();
-            let result = dispatch_and_respond(cmd, registry, shard_manager, renderer).await;
+            let result = dispatch_and_respond(
+                cmd,
+                registry,
+                shard_manager,
+                auth_manager.as_ref(),
+                renderer,
+            )
+            .await;
             let execution_time_ms = start.elapsed().as_secs_f64() * 1000.0;
             // Decrement after dispatch completes
             server_state.decrement_pending();
@@ -94,6 +205,7 @@ pub async fn handle_json_command(
     registry: Arc<RwLock<SchemaRegistry>>,
     shard_manager: Arc<ShardManager>,
     server_state: Arc<ServerState>,
+    auth_manager: Option<Arc<AuthManager>>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
     if req.method() != hyper::Method::POST {
         return method_not_allowed();
@@ -102,7 +214,11 @@ pub async fn handle_json_command(
         return unauthorized();
     }
 
+    // Extract auth headers before consuming the request body
+    let auth_from_headers = extract_auth_from_headers(&req);
+
     let body = req.collect().await.unwrap().to_bytes();
+    let body_str = String::from_utf8_lossy(&body);
     let renderer: Arc<dyn Renderer + Send + Sync> = match CONFIG.server.output_format.as_str() {
         "arrow" => Arc::new(ArrowRenderer),
         _ => Arc::new(JsonRenderer),
@@ -110,12 +226,49 @@ pub async fn handle_json_command(
 
     match sonic_rs::from_slice::<JsonCommand>(&body) {
         Ok(json_cmd) => {
+            // Check authentication for all commands
+            // Try header-based authentication
+            if let Some((user_id, signature)) = auth_from_headers {
+                // Use the raw body string for signature verification (what client signed)
+                if let Some(auth_mgr) = auth_manager.as_ref() {
+                    match auth_mgr
+                        .verify_signature(body_str.trim(), &user_id, &signature)
+                        .await
+                    {
+                        Ok(_) => {
+                            // Authentication successful, proceed
+                        }
+                        Err(_) => {
+                            return render_error(
+                                "Authentication failed",
+                                StatusCode::UNAUTHORIZED,
+                                renderer,
+                            );
+                        }
+                    }
+                }
+            } else {
+                // No headers found, require authentication for all commands
+                return render_error(
+                    "Authentication required: missing X-Auth-User and X-Auth-Signature headers",
+                    StatusCode::UNAUTHORIZED,
+                    renderer,
+                );
+            }
+
             let cmd: Command = json_cmd.into();
             info!("Received JSON command: {:?}", cmd);
             // Increment pending operations before dispatch
             server_state.increment_pending();
             let start = Instant::now();
-            let result = dispatch_and_respond(cmd, registry, shard_manager, renderer).await;
+            let result = dispatch_and_respond(
+                cmd,
+                registry,
+                shard_manager,
+                auth_manager.as_ref(),
+                renderer,
+            )
+            .await;
             let execution_time_ms = start.elapsed().as_secs_f64() * 1000.0;
             // Decrement after dispatch completes
             server_state.decrement_pending();
@@ -133,6 +286,7 @@ async fn dispatch_and_respond(
     cmd: Command,
     registry: Arc<RwLock<SchemaRegistry>>,
     shard_manager: Arc<ShardManager>,
+    auth_manager: Option<&Arc<AuthManager>>,
     renderer: Arc<dyn Renderer + Send + Sync>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
     let mut output = Vec::new();
@@ -141,6 +295,7 @@ async fn dispatch_and_respond(
         &mut output,
         &shard_manager,
         &registry,
+        auth_manager,
         renderer.as_ref(),
     )
     .await;
