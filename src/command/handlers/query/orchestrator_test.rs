@@ -90,7 +90,12 @@ fn streaming_supported_returns_true_with_event_sequence() {
     let registry = SchemaRegistryFactory::new().registry();
 
     let mut command = base_command();
-    if let Command::Query { event_sequence, link_field, .. } = &mut command {
+    if let Command::Query {
+        event_sequence,
+        link_field,
+        ..
+    } = &mut command
+    {
         *event_sequence = Some(crate::command::types::EventSequence {
             head: crate::command::types::EventTarget {
                 event: "evt1".to_string(),
@@ -117,7 +122,12 @@ fn is_sequence_query_returns_true_for_sequence_query() {
     let registry = SchemaRegistryFactory::new().registry();
 
     let mut command = base_command();
-    if let Command::Query { event_sequence, link_field, .. } = &mut command {
+    if let Command::Query {
+        event_sequence,
+        link_field,
+        ..
+    } = &mut command
+    {
         *event_sequence = Some(crate::command::types::EventSequence {
             head: crate::command::types::EventTarget {
                 event: "evt1".to_string(),
@@ -191,7 +201,12 @@ fn is_sequence_query_returns_true_for_preceded_by_sequence() {
     let registry = SchemaRegistryFactory::new().registry();
 
     let mut command = base_command();
-    if let Command::Query { event_sequence, link_field, .. } = &mut command {
+    if let Command::Query {
+        event_sequence,
+        link_field,
+        ..
+    } = &mut command
+    {
         *event_sequence = Some(crate::command::types::EventSequence {
             head: crate::command::types::EventTarget {
                 event: "evt1".to_string(),

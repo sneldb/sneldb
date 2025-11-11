@@ -356,10 +356,8 @@ fn parses_top_by_max() {
 fn parses_top_by_different_metric() {
     // Ordering by a metric that differs from the main metric
     // Should add the ordering metric to aggs
-    let cmd = plotql::parse(
-        "plot count of orders breakdown by product_id top 10 by avg(price)",
-    )
-    .unwrap();
+    let cmd =
+        plotql::parse("plot count of orders breakdown by product_id top 10 by avg(price)").unwrap();
     if let Command::Query {
         limit,
         order_by,
@@ -393,10 +391,8 @@ fn parses_top_by_different_metric() {
 #[test]
 fn parses_top_by_different_metric_reverse() {
     // Ordering by count when main metric is avg
-    let cmd = plotql::parse(
-        "plot avg(rating) of reviews breakdown by product_id top 5 by count",
-    )
-    .unwrap();
+    let cmd = plotql::parse("plot avg(rating) of reviews breakdown by product_id top 5 by count")
+        .unwrap();
     if let Command::Query {
         limit,
         order_by,
@@ -1220,14 +1216,22 @@ fn parses_all_keywords_lowercase() {
 
     // With filter
     assert!(plotql::parse("plot count of orders filter status = \"active\"").is_ok());
-    assert!(plotql::parse("plot count of orders filter status = \"active\" and price > 100").is_ok());
-    assert!(plotql::parse("plot count of orders filter status in (\"active\", \"pending\")").is_ok());
+    assert!(
+        plotql::parse("plot count of orders filter status = \"active\" and price > 100").is_ok()
+    );
+    assert!(
+        plotql::parse("plot count of orders filter status in (\"active\", \"pending\")").is_ok()
+    );
     assert!(plotql::parse("plot count of orders filter not status = \"inactive\"").is_ok());
 
     // With top
     assert!(plotql::parse("plot count of orders breakdown by product_id top 10").is_ok());
-    assert!(plotql::parse("plot count of orders breakdown by product_id top 10 by avg(price)").is_ok());
-    assert!(plotql::parse("plot count of orders breakdown by product_id top 10 by product_id").is_ok());
+    assert!(
+        plotql::parse("plot count of orders breakdown by product_id top 10 by avg(price)").is_ok()
+    );
+    assert!(
+        plotql::parse("plot count of orders breakdown by product_id top 10 by product_id").is_ok()
+    );
 
     // With compare
     assert!(plotql::parse("plot count of orders vs count of reviews").is_ok());
@@ -1252,10 +1256,7 @@ fn parses_all_keywords_lowercase() {
 
 #[test]
 fn parses_two_way_comparison() {
-    let cmd = plotql::parse(
-        "plot total(amount) of orders vs total(amount) of refunds",
-    )
-    .unwrap();
+    let cmd = plotql::parse("plot total(amount) of orders vs total(amount) of refunds").unwrap();
     if let Command::Compare { queries } = cmd {
         assert_eq!(queries.len(), 2);
         assert_eq!(queries[0].event_type, "orders");
@@ -1375,10 +1376,9 @@ fn parses_comparison_with_per_side_filters() {
 
 #[test]
 fn parses_comparison_with_per_side_top() {
-    let cmd = plotql::parse(
-        "plot total(amount) of orders top 10 vs total(amount) of refunds top 5",
-    )
-    .unwrap();
+    let cmd =
+        plotql::parse("plot total(amount) of orders top 10 vs total(amount) of refunds top 5")
+            .unwrap();
     if let Command::Compare { queries } = cmd {
         assert_eq!(queries.len(), 2);
         assert_eq!(queries[0].limit, Some(10));
@@ -1421,10 +1421,8 @@ fn parses_comparison_with_event_sequences() {
 
 #[test]
 fn parses_comparison_with_then_alias() {
-    let cmd = plotql::parse(
-        "plot count of event_a then event_b vs count of event_c then event_d",
-    )
-    .unwrap();
+    let cmd = plotql::parse("plot count of event_a then event_b vs count of event_c then event_d")
+        .unwrap();
     if let Command::Compare { queries } = cmd {
         assert_eq!(queries.len(), 2);
         assert!(queries[0].event_sequence.is_some());
@@ -1544,10 +1542,12 @@ fn rejects_comparison_with_different_metrics() {
     // Different metric functions should be rejected
     let result = plotql::parse("plot total(amount) of orders vs count of refunds");
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("same metric function"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("same metric function")
+    );
 }
 
 #[test]
@@ -1555,10 +1555,12 @@ fn rejects_comparison_with_different_metric_fields() {
     // Same metric function but different fields should be rejected
     let result = plotql::parse("plot total(amount) of orders vs total(price) of refunds");
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("same metric function"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("same metric function")
+    );
 }
 
 #[test]
@@ -1900,10 +1902,8 @@ fn parses_qualified_field_in_filter() {
 
 #[test]
 fn parses_qualified_field_in_breakdown() {
-    let cmd = plotql::parse(
-        "plot count of orders breakdown by orders.region, orders.product_id",
-    )
-    .unwrap();
+    let cmd = plotql::parse("plot count of orders breakdown by orders.region, orders.product_id")
+        .unwrap();
     if let Command::Query { group_by, .. } = cmd {
         assert_eq!(
             group_by,
@@ -2338,4 +2338,3 @@ fn parses_query_with_vs_returns_compare_command() {
         _ => panic!("expected Compare command"),
     }
 }
-

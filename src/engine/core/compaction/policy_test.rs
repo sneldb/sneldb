@@ -175,7 +175,10 @@ fn handles_segments_with_multiple_uids() {
     assert_eq!(uid_b_plans.len(), 1);
 
     // Both should reference the same input segments
-    assert_eq!(uid_a_plans[0].input_segment_labels, uid_b_plans[0].input_segment_labels);
+    assert_eq!(
+        uid_a_plans[0].input_segment_labels,
+        uid_b_plans[0].input_segment_labels
+    );
 }
 
 #[test]
@@ -199,8 +202,14 @@ fn handles_mixed_leftovers_and_full_batches() {
     // They will accumulate and be compacted in a future cycle
     assert_eq!(plans.len(), 2);
 
-    let full_batches: Vec<_> = plans.iter().filter(|p| p.input_segment_labels.len() == 3).collect();
-    let leftover_batch: Vec<_> = plans.iter().filter(|p| p.input_segment_labels.len() == 2).collect();
+    let full_batches: Vec<_> = plans
+        .iter()
+        .filter(|p| p.input_segment_labels.len() == 3)
+        .collect();
+    let leftover_batch: Vec<_> = plans
+        .iter()
+        .filter(|p| p.input_segment_labels.len() == 2)
+        .collect();
 
     assert_eq!(full_batches.len(), 2);
     assert_eq!(leftover_batch.len(), 0); // No force-compaction after chunking
@@ -270,8 +279,14 @@ fn handles_large_number_of_segments() {
     let plans = policy.plan(&index);
 
     // Should create 8 full batches + 0 forced leftover batches (1 leftover < k-1=2, so wait)
-    let full_batches: Vec<_> = plans.iter().filter(|p| p.input_segment_labels.len() == 3).collect();
-    let leftover_batch: Vec<_> = plans.iter().filter(|p| p.input_segment_labels.len() == 1).collect();
+    let full_batches: Vec<_> = plans
+        .iter()
+        .filter(|p| p.input_segment_labels.len() == 3)
+        .collect();
+    let leftover_batch: Vec<_> = plans
+        .iter()
+        .filter(|p| p.input_segment_labels.len() == 1)
+        .collect();
 
     assert_eq!(full_batches.len(), 8);
     assert_eq!(leftover_batch.len(), 0);

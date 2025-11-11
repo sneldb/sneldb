@@ -4,11 +4,11 @@ use crate::command::handlers::query_batch_stream::QueryBatchStream;
 use crate::command::types::{Command, QueryCommand};
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
-use tokio::sync::RwLock;
 use futures::future::join_all;
+use tokio::sync::RwLock;
 
-use crate::command::handlers::query::QueryExecutionPipeline;
 use super::merge::ComparisonStreamMerger;
+use crate::command::handlers::query::QueryExecutionPipeline;
 
 pub struct ComparisonExecutionPipeline<'a> {
     queries: &'a [QueryCommand],
@@ -42,11 +42,7 @@ impl<'a> ComparisonExecutionPipeline<'a> {
             let shard_manager = self.shard_manager;
             let registry = Arc::clone(&self.registry);
             query_futures.push(async move {
-                let pipeline = QueryExecutionPipeline::new(
-                    &command,
-                    shard_manager,
-                    registry,
-                );
+                let pipeline = QueryExecutionPipeline::new(&command, shard_manager, registry);
                 pipeline.execute_streaming().await
             });
         }
@@ -83,4 +79,3 @@ impl<'a> ComparisonExecutionPipeline<'a> {
         Ok(Some(merged_stream))
     }
 }
-

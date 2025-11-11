@@ -48,8 +48,8 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|| vec!["stress_evt".to_string()]);
 
     // Link field for sequence queries (default: user_id)
-    let link_field = std::env::var("SNEL_STRESS_LINK_FIELD")
-        .unwrap_or_else(|_| "user_id".to_string());
+    let link_field =
+        std::env::var("SNEL_STRESS_LINK_FIELD").unwrap_or_else(|_| "user_id".to_string());
 
     // Sample context id for replay/query timings
     let sample_ctx =
@@ -98,7 +98,11 @@ async fn main() -> Result<()> {
 
     // Define schemas for all event types
     // All event types share the same schema with link_field for sequence queries
-    println!("Defining schemas for {} event type(s): {:?}", event_types.len(), event_types);
+    println!(
+        "Defining schemas for {} event type(s): {:?}",
+        event_types.len(),
+        event_types
+    );
     for event_type in &event_types {
         let schema_cmd = format!(
             "DEFINE {} FIELDS {{ id: \"u64\", v: \"string\", flag: \"bool\", created_at: \"datetime\", {}: \"u64\", plan: [\"type01\", \"type02\", \"type03\", \"type04\", \"type05\", \"type06\", \"type07\", \"type08\", \"type09\", \"type10\", \"type11\", \"type12\", \"type13\", \"type14\", \"type15\", \"type16\", \"type17\", \"type18\", \"type19\", \"type20\"] }}\n",
@@ -299,7 +303,8 @@ async fn main() -> Result<()> {
         if let Ok(replay_result) = timeout(Duration::from_secs(2), async {
             let replay_cmd = format!("REPLAY {} FOR {}\n", first_event_type, sample_ctx);
             let t0 = Instant::now();
-            send_and_collect_json_with_timeout(&mut control_reader, &replay_cmd, 10, wait_dur).await?;
+            send_and_collect_json_with_timeout(&mut control_reader, &replay_cmd, 10, wait_dur)
+                .await?;
             println!(
                 "Replay latency: {:.2} ms",
                 t0.elapsed().as_secs_f64() * 1000.0
@@ -324,7 +329,8 @@ async fn main() -> Result<()> {
                 first_event_type, since_secs
             );
             let t1 = Instant::now();
-            send_and_collect_json_with_timeout(&mut control_reader, &query_cmd, 10, wait_dur).await?;
+            send_and_collect_json_with_timeout(&mut control_reader, &query_cmd, 10, wait_dur)
+                .await?;
             println!(
                 "Query latency: {:.2} ms",
                 t1.elapsed().as_secs_f64() * 1000.0
@@ -342,7 +348,13 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn random_event_payload(seq: u64, ts_start: i64, ts_end: i64, user_id: u64, link_field: &str) -> String {
+fn random_event_payload(
+    seq: u64,
+    ts_start: i64,
+    ts_end: i64,
+    user_id: u64,
+    link_field: &str,
+) -> String {
     let v = Alphanumeric.sample_string(&mut rand::thread_rng(), 12);
     let plan = format!("type{:02}", (seq % 20) + 1);
     let mut rng = rand::thread_rng();

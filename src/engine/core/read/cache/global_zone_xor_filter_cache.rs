@@ -366,4 +366,3 @@ fn file_identity(path: &Path) -> Result<(u64, i64, u64), io::Error> {
         Ok((0, mtime, size))
     }
 }
-

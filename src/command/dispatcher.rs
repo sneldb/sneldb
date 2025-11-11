@@ -32,9 +32,15 @@ pub async fn dispatch_command<W: AsyncWrite + Unpin>(
                 .await
         }
         Compare { .. } => {
-            compare::ComparisonCommandHandler::new(cmd, shard_manager, Arc::clone(registry), writer, renderer)
-                .handle()
-                .await
+            compare::ComparisonCommandHandler::new(
+                cmd,
+                shard_manager,
+                Arc::clone(registry),
+                writer,
+                renderer,
+            )
+            .handle()
+            .await
         }
         Replay { .. } => replay::handle(cmd, shard_manager, registry, writer, renderer).await,
         ShowMaterialized { .. } => {

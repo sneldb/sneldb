@@ -1,5 +1,5 @@
-use crate::engine::core::{ExecutionStep, QueryPlan};
 use crate::engine::core::filter::filter_group::FilterGroup;
+use crate::engine::core::{ExecutionStep, QueryPlan};
 
 #[derive(Default)]
 pub struct ExecutionStepFactory<'a> {

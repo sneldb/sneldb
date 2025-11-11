@@ -57,7 +57,9 @@ async fn builds_execution_step_with_valid_filter_and_plan() {
     // Verify
     assert_eq!(step.filter.column(), Some("status"));
     match &step.filter {
-        crate::engine::core::filter::filter_group::FilterGroup::Filter { uid: filter_uid, .. } => {
+        crate::engine::core::filter::filter_group::FilterGroup::Filter {
+            uid: filter_uid, ..
+        } => {
             assert_eq!(filter_uid.as_deref(), Some(uid.as_str()));
         }
         _ => panic!("Expected Filter variant"),

@@ -1,4 +1,3 @@
-
 use crate::command::types::{EventSequence, EventTarget, SequenceLink};
 use crate::engine::core::CandidateZone;
 use crate::engine::core::read::sequence::group::ColumnarGrouper;
@@ -26,7 +25,9 @@ async fn create_test_registry(
         let schema = MiniSchema {
             fields: schema_fields,
         };
-        registry.define(event_type, schema).expect("Failed to define schema");
+        registry
+            .define(event_type, schema)
+            .expect("Failed to define schema");
     }
 
     Arc::new(RwLock::new(registry))
@@ -366,10 +367,8 @@ async fn test_match_followed_by_with_where_clause() {
 
     // Create WHERE evaluator
     let event_types = vec!["page_view".to_string(), "order_created".to_string()];
-    let registry = create_test_registry(&[
-        ("page_view", &["page"]),
-        ("order_created", &["status"]),
-    ]).await;
+    let registry =
+        create_test_registry(&[("page_view", &["page"]), ("order_created", &["status"])]).await;
     let where_evaluator =
         crate::engine::core::read::sequence::where_evaluator::SequenceWhereEvaluator::new(
             Some(&where_clause),
@@ -394,7 +393,8 @@ async fn test_match_followed_by_with_where_clause() {
         )],
     };
 
-    let matcher = SequenceMatcher::new(sequence, "timestamp".to_string()).with_where_evaluator(where_evaluator);
+    let matcher = SequenceMatcher::new(sequence, "timestamp".to_string())
+        .with_where_evaluator(where_evaluator);
     let matches = matcher.match_sequences(groups, &zones_by_type, None);
 
     // Should find 1 match (only u1, not u2)
@@ -450,7 +450,8 @@ async fn test_match_preceded_by_with_where_clause() {
     let registry = create_test_registry(&[
         ("payment_failed", &["amount"]), // payment_failed has amount but not status
         ("order_created", &["status"]),
-    ]).await;
+    ])
+    .await;
     let where_evaluator =
         crate::engine::core::read::sequence::where_evaluator::SequenceWhereEvaluator::new(
             Some(&where_clause),
@@ -475,7 +476,8 @@ async fn test_match_preceded_by_with_where_clause() {
         )],
     };
 
-    let matcher = SequenceMatcher::new(sequence, "timestamp".to_string()).with_where_evaluator(where_evaluator);
+    let matcher = SequenceMatcher::new(sequence, "timestamp".to_string())
+        .with_where_evaluator(where_evaluator);
     let matches = matcher.match_sequences(groups, &zones_by_type, None);
 
     // Should find 1 match (only u1, not u2)

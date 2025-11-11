@@ -3,14 +3,14 @@ use std::sync::Arc;
 use crate::engine::core::Event;
 use crate::engine::core::QueryPlan;
 use crate::engine::core::event::event_id::EventId;
+use crate::engine::core::read::aggregate::partial::{AggPartial, AggState};
 use crate::engine::core::read::aggregate::plan::{AggregateOpSpec, AggregatePlan};
 use crate::engine::core::read::flow::{BatchSchema, FlowContext, FlowOperator, FlowOperatorError};
 use crate::engine::core::read::result::ColumnSpec;
-use crate::engine::core::read::aggregate::partial::{AggPartial, AggState};
 use crate::engine::core::read::sink::{AggregateSink, ResultSink};
 use crate::engine::types::ScalarValue;
-use std::collections::BTreeMap;
 use serde_json;
+use std::collections::BTreeMap;
 
 use super::super::{BatchReceiver, BatchSender};
 
@@ -110,7 +110,7 @@ async fn partial_to_batches(
         // Add bucket if present
         if partial.time_bucket.is_some() {
             row.push(ScalarValue::Int64(
-                group_key.bucket.map(|b| b as i64).unwrap_or(0)
+                group_key.bucket.map(|b| b as i64).unwrap_or(0),
             ));
         }
 
@@ -134,8 +134,12 @@ async fn partial_to_batches(
                     // Serialize HashSet as JSON array string for accurate merging across shards
                     // This preserves the actual values, not just the count
                     let json_values: Vec<&String> = values.iter().collect();
-                    let json_str = serde_json::to_string(&json_values)
-                        .map_err(|e| FlowOperatorError::Batch(format!("failed to serialize CountUnique values: {}", e)))?;
+                    let json_str = serde_json::to_string(&json_values).map_err(|e| {
+                        FlowOperatorError::Batch(format!(
+                            "failed to serialize CountUnique values: {}",
+                            e
+                        ))
+                    })?;
                     row.push(ScalarValue::Utf8(json_str));
                 }
                 (AggregateOpSpec::Total { .. }, AggState::Sum { sum }) => {
@@ -328,7 +332,7 @@ fn build_aggregate_schema(plan: &AggregatePlan) -> Vec<ColumnSpec> {
                     name: format!("count_unique_{}_values", field),
                     logical_type: "String".to_string(),
                 });
-            },
+            }
             AggregateOpSpec::Total { field } => columns.push(ColumnSpec {
                 name: format!("total_{}", field),
                 logical_type: "Integer".to_string(),
@@ -343,7 +347,7 @@ fn build_aggregate_schema(plan: &AggregatePlan) -> Vec<ColumnSpec> {
                     name: format!("avg_{}_count", field),
                     logical_type: "Integer".to_string(),
                 });
-            },
+            }
             AggregateOpSpec::Min { field } => columns.push(ColumnSpec {
                 name: format!("min_{}", field),
                 logical_type: "String".to_string(),

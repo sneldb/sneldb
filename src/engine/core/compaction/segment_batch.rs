@@ -28,13 +28,10 @@ impl SegmentBatch {
             // Normalize segment labels by sorting to ensure consistent grouping
             let mut normalized_labels = plan.input_segment_labels.clone();
             normalized_labels.sort();
-            batches
-                .entry(normalized_labels)
-                .or_default()
-                .push(UidPlan {
-                    uid: plan.uid,
-                    output_segment_id: plan.output_segment_id,
-                });
+            batches.entry(normalized_labels).or_default().push(UidPlan {
+                uid: plan.uid,
+                output_segment_id: plan.output_segment_id,
+            });
         }
 
         batches
@@ -128,4 +125,3 @@ mod tests {
         assert_eq!(batches[0].input_segment_labels, vec!["00001"]);
     }
 }
-

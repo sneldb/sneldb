@@ -4,7 +4,10 @@ use crate::engine::core::ColumnValues;
 use crate::engine::core::Condition;
 use crate::engine::core::filter::condition::{CompareOp, FieldAccessor, PreparedAccessor};
 use crate::engine::core::read::cache::DecompressedBlock;
-use crate::engine::core::{LogicalCondition, LogicalOp, NumericCondition, StringCondition, InNumericCondition, InStringCondition};
+use crate::engine::core::{
+    InNumericCondition, InStringCondition, LogicalCondition, LogicalOp, NumericCondition,
+    StringCondition,
+};
 use crate::test_helpers::factories::candidate_zone_factory::CandidateZoneFactory;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -252,7 +255,10 @@ fn logical_not_nested_with_mixed_types() {
 #[test]
 fn in_numeric_condition_evaluates_correctly() {
     let mut values = HashMap::new();
-    values.insert("id".to_string(), vec!["2".to_string(), "4".to_string(), "6".to_string()]);
+    values.insert(
+        "id".to_string(),
+        vec!["2".to_string(), "4".to_string(), "6".to_string()],
+    );
 
     let in_condition = InNumericCondition::new("id".into(), vec![2, 4, 6, 8]);
 
@@ -260,13 +266,19 @@ fn in_numeric_condition_evaluates_correctly() {
     assert!(in_condition.evaluate(&values));
 
     let mut values_mixed = HashMap::new();
-    values_mixed.insert("id".to_string(), vec!["2".to_string(), "5".to_string(), "8".to_string()]);
+    values_mixed.insert(
+        "id".to_string(),
+        vec!["2".to_string(), "5".to_string(), "8".to_string()],
+    );
 
     // Some values match, some don't - should return true (any match)
     assert!(in_condition.evaluate(&values_mixed));
 
     let mut values_no_match = HashMap::new();
-    values_no_match.insert("id".to_string(), vec!["1".to_string(), "3".to_string(), "5".to_string()]);
+    values_no_match.insert(
+        "id".to_string(),
+        vec!["1".to_string(), "3".to_string(), "5".to_string()],
+    );
 
     // No values match
     assert!(!in_condition.evaluate(&values_no_match));
@@ -294,7 +306,10 @@ fn in_numeric_condition_evaluate_at_works() {
 #[test]
 fn in_numeric_condition_evaluate_at_handles_i64() {
     let mut m = std::collections::HashMap::new();
-    m.insert("id".into(), vec!["-5".into(), "0".into(), "5".into(), "10".into()]);
+    m.insert(
+        "id".into(),
+        vec!["-5".into(), "0".into(), "5".into(), "10".into()],
+    );
     let zone = CandidateZoneFactory::new().with_values(m).create();
     let accessor = PreparedAccessor::new(&zone.values);
 
@@ -364,21 +379,33 @@ fn in_numeric_condition_contains_method() {
 #[test]
 fn in_string_condition_evaluates_correctly() {
     let mut values = HashMap::new();
-    values.insert("status".to_string(), vec!["active".to_string(), "pending".to_string()]);
+    values.insert(
+        "status".to_string(),
+        vec!["active".to_string(), "pending".to_string()],
+    );
 
-    let in_condition = InStringCondition::new("status".into(), vec!["active".into(), "completed".into(), "pending".into()]);
+    let in_condition = InStringCondition::new(
+        "status".into(),
+        vec!["active".into(), "completed".into(), "pending".into()],
+    );
 
     // All values in the zone are in the IN list
     assert!(in_condition.evaluate(&values));
 
     let mut values_mixed = HashMap::new();
-    values_mixed.insert("status".to_string(), vec!["active".to_string(), "cancelled".to_string()]);
+    values_mixed.insert(
+        "status".to_string(),
+        vec!["active".to_string(), "cancelled".to_string()],
+    );
 
     // Some values match, some don't - should return true (any match)
     assert!(in_condition.evaluate(&values_mixed));
 
     let mut values_no_match = HashMap::new();
-    values_no_match.insert("status".to_string(), vec!["cancelled".to_string(), "failed".to_string()]);
+    values_no_match.insert(
+        "status".to_string(),
+        vec!["cancelled".to_string(), "failed".to_string()],
+    );
 
     // No values match
     assert!(!in_condition.evaluate(&values_no_match));
@@ -387,11 +414,22 @@ fn in_string_condition_evaluates_correctly() {
 #[test]
 fn in_string_condition_evaluate_at_works() {
     let mut m = std::collections::HashMap::new();
-    m.insert("status".into(), vec!["active".into(), "completed".into(), "pending".into(), "cancelled".into()]);
+    m.insert(
+        "status".into(),
+        vec![
+            "active".into(),
+            "completed".into(),
+            "pending".into(),
+            "cancelled".into(),
+        ],
+    );
     let zone = CandidateZoneFactory::new().with_values(m).create();
     let accessor = PreparedAccessor::new(&zone.values);
 
-    let in_condition = InStringCondition::new("status".into(), vec!["active".into(), "completed".into(), "pending".into()]);
+    let in_condition = InStringCondition::new(
+        "status".into(),
+        vec!["active".into(), "completed".into(), "pending".into()],
+    );
 
     assert!(in_condition.evaluate_at(&accessor, 0)); // "active"
     assert!(in_condition.evaluate_at(&accessor, 1)); // "completed"
@@ -412,7 +450,8 @@ fn in_string_condition_evaluate_event_direct_works() {
     let ev: Event = eb.build();
 
     let acc = DirectEventAccessor::new(&ev);
-    let in_condition = InStringCondition::new("status".into(), vec!["active".into(), "completed".into()]);
+    let in_condition =
+        InStringCondition::new("status".into(), vec!["active".into(), "completed".into()]);
 
     assert!(in_condition.evaluate_event_direct(&acc));
 
@@ -429,7 +468,8 @@ fn in_string_condition_evaluate_event_direct_works() {
 
 #[test]
 fn in_string_condition_contains_method() {
-    let in_condition = InStringCondition::new("status".into(), vec!["active".into(), "completed".into()]);
+    let in_condition =
+        InStringCondition::new("status".into(), vec!["active".into(), "completed".into()]);
 
     assert!(in_condition.contains("active"));
     assert!(in_condition.contains("completed"));
@@ -444,7 +484,11 @@ fn in_numeric_condition_with_logical_and() {
     values.insert("status".to_string(), vec!["active".into()]);
 
     let in_condition = Box::new(InNumericCondition::new("id".into(), vec![2, 4, 6]));
-    let status_condition = Box::new(StringCondition::new("status".into(), CompareOp::Eq, "active".into()));
+    let status_condition = Box::new(StringCondition::new(
+        "status".into(),
+        CompareOp::Eq,
+        "active".into(),
+    ));
 
     let and = LogicalCondition::new(vec![in_condition, status_condition], LogicalOp::And);
     assert!(and.evaluate(&values));
@@ -463,7 +507,11 @@ fn in_numeric_condition_with_logical_or() {
     values1.insert("status".to_string(), vec!["pending".into()]);
 
     let in_condition = Box::new(InNumericCondition::new("id".into(), vec![2, 4, 6]));
-    let status_condition = Box::new(StringCondition::new("status".into(), CompareOp::Eq, "completed".into()));
+    let status_condition = Box::new(StringCondition::new(
+        "status".into(),
+        CompareOp::Eq,
+        "completed".into(),
+    ));
 
     let or = LogicalCondition::new(vec![in_condition, status_condition], LogicalOp::Or);
     assert!(or.evaluate(&values1)); // IN condition matches
@@ -503,8 +551,15 @@ fn in_string_condition_with_logical_and() {
     values.insert("status".to_string(), vec!["active".into()]);
     values.insert("priority".to_string(), vec!["high".into()]);
 
-    let in_condition = Box::new(InStringCondition::new("status".into(), vec!["active".into(), "completed".into()]));
-    let priority_condition = Box::new(StringCondition::new("priority".into(), CompareOp::Eq, "high".into()));
+    let in_condition = Box::new(InStringCondition::new(
+        "status".into(),
+        vec!["active".into(), "completed".into()],
+    ));
+    let priority_condition = Box::new(StringCondition::new(
+        "priority".into(),
+        CompareOp::Eq,
+        "high".into(),
+    ));
 
     let and = LogicalCondition::new(vec![in_condition, priority_condition], LogicalOp::And);
     assert!(and.evaluate(&values));
@@ -527,7 +582,10 @@ fn in_condition_single_value() {
 #[test]
 fn in_numeric_condition_evaluate_at_handles_f64() {
     let mut m = std::collections::HashMap::new();
-    m.insert("score".into(), vec!["10.0".into(), "20.5".into(), "30.0".into()]);
+    m.insert(
+        "score".into(),
+        vec!["10.0".into(), "20.5".into(), "30.0".into()],
+    );
     let zone = CandidateZoneFactory::new().with_values(m).create();
     let accessor = PreparedAccessor::new(&zone.values);
 

@@ -52,7 +52,11 @@ pub enum FilterGroup {
 /// Creates a unique string key for a filter based on column, operation, and value.
 /// Used for deduplicating filters in the tree and caching zones.
 /// Optimized to reduce allocations.
-pub fn filter_key(column: &str, operation: &Option<CompareOp>, value: &Option<ScalarValue>) -> String {
+pub fn filter_key(
+    column: &str,
+    operation: &Option<CompareOp>,
+    value: &Option<ScalarValue>,
+) -> String {
     // Pre-allocate with estimated capacity
     let mut key = String::with_capacity(column.len() + 30);
 
@@ -130,12 +134,7 @@ impl FilterGroup {
         value: ScalarValue,
         event_type_uid: Option<String>,
     ) -> Self {
-        Self::new_filter(
-            column,
-            Some(CompareOp::Eq),
-            Some(value),
-            event_type_uid,
-        )
+        Self::new_filter(column, Some(CompareOp::Eq), Some(value), event_type_uid)
     }
 
     /// Creates multiple equality filters for IN expansion
@@ -146,11 +145,13 @@ impl FilterGroup {
     ) -> Vec<Self> {
         values
             .iter()
-            .map(|v| Self::new_equality_filter(
-                column.clone(),
-                ScalarValue::from(v.clone()),
-                event_type_uid.clone(),
-            ))
+            .map(|v| {
+                Self::new_equality_filter(
+                    column.clone(),
+                    ScalarValue::from(v.clone()),
+                    event_type_uid.clone(),
+                )
+            })
             .collect()
     }
 
@@ -159,9 +160,10 @@ impl FilterGroup {
     pub fn extract_individual_filters(&self) -> Vec<FilterGroup> {
         match self {
             FilterGroup::Filter { .. } => vec![self.clone()],
-            FilterGroup::And(children) | FilterGroup::Or(children) => {
-                children.iter().flat_map(|c| c.extract_individual_filters()).collect()
-            }
+            FilterGroup::And(children) | FilterGroup::Or(children) => children
+                .iter()
+                .flat_map(|c| c.extract_individual_filters())
+                .collect(),
             FilterGroup::Not(child) => child.extract_individual_filters(),
         }
     }
@@ -292,7 +294,8 @@ impl FilterGroup {
                         value: fg_val,
                         index_strategy: fg_strategy,
                         ..
-                    } = fg {
+                    } = fg
+                    {
                         if fg_col == column && fg_op == operation && fg_val == value {
                             *index_strategy = fg_strategy.clone();
                             break;

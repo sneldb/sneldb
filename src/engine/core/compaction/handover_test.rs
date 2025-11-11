@@ -86,7 +86,7 @@ async fn commit_updates_index_segment_ids_and_reclaims() {
         input_segment_labels: vec!["00001".into(), "00002".into()],
         uid_plans: vec![UidPlan {
             uid: "uidA".to_string(),
-        output_segment_id: 10_000,
+            output_segment_id: 10_000,
         }],
     };
 
@@ -95,7 +95,10 @@ async fn commit_updates_index_segment_ids_and_reclaims() {
         uids: vec!["uidA".to_string()],
     };
 
-    let drained = handover.commit_batch(&batch, vec![new_entry]).await.unwrap();
+    let drained = handover
+        .commit_batch(&batch, vec![new_entry])
+        .await
+        .unwrap();
     handover.schedule_reclaim(drained);
 
     // Allow background reclaim task to finish
@@ -194,11 +197,16 @@ async fn commit_batch_verifies_output_segments_exist() {
     };
 
     let result = handover.commit_batch(&batch, vec![new_entry]).await;
-    assert!(result.is_err(), "Should fail when output segment doesn't exist");
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("Output segment directory does not exist"));
+    assert!(
+        result.is_err(),
+        "Should fail when output segment doesn't exist"
+    );
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Output segment directory does not exist")
+    );
 
     // Verify index was not modified
     let reloaded = SegmentIndex::load(&shard_path).await.unwrap();
@@ -262,7 +270,10 @@ async fn commit_batch_succeeds_when_output_segment_exists() {
     };
 
     // Should succeed since output segment exists
-    let drained = handover.commit_batch(&batch, vec![new_entry]).await.unwrap();
+    let drained = handover
+        .commit_batch(&batch, vec![new_entry])
+        .await
+        .unwrap();
     assert_eq!(drained.len(), 2, "Both input segments should be drained");
 
     // Verify index was updated
@@ -344,10 +355,12 @@ async fn commit_batch_verifies_all_output_segments_in_batch() {
     // Should fail because 20000 doesn't exist
     let result = handover.commit_batch(&batch, new_entries).await;
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("Output segment directory does not exist"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Output segment directory does not exist")
+    );
 
     // Index should not be modified
     let reloaded = SegmentIndex::load(&shard_path).await.unwrap();

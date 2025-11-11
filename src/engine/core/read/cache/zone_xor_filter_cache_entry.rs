@@ -62,4 +62,3 @@ impl ZoneXorFilterCacheEntry {
         total.max(self.size as usize)
     }
 }
-

@@ -82,10 +82,7 @@ fn create_schema_with_fields(fields: Vec<(&str, &str)>) -> Arc<BatchSchema> {
     Arc::new(BatchSchema::new(columns).expect("schema"))
 }
 
-async fn build_handle(
-    schema: Arc<BatchSchema>,
-    rows: Vec<Vec<ScalarValue>>,
-) -> ShardFlowHandle {
+async fn build_handle(schema: Arc<BatchSchema>, rows: Vec<Vec<ScalarValue>>) -> ShardFlowHandle {
     let metrics = FlowMetrics::new();
     let (tx, rx) = FlowChannel::bounded(16, Arc::clone(&metrics));
 
@@ -154,15 +151,13 @@ async fn test_merge_followed_by_basic() {
 
     let page_view_handle = build_handle(
         Arc::clone(&page_view_schema),
-        vec![
-            vec![
-                ScalarValue::Utf8("u1".to_string()),
-                ScalarValue::Timestamp(1000),
-                ScalarValue::Utf8("page_view".to_string()),
-                ScalarValue::Utf8("user1".to_string()),
-                ScalarValue::Utf8("/product".to_string()),
-            ],
-        ],
+        vec![vec![
+            ScalarValue::Utf8("u1".to_string()),
+            ScalarValue::Timestamp(1000),
+            ScalarValue::Utf8("page_view".to_string()),
+            ScalarValue::Utf8("user1".to_string()),
+            ScalarValue::Utf8("/product".to_string()),
+        ]],
     )
     .await;
 
@@ -177,15 +172,13 @@ async fn test_merge_followed_by_basic() {
 
     let purchase_handle = build_handle(
         Arc::clone(&purchase_schema),
-        vec![
-            vec![
-                ScalarValue::Utf8("u1".to_string()),
-                ScalarValue::Timestamp(2000), // After page_view
-                ScalarValue::Utf8("purchase".to_string()),
-                ScalarValue::Utf8("user1".to_string()),
-                ScalarValue::Int64(100),
-            ],
-        ],
+        vec![vec![
+            ScalarValue::Utf8("u1".to_string()),
+            ScalarValue::Timestamp(2000), // After page_view
+            ScalarValue::Utf8("purchase".to_string()),
+            ScalarValue::Utf8("user1".to_string()),
+            ScalarValue::Int64(100),
+        ]],
     )
     .await;
 
@@ -193,7 +186,10 @@ async fn test_merge_followed_by_basic() {
     handles_by_type.insert("page_view".to_string(), vec![page_view_handle]);
     handles_by_type.insert("purchase".to_string(), vec![purchase_handle]);
 
-    let mut stream = merger.merge(&ctx, handles_by_type).await.expect("merge should succeed");
+    let mut stream = merger
+        .merge(&ctx, handles_by_type)
+        .await
+        .expect("merge should succeed");
 
     // Should get both events in sequence
     let mut events_received = 0;
@@ -226,15 +222,13 @@ async fn test_merge_preceded_by_basic() {
 
     let page_view_handle = build_handle(
         Arc::clone(&page_view_schema),
-        vec![
-            vec![
-                ScalarValue::Utf8("u1".to_string()),
-                ScalarValue::Timestamp(1000),
-                ScalarValue::Utf8("page_view".to_string()),
-                ScalarValue::Utf8("user1".to_string()),
-                ScalarValue::Utf8("/product".to_string()),
-            ],
-        ],
+        vec![vec![
+            ScalarValue::Utf8("u1".to_string()),
+            ScalarValue::Timestamp(1000),
+            ScalarValue::Utf8("page_view".to_string()),
+            ScalarValue::Utf8("user1".to_string()),
+            ScalarValue::Utf8("/product".to_string()),
+        ]],
     )
     .await;
 
@@ -249,15 +243,13 @@ async fn test_merge_preceded_by_basic() {
 
     let purchase_handle = build_handle(
         Arc::clone(&purchase_schema),
-        vec![
-            vec![
-                ScalarValue::Utf8("u1".to_string()),
-                ScalarValue::Timestamp(2000), // After page_view
-                ScalarValue::Utf8("purchase".to_string()),
-                ScalarValue::Utf8("user1".to_string()),
-                ScalarValue::Int64(100),
-            ],
-        ],
+        vec![vec![
+            ScalarValue::Utf8("u1".to_string()),
+            ScalarValue::Timestamp(2000), // After page_view
+            ScalarValue::Utf8("purchase".to_string()),
+            ScalarValue::Utf8("user1".to_string()),
+            ScalarValue::Int64(100),
+        ]],
     )
     .await;
 
@@ -265,7 +257,10 @@ async fn test_merge_preceded_by_basic() {
     handles_by_type.insert("page_view".to_string(), vec![page_view_handle]);
     handles_by_type.insert("purchase".to_string(), vec![purchase_handle]);
 
-    let mut stream = merger.merge(&ctx, handles_by_type).await.expect("merge should succeed");
+    let mut stream = merger
+        .merge(&ctx, handles_by_type)
+        .await
+        .expect("merge should succeed");
 
     // Should get both events in sequence
     let mut events_received = 0;
@@ -350,7 +345,10 @@ async fn test_merge_with_limit() {
     handles_by_type.insert("page_view".to_string(), vec![page_view_handle]);
     handles_by_type.insert("purchase".to_string(), vec![purchase_handle]);
 
-    let mut stream = merger.merge(&ctx, handles_by_type).await.expect("merge should succeed");
+    let mut stream = merger
+        .merge(&ctx, handles_by_type)
+        .await
+        .expect("merge should succeed");
 
     // Should get only 1 sequence (2 events) due to limit
     let mut events_received = 0;
@@ -439,7 +437,10 @@ async fn test_merge_with_where_clause() {
     handles_by_type.insert("page_view".to_string(), vec![page_view_handle]);
     handles_by_type.insert("purchase".to_string(), vec![purchase_handle]);
 
-    let mut stream = merger.merge(&ctx, handles_by_type).await.expect("merge should succeed");
+    let mut stream = merger
+        .merge(&ctx, handles_by_type)
+        .await
+        .expect("merge should succeed");
 
     // Should get only 1 sequence (user1 with /product page_view)
     let mut events_received = 0;
@@ -471,15 +472,13 @@ async fn test_merge_no_matches() {
 
     let page_view_handle = build_handle(
         Arc::clone(&page_view_schema),
-        vec![
-            vec![
-                ScalarValue::Utf8("u1".to_string()),
-                ScalarValue::Timestamp(2000), // After purchase
-                ScalarValue::Utf8("page_view".to_string()),
-                ScalarValue::Utf8("user1".to_string()),
-                ScalarValue::Utf8("/product".to_string()),
-            ],
-        ],
+        vec![vec![
+            ScalarValue::Utf8("u1".to_string()),
+            ScalarValue::Timestamp(2000), // After purchase
+            ScalarValue::Utf8("page_view".to_string()),
+            ScalarValue::Utf8("user1".to_string()),
+            ScalarValue::Utf8("/product".to_string()),
+        ]],
     )
     .await;
 
@@ -493,15 +492,13 @@ async fn test_merge_no_matches() {
 
     let purchase_handle = build_handle(
         Arc::clone(&purchase_schema),
-        vec![
-            vec![
-                ScalarValue::Utf8("u1".to_string()),
-                ScalarValue::Timestamp(1000), // Before page_view - wrong order
-                ScalarValue::Utf8("purchase".to_string()),
-                ScalarValue::Utf8("user1".to_string()),
-                ScalarValue::Int64(100),
-            ],
-        ],
+        vec![vec![
+            ScalarValue::Utf8("u1".to_string()),
+            ScalarValue::Timestamp(1000), // Before page_view - wrong order
+            ScalarValue::Utf8("purchase".to_string()),
+            ScalarValue::Utf8("user1".to_string()),
+            ScalarValue::Int64(100),
+        ]],
     )
     .await;
 
@@ -509,7 +506,10 @@ async fn test_merge_no_matches() {
     handles_by_type.insert("page_view".to_string(), vec![page_view_handle]);
     handles_by_type.insert("purchase".to_string(), vec![purchase_handle]);
 
-    let mut stream = merger.merge(&ctx, handles_by_type).await.expect("merge should succeed");
+    let mut stream = merger
+        .merge(&ctx, handles_by_type)
+        .await
+        .expect("merge should succeed");
 
     // Should get no events (no valid sequences)
     let mut events_received = 0;
@@ -533,7 +533,10 @@ async fn test_merge_empty_handles() {
 
     let handles_by_type = HashMap::new();
 
-    let mut stream = merger.merge(&ctx, handles_by_type).await.expect("merge should succeed");
+    let mut stream = merger
+        .merge(&ctx, handles_by_type)
+        .await
+        .expect("merge should succeed");
 
     // Should get empty stream
     let mut events_received = 0;
@@ -566,29 +569,25 @@ async fn test_merge_multiple_handles_per_event_type() {
     // Create two handles for page_view (simulating multiple shards)
     let page_view_handle1 = build_handle(
         Arc::clone(&page_view_schema),
-        vec![
-            vec![
-                ScalarValue::Utf8("u1".to_string()),
-                ScalarValue::Timestamp(1000),
-                ScalarValue::Utf8("page_view".to_string()),
-                ScalarValue::Utf8("user1".to_string()),
-                ScalarValue::Utf8("/product".to_string()),
-            ],
-        ],
+        vec![vec![
+            ScalarValue::Utf8("u1".to_string()),
+            ScalarValue::Timestamp(1000),
+            ScalarValue::Utf8("page_view".to_string()),
+            ScalarValue::Utf8("user1".to_string()),
+            ScalarValue::Utf8("/product".to_string()),
+        ]],
     )
     .await;
 
     let page_view_handle2 = build_handle(
         Arc::clone(&page_view_schema),
-        vec![
-            vec![
-                ScalarValue::Utf8("u2".to_string()),
-                ScalarValue::Timestamp(3000),
-                ScalarValue::Utf8("page_view".to_string()),
-                ScalarValue::Utf8("user2".to_string()),
-                ScalarValue::Utf8("/product".to_string()),
-            ],
-        ],
+        vec![vec![
+            ScalarValue::Utf8("u2".to_string()),
+            ScalarValue::Timestamp(3000),
+            ScalarValue::Utf8("page_view".to_string()),
+            ScalarValue::Utf8("user2".to_string()),
+            ScalarValue::Utf8("/product".to_string()),
+        ]],
     )
     .await;
 
@@ -628,7 +627,10 @@ async fn test_merge_multiple_handles_per_event_type() {
     );
     handles_by_type.insert("purchase".to_string(), vec![purchase_handle]);
 
-    let mut stream = merger.merge(&ctx, handles_by_type).await.expect("merge should succeed");
+    let mut stream = merger
+        .merge(&ctx, handles_by_type)
+        .await
+        .expect("merge should succeed");
 
     // Should get both sequences
     let mut events_received = 0;
@@ -661,16 +663,14 @@ async fn test_merge_with_custom_time_field() {
 
     let page_view_handle = build_handle(
         Arc::clone(&page_view_schema),
-        vec![
-            vec![
-                ScalarValue::Utf8("u1".to_string()),
-                ScalarValue::Timestamp(1000),
-                ScalarValue::Utf8("page_view".to_string()),
-                ScalarValue::Utf8("user1".to_string()),
-                ScalarValue::Timestamp(1000), // created_at
-                ScalarValue::Utf8("/product".to_string()),
-            ],
-        ],
+        vec![vec![
+            ScalarValue::Utf8("u1".to_string()),
+            ScalarValue::Timestamp(1000),
+            ScalarValue::Utf8("page_view".to_string()),
+            ScalarValue::Utf8("user1".to_string()),
+            ScalarValue::Timestamp(1000), // created_at
+            ScalarValue::Utf8("/product".to_string()),
+        ]],
     )
     .await;
 
@@ -685,16 +685,14 @@ async fn test_merge_with_custom_time_field() {
 
     let purchase_handle = build_handle(
         Arc::clone(&purchase_schema),
-        vec![
-            vec![
-                ScalarValue::Utf8("u1".to_string()),
-                ScalarValue::Timestamp(2000),
-                ScalarValue::Utf8("purchase".to_string()),
-                ScalarValue::Utf8("user1".to_string()),
-                ScalarValue::Timestamp(2000), // created_at - after page_view
-                ScalarValue::Int64(100),
-            ],
-        ],
+        vec![vec![
+            ScalarValue::Utf8("u1".to_string()),
+            ScalarValue::Timestamp(2000),
+            ScalarValue::Utf8("purchase".to_string()),
+            ScalarValue::Utf8("user1".to_string()),
+            ScalarValue::Timestamp(2000), // created_at - after page_view
+            ScalarValue::Int64(100),
+        ]],
     )
     .await;
 
@@ -702,7 +700,10 @@ async fn test_merge_with_custom_time_field() {
     handles_by_type.insert("page_view".to_string(), vec![page_view_handle]);
     handles_by_type.insert("purchase".to_string(), vec![purchase_handle]);
 
-    let mut stream = merger.merge(&ctx, handles_by_type).await.expect("merge should succeed");
+    let mut stream = merger
+        .merge(&ctx, handles_by_type)
+        .await
+        .expect("merge should succeed");
 
     // Should get both events in sequence
     let mut events_received = 0;
@@ -735,15 +736,13 @@ async fn test_merge_with_timestamp_as_int64() {
     // Use Int64 for timestamp (should be converted)
     let page_view_handle = build_handle(
         Arc::clone(&page_view_schema),
-        vec![
-            vec![
-                ScalarValue::Utf8("u1".to_string()),
-                ScalarValue::Int64(1000), // Int64 instead of Timestamp
-                ScalarValue::Utf8("page_view".to_string()),
-                ScalarValue::Utf8("user1".to_string()),
-                ScalarValue::Utf8("/product".to_string()),
-            ],
-        ],
+        vec![vec![
+            ScalarValue::Utf8("u1".to_string()),
+            ScalarValue::Int64(1000), // Int64 instead of Timestamp
+            ScalarValue::Utf8("page_view".to_string()),
+            ScalarValue::Utf8("user1".to_string()),
+            ScalarValue::Utf8("/product".to_string()),
+        ]],
     )
     .await;
 
@@ -757,15 +756,13 @@ async fn test_merge_with_timestamp_as_int64() {
 
     let purchase_handle = build_handle(
         Arc::clone(&purchase_schema),
-        vec![
-            vec![
-                ScalarValue::Utf8("u1".to_string()),
-                ScalarValue::Int64(2000), // Int64 instead of Timestamp
-                ScalarValue::Utf8("purchase".to_string()),
-                ScalarValue::Utf8("user1".to_string()),
-                ScalarValue::Int64(100),
-            ],
-        ],
+        vec![vec![
+            ScalarValue::Utf8("u1".to_string()),
+            ScalarValue::Int64(2000), // Int64 instead of Timestamp
+            ScalarValue::Utf8("purchase".to_string()),
+            ScalarValue::Utf8("user1".to_string()),
+            ScalarValue::Int64(100),
+        ]],
     )
     .await;
 
@@ -773,7 +770,10 @@ async fn test_merge_with_timestamp_as_int64() {
     handles_by_type.insert("page_view".to_string(), vec![page_view_handle]);
     handles_by_type.insert("purchase".to_string(), vec![purchase_handle]);
 
-    let mut stream = merger.merge(&ctx, handles_by_type).await.expect("merge should succeed");
+    let mut stream = merger
+        .merge(&ctx, handles_by_type)
+        .await
+        .expect("merge should succeed");
 
     // Should get both events in sequence
     let mut events_received = 0;
@@ -805,15 +805,13 @@ async fn test_merge_different_user_ids_no_match() {
 
     let page_view_handle = build_handle(
         Arc::clone(&page_view_schema),
-        vec![
-            vec![
-                ScalarValue::Utf8("u1".to_string()),
-                ScalarValue::Timestamp(1000),
-                ScalarValue::Utf8("page_view".to_string()),
-                ScalarValue::Utf8("user1".to_string()),
-                ScalarValue::Utf8("/product".to_string()),
-            ],
-        ],
+        vec![vec![
+            ScalarValue::Utf8("u1".to_string()),
+            ScalarValue::Timestamp(1000),
+            ScalarValue::Utf8("page_view".to_string()),
+            ScalarValue::Utf8("user1".to_string()),
+            ScalarValue::Utf8("/product".to_string()),
+        ]],
     )
     .await;
 
@@ -827,15 +825,13 @@ async fn test_merge_different_user_ids_no_match() {
 
     let purchase_handle = build_handle(
         Arc::clone(&purchase_schema),
-        vec![
-            vec![
-                ScalarValue::Utf8("u2".to_string()),
-                ScalarValue::Timestamp(2000),
-                ScalarValue::Utf8("purchase".to_string()),
-                ScalarValue::Utf8("user2".to_string()), // Different user_id
-                ScalarValue::Int64(100),
-            ],
-        ],
+        vec![vec![
+            ScalarValue::Utf8("u2".to_string()),
+            ScalarValue::Timestamp(2000),
+            ScalarValue::Utf8("purchase".to_string()),
+            ScalarValue::Utf8("user2".to_string()), // Different user_id
+            ScalarValue::Int64(100),
+        ]],
     )
     .await;
 
@@ -843,7 +839,10 @@ async fn test_merge_different_user_ids_no_match() {
     handles_by_type.insert("page_view".to_string(), vec![page_view_handle]);
     handles_by_type.insert("purchase".to_string(), vec![purchase_handle]);
 
-    let mut stream = merger.merge(&ctx, handles_by_type).await.expect("merge should succeed");
+    let mut stream = merger
+        .merge(&ctx, handles_by_type)
+        .await
+        .expect("merge should succeed");
 
     // Should get no events (different user_ids don't match)
     let mut events_received = 0;
@@ -890,7 +889,10 @@ async fn test_merge_empty_batches() {
     handles_by_type.insert("page_view".to_string(), vec![page_view_handle]);
     handles_by_type.insert("purchase".to_string(), vec![purchase_handle]);
 
-    let mut stream = merger.merge(&ctx, handles_by_type).await.expect("merge should succeed");
+    let mut stream = merger
+        .merge(&ctx, handles_by_type)
+        .await
+        .expect("merge should succeed");
 
     // Should get empty stream
     let mut events_received = 0;
@@ -900,4 +902,3 @@ async fn test_merge_empty_batches() {
 
     assert_eq!(events_received, 0);
 }
-

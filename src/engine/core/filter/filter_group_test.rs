@@ -1,6 +1,6 @@
 use crate::command::types::CompareOp;
 use crate::engine::core::filter::condition::LogicalOp;
-use crate::engine::core::filter::filter_group::{filter_key, FilterGroup, FilterPriority};
+use crate::engine::core::filter::filter_group::{FilterGroup, FilterPriority, filter_key};
 use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::engine::types::ScalarValue;
 use serde_json::json;
@@ -24,31 +24,49 @@ mod filter_group_tests {
 
     #[test]
     fn test_filter_priority_for_field_event_type() {
-        assert_eq!(FilterPriority::for_field("event_type"), FilterPriority::EVENT_TYPE);
+        assert_eq!(
+            FilterPriority::for_field("event_type"),
+            FilterPriority::EVENT_TYPE
+        );
     }
 
     #[test]
     fn test_filter_priority_for_field_context_id() {
-        assert_eq!(FilterPriority::for_field("context_id"), FilterPriority::CONTEXT_ID);
+        assert_eq!(
+            FilterPriority::for_field("context_id"),
+            FilterPriority::CONTEXT_ID
+        );
     }
 
     #[test]
     fn test_filter_priority_for_field_timestamp() {
-        assert_eq!(FilterPriority::for_field("timestamp"), FilterPriority::TIMESTAMP);
+        assert_eq!(
+            FilterPriority::for_field("timestamp"),
+            FilterPriority::TIMESTAMP
+        );
     }
 
     #[test]
     fn test_filter_priority_for_field_default() {
         assert_eq!(FilterPriority::for_field("status"), FilterPriority::DEFAULT);
         assert_eq!(FilterPriority::for_field("amount"), FilterPriority::DEFAULT);
-        assert_eq!(FilterPriority::for_field("custom_field"), FilterPriority::DEFAULT);
+        assert_eq!(
+            FilterPriority::for_field("custom_field"),
+            FilterPriority::DEFAULT
+        );
     }
 
     #[test]
     fn test_filter_priority_for_field_case_sensitive() {
         // Should be case-sensitive
-        assert_eq!(FilterPriority::for_field("Event_Type"), FilterPriority::DEFAULT);
-        assert_eq!(FilterPriority::for_field("TIMESTAMP"), FilterPriority::DEFAULT);
+        assert_eq!(
+            FilterPriority::for_field("Event_Type"),
+            FilterPriority::DEFAULT
+        );
+        assert_eq!(
+            FilterPriority::for_field("TIMESTAMP"),
+            FilterPriority::DEFAULT
+        );
     }
 
     // ─────────────────────────────
@@ -88,10 +106,18 @@ mod filter_group_tests {
 
     #[test]
     fn test_filter_key_with_boolean_values() {
-        let key_true = filter_key("active", &Some(CompareOp::Eq), &Some(ScalarValue::Boolean(true)));
+        let key_true = filter_key(
+            "active",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::Boolean(true)),
+        );
         assert_eq!(key_true, "active:Eq:Bool(true)");
 
-        let key_false = filter_key("active", &Some(CompareOp::Eq), &Some(ScalarValue::Boolean(false)));
+        let key_false = filter_key(
+            "active",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::Boolean(false)),
+        );
         assert_eq!(key_false, "active:Eq:Bool(false)");
     }
 
@@ -106,41 +132,69 @@ mod filter_group_tests {
 
     #[test]
     fn test_filter_key_with_float64_value() {
-        let key = filter_key("price", &Some(CompareOp::Eq), &Some(ScalarValue::Float64(3.14)));
+        let key = filter_key(
+            "price",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::Float64(3.14)),
+        );
         assert_eq!(key, "price:Eq:Float64(3.14)");
 
-        let key_negative = filter_key("price", &Some(CompareOp::Eq), &Some(ScalarValue::Float64(-99.99)));
+        let key_negative = filter_key(
+            "price",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::Float64(-99.99)),
+        );
         assert_eq!(key_negative, "price:Eq:Float64(-99.99)");
     }
 
     #[test]
     fn test_filter_key_with_float64_nan() {
-        let key = filter_key("value", &Some(CompareOp::Eq), &Some(ScalarValue::Float64(f64::NAN)));
+        let key = filter_key(
+            "value",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::Float64(f64::NAN)),
+        );
         assert_eq!(key, "value:Eq:Float64(NaN)");
     }
 
     #[test]
     fn test_filter_key_with_timestamp_value() {
-        let key = filter_key("created_at", &Some(CompareOp::Eq), &Some(ScalarValue::Timestamp(1609459200)));
+        let key = filter_key(
+            "created_at",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::Timestamp(1609459200)),
+        );
         assert_eq!(key, "created_at:Eq:Timestamp(1609459200)");
     }
 
     #[test]
     fn test_filter_key_with_utf8_value() {
-        let key = filter_key("name", &Some(CompareOp::Eq), &Some(ScalarValue::Utf8("John".to_string())));
+        let key = filter_key(
+            "name",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::Utf8("John".to_string())),
+        );
         assert_eq!(key, "name:Eq:Utf8(John)");
     }
 
     #[test]
     fn test_filter_key_with_utf8_value_special_chars() {
-        let key = filter_key("path", &Some(CompareOp::Eq), &Some(ScalarValue::Utf8("/path/to/file".to_string())));
+        let key = filter_key(
+            "path",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::Utf8("/path/to/file".to_string())),
+        );
         assert_eq!(key, "path:Eq:Utf8(/path/to/file)");
     }
 
     #[test]
     fn test_filter_key_with_binary_value() {
         let binary_data = vec![0x01, 0x02, 0x03];
-        let key = filter_key("data", &Some(CompareOp::Eq), &Some(ScalarValue::Binary(binary_data)));
+        let key = filter_key(
+            "data",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::Binary(binary_data)),
+        );
         // Binary format includes debug representation
         assert!(key.starts_with("data:Eq:Binary("));
         assert!(key.contains("1, 2, 3"));
@@ -149,12 +203,24 @@ mod filter_group_tests {
     #[test]
     fn test_filter_key_deduplication() {
         // Same filter should produce same key
-        let key1 = filter_key("status", &Some(CompareOp::Eq), &Some(ScalarValue::Utf8("active".to_string())));
-        let key2 = filter_key("status", &Some(CompareOp::Eq), &Some(ScalarValue::Utf8("active".to_string())));
+        let key1 = filter_key(
+            "status",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::Utf8("active".to_string())),
+        );
+        let key2 = filter_key(
+            "status",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::Utf8("active".to_string())),
+        );
         assert_eq!(key1, key2);
 
         // Different values should produce different keys
-        let key3 = filter_key("status", &Some(CompareOp::Eq), &Some(ScalarValue::Utf8("inactive".to_string())));
+        let key3 = filter_key(
+            "status",
+            &Some(CompareOp::Eq),
+            &Some(ScalarValue::Utf8("inactive".to_string())),
+        );
         assert_ne!(key1, key3);
     }
 
@@ -278,12 +344,7 @@ mod filter_group_tests {
 
     #[test]
     fn test_new_filter_with_none_value() {
-        let filter = FilterGroup::new_filter(
-            "status".to_string(),
-            Some(CompareOp::Eq),
-            None,
-            None,
-        );
+        let filter = FilterGroup::new_filter("status".to_string(), Some(CompareOp::Eq), None, None);
 
         match filter {
             FilterGroup::Filter { value, .. } => {
@@ -322,14 +383,13 @@ mod filter_group_tests {
 
     #[test]
     fn test_new_equality_filter_with_int64() {
-        let filter = FilterGroup::new_equality_filter(
-            "id".to_string(),
-            ScalarValue::Int64(42),
-            None,
-        );
+        let filter =
+            FilterGroup::new_equality_filter("id".to_string(), ScalarValue::Int64(42), None);
 
         match filter {
-            FilterGroup::Filter { operation, value, .. } => {
+            FilterGroup::Filter {
+                operation, value, ..
+            } => {
                 assert_eq!(operation, Some(CompareOp::Eq));
                 assert_eq!(value, Some(ScalarValue::Int64(42)));
             }
@@ -359,21 +419,14 @@ mod filter_group_tests {
 
     #[test]
     fn test_new_equality_filters_empty() {
-        let filters = FilterGroup::new_equality_filters(
-            "status".to_string(),
-            &[],
-            None,
-        );
+        let filters = FilterGroup::new_equality_filters("status".to_string(), &[], None);
         assert!(filters.is_empty());
     }
 
     #[test]
     fn test_new_equality_filters_single() {
-        let filters = FilterGroup::new_equality_filters(
-            "status".to_string(),
-            &[json!("active")],
-            None,
-        );
+        let filters =
+            FilterGroup::new_equality_filters("status".to_string(), &[json!("active")], None);
 
         assert_eq!(filters.len(), 1);
         match &filters[0] {
@@ -402,7 +455,9 @@ mod filter_group_tests {
         assert_eq!(filters.len(), 3);
         for filter in &filters {
             match filter {
-                FilterGroup::Filter { column, operation, .. } => {
+                FilterGroup::Filter {
+                    column, operation, ..
+                } => {
                     assert_eq!(column, "status");
                     assert_eq!(operation, &Some(CompareOp::Eq));
                 }
@@ -484,9 +539,24 @@ mod filter_group_tests {
     #[test]
     fn test_extract_individual_filters_and_group() {
         let filter = FilterGroup::And(vec![
-            FilterGroup::new_filter("a".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Int64(1)), None),
-            FilterGroup::new_filter("b".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Int64(2)), None),
-            FilterGroup::new_filter("c".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Int64(3)), None),
+            FilterGroup::new_filter(
+                "a".to_string(),
+                Some(CompareOp::Eq),
+                Some(ScalarValue::Int64(1)),
+                None,
+            ),
+            FilterGroup::new_filter(
+                "b".to_string(),
+                Some(CompareOp::Eq),
+                Some(ScalarValue::Int64(2)),
+                None,
+            ),
+            FilterGroup::new_filter(
+                "c".to_string(),
+                Some(CompareOp::Eq),
+                Some(ScalarValue::Int64(3)),
+                None,
+            ),
         ]);
 
         let extracted = filter.extract_individual_filters();
@@ -499,8 +569,18 @@ mod filter_group_tests {
     #[test]
     fn test_extract_individual_filters_or_group() {
         let filter = FilterGroup::Or(vec![
-            FilterGroup::new_filter("x".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Int64(1)), None),
-            FilterGroup::new_filter("y".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Int64(2)), None),
+            FilterGroup::new_filter(
+                "x".to_string(),
+                Some(CompareOp::Eq),
+                Some(ScalarValue::Int64(1)),
+                None,
+            ),
+            FilterGroup::new_filter(
+                "y".to_string(),
+                Some(CompareOp::Eq),
+                Some(ScalarValue::Int64(2)),
+                None,
+            ),
         ]);
 
         let extracted = filter.extract_individual_filters();
@@ -509,9 +589,12 @@ mod filter_group_tests {
 
     #[test]
     fn test_extract_individual_filters_not_group() {
-        let filter = FilterGroup::Not(Box::new(
-            FilterGroup::new_filter("status".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Utf8("inactive".to_string())), None)
-        ));
+        let filter = FilterGroup::Not(Box::new(FilterGroup::new_filter(
+            "status".to_string(),
+            Some(CompareOp::Eq),
+            Some(ScalarValue::Utf8("inactive".to_string())),
+            None,
+        )));
 
         let extracted = filter.extract_individual_filters();
         assert_eq!(extracted.len(), 1);
@@ -520,12 +603,32 @@ mod filter_group_tests {
     #[test]
     fn test_extract_individual_filters_nested() {
         let filter = FilterGroup::And(vec![
-            FilterGroup::new_filter("a".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Int64(1)), None),
+            FilterGroup::new_filter(
+                "a".to_string(),
+                Some(CompareOp::Eq),
+                Some(ScalarValue::Int64(1)),
+                None,
+            ),
             FilterGroup::Or(vec![
-                FilterGroup::new_filter("b".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Int64(2)), None),
-                FilterGroup::new_filter("c".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Int64(3)), None),
+                FilterGroup::new_filter(
+                    "b".to_string(),
+                    Some(CompareOp::Eq),
+                    Some(ScalarValue::Int64(2)),
+                    None,
+                ),
+                FilterGroup::new_filter(
+                    "c".to_string(),
+                    Some(CompareOp::Eq),
+                    Some(ScalarValue::Int64(3)),
+                    None,
+                ),
             ]),
-            FilterGroup::new_filter("d".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Int64(4)), None),
+            FilterGroup::new_filter(
+                "d".to_string(),
+                Some(CompareOp::Eq),
+                Some(ScalarValue::Int64(4)),
+                None,
+            ),
         ]);
 
         let extracted = filter.extract_individual_filters();
@@ -536,12 +639,25 @@ mod filter_group_tests {
     fn test_extract_individual_filters_deeply_nested() {
         let filter = FilterGroup::And(vec![
             FilterGroup::Or(vec![
-                FilterGroup::Not(Box::new(
-                    FilterGroup::new_filter("a".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Int64(1)), None)
-                )),
-                FilterGroup::new_filter("b".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Int64(2)), None),
+                FilterGroup::Not(Box::new(FilterGroup::new_filter(
+                    "a".to_string(),
+                    Some(CompareOp::Eq),
+                    Some(ScalarValue::Int64(1)),
+                    None,
+                ))),
+                FilterGroup::new_filter(
+                    "b".to_string(),
+                    Some(CompareOp::Eq),
+                    Some(ScalarValue::Int64(2)),
+                    None,
+                ),
             ]),
-            FilterGroup::new_filter("c".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Int64(3)), None),
+            FilterGroup::new_filter(
+                "c".to_string(),
+                Some(CompareOp::Eq),
+                Some(ScalarValue::Int64(3)),
+                None,
+            ),
         ]);
 
         let extracted = filter.extract_individual_filters();
@@ -568,8 +684,18 @@ mod filter_group_tests {
     #[test]
     fn test_extract_unique_filters_deduplicates_identical() {
         let filter = FilterGroup::And(vec![
-            FilterGroup::new_filter("status".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Utf8("active".to_string())), None),
-            FilterGroup::new_filter("status".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Utf8("active".to_string())), None),
+            FilterGroup::new_filter(
+                "status".to_string(),
+                Some(CompareOp::Eq),
+                Some(ScalarValue::Utf8("active".to_string())),
+                None,
+            ),
+            FilterGroup::new_filter(
+                "status".to_string(),
+                Some(CompareOp::Eq),
+                Some(ScalarValue::Utf8("active".to_string())),
+                None,
+            ),
         ]);
 
         let unique = filter.extract_unique_filters();
@@ -579,8 +705,18 @@ mod filter_group_tests {
     #[test]
     fn test_extract_unique_filters_preserves_different() {
         let filter = FilterGroup::And(vec![
-            FilterGroup::new_filter("status".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Utf8("active".to_string())), None),
-            FilterGroup::new_filter("status".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Utf8("inactive".to_string())), None),
+            FilterGroup::new_filter(
+                "status".to_string(),
+                Some(CompareOp::Eq),
+                Some(ScalarValue::Utf8("active".to_string())),
+                None,
+            ),
+            FilterGroup::new_filter(
+                "status".to_string(),
+                Some(CompareOp::Eq),
+                Some(ScalarValue::Utf8("inactive".to_string())),
+                None,
+            ),
         ]);
 
         let unique = filter.extract_unique_filters();
@@ -590,10 +726,25 @@ mod filter_group_tests {
     #[test]
     fn test_extract_unique_filters_deduplicates_across_nested_groups() {
         let filter = FilterGroup::And(vec![
-            FilterGroup::new_filter("status".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Utf8("active".to_string())), None),
+            FilterGroup::new_filter(
+                "status".to_string(),
+                Some(CompareOp::Eq),
+                Some(ScalarValue::Utf8("active".to_string())),
+                None,
+            ),
             FilterGroup::Or(vec![
-                FilterGroup::new_filter("status".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Utf8("active".to_string())), None),
-                FilterGroup::new_filter("amount".to_string(), Some(CompareOp::Gt), Some(ScalarValue::Int64(100)), None),
+                FilterGroup::new_filter(
+                    "status".to_string(),
+                    Some(CompareOp::Eq),
+                    Some(ScalarValue::Utf8("active".to_string())),
+                    None,
+                ),
+                FilterGroup::new_filter(
+                    "amount".to_string(),
+                    Some(CompareOp::Gt),
+                    Some(ScalarValue::Int64(100)),
+                    None,
+                ),
             ]),
         ]);
 
@@ -604,8 +755,18 @@ mod filter_group_tests {
     #[test]
     fn test_extract_unique_filters_different_operations_same_column() {
         let filter = FilterGroup::And(vec![
-            FilterGroup::new_filter("amount".to_string(), Some(CompareOp::Gt), Some(ScalarValue::Int64(100)), None),
-            FilterGroup::new_filter("amount".to_string(), Some(CompareOp::Lt), Some(ScalarValue::Int64(200)), None),
+            FilterGroup::new_filter(
+                "amount".to_string(),
+                Some(CompareOp::Gt),
+                Some(ScalarValue::Int64(100)),
+                None,
+            ),
+            FilterGroup::new_filter(
+                "amount".to_string(),
+                Some(CompareOp::Lt),
+                Some(ScalarValue::Int64(200)),
+                None,
+            ),
         ]);
 
         let unique = filter.extract_unique_filters();
@@ -614,9 +775,12 @@ mod filter_group_tests {
 
     #[test]
     fn test_extract_unique_filters_not_group() {
-        let filter = FilterGroup::Not(Box::new(
-            FilterGroup::new_filter("status".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Utf8("inactive".to_string())), None)
-        ));
+        let filter = FilterGroup::Not(Box::new(FilterGroup::new_filter(
+            "status".to_string(),
+            Some(CompareOp::Eq),
+            Some(ScalarValue::Utf8("inactive".to_string())),
+            None,
+        )));
 
         let unique = filter.extract_unique_filters();
         assert_eq!(unique.len(), 1);
@@ -652,9 +816,12 @@ mod filter_group_tests {
 
     #[test]
     fn test_operator_not_group() {
-        let filter = FilterGroup::Not(Box::new(
-            FilterGroup::new_filter("status".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Utf8("active".to_string())), None)
-        ));
+        let filter = FilterGroup::Not(Box::new(FilterGroup::new_filter(
+            "status".to_string(),
+            Some(CompareOp::Eq),
+            Some(ScalarValue::Utf8("active".to_string())),
+            None,
+        )));
         assert_eq!(filter.operator(), LogicalOp::Not);
     }
 
@@ -688,9 +855,12 @@ mod filter_group_tests {
 
     #[test]
     fn test_is_single_filter_false_not() {
-        let filter = FilterGroup::Not(Box::new(
-            FilterGroup::new_filter("status".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Utf8("active".to_string())), None)
-        ));
+        let filter = FilterGroup::Not(Box::new(FilterGroup::new_filter(
+            "status".to_string(),
+            Some(CompareOp::Eq),
+            Some(ScalarValue::Utf8("active".to_string())),
+            None,
+        )));
         assert!(!filter.is_single_filter());
     }
 
@@ -829,21 +999,19 @@ mod filter_group_tests {
 
     #[test]
     fn test_value_getter_none() {
-        let filter = FilterGroup::new_filter(
-            "status".to_string(),
-            Some(CompareOp::Eq),
-            None,
-            None,
-        );
+        let filter = FilterGroup::new_filter("status".to_string(), Some(CompareOp::Eq), None, None);
 
         assert_eq!(filter.value(), None);
     }
 
     #[test]
     fn test_value_getter_none_for_group() {
-        let filter = FilterGroup::Not(Box::new(
-            FilterGroup::new_filter("status".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Utf8("active".to_string())), None)
-        ));
+        let filter = FilterGroup::Not(Box::new(FilterGroup::new_filter(
+            "status".to_string(),
+            Some(CompareOp::Eq),
+            Some(ScalarValue::Utf8("active".to_string())),
+            None,
+        )));
         assert_eq!(filter.value(), None);
     }
 
@@ -880,7 +1048,9 @@ mod filter_group_tests {
             None,
         );
 
-        let strategy = IndexStrategy::ZoneSuRF { field: "status".to_string() };
+        let strategy = IndexStrategy::ZoneSuRF {
+            field: "status".to_string(),
+        };
         *filter.index_strategy_mut().unwrap() = Some(strategy.clone());
 
         match filter {
@@ -916,7 +1086,9 @@ mod filter_group_tests {
             value: Some(ScalarValue::Utf8("active".to_string())),
             priority: 2,
             uid: None,
-            index_strategy: Some(IndexStrategy::ZoneSuRF { field: "status".to_string() }),
+            index_strategy: Some(IndexStrategy::ZoneSuRF {
+                field: "status".to_string(),
+            }),
         };
 
         filter.sync_index_strategies_from(&[source_filter]);
@@ -924,7 +1096,10 @@ mod filter_group_tests {
         match filter {
             FilterGroup::Filter { index_strategy, .. } => {
                 assert!(index_strategy.is_some());
-                assert!(matches!(index_strategy.unwrap(), IndexStrategy::ZoneSuRF { .. }));
+                assert!(matches!(
+                    index_strategy.unwrap(),
+                    IndexStrategy::ZoneSuRF { .. }
+                ));
             }
             _ => panic!("Expected Filter variant"),
         }
@@ -950,7 +1125,10 @@ mod filter_group_tests {
 
         match filter {
             FilterGroup::Filter { index_strategy, .. } => {
-                assert!(index_strategy.is_none(), "Index strategy should remain None when no match");
+                assert!(
+                    index_strategy.is_none(),
+                    "Index strategy should remain None when no match"
+                );
             }
             _ => panic!("Expected Filter variant"),
         }
@@ -973,18 +1151,18 @@ mod filter_group_tests {
             value: Some(ScalarValue::Utf8("active".to_string())),
             priority: 2,
             uid: None,
-            index_strategy: Some(IndexStrategy::ZoneSuRF { field: "status".to_string() }),
+            index_strategy: Some(IndexStrategy::ZoneSuRF {
+                field: "status".to_string(),
+            }),
         };
 
         filter.sync_index_strategies_from(&[source_filter]);
 
         match filter {
-            FilterGroup::Filter { index_strategy, .. } => {
-                match index_strategy {
-                    Some(IndexStrategy::FullScan) => {}
-                    _ => panic!("Expected FullScan strategy to be preserved"),
-                }
-            }
+            FilterGroup::Filter { index_strategy, .. } => match index_strategy {
+                Some(IndexStrategy::FullScan) => {}
+                _ => panic!("Expected FullScan strategy to be preserved"),
+            },
             _ => panic!("Expected Filter variant"),
         }
     }
@@ -992,8 +1170,18 @@ mod filter_group_tests {
     #[test]
     fn test_sync_index_strategies_from_and_group() {
         let mut filter = FilterGroup::And(vec![
-            FilterGroup::new_filter("a".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Int64(1)), None),
-            FilterGroup::new_filter("b".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Int64(2)), None),
+            FilterGroup::new_filter(
+                "a".to_string(),
+                Some(CompareOp::Eq),
+                Some(ScalarValue::Int64(1)),
+                None,
+            ),
+            FilterGroup::new_filter(
+                "b".to_string(),
+                Some(CompareOp::Eq),
+                Some(ScalarValue::Int64(2)),
+                None,
+            ),
         ]);
 
         let source_filters = vec![
@@ -1003,7 +1191,9 @@ mod filter_group_tests {
                 value: Some(ScalarValue::Int64(1)),
                 priority: 2,
                 uid: None,
-                index_strategy: Some(IndexStrategy::ZoneSuRF { field: "a".to_string() }),
+                index_strategy: Some(IndexStrategy::ZoneSuRF {
+                    field: "a".to_string(),
+                }),
             },
             FilterGroup::Filter {
                 column: "b".to_string(),
@@ -1011,7 +1201,9 @@ mod filter_group_tests {
                 value: Some(ScalarValue::Int64(2)),
                 priority: 2,
                 uid: None,
-                index_strategy: Some(IndexStrategy::EnumBitmap { field: "b".to_string() }),
+                index_strategy: Some(IndexStrategy::EnumBitmap {
+                    field: "b".to_string(),
+                }),
             },
         ];
 
@@ -1021,13 +1213,19 @@ mod filter_group_tests {
             FilterGroup::And(children) => {
                 match &children[0] {
                     FilterGroup::Filter { index_strategy, .. } => {
-                        assert!(matches!(index_strategy.as_ref().unwrap(), IndexStrategy::ZoneSuRF { .. }));
+                        assert!(matches!(
+                            index_strategy.as_ref().unwrap(),
+                            IndexStrategy::ZoneSuRF { .. }
+                        ));
                     }
                     _ => panic!("Expected Filter variant"),
                 }
                 match &children[1] {
                     FilterGroup::Filter { index_strategy, .. } => {
-                        assert!(matches!(index_strategy.as_ref().unwrap(), IndexStrategy::EnumBitmap { .. }));
+                        assert!(matches!(
+                            index_strategy.as_ref().unwrap(),
+                            IndexStrategy::EnumBitmap { .. }
+                        ));
                     }
                     _ => panic!("Expected Filter variant"),
                 }
@@ -1038,9 +1236,12 @@ mod filter_group_tests {
 
     #[test]
     fn test_sync_index_strategies_from_or_group() {
-        let mut filter = FilterGroup::Or(vec![
-            FilterGroup::new_filter("x".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Int64(1)), None),
-        ]);
+        let mut filter = FilterGroup::Or(vec![FilterGroup::new_filter(
+            "x".to_string(),
+            Some(CompareOp::Eq),
+            Some(ScalarValue::Int64(1)),
+            None,
+        )]);
 
         let source_filters = vec![FilterGroup::Filter {
             column: "x".to_string(),
@@ -1054,26 +1255,25 @@ mod filter_group_tests {
         filter.sync_index_strategies_from(&source_filters);
 
         match filter {
-            FilterGroup::Or(children) => {
-                match &children[0] {
-                    FilterGroup::Filter { index_strategy, .. } => {
-                        match index_strategy {
-                            Some(IndexStrategy::FullScan) => {}
-                            _ => panic!("Expected FullScan strategy"),
-                        }
-                    }
-                    _ => panic!("Expected Filter variant"),
-                }
-            }
+            FilterGroup::Or(children) => match &children[0] {
+                FilterGroup::Filter { index_strategy, .. } => match index_strategy {
+                    Some(IndexStrategy::FullScan) => {}
+                    _ => panic!("Expected FullScan strategy"),
+                },
+                _ => panic!("Expected Filter variant"),
+            },
             _ => panic!("Expected Or variant"),
         }
     }
 
     #[test]
     fn test_sync_index_strategies_from_not_group() {
-        let mut filter = FilterGroup::Not(Box::new(
-            FilterGroup::new_filter("status".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Utf8("active".to_string())), None)
-        ));
+        let mut filter = FilterGroup::Not(Box::new(FilterGroup::new_filter(
+            "status".to_string(),
+            Some(CompareOp::Eq),
+            Some(ScalarValue::Utf8("active".to_string())),
+            None,
+        )));
 
         let source_filters = vec![FilterGroup::Filter {
             column: "status".to_string(),
@@ -1081,20 +1281,23 @@ mod filter_group_tests {
             value: Some(ScalarValue::Utf8("active".to_string())),
             priority: 2,
             uid: None,
-            index_strategy: Some(IndexStrategy::ZoneSuRF { field: "status".to_string() }),
+            index_strategy: Some(IndexStrategy::ZoneSuRF {
+                field: "status".to_string(),
+            }),
         }];
 
         filter.sync_index_strategies_from(&source_filters);
 
         match filter {
-            FilterGroup::Not(child) => {
-                match child.as_ref() {
-                    FilterGroup::Filter { index_strategy, .. } => {
-                        assert!(matches!(index_strategy.as_ref().unwrap(), IndexStrategy::ZoneSuRF { .. }));
-                    }
-                    _ => panic!("Expected Filter variant"),
+            FilterGroup::Not(child) => match child.as_ref() {
+                FilterGroup::Filter { index_strategy, .. } => {
+                    assert!(matches!(
+                        index_strategy.as_ref().unwrap(),
+                        IndexStrategy::ZoneSuRF { .. }
+                    ));
                 }
-            }
+                _ => panic!("Expected Filter variant"),
+            },
             _ => panic!("Expected Not variant"),
         }
     }
@@ -1102,10 +1305,18 @@ mod filter_group_tests {
     #[test]
     fn test_sync_index_strategies_from_nested() {
         let mut filter = FilterGroup::And(vec![
-            FilterGroup::new_filter("a".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Int64(1)), None),
-            FilterGroup::Or(vec![
-                FilterGroup::new_filter("b".to_string(), Some(CompareOp::Eq), Some(ScalarValue::Int64(2)), None),
-            ]),
+            FilterGroup::new_filter(
+                "a".to_string(),
+                Some(CompareOp::Eq),
+                Some(ScalarValue::Int64(1)),
+                None,
+            ),
+            FilterGroup::Or(vec![FilterGroup::new_filter(
+                "b".to_string(),
+                Some(CompareOp::Eq),
+                Some(ScalarValue::Int64(2)),
+                None,
+            )]),
         ]);
 
         let source_filters = vec![
@@ -1115,7 +1326,9 @@ mod filter_group_tests {
                 value: Some(ScalarValue::Int64(1)),
                 priority: 2,
                 uid: None,
-                index_strategy: Some(IndexStrategy::ZoneSuRF { field: "a".to_string() }),
+                index_strategy: Some(IndexStrategy::ZoneSuRF {
+                    field: "a".to_string(),
+                }),
             },
             FilterGroup::Filter {
                 column: "b".to_string(),
@@ -1123,7 +1336,9 @@ mod filter_group_tests {
                 value: Some(ScalarValue::Int64(2)),
                 priority: 2,
                 uid: None,
-                index_strategy: Some(IndexStrategy::EnumBitmap { field: "b".to_string() }),
+                index_strategy: Some(IndexStrategy::EnumBitmap {
+                    field: "b".to_string(),
+                }),
             },
         ];
 
@@ -1133,19 +1348,23 @@ mod filter_group_tests {
             FilterGroup::And(children) => {
                 match &children[0] {
                     FilterGroup::Filter { index_strategy, .. } => {
-                        assert!(matches!(index_strategy.as_ref().unwrap(), IndexStrategy::ZoneSuRF { .. }));
+                        assert!(matches!(
+                            index_strategy.as_ref().unwrap(),
+                            IndexStrategy::ZoneSuRF { .. }
+                        ));
                     }
                     _ => panic!("Expected Filter variant"),
                 }
                 match &children[1] {
-                    FilterGroup::Or(or_children) => {
-                        match &or_children[0] {
-                            FilterGroup::Filter { index_strategy, .. } => {
-                                assert!(matches!(index_strategy.as_ref().unwrap(), IndexStrategy::EnumBitmap { .. }));
-                            }
-                            _ => panic!("Expected Filter variant"),
+                    FilterGroup::Or(or_children) => match &or_children[0] {
+                        FilterGroup::Filter { index_strategy, .. } => {
+                            assert!(matches!(
+                                index_strategy.as_ref().unwrap(),
+                                IndexStrategy::EnumBitmap { .. }
+                            ));
                         }
-                    }
+                        _ => panic!("Expected Filter variant"),
+                    },
                     _ => panic!("Expected Or variant"),
                 }
             }
@@ -1153,4 +1372,3 @@ mod filter_group_tests {
         }
     }
 }
-

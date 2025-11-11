@@ -243,10 +243,25 @@
     const textColor = isDarkMode ? '#f9fafb' : '#111827';
     const gridColor = isDarkMode ? '#374151' : '#e5e7eb';
 
+    // Detect comparison query: multiple metric columns (columns with dots in name like "event_type.metric")
+    // Comparison queries have columns like "add_to_cart.count_customer_id" or "payment_succeeded.total_amount"
+    const isComparison = data.columns.some(col => {
+      const name = col.name.toLowerCase();
+      // Check if column name contains a dot and metric keywords
+      return col.name.includes('.') && (
+        name.includes('count') || name.includes('total') || name.includes('avg') ||
+        name.includes('min') || name.includes('max') || name.includes('unique') ||
+        name.includes('sum')
+      );
+    });
+
     // Detect data structure: 2 columns vs 3+ columns (with grouping)
     const isGrouped = data.columns.length >= 3;
 
-    if (isGrouped) {
+    if (isComparison) {
+      // Comparison query: render multi-series chart
+      renderComparisonChart(data, type, isDarkMode, textColor, gridColor);
+    } else if (isGrouped) {
       // Multi-dimensional data: bucket, group_by, value, ...
       // Example: [timestamp, plan, count] or [timestamp, category, subcategory, count]
       renderGroupedChart(data, type, isDarkMode, textColor, gridColor);
@@ -513,6 +528,315 @@
           },
           y: {
             stacked: type === 'bar',
+            ticks: {
+              color: textColor
+            },
+            grid: {
+              color: gridColor,
+              drawBorder: false
+            },
+            beginAtZero: true
+          }
+        }
+      }
+    };
+
+    currentChart = new Chart(chartCanvas, chartConfig);
+  }
+
+  function renderComparisonChart(data, type, isDarkMode, textColor, gridColor) {
+    // Comparison query structure:
+    // - First column(s): bucket (optional), group_by fields (optional)
+    // - Remaining columns: metric columns from each comparison side (e.g., "add_to_cart.count_customer_id", "payment_succeeded.count_customer_id")
+
+    // Find metric columns (columns with dots in name, typically event_type.metric_name)
+    const metricColumns = data.columns.filter(col => col.name.includes('.'));
+    const nonMetricColumns = data.columns.filter(col => !col.name.includes('.'));
+
+    // Determine x-axis column (first non-metric column, usually bucket or first group_by)
+    const xColumn = nonMetricColumns[0] || data.columns[0];
+    const xColumnIndex = data.columns.findIndex(col => col.name === xColumn.name);
+
+    // Group by columns (remaining non-metric columns after x-axis)
+    const groupByColumns = nonMetricColumns.slice(1);
+
+    // Extract event type names from metric columns (e.g., "add_to_cart" from "add_to_cart.count_customer_id")
+    const eventTypes = new Set();
+    metricColumns.forEach(col => {
+      const parts = col.name.split('.');
+      if (parts.length > 0) {
+        eventTypes.add(parts[0]);
+      }
+    });
+    const eventTypeArray = Array.from(eventTypes);
+
+    // Build data structure: x-value -> breakdown value -> event type -> metric value
+    const dataMap = new Map(); // x-value -> Map(breakdown_key -> Map(event_type -> value))
+    const xAxisValues = new Set();
+    const breakdownValues = new Set();
+
+    data.rows.forEach(row => {
+      const xValue = row[xColumnIndex];
+      const breakdownKey = groupByColumns.length > 0
+        ? groupByColumns.map((col) => {
+            const colIndex = data.columns.findIndex(c => c.name === col.name);
+            return row[colIndex];
+          }).join(' | ')
+        : 'All';
+
+      xAxisValues.add(xValue);
+      if (breakdownKey !== 'All') {
+        breakdownValues.add(breakdownKey);
+      }
+
+      if (!dataMap.has(xValue)) {
+        dataMap.set(xValue, new Map());
+      }
+      const breakdownMap = dataMap.get(xValue);
+
+      if (!breakdownMap.has(breakdownKey)) {
+        breakdownMap.set(breakdownKey, new Map());
+      }
+      const eventMap = breakdownMap.get(breakdownKey);
+
+      // Store metric values by event type
+      metricColumns.forEach(col => {
+        const colIndex = data.columns.findIndex(c => c.name === col.name);
+        const value = row[colIndex];
+        const eventType = col.name.split('.')[0];
+        eventMap.set(eventType, (value === null || value === undefined) ? 0 : value);
+      });
+    });
+
+    // Convert x-axis values to sorted array
+    const sortedXValues = Array.from(xAxisValues).sort((a, b) => {
+      if (a === null || b === null) return 0;
+      return a - b;
+    });
+
+    const labels = sortedXValues.map(value => {
+      if (xColumn.type === 'Timestamp') {
+        return formatTimestamp(value);
+      }
+      return String(value);
+    });
+
+    // Create datasets based on whether we have breakdown
+    const colors = generateColors(eventTypeArray.length, currentColorScheme);
+    const datasets = [];
+    let colorIndex = 0;
+
+    if (groupByColumns.length > 0 && breakdownValues.size > 0) {
+      // With breakdown: For comparison queries, show one series per comparison side
+      // Aggregate across breakdown values OR show breakdown in tooltips/legend
+      // This creates a cleaner visualization: just 2 series (shipment_dispatched vs order_delivered)
+      // with breakdown values shown in tooltips
+
+      const sortedBreakdownValues = Array.from(breakdownValues).sort();
+
+      // Assign colors to event types (consistent across breakdown values)
+      const eventTypeColors = new Map();
+      eventTypeArray.forEach((eventType, idx) => {
+        eventTypeColors.set(eventType, colors[idx % colors.length]);
+      });
+
+      // Create one dataset per event type, aggregating across breakdown values
+      // For each x-value, sum or average across all breakdown values
+      eventTypeArray.forEach(eventType => {
+        const color = eventTypeColors.get(eventType);
+        const data = sortedXValues.map(xValue => {
+          const breakdownMap = dataMap.get(xValue);
+          if (!breakdownMap) return 0;
+
+          // Sum across all breakdown values for this event type
+          let sum = 0;
+          sortedBreakdownValues.forEach(breakdownKey => {
+            const eventMap = breakdownMap.get(breakdownKey);
+            if (eventMap) {
+              const value = eventMap.get(eventType) || 0;
+              sum += value;
+            }
+          });
+          return sum;
+        });
+
+        datasets.push({
+          label: eventType,
+          data: data,
+          backgroundColor: type === 'bar' || type === 'line' ? color + '80' : color,
+          borderColor: color,
+          borderWidth: type === 'line' ? 2 : 1,
+          tension: 0.3,
+          fill: false
+        });
+      });
+    } else {
+      // Without breakdown: create one series per event type (comparison side)
+      eventTypeArray.forEach(eventType => {
+        const color = colors[colorIndex % colors.length];
+        const data = sortedXValues.map(xValue => {
+          const breakdownMap = dataMap.get(xValue);
+          if (!breakdownMap) return 0;
+          const eventMap = breakdownMap.get('All');
+          if (!eventMap) return 0;
+          return eventMap.get(eventType) || 0;
+        });
+
+        datasets.push({
+          label: eventType,
+          data: data,
+          backgroundColor: type === 'bar' || type === 'line' ? color + '80' : color,
+          borderColor: color,
+          borderWidth: type === 'line' ? 2 : 1,
+          tension: 0.3,
+          fill: false
+        });
+
+        colorIndex++;
+      });
+    }
+
+    // For pie/doughnut charts with comparison data, aggregate across all buckets
+    if (type === 'pie' || type === 'doughnut') {
+      const aggregated = new Map();
+      datasets.forEach(dataset => {
+        const sum = dataset.data.reduce((a, b) => a + b, 0);
+        aggregated.set(dataset.label, sum);
+      });
+
+      const pieLabels = Array.from(aggregated.keys());
+      const pieValues = Array.from(aggregated.values());
+      const pieColors = generateColors(pieLabels.length, currentColorScheme);
+
+      const chartConfig = {
+        type: type,
+        data: {
+          labels: pieLabels,
+          datasets: [{
+            label: 'Comparison',
+            data: pieValues,
+            backgroundColor: pieColors,
+            borderColor: pieColors.map(c => c),
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true,
+              position: 'right',
+              labels: {
+                color: textColor,
+                padding: 15,
+                font: {
+                  size: 12
+                }
+              }
+            },
+            tooltip: {
+              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+              titleColor: textColor,
+              bodyColor: textColor,
+              borderColor: gridColor,
+              borderWidth: 1,
+              padding: 12,
+              displayColors: true
+            }
+          }
+        }
+      };
+
+      currentChart = new Chart(chartCanvas, chartConfig);
+      return;
+    }
+
+    // Bar and Line charts for comparison
+    // Store breakdown info for tooltip callbacks
+    const breakdownInfo = groupByColumns.length > 0 && breakdownValues.size > 0
+      ? { sortedBreakdownValues: Array.from(breakdownValues).sort(), dataMap, groupByColumns }
+      : null;
+
+    const chartConfig = {
+      type: type,
+      data: {
+        labels: labels,
+        datasets: datasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            labels: {
+              color: textColor,
+              padding: 15,
+              font: {
+                size: 12
+              },
+              usePointStyle: true
+            }
+          },
+          tooltip: {
+            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+            titleColor: textColor,
+            bodyColor: textColor,
+            borderColor: gridColor,
+            borderWidth: 1,
+            padding: 12,
+            displayColors: true,
+            callbacks: {
+              label: function(context) {
+                const label = context.dataset.label || '';
+                const value = context.parsed.y || context.parsed;
+                // If we have breakdown data, show breakdown details in tooltip
+                if (breakdownInfo) {
+                  const xValue = sortedXValues[context.dataIndex];
+                  const breakdownMap = breakdownInfo.dataMap.get(xValue);
+                  if (breakdownMap) {
+                    const breakdownDetails = [];
+                    breakdownInfo.sortedBreakdownValues.forEach(breakdownKey => {
+                      const eventMap = breakdownMap.get(breakdownKey);
+                      if (eventMap) {
+                        const eventType = label;
+                        const breakdownValue = eventMap.get(eventType);
+                        if (breakdownValue !== undefined && breakdownValue !== null) {
+                          breakdownDetails.push(`${breakdownKey}: ${breakdownValue}`);
+                        }
+                      }
+                    });
+                    if (breakdownDetails.length > 0) {
+                      return [`${label}: ${value}`, ...breakdownDetails];
+                    }
+                  }
+                }
+                return `${label}: ${value}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            stacked: false, // Don't stack comparison series
+            ticks: {
+              color: textColor,
+              maxRotation: 45,
+              minRotation: 0
+            },
+            grid: {
+              color: gridColor,
+              drawBorder: false
+            }
+          },
+          y: {
+            stacked: false,
             ticks: {
               color: textColor
             },
@@ -964,8 +1288,14 @@
 
   // Detect if a query is an aggregation query
   function isAggregationQuery(query) {
-    const upperQuery = query.toUpperCase();
-    // Check for aggregation keywords
+    const upperQuery = query.toUpperCase().trim();
+
+    // PlotQL queries (starting with "plot") are always aggregations
+    if (upperQuery.startsWith('PLOT')) {
+      return true;
+    }
+
+    // Legacy QUERY command aggregation detection
     const aggKeywords = /\b(COUNT|AVG|TOTAL|MIN|MAX|SUM)\b/i;
     const hasAggKeyword = aggKeywords.test(query);
 
@@ -976,13 +1306,19 @@
     return hasAggKeyword || hasTimeBucket;
   }
 
+  // Detect if a query is a comparison query (has "vs" clause)
+  function isComparisonQuery(query) {
+    // Case-insensitive check for "vs" keyword (with word boundaries to avoid matching "vs" inside words)
+    return /\bvs\b/i.test(query);
+  }
+
   // Parse and modify query to add pagination if needed
   function prepareQueryWithPagination(query) {
     const trimmed = query.trim();
     const upperQuery = trimmed.toUpperCase();
 
-    // Check if query is a QUERY command
-    if (!upperQuery.startsWith('QUERY')) {
+    // Check if query is a QUERY command or PLOT command
+    if (!upperQuery.startsWith('QUERY') && !upperQuery.startsWith('PLOT')) {
       paginationState.isPaginated = false;
       paginationState.baseQuery = null;
       paginationState.isAggregation = false;
@@ -992,7 +1328,7 @@
     // Detect if this is an aggregation query
     paginationState.isAggregation = isAggregationQuery(trimmed);
 
-    // Aggregation queries should not be paginated
+    // Aggregation queries (including PlotQL) should not be paginated
     if (paginationState.isAggregation) {
       paginationState.isPaginated = false;
       paginationState.baseQuery = null;

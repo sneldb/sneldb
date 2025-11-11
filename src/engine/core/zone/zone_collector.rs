@@ -1,8 +1,8 @@
+use crate::engine::core::filter::filter_group::{FilterGroup, filter_key};
+use crate::engine::core::zone::zone_group_collector::ZoneGroupCollector;
 use crate::engine::core::{
     CandidateZone, ExecutionStep, LogicalOp, QueryCaches, QueryPlan, ZoneCombiner,
 };
-use crate::engine::core::zone::zone_group_collector::ZoneGroupCollector;
-use crate::engine::core::filter::filter_group::{filter_key, FilterGroup};
 use std::collections::HashMap;
 
 use tracing::info;
@@ -24,10 +24,7 @@ impl<'a> ZoneCacheBuilder<'a> {
 
     /// Builds zone cache for unique filters
     /// Returns HashMap mapping filter_key -> zones
-    fn build_cache(
-        &self,
-        unique_filters: &[FilterGroup],
-    ) -> HashMap<String, Vec<CandidateZone>> {
+    fn build_cache(&self, unique_filters: &[FilterGroup]) -> HashMap<String, Vec<CandidateZone>> {
         // Create execution steps
         let mut steps: Vec<ExecutionStep> = unique_filters
             .iter()
@@ -48,9 +45,12 @@ impl<'a> ZoneCacheBuilder<'a> {
                 let step = steps.get(*step_idx)?;
                 let zones_vec = zones.get(pos)?;
                 match &step.filter {
-                    FilterGroup::Filter { column, operation, value, .. } => {
-                        Some((filter_key(column, operation, value), zones_vec.clone()))
-                    }
+                    FilterGroup::Filter {
+                        column,
+                        operation,
+                        value,
+                        ..
+                    } => Some((filter_key(column, operation, value), zones_vec.clone())),
                     _ => None,
                 }
             })
@@ -140,11 +140,7 @@ impl<'a> ZoneCollector<'a> {
 
             // Use ZoneGroupCollector with cache to process FilterGroup tree
             // Pass plan and caches for smart NOT handling
-            let group_collector = ZoneGroupCollector::new(
-                filter_to_zones,
-                self.plan,
-                self.caches,
-            );
+            let group_collector = ZoneGroupCollector::new(filter_to_zones, self.plan, self.caches);
             group_collector.collect_zones_from_group(filter_group)
         } else {
             // Fallback to flat combination using top-level operator

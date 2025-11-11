@@ -8,4 +8,3 @@ pub use handler::ComparisonCommandHandler;
 mod handler_test;
 #[cfg(test)]
 mod orchestrator_test;
-

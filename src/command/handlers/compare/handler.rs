@@ -122,4 +122,3 @@ impl<'a, W: AsyncWrite + Unpin> ComparisonCommandHandler<'a, W> {
         self.writer.write_all(&self.renderer.render(&resp)).await
     }
 }
-

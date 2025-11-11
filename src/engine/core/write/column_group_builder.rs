@@ -44,7 +44,7 @@ impl ColumnGroupBuilder {
                 } else {
                     i.to_string()
                 }
-            },
+            }
             ScalarValue::Timestamp(ts) => ts.to_string(),
             ScalarValue::Float64(f) => f.to_string(),
             ScalarValue::Boolean(b) => b.to_string(),

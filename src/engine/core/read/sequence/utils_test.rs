@@ -76,7 +76,10 @@ fn parse_event_field_without_prefix_common_field() {
 fn parse_event_field_multiple_dots() {
     // Takes first dot as separator
     let result = parse_event_field("event.field.subfield");
-    assert_eq!(result, Some(("event".to_string(), "field.subfield".to_string())));
+    assert_eq!(
+        result,
+        Some(("event".to_string(), "field.subfield".to_string()))
+    );
 }
 
 #[test]
@@ -328,10 +331,24 @@ fn transform_where_clause_nested_and_or() {
     match result {
         Some(Expr::And(left, right)) => {
             // Both sides should be Compare expressions
-            if let (Expr::Compare { field: field_left, .. }, Expr::Compare { field: field_right, .. }) = (*left, *right) {
-                assert!(field_left == "amount" || field_right == "amount", "Should have amount field");
-                assert!(field_left == "status" || field_right == "status", "Should have status field");
-    } else {
+            if let (
+                Expr::Compare {
+                    field: field_left, ..
+                },
+                Expr::Compare {
+                    field: field_right, ..
+                },
+            ) = (*left, *right)
+            {
+                assert!(
+                    field_left == "amount" || field_right == "amount",
+                    "Should have amount field"
+                );
+                assert!(
+                    field_left == "status" || field_right == "status",
+                    "Should have status field"
+                );
+            } else {
                 panic!("Expected both sides to be Compare expressions");
             }
         }
@@ -388,4 +405,3 @@ fn transform_where_clause_complex_nested() {
         panic!("Expected And expression");
     }
 }
-

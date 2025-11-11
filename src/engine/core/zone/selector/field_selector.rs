@@ -1,3 +1,4 @@
+use crate::engine::core::filter::filter_group::FilterGroup;
 use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::engine::core::zone::selector::pruner::enum_pruner::EnumPruner;
 use crate::engine::core::zone::selector::pruner::materialization_pruner::MaterializationPruner;
@@ -7,7 +8,6 @@ use crate::engine::core::zone::selector::pruner::xor_pruner::XorPruner;
 use crate::engine::core::zone::selector::pruner::{PruneArgs, ZonePruner};
 use crate::engine::core::zone::selector::selector_kind::ZoneSelector;
 use crate::engine::core::{CandidateZone, QueryCaches, QueryPlan};
-use crate::engine::core::filter::filter_group::FilterGroup;
 use tracing::warn;
 
 pub struct FieldSelector<'a> {
@@ -32,7 +32,13 @@ impl<'a> ZoneSelector for FieldSelector<'a> {
                 operation,
                 index_strategy,
                 ..
-            } => (uid.as_ref(), column.as_str(), value.as_ref(), operation.as_ref(), index_strategy.as_ref()),
+            } => (
+                uid.as_ref(),
+                column.as_str(),
+                value.as_ref(),
+                operation.as_ref(),
+                index_strategy.as_ref(),
+            ),
             _ => return Vec::new(), // Only single filters supported
         };
 
@@ -106,13 +112,12 @@ impl<'a> ZoneSelector for FieldSelector<'a> {
                 }
                 IndexStrategy::FullScan => {
                     // For FullScan, return all zones (will be filtered by materialization pruner if needed)
-                    candidate_zones =
-                        CandidateZone::create_all_zones_for_segment_from_meta_cached(
-                            &self.qplan.segment_base_dir,
-                            segment_id,
-                            uid,
-                            self.caches,
-                        );
+                    candidate_zones = CandidateZone::create_all_zones_for_segment_from_meta_cached(
+                        &self.qplan.segment_base_dir,
+                        segment_id,
+                        uid,
+                        self.caches,
+                    );
                 }
             }
         } else {

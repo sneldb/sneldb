@@ -1,6 +1,6 @@
 use crate::engine::core::compaction::handover::CompactionHandover;
-use crate::engine::core::{CompactionWorker, IoMonitor, SegmentIndex};
 use crate::engine::core::utils::system_info_cache::get_system_info_cache;
+use crate::engine::core::{CompactionWorker, IoMonitor, SegmentIndex};
 use crate::engine::schema::SchemaRegistry;
 use crate::shared::config::CONFIG;
 use once_cell::sync::Lazy;

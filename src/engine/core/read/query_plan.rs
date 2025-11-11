@@ -36,14 +36,12 @@ impl QueryPlan {
     ) -> Option<Self> {
         match &command {
             Command::Query {
-                where_clause, event_type, ..
+                where_clause,
+                event_type,
+                ..
             } => {
                 // Build FilterGroup from WHERE clause to preserve logical structure
-                let event_type_uid = registry
-                    .read()
-                    .await
-                    .get_uid(event_type)
-                    .clone();
+                let event_type_uid = registry.read().await.get_uid(event_type).clone();
                 let filter_group = where_clause
                     .as_ref()
                     .and_then(|expr| FilterGroupBuilder::build(expr, &event_type_uid));
@@ -71,20 +69,25 @@ impl QueryPlan {
                     {
                         let tf = time_field.as_deref().unwrap_or("timestamp");
                         // Remove implicit 'since' time filter for aggregations
-                        filter_groups.retain(|fg| {
-                            match fg {
-                                FilterGroup::Filter { column, operation, value, .. } => {
-                                    if column != tf {
-                                        return true;
-                                    }
-                                    match (operation, value) {
-                                        (Some(crate::command::types::CompareOp::Gte), Some(crate::engine::types::ScalarValue::Utf8(s)))
-                                            if since.as_deref() == Some(s.as_str()) => false,
-                                        _ => true,
-                                    }
+                        filter_groups.retain(|fg| match fg {
+                            FilterGroup::Filter {
+                                column,
+                                operation,
+                                value,
+                                ..
+                            } => {
+                                if column != tf {
+                                    return true;
                                 }
-                                _ => true,
+                                match (operation, value) {
+                                    (
+                                        Some(crate::command::types::CompareOp::Gte),
+                                        Some(crate::engine::types::ScalarValue::Utf8(s)),
+                                    ) if since.as_deref() == Some(s.as_str()) => false,
+                                    _ => true,
+                                }
                             }
+                            _ => true,
                         });
                     }
                 }
@@ -248,13 +251,12 @@ impl QueryPlan {
     pub async fn build(command: &Command, registry: Arc<RwLock<SchemaRegistry>>) -> Self {
         // Build FilterGroup from WHERE clause if present
         let filter_group = if let Command::Query {
-            where_clause, event_type, ..
-        } = command {
-            let event_type_uid = registry
-                .read()
-                .await
-                .get_uid(event_type)
-                .clone();
+            where_clause,
+            event_type,
+            ..
+        } = command
+        {
+            let event_type_uid = registry.read().await.get_uid(event_type).clone();
             where_clause
                 .as_ref()
                 .and_then(|expr| FilterGroupBuilder::build(expr, &event_type_uid))

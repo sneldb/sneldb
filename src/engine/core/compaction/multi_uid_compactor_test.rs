@@ -1,9 +1,9 @@
-use super::multi_uid_compactor::MultiUidCompactor;
 use super::merge_plan::MergePlan;
+use super::multi_uid_compactor::MultiUidCompactor;
 use super::segment_batch::{SegmentBatch, UidPlan};
+use crate::engine::core::ZoneMeta;
 use crate::engine::core::compaction::handover::{CompactionHandover, SegmentCache};
 use crate::engine::core::{CompactionWorker, Flusher, SegmentEntry, SegmentIndex};
-use crate::engine::core::ZoneMeta;
 use crate::test_helpers::factories::*;
 use serde_json::json;
 use std::collections::HashSet;
@@ -160,13 +160,18 @@ async fn compacts_multiple_uids_from_shared_segments_in_single_pass() {
     let mut seen_uids = HashSet::new();
     // With k=2, we have 2 batches: [00001, 00002] and [00003, 00004]
     // Each batch should produce one output segment with all 3 UIDs
-    assert_eq!(index_after.len(), 2, "With k=2, 4 segments should create 2 output segments");
+    assert_eq!(
+        index_after.len(),
+        2,
+        "With k=2, 4 segments should create 2 output segments"
+    );
     for entry in index_after.iter_all() {
-        assert_eq!(entry.uids.len(), 3, "Each output segment should contain all three UIDs");
-        assert!(
-            entry.id >= 10_000,
-            "Compacted entries must be L1 or higher"
+        assert_eq!(
+            entry.uids.len(),
+            3,
+            "Each output segment should contain all three UIDs"
         );
+        assert!(entry.id >= 10_000, "Compacted entries must be L1 or higher");
         for uid in &entry.uids {
             seen_uids.insert(uid.clone());
 
@@ -192,7 +197,8 @@ async fn compacts_multiple_uids_from_shared_segments_in_single_pass() {
     // Verify original segments were deleted
     let ids = segment_ids.read().unwrap().clone();
     assert!(
-        ids.iter().all(|label| label.parse::<u32>().unwrap() >= 10_000),
+        ids.iter()
+            .all(|label| label.parse::<u32>().unwrap() >= 10_000),
         "Only compacted L1 segments should remain"
     );
 }
@@ -235,7 +241,10 @@ async fn handles_batch_with_many_uids_efficiently() {
                 EventFactory::new()
                     .with("event_type", event_type)
                     .with("context_id", format!("ctx-{}", segment_id))
-                    .with("payload", json!({ "value": segment_id as i64 * (i as i64 + 1) }))
+                    .with(
+                        "payload",
+                        json!({ "value": segment_id as i64 * (i as i64 + 1) }),
+                    )
                     .create(),
             );
         }
@@ -283,9 +292,17 @@ async fn handles_batch_with_many_uids_efficiently() {
     let mut seen_uids = HashSet::new();
     // With k=2, we have 2 batches: [00001, 00002] and [00003, 00004]
     // Each batch should produce one output segment with all 10 UIDs
-    assert_eq!(index.len(), 2, "With k=2, 4 segments should create 2 output segments");
+    assert_eq!(
+        index.len(),
+        2,
+        "With k=2, 4 segments should create 2 output segments"
+    );
     for entry in index.iter_all() {
-        assert_eq!(entry.uids.len(), 10, "Each output segment should contain all 10 UIDs");
+        assert_eq!(
+            entry.uids.len(),
+            10,
+            "Each output segment should contain all 10 UIDs"
+        );
         assert!(entry.id >= 10_000);
         for uid in &entry.uids {
             seen_uids.insert(uid.clone());
@@ -315,12 +332,7 @@ async fn processes_empty_batch_gracefully() {
     let schema_factory = SchemaRegistryFactory::new();
     let registry = schema_factory.registry();
 
-    let compactor = MultiUidCompactor::new(
-        batch,
-        shard_dir.clone(),
-        shard_dir.clone(),
-        registry,
-    );
+    let compactor = MultiUidCompactor::new(batch, shard_dir.clone(), shard_dir.clone(), registry);
 
     let results = compactor.run().await.unwrap();
     assert!(results.is_empty());
@@ -488,7 +500,10 @@ async fn handles_partial_uid_retirement_correctly() {
     let mut found_compacted = false;
     for entry in index_after.iter_all() {
         if entry.id < 10000 {
-            assert!(entry.uids.contains(&uid_b), "Original segments should still have uid_b");
+            assert!(
+                entry.uids.contains(&uid_b),
+                "Original segments should still have uid_b"
+            );
             found_original = true;
         } else {
             assert_eq!(entry.uids, vec![uid_a.clone()]);
@@ -497,7 +512,10 @@ async fn handles_partial_uid_retirement_correctly() {
     }
     assert!(found_original, "Original segments should still exist");
     assert!(found_compacted, "Compacted segment should exist");
-    assert!(drained.is_empty(), "No segments should be drained when UIDs remain");
+    assert!(
+        drained.is_empty(),
+        "No segments should be drained when UIDs remain"
+    );
 }
 
 #[tokio::test]
@@ -518,12 +536,7 @@ async fn handles_empty_segment_labels() {
     let tmp_dir = tempdir().unwrap();
     let shard_dir = tmp_dir.path().join("shard-empty-labels");
 
-    let compactor = MultiUidCompactor::new(
-        batch,
-        shard_dir.clone(),
-        shard_dir.clone(),
-        registry,
-    );
+    let compactor = MultiUidCompactor::new(batch, shard_dir.clone(), shard_dir.clone(), registry);
 
     // Should handle empty segment labels gracefully
     let result = compactor.run().await;
