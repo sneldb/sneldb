@@ -196,7 +196,9 @@ impl FlowSource for MemTableSource {
         let query_ctx = QueryContext::from_command(&self.config.plan.command);
         let limit = self.determine_limit(&query_ctx);
 
-        if let Some(order_spec) = self.config.plan.order_by() {
+        // For aggregate queries, ordering happens after aggregation in AggregateStreamMerger.
+        // For non-aggregate queries, ordering can happen at the shard level.
+        if let Some(order_spec) = self.config.plan.order_by_for_shard_level() {
             let order_index = schema
                 .columns()
                 .iter()

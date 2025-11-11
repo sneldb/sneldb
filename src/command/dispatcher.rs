@@ -1,5 +1,5 @@
 use crate::command::handlers::query::QueryCommandHandler;
-use crate::command::handlers::{define, flush, remember, replay, show, store};
+use crate::command::handlers::{compare, define, flush, remember, replay, show, store};
 use crate::command::types::Command;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
@@ -28,6 +28,11 @@ pub async fn dispatch_command<W: AsyncWrite + Unpin>(
         }
         Query { .. } => {
             QueryCommandHandler::new(cmd, shard_manager, Arc::clone(registry), writer, renderer)
+                .handle()
+                .await
+        }
+        Compare { .. } => {
+            compare::ComparisonCommandHandler::new(cmd, shard_manager, Arc::clone(registry), writer, renderer)
                 .handle()
                 .await
         }

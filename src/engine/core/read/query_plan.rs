@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 /// The main query plan structure that holds all query information
 #[derive(Debug, Clone)]
@@ -186,6 +186,24 @@ impl QueryPlan {
         } else {
             None
         }
+    }
+
+    /// Returns the OrderSpec if ordering should happen at the shard level (before aggregation).
+    /// Returns None if ordering should be deferred to the merger (after aggregation).
+    ///
+    /// For aggregate queries, ordering must happen after aggregation because:
+    /// 1. Metric columns don't exist until after aggregation
+    /// 2. Partial aggregates from multiple shards must be merged first
+    /// 3. Final ordering happens on merged results in AggregateStreamMerger
+    ///
+    /// For non-aggregate queries, ordering can happen at the shard level.
+    pub fn order_by_for_shard_level(&self) -> Option<&crate::command::types::OrderSpec> {
+        // If there's an aggregate plan, ordering must happen after aggregation
+        if self.aggregate_plan.is_some() {
+            return None;
+        }
+        // For non-aggregate queries, ordering can happen at shard level
+        self.order_by()
     }
 
     pub fn context_id_plan(&self) -> Option<&FilterGroup> {

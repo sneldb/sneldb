@@ -118,7 +118,9 @@ impl<'a> SegmentQueryRunner<'a> {
         let eval_limit = self.determine_eval_limit(&query_ctx);
         let evaluator = ConditionEvaluatorBuilder::build_from_plan(self.plan);
 
-        if let Some(order_spec) = self.plan.order_by() {
+        // For aggregate queries, ordering happens after aggregation in AggregateStreamMerger.
+        // For non-aggregate queries, ordering can happen at the shard level.
+        if let Some(order_spec) = self.plan.order_by_for_shard_level() {
             let order_index = schema
                 .columns()
                 .iter()

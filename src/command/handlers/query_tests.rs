@@ -6841,3 +6841,547 @@ async fn test_query_parentheses_complex() {
     ids.sort();
     assert_eq!(ids, vec![1, 2, 3, 5], "Should return correct IDs");
 }
+
+/// Test PlotQL ordering by a metric that differs from the main metric.
+/// Verifies that when ordering by avg(price) while main metric is count,
+/// both metrics are computed and results are sorted correctly by avg(price).
+#[tokio::test]
+async fn test_plotql_order_by_different_metric() {
+    let _guard = set_streaming_enabled(true);
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("orders", &[("product_id", "string"), ("price", "int")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Create products with different average prices:
+    // product_A: 3 orders with prices [10, 20, 30] -> avg = 20.0
+    // product_B: 2 orders with prices [50, 60] -> avg = 55.0
+    // product_C: 4 orders with prices [5, 10, 15, 20] -> avg = 12.5
+    // Expected order (desc by avg): product_B (55.0), product_A (20.0), product_C (12.5)
+    let stores = vec![
+        (
+            "orders",
+            "ctx1",
+            serde_json::json!({"product_id": "product_A", "price": 10}),
+        ),
+        (
+            "orders",
+            "ctx2",
+            serde_json::json!({"product_id": "product_A", "price": 20}),
+        ),
+        (
+            "orders",
+            "ctx3",
+            serde_json::json!({"product_id": "product_A", "price": 30}),
+        ),
+        (
+            "orders",
+            "ctx4",
+            serde_json::json!({"product_id": "product_B", "price": 50}),
+        ),
+        (
+            "orders",
+            "ctx5",
+            serde_json::json!({"product_id": "product_B", "price": 60}),
+        ),
+        (
+            "orders",
+            "ctx6",
+            serde_json::json!({"product_id": "product_C", "price": 5}),
+        ),
+        (
+            "orders",
+            "ctx7",
+            serde_json::json!({"product_id": "product_C", "price": 10}),
+        ),
+        (
+            "orders",
+            "ctx8",
+            serde_json::json!({"product_id": "product_C", "price": 15}),
+        ),
+        (
+            "orders",
+            "ctx9",
+            serde_json::json!({"product_id": "product_C", "price": 20}),
+        ),
+    ];
+
+    for (evt, ctx, payload) in stores {
+        let store_cmd = crate::test_helpers::factories::CommandFactory::store()
+            .with_event_type(evt)
+            .with_context_id(ctx)
+            .with_payload(payload)
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+    sleep(Duration::from_millis(400)).await;
+
+    // Flush to ensure all data is persisted to segments
+    let flush_cmd = crate::command::types::Command::Flush;
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::flush::handle(
+        &flush_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("flush should succeed");
+    sleep(Duration::from_millis(1500)).await;
+
+    // PlotQL query: plot count of orders breakdown by product_id top 3 by avg(price)
+    // This should:
+    // 1. Compute count (main metric) and avg(price) (ordering metric)
+    // 2. Group by product_id
+    // 3. Sort by avg(price) descending
+    // 4. Return top 3
+    let cmd = crate::command::parser::parse_command(
+        "PLOT count of orders breakdown by product_id top 3 by avg(price)",
+    )
+    .expect("parse PlotQL query");
+
+    let (mut reader, mut writer) = duplex(4096);
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Parse streaming frames
+    let frames: Vec<&str> = body.lines().filter(|line| !line.is_empty()).collect();
+    let mut results: Vec<(String, i64, f64)> = Vec::new();
+
+    for frame_str in frames {
+        if let Ok(frame) = serde_json::from_str::<JsonValue>(frame_str) {
+            if let Some(frame_type) = frame.get("type").and_then(|t| t.as_str()) {
+                if frame_type == "batch" {
+                    if let Some(rows) = frame.get("rows").and_then(|r| r.as_array()) {
+                        for row in rows {
+                            if let Some(row_array) = row.as_array() {
+                                // Row structure: [product_id, count, avg_price]
+                                if let (Some(product_id), Some(count), Some(avg_price)) = (
+                                    row_array.get(0).and_then(|v| v.as_str()),
+                                    row_array.get(1).and_then(|v| v.as_i64()),
+                                    row_array.get(2).and_then(|v| v.as_f64()),
+                                ) {
+                                    results.push((product_id.to_string(), count, avg_price));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Verify we got exactly 3 results (top 3)
+    assert_eq!(results.len(), 3, "Should return exactly 3 products (top 3)");
+
+    // Verify ordering: should be sorted by avg(price) descending
+    // Expected order: product_B (55.0), product_A (20.0), product_C (12.5)
+    assert_eq!(
+        results[0].0, "product_B",
+        "First result should be product_B with highest avg price"
+    );
+    assert_eq!(results[0].1, 2, "product_B should have count of 2");
+    assert!(
+        (results[0].2 - 55.0).abs() < 0.01,
+        "product_B should have avg price ~55.0, got {}",
+        results[0].2
+    );
+
+    assert_eq!(
+        results[1].0, "product_A",
+        "Second result should be product_A"
+    );
+    assert_eq!(results[1].1, 3, "product_A should have count of 3");
+    assert!(
+        (results[1].2 - 20.0).abs() < 0.01,
+        "product_A should have avg price ~20.0, got {}",
+        results[1].2
+    );
+
+    assert_eq!(
+        results[2].0, "product_C",
+        "Third result should be product_C"
+    );
+    assert_eq!(results[2].1, 4, "product_C should have count of 4");
+    assert!(
+        (results[2].2 - 12.5).abs() < 0.01,
+        "product_C should have avg price ~12.5, got {}",
+        results[2].2
+    );
+
+    // Verify descending order
+    assert!(
+        results[0].2 > results[1].2 && results[1].2 > results[2].2,
+        "Results should be sorted in descending order by avg(price)"
+    );
+}
+
+/// Test PlotQL ordering by count when main metric is avg.
+/// Verifies reverse scenario: main metric is avg(rating), order by count.
+#[tokio::test]
+async fn test_plotql_order_by_count_when_main_is_avg() {
+    let _guard = set_streaming_enabled(true);
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("reviews", &[("product_id", "string"), ("rating", "int")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Create products with different review counts and ratings:
+    // product_X: 1 review with rating 100 -> avg = 100.0, count = 1
+    // product_Y: 3 reviews with ratings [80, 90, 100] -> avg = 90.0, count = 3
+    // product_Z: 2 reviews with ratings [95, 95] -> avg = 95.0, count = 2
+    // Expected order (desc by count): product_Y (3), product_Z (2), product_X (1)
+    let stores = vec![
+        (
+            "reviews",
+            "ctx1",
+            serde_json::json!({"product_id": "product_X", "rating": 100}),
+        ),
+        (
+            "reviews",
+            "ctx2",
+            serde_json::json!({"product_id": "product_Y", "rating": 80}),
+        ),
+        (
+            "reviews",
+            "ctx3",
+            serde_json::json!({"product_id": "product_Y", "rating": 90}),
+        ),
+        (
+            "reviews",
+            "ctx4",
+            serde_json::json!({"product_id": "product_Y", "rating": 100}),
+        ),
+        (
+            "reviews",
+            "ctx5",
+            serde_json::json!({"product_id": "product_Z", "rating": 95}),
+        ),
+        (
+            "reviews",
+            "ctx6",
+            serde_json::json!({"product_id": "product_Z", "rating": 95}),
+        ),
+    ];
+
+    for (evt, ctx, payload) in stores {
+        let store_cmd = crate::test_helpers::factories::CommandFactory::store()
+            .with_event_type(evt)
+            .with_context_id(ctx)
+            .with_payload(payload)
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+    sleep(Duration::from_millis(400)).await;
+
+    // Flush to ensure all data is persisted to segments
+    let flush_cmd = crate::command::types::Command::Flush;
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::flush::handle(
+        &flush_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("flush should succeed");
+    sleep(Duration::from_millis(1500)).await;
+
+    // PlotQL query: plot avg(rating) of reviews breakdown by product_id top 3 by count
+    // This should:
+    // 1. Compute avg(rating) (main metric) and count (ordering metric)
+    // 2. Group by product_id
+    // 3. Sort by count descending
+    // 4. Return top 3
+    let cmd = crate::command::parser::parse_command(
+        "PLOT avg(rating) of reviews breakdown by product_id top 3 by count",
+    )
+    .expect("parse PlotQL query");
+
+    let (mut reader, mut writer) = duplex(4096);
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Parse streaming frames
+    let frames: Vec<&str> = body.lines().filter(|line| !line.is_empty()).collect();
+    let mut results: Vec<(String, f64, i64)> = Vec::new();
+
+    for frame_str in frames {
+        if let Ok(frame) = serde_json::from_str::<JsonValue>(frame_str) {
+            if let Some(frame_type) = frame.get("type").and_then(|t| t.as_str()) {
+                if frame_type == "batch" {
+                    if let Some(rows) = frame.get("rows").and_then(|r| r.as_array()) {
+                        for row in rows {
+                            if let Some(row_array) = row.as_array() {
+                                // Row structure: [product_id, avg_rating, count]
+                                if let (Some(product_id), Some(avg_rating), Some(count)) = (
+                                    row_array.get(0).and_then(|v| v.as_str()),
+                                    row_array.get(1).and_then(|v| v.as_f64()),
+                                    row_array.get(2).and_then(|v| v.as_i64()),
+                                ) {
+                                    results.push((product_id.to_string(), avg_rating, count));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Verify we got exactly 3 results (top 3)
+    assert_eq!(results.len(), 3, "Should return exactly 3 products (top 3)");
+
+    // Verify ordering: should be sorted by count descending
+    // Expected order: product_Y (3), product_Z (2), product_X (1)
+    assert_eq!(
+        results[0].0, "product_Y",
+        "First result should be product_Y with highest count"
+    );
+    assert_eq!(results[0].2, 3, "product_Y should have count of 3");
+    assert!(
+        (results[0].1 - 90.0).abs() < 0.01,
+        "product_Y should have avg rating ~90.0, got {}",
+        results[0].1
+    );
+
+    assert_eq!(
+        results[1].0, "product_Z",
+        "Second result should be product_Z"
+    );
+    assert_eq!(results[1].2, 2, "product_Z should have count of 2");
+    assert!(
+        (results[1].1 - 95.0).abs() < 0.01,
+        "product_Z should have avg rating ~95.0, got {}",
+        results[1].1
+    );
+
+    assert_eq!(
+        results[2].0, "product_X",
+        "Third result should be product_X"
+    );
+    assert_eq!(results[2].2, 1, "product_X should have count of 1");
+    assert!(
+        (results[2].1 - 100.0).abs() < 0.01,
+        "product_X should have avg rating ~100.0, got {}",
+        results[2].1
+    );
+
+    // Verify descending order by count
+    assert!(
+        results[0].2 > results[1].2 && results[1].2 > results[2].2,
+        "Results should be sorted in descending order by count"
+    );
+}
+
+/// Test PlotQL ordering by a field (column) when main metric is count.
+/// Verifies that when ordering by a field like product_id, ordering happens
+/// at the engine level and works correctly with aggregation.
+#[tokio::test]
+async fn test_plotql_order_by_field_not_metric() {
+    let _guard = set_streaming_enabled(true);
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("sales", &[("product_id", "string"), ("amount", "int")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Create products with different IDs (alphabetical order):
+    // product_A: 2 sales with amounts [100, 200] -> total = 300, count = 2
+    // product_B: 1 sale with amount [500] -> total = 500, count = 1
+    // product_C: 3 sales with amounts [50, 75, 100] -> total = 225, count = 3
+    // Expected order (desc by product_id): product_C, product_B, product_A
+    let stores = vec![
+        (
+            "sales",
+            "ctx1",
+            serde_json::json!({"product_id": "product_A", "amount": 100}),
+        ),
+        (
+            "sales",
+            "ctx2",
+            serde_json::json!({"product_id": "product_A", "amount": 200}),
+        ),
+        (
+            "sales",
+            "ctx3",
+            serde_json::json!({"product_id": "product_B", "amount": 500}),
+        ),
+        (
+            "sales",
+            "ctx4",
+            serde_json::json!({"product_id": "product_C", "amount": 50}),
+        ),
+        (
+            "sales",
+            "ctx5",
+            serde_json::json!({"product_id": "product_C", "amount": 75}),
+        ),
+        (
+            "sales",
+            "ctx6",
+            serde_json::json!({"product_id": "product_C", "amount": 100}),
+        ),
+    ];
+
+    for (evt, ctx, payload) in stores {
+        let store_cmd = crate::test_helpers::factories::CommandFactory::store()
+            .with_event_type(evt)
+            .with_context_id(ctx)
+            .with_payload(payload)
+            .create();
+        let (mut _r, mut w) = duplex(1024);
+        crate::command::handlers::store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
+    }
+    sleep(Duration::from_millis(400)).await;
+
+    // Flush to ensure all data is persisted to segments
+    let flush_cmd = crate::command::types::Command::Flush;
+    let (mut _r, mut w) = duplex(1024);
+    crate::command::handlers::flush::handle(
+        &flush_cmd,
+        &shard_manager,
+        &registry,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("flush should succeed");
+    sleep(Duration::from_millis(1500)).await;
+
+    // PlotQL query: plot count of sales breakdown by product_id top 3 by product_id
+    // This should:
+    // 1. Compute count (main metric)
+    // 2. Group by product_id
+    // 3. Sort by product_id descending (field ordering, not metric)
+    // 4. Return top 3
+    let cmd = crate::command::parser::parse_command(
+        "PLOT count of sales breakdown by product_id top 3 by product_id",
+    )
+    .expect("parse PlotQL query");
+
+    let (mut reader, mut writer) = duplex(4096);
+    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Parse streaming frames
+    let frames: Vec<&str> = body.lines().filter(|line| !line.is_empty()).collect();
+    let mut results: Vec<(String, i64)> = Vec::new();
+
+    for frame_str in frames {
+        if let Ok(frame) = serde_json::from_str::<JsonValue>(frame_str) {
+            if let Some(frame_type) = frame.get("type").and_then(|t| t.as_str()) {
+                if frame_type == "batch" {
+                    if let Some(rows) = frame.get("rows").and_then(|r| r.as_array()) {
+                        for row in rows {
+                            if let Some(row_array) = row.as_array() {
+                                // Row structure: [product_id, count]
+                                if let (Some(product_id), Some(count)) = (
+                                    row_array.get(0).and_then(|v| v.as_str()),
+                                    row_array.get(1).and_then(|v| v.as_i64()),
+                                ) {
+                                    results.push((product_id.to_string(), count));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Verify we got exactly 3 results (top 3)
+    assert_eq!(results.len(), 3, "Should return exactly 3 products (top 3)");
+
+    // Verify ordering: should be sorted by product_id descending (string comparison)
+    // Expected order: product_C, product_B, product_A (descending alphabetical)
+    assert_eq!(
+        results[0].0, "product_C",
+        "First result should be product_C (highest alphabetically)"
+    );
+    assert_eq!(results[0].1, 3, "product_C should have count of 3");
+
+    assert_eq!(
+        results[1].0, "product_B",
+        "Second result should be product_B"
+    );
+    assert_eq!(results[1].1, 1, "product_B should have count of 1");
+
+    assert_eq!(
+        results[2].0, "product_A",
+        "Third result should be product_A"
+    );
+    assert_eq!(results[2].1, 2, "product_A should have count of 2");
+
+    // Verify descending order by product_id (string comparison)
+    assert!(
+        results[0].0 > results[1].0 && results[1].0 > results[2].0,
+        "Results should be sorted in descending order by product_id"
+    );
+}

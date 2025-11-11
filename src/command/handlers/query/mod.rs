@@ -1,7 +1,7 @@
 mod context;
 mod dispatch;
 mod handler;
-mod merge;
+pub mod merge;
 mod orchestrator;
 mod planner;
 mod response;
@@ -16,6 +16,9 @@ mod response_test;
 
 pub use handler::QueryCommandHandler;
 pub use orchestrator::QueryExecutionPipeline;
+
+// Re-export streaming types for use by comparison handler
+pub use streaming::{QueryResponseWriter, QueryStreamingConfig};
 
 #[cfg(test)]
 pub use streaming::set_streaming_enabled;

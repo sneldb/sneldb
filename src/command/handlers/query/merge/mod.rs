@@ -1,4 +1,4 @@
-mod aggregate_stream;
+pub mod aggregate_stream;
 mod batch_merger;
 mod ordered;
 mod sequence_stream;

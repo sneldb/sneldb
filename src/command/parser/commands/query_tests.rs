@@ -902,7 +902,8 @@ mod query_peg_tests {
 
     #[test]
     fn test_parse_query_invalid_per_unit_should_fail() {
-        let input = r#"QUERY e COUNT PER year"#;
+        // Test with an invalid time granularity unit (not HOUR, DAY, WEEK, MONTH, or YEAR)
+        let input = r#"QUERY e COUNT PER decade"#;
         assert!(parse_query_peg(input).is_err());
     }
 
