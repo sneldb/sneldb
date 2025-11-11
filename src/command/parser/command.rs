@@ -45,6 +45,9 @@ pub fn parse_command(input: &str) -> Result<Command, ParseError> {
         Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("FLUSH") => {
             commands::flush::parse(&tokens)
         }
+        Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("PLOT") => {
+            commands::plotql::parse(input)
+        }
         _ => {
             warn!(target: "sneldb::parse", input, "Unknown command keyword");
             Err(ParseError::UnknownCommand(input.into()))
