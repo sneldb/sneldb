@@ -2,9 +2,8 @@ use crate::command::handlers::query::context::QueryContext;
 use crate::command::handlers::query::planner::QueryPlanner;
 use crate::command::handlers::query::planner::rlte::RltePlanner;
 use crate::command::types::{Command, OrderSpec};
-use crate::engine::shard::manager::ShardManager;
+use crate::engine::shard::{Shard, manager::ShardManager};
 use crate::test_helpers::factories::SchemaRegistryFactory;
-use std::sync::Arc;
 use tempfile::TempDir;
 
 fn create_context_with_shard_dirs() -> (QueryContext<'static>, TempDir) {
@@ -36,7 +35,7 @@ fn create_context_with_shard_dirs() -> (QueryContext<'static>, TempDir) {
 
     let (tx, _rx) = tokio::sync::mpsc::channel(10);
     let manager = Box::leak(Box::new(ShardManager {
-        shards: vec![crate::engine::shard::Shard {
+        shards: vec![Shard {
             id: 0,
             base_dir: shard_dir.clone(),
             tx,

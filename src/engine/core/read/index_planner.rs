@@ -1,7 +1,8 @@
+use crate::command::types::CompareOp;
 use crate::engine::core::filter::filter_group::FilterGroup;
 use crate::engine::core::read::catalog::{IndexKind, IndexRegistry};
 use crate::engine::core::read::index_strategy::IndexStrategy;
-use crate::engine::schema::registry::SchemaRegistry;
+use crate::engine::schema::{FieldType, registry::SchemaRegistry};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -59,13 +60,10 @@ impl<'a> IndexPlanner<'a> {
                         .get_schema_by_uid(uid)
                         .and_then(|s| s.field_type(&field).cloned())
                         .map(|ft| match ft {
-                            crate::engine::schema::FieldType::Timestamp
-                            | crate::engine::schema::FieldType::Date => true,
-                            crate::engine::schema::FieldType::Optional(inner) => matches!(
-                                *inner,
-                                crate::engine::schema::FieldType::Timestamp
-                                    | crate::engine::schema::FieldType::Date
-                            ),
+                            FieldType::Timestamp | FieldType::Date => true,
+                            FieldType::Optional(inner) => {
+                                matches!(*inner, FieldType::Timestamp | FieldType::Date)
+                            }
                             _ => false,
                         })
                         .unwrap_or(false)
@@ -77,10 +75,10 @@ impl<'a> IndexPlanner<'a> {
         if is_temporal {
             // IN operations require checking multiple values, which temporal range indexes can't efficiently handle.
             // Use FullScan and let the condition evaluator filter events.
-            if matches!(operation, Some(crate::command::types::CompareOp::In)) {
+            if matches!(operation, Some(CompareOp::In)) {
                 return IndexStrategy::FullScan;
             }
-            if matches!(operation, Some(crate::command::types::CompareOp::Eq)) {
+            if matches!(operation, Some(CompareOp::Eq)) {
                 return IndexStrategy::TemporalEq { field };
             } else {
                 return IndexStrategy::TemporalRange { field };
@@ -99,7 +97,7 @@ impl<'a> IndexPlanner<'a> {
 
         // Range
         if let Some(op) = &operation {
-            use crate::command::types::CompareOp::*;
+            use CompareOp::*;
             if matches!(op, Gt | Gte | Lt | Lte) && kinds.contains(IndexKind::ZONE_SURF) {
                 return IndexStrategy::ZoneSuRF { field };
             }

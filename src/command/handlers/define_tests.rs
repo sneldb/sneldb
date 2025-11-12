@@ -1,7 +1,9 @@
+use crate::command::handlers::define;
 use crate::command::types::{Command, FieldSpec, MiniSchema};
 use crate::engine::schema::registry::SchemaRegistry;
 use crate::engine::schema::{EnumType, FieldType};
 use crate::engine::shard::manager::ShardManager;
+use crate::shared::response::JsonRenderer;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -41,15 +43,9 @@ async fn test_define_handler_success() {
 
     let (_reader, mut writer) = tokio::io::duplex(1024);
 
-    crate::command::handlers::define::handle(
-        &cmd,
-        &shard_manager,
-        &registry,
-        &mut writer,
-        &crate::shared::response::JsonRenderer,
-    )
-    .await
-    .unwrap();
+    define::handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
 
     // Confirm it was added to the registry
     let r = registry.read().await;
@@ -87,15 +83,9 @@ async fn test_define_handler_with_enum_field() {
 
     let (_reader, mut writer) = tokio::io::duplex(1024);
 
-    crate::command::handlers::define::handle(
-        &cmd,
-        &shard_manager,
-        &registry,
-        &mut writer,
-        &crate::shared::response::JsonRenderer,
-    )
-    .await
-    .unwrap();
+    define::handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
 
     let r = registry.read().await;
     let schema = r.get("subscription").unwrap();
@@ -136,15 +126,9 @@ async fn test_define_handler_with_optional_field() {
 
     let (_reader, mut writer) = tokio::io::duplex(1024);
 
-    crate::command::handlers::define::handle(
-        &cmd,
-        &shard_manager,
-        &registry,
-        &mut writer,
-        &crate::shared::response::JsonRenderer,
-    )
-    .await
-    .unwrap();
+    define::handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
 
     let r = registry.read().await;
     let ft = &r.get("user_profile").unwrap().fields["nickname"];
@@ -176,15 +160,9 @@ async fn test_define_handler_engine_error() {
 
     let (_reader, mut writer) = tokio::io::duplex(1024);
 
-    crate::command::handlers::define::handle(
-        &cmd,
-        &shard_manager,
-        &registry,
-        &mut writer,
-        &crate::shared::response::JsonRenderer,
-    )
-    .await
-    .unwrap();
+    define::handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
 
     let r = registry.read().await;
     assert!(r.get("invalid").is_none());

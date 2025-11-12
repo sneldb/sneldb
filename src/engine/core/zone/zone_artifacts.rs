@@ -155,7 +155,13 @@ impl<'a> ZoneArtifacts<'a> {
         if tracing::enabled!(tracing::Level::INFO) {
             tracing::info!(target: "sneldb::enum", %segment_id, %uid, field = %column, path = %path.display(), "Loading EnumBitmapIndex directly from file");
         }
-        EnumBitmapIndex::load(&path).map_err(|e| format!("Failed to load EnumBitmapIndex from {}: {:?}", path.display(), e))
+        EnumBitmapIndex::load(&path).map_err(|e| {
+            format!(
+                "Failed to load EnumBitmapIndex from {}: {:?}",
+                path.display(),
+                e
+            )
+        })
     }
 
     pub fn load_zxf(

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::engine::core::Event;
 use crate::engine::core::column::column_values::ColumnValues;
+use crate::engine::core::column::format::PhysicalType;
 use crate::engine::core::event::event_builder::EventBuilder;
 
 use super::ResultSink;
@@ -29,7 +30,6 @@ impl ResultSink for EventSink {
         // Use type information to skip unnecessary type checks
         for (field, values) in columns {
             // Fast path: use known column type if available
-            use crate::engine::core::column::format::PhysicalType;
             match values.physical_type() {
                 Some(PhysicalType::I64) => {
                     if let Some(n) = values.get_i64_at(row_idx) {

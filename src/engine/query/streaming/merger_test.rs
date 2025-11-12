@@ -5,6 +5,7 @@ use std::time::Duration;
 use serde_json::json;
 use tokio::time::timeout;
 
+use crate::command::types::Command;
 use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
 use crate::engine::core::read::flow::shard_pipeline::ShardFlowHandle;
 use crate::engine::core::read::flow::{BatchPool, BatchSchema, FlowChannel, FlowMetrics};
@@ -15,7 +16,7 @@ use crate::engine::query::streaming::merger::ShardFlowMerger;
 use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::{CommandFactory, QueryPlanFactory, SchemaRegistryFactory};
 
-async fn build_context(command: crate::command::types::Command) -> StreamingContext {
+async fn build_context(command: Command) -> StreamingContext {
     let registry_factory = SchemaRegistryFactory::new();
     registry_factory
         .define_with_fields(

@@ -1,18 +1,18 @@
 #![cfg(test)]
 
+use crate::engine::core::column::compression::compression_codec::{ALGO_LZ4, FLAG_COMPRESSED};
 use crate::engine::core::filter::surf_encoding::encode_value;
-use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
+use crate::engine::core::filter::surf_trie::SurfTrie;
+use crate::engine::core::filter::zone_surf_filter::{ZoneSurfEntry, ZoneSurfFilter};
+use crate::engine::core::zone::zone_plan::ZonePlan;
 use crate::engine::types::ScalarValue;
+use crate::shared::storage_header::{BinaryHeader, FileKind};
 use crate::test_helpers::factory::Factory;
 use serde_json::json;
 use std::collections::HashSet;
 use tempfile::tempdir;
 
-fn zone_with_events(
-    uid: &str,
-    zone_id: u32,
-    ids: &[i64],
-) -> crate::engine::core::zone::zone_plan::ZonePlan {
+fn zone_with_events(uid: &str, zone_id: u32, ids: &[i64]) -> ZonePlan {
     let events: Vec<_> = ids
         .iter()
         .map(|v| Factory::event().with("payload", json!({"id": v})).create())
@@ -463,8 +463,6 @@ fn zone_surf_gt_many_bounds_monotonic() {
 
 #[test]
 fn zonesurf_compressed_header_and_algo_lz4() {
-    use crate::engine::core::column::compression::compression_codec::{ALGO_LZ4, FLAG_COMPRESSED};
-    use crate::shared::storage_header::{BinaryHeader, FileKind};
     use std::fs::OpenOptions;
     use std::io::Read;
 
@@ -493,7 +491,6 @@ fn zonesurf_compressed_header_and_algo_lz4() {
 
 #[test]
 fn zonesurf_legacy_uncompressed_roundtrip_loads() {
-    use crate::shared::storage_header::{BinaryHeader, FileKind};
     use std::fs::OpenOptions;
     use std::io::Write;
 
@@ -523,8 +520,6 @@ fn zonesurf_legacy_uncompressed_roundtrip_loads() {
 
 #[test]
 fn zonesurf_rejects_unsupported_algo() {
-    use crate::engine::core::column::compression::compression_codec::FLAG_COMPRESSED;
-    use crate::shared::storage_header::{BinaryHeader, FileKind};
     use std::fs::OpenOptions;
     use std::io::Write;
 
@@ -557,8 +552,6 @@ fn zonesurf_rejects_unsupported_algo() {
 
 #[test]
 fn zonesurf_truncated_compressed_file_errors() {
-    use crate::engine::core::column::compression::compression_codec::FLAG_COMPRESSED;
-    use crate::shared::storage_header::{BinaryHeader, FileKind};
     use std::fs::OpenOptions;
 
     let dir = tempdir().unwrap();
@@ -586,9 +579,6 @@ fn zonesurf_truncated_compressed_file_errors() {
 
 #[test]
 fn zonesurf_no_panic_le_on_exact_length_equal() {
-    use crate::engine::core::filter::surf_trie::SurfTrie;
-    use crate::engine::core::filter::zone_surf_filter::ZoneSurfEntry;
-
     // Build a trie with keys where one key equals the bound exactly
     let keys = vec![
         encode_value(&ScalarValue::from(json!("a"))).unwrap(),
@@ -617,9 +607,6 @@ fn zonesurf_no_panic_le_on_exact_length_equal() {
 
 #[test]
 fn zonesurf_no_panic_ge_simd_tail_alignment() {
-    use crate::engine::core::filter::surf_trie::SurfTrie;
-    use crate::engine::core::filter::zone_surf_filter::ZoneSurfEntry;
-
     // Build >16 distinct single-byte keys to exercise SIMD chunk + tail path
     let mut keys: Vec<Vec<u8>> = (0u8..=20u8).map(|b| vec![b]).collect();
     // Ensure ascending and unique as required by builder

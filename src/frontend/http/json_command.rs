@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::command::types::{Command, CompareOp, Expr, MiniSchema};
+use crate::command::types::{Command, CompareOp, Expr, MiniSchema, OrderSpec};
 
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "PascalCase")]
@@ -26,7 +26,7 @@ pub enum JsonCommand {
         where_clause: Option<JsonExpr>,
         limit: Option<u32>,
         offset: Option<u32>,
-        order_by: Option<crate::command::types::OrderSpec>,
+        order_by: Option<OrderSpec>,
     },
     Replay {
         event_type: Option<String>,

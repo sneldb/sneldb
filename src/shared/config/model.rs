@@ -1,5 +1,7 @@
 use serde::Deserialize;
 
+use crate::shared::datetime::time::TimeConfig;
+
 #[derive(Debug, Deserialize)]
 pub struct Settings {
     pub wal: WalConfig,
@@ -10,7 +12,7 @@ pub struct Settings {
     pub playground: PlaygroundConfig,
     pub auth: Option<AuthConfig>,
     pub query: Option<QueryConfig>,
-    pub time: Option<crate::shared::datetime::time::TimeConfig>,
+    pub time: Option<TimeConfig>,
 }
 
 #[derive(Debug, Deserialize)]

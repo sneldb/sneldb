@@ -1,5 +1,8 @@
-use crate::command::types::{Command, Expr};
+use crate::command::types::{Command, CompareOp, Expr};
+use crate::engine::core::filter::filter_group::FilterGroup;
 use crate::engine::core::read::catalog::{IndexKind, SegmentIndexCatalog};
+use crate::engine::core::read::index_strategy::IndexStrategy;
+use crate::engine::core::read::query_plan::QueryPlan;
 use crate::engine::schema::registry::{MiniSchema, SchemaRegistry};
 use crate::engine::schema::types::FieldType;
 use std::collections::HashMap;
@@ -40,27 +43,19 @@ async fn query_plan_new_assigns_strategies_using_segment_with_catalog() {
         .with_event_type("ev")
         .with_where_clause(Expr::Compare {
             field: "id".to_string(),
-            op: crate::command::types::CompareOp::Eq,
+            op: CompareOp::Eq,
             value: serde_json::json!(1),
         })
         .create();
 
-    let plan = crate::engine::core::read::query_plan::QueryPlan::new(
-        cmd,
-        &registry,
-        base_dir.path(),
-        &seg_ids,
-    )
-    .await
-    .unwrap();
+    let plan = QueryPlan::new(cmd, &registry, base_dir.path(), &seg_ids)
+        .await
+        .unwrap();
 
     assert!(!plan.filter_groups.is_empty());
     assert!(plan.filter_groups.iter().all(|fg| {
         match fg {
-            crate::engine::core::filter::filter_group::FilterGroup::Filter {
-                index_strategy,
-                ..
-            } => index_strategy.is_some(),
+            FilterGroup::Filter { index_strategy, .. } => index_strategy.is_some(),
             _ => false,
         }
     }));
@@ -79,22 +74,13 @@ async fn query_plan_assigns_fullscan_when_no_catalogs() {
         .with_event_type("ev")
         .create();
 
-    let plan = crate::engine::core::read::query_plan::QueryPlan::new(
-        cmd,
-        &registry,
-        base_dir.path(),
-        &seg_ids,
-    )
-    .await
-    .unwrap();
+    let plan = QueryPlan::new(cmd, &registry, base_dir.path(), &seg_ids)
+        .await
+        .unwrap();
 
-    use crate::engine::core::read::index_strategy::IndexStrategy;
     assert!(plan.filter_groups.iter().all(|fg| {
         match fg {
-            crate::engine::core::filter::filter_group::FilterGroup::Filter {
-                index_strategy,
-                ..
-            } => {
+            FilterGroup::Filter { index_strategy, .. } => {
                 matches!(index_strategy.as_ref(), Some(IndexStrategy::FullScan))
             }
             _ => false,
@@ -115,21 +101,13 @@ async fn query_plan_with_no_segments_skips_strategy_assignment() {
         .with_event_type("ev")
         .create();
 
-    let plan = crate::engine::core::read::query_plan::QueryPlan::new(
-        cmd,
-        &registry,
-        base_dir.path(),
-        &seg_ids,
-    )
-    .await
-    .unwrap();
+    let plan = QueryPlan::new(cmd, &registry, base_dir.path(), &seg_ids)
+        .await
+        .unwrap();
 
     assert!(plan.filter_groups.iter().all(|fg| {
         match fg {
-            crate::engine::core::filter::filter_group::FilterGroup::Filter {
-                index_strategy,
-                ..
-            } => index_strategy.is_none(),
+            FilterGroup::Filter { index_strategy, .. } => index_strategy.is_none(),
             _ => false,
         }
     }));
@@ -151,19 +129,14 @@ async fn query_plan_aggregates_remove_implicit_since_filter() {
         .add_count()
         .create();
 
-    let plan = crate::engine::core::read::query_plan::QueryPlan::new(
-        cmd,
-        &registry,
-        base_dir.path(),
-        &seg_ids,
-    )
-    .await
-    .unwrap();
+    let plan = QueryPlan::new(cmd, &registry, base_dir.path(), &seg_ids)
+        .await
+        .unwrap();
 
     // No Gte filter for the time field should remain
     let has_implicit_since = plan.filter_groups.iter().any(|fg| {
         fg.column() == Some("timestamp")
-            && matches!(fg.operation(), Some(crate::command::types::CompareOp::Gte))
+            && matches!(fg.operation(), Some(CompareOp::Gte))
             && fg.value().and_then(|v| v.as_str().map(|s| s.to_string()))
                 == Some("2020-01-01T00:00:00Z".to_string())
     });

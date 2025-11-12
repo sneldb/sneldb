@@ -1,6 +1,7 @@
 use crate::engine::core::ZoneMeta;
 use crate::engine::core::column::column_reader::ColumnReader;
 use crate::engine::core::column::compression::{CompressionCodec, Lz4Codec};
+use crate::engine::core::column::format::{ColumnBlockHeader, PhysicalType};
 use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
 use crate::engine::core::read::cache::QueryCaches;
 use crate::engine::core::time::{TemporalCalendarIndex, ZoneTemporalIndex};
@@ -60,7 +61,7 @@ fn zone_meta_cache_reuses_arc_and_reads_from_disk_once() {
         .with("uid", uid)
         .with("segment_id", 7u64)
         .create();
-    crate::engine::core::ZoneMeta::save(uid, &[m1, m2, m3], &seg_dir).unwrap();
+    ZoneMeta::save(uid, &[m1, m2, m3], &seg_dir).unwrap();
 
     let a3 = caches
         .get_or_load_zone_meta(segment_id, uid)
@@ -86,7 +87,7 @@ fn zone_meta_cache_isolated_per_query_instances() {
         .with("uid", uid)
         .with("segment_id", 9u64)
         .create();
-    crate::engine::core::ZoneMeta::save(uid, &[m1], &seg_dir).unwrap();
+    ZoneMeta::save(uid, &[m1], &seg_dir).unwrap();
 
     // Two separate query contexts should yield separate Arcs (per-query memo only)
     let caches1 = QueryCaches::new(base_dir.clone());
@@ -340,7 +341,6 @@ fn column_handle_cache_reuses_arc() {
 }
 
 fn write_typed_varbytes_block(values: &[&str]) -> (Vec<u8>, Vec<u32>) {
-    use crate::engine::core::column::format::{ColumnBlockHeader, PhysicalType};
     // Build aux = u32 lengths, payload = concatenated bytes
     let mut aux: Vec<u8> = Vec::with_capacity(values.len() * 4);
     let mut payload: Vec<u8> = Vec::new();

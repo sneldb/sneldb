@@ -1,5 +1,6 @@
 use super::columns::ProjectionColumns;
 use super::context::ProjectionContext;
+use crate::command::types::Command;
 use crate::engine::core::QueryPlan;
 use crate::engine::core::read::aggregate::plan::{AggregateOpSpec, AggregatePlan};
 use std::collections::HashSet;
@@ -23,7 +24,7 @@ impl<'a> ProjectionStrategy for SelectionProjection<'a> {
 
         // For sequence queries, include the link_field in columns to load
         // This is needed for grouping events by the link field value
-        if let crate::command::types::Command::Query {
+        if let Command::Query {
             link_field: Some(link_field),
             ..
         } = &self.plan.command
@@ -32,7 +33,7 @@ impl<'a> ProjectionStrategy for SelectionProjection<'a> {
         }
 
         let mode_all = match &self.plan.command {
-            crate::command::types::Command::Query { return_fields, .. } => match return_fields {
+            Command::Query { return_fields, .. } => match return_fields {
                 None => true,
                 Some(v) if v.is_empty() => true,
                 Some(_v) => false,
@@ -43,7 +44,7 @@ impl<'a> ProjectionStrategy for SelectionProjection<'a> {
         let all_payload = ctx.payload_fields().await;
         if mode_all {
             set.add_many(all_payload.clone());
-        } else if let crate::command::types::Command::Query {
+        } else if let Command::Query {
             return_fields: Some(list),
             ..
         } = &self.plan.command
@@ -92,9 +93,7 @@ impl<'a> ProjectionStrategy for AggregationProjection<'a> {
         // time bucket requires the selected time field (defaults to core "timestamp")
         if self.agg.time_bucket.is_some() {
             let tf = match &self.plan.command {
-                crate::command::types::Command::Query { time_field, .. } => {
-                    time_field.as_deref().unwrap_or("timestamp")
-                }
+                Command::Query { time_field, .. } => time_field.as_deref().unwrap_or("timestamp"),
                 _ => "timestamp",
             };
             set.add(tf);

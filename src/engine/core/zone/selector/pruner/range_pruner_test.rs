@@ -4,6 +4,7 @@ use serde_json::json;
 use tempfile::tempdir;
 
 use crate::command::types::CompareOp;
+use crate::engine::core::Flusher;
 use crate::engine::core::QueryCaches;
 use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::engine::core::zone::selector::builder::ZoneSelectorBuilder;
@@ -56,7 +57,7 @@ async fn surf_ge_and_le_inclusive_boundaries_id_field() {
         .with_events(vec![a, b])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem1,
         1,
         &seg1,
@@ -83,7 +84,7 @@ async fn surf_ge_and_le_inclusive_boundaries_id_field() {
         .with_events(vec![c, d])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem2,
         2,
         &seg2,
@@ -182,7 +183,7 @@ async fn surf_gt_and_lt_exclusive_boundaries_id_field() {
         .with_events(vec![a])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem1,
         1,
         &seg1,
@@ -204,7 +205,7 @@ async fn surf_gt_and_lt_exclusive_boundaries_id_field() {
         .with_events(vec![b])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem2,
         2,
         &seg2,
@@ -312,7 +313,7 @@ async fn skips_surf_for_payload_temporal_field() {
         .with_events(vec![a, b])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem,
         1,
         &seg1,

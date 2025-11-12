@@ -10,6 +10,7 @@ use arrow_schema::{ArrowError, DataType, Field, Schema, TimeUnit};
 use serde_json::Value;
 
 use crate::engine::core::read::flow::{BatchSchema, ColumnBatch};
+use crate::engine::core::read::result::ColumnSpec;
 use crate::engine::types::ScalarValue;
 use crate::shared::response::render::{Renderer, StreamingFormat};
 use crate::shared::response::types::{Response, ResponseBody, StatusCode};
@@ -588,7 +589,6 @@ fn extract_f64(value: &Value) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::core::read::result::ColumnSpec;
     use arrow_ipc::reader::StreamReader;
     use serde_json::json;
     use std::io::Cursor;
@@ -608,7 +608,6 @@ mod tests {
         .expect("schema");
         let schema_arc = Arc::new(schema);
 
-        use crate::engine::types::ScalarValue;
         let rows = vec![(json!(1), json!("alpha")), (json!(2), json!("beta"))];
 
         let columns = vec![

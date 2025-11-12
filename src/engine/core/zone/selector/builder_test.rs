@@ -2,8 +2,12 @@ use std::sync::Arc;
 
 use tempfile::tempdir;
 
-use crate::engine::core::zone::selector::builder::ZoneSelectorBuilder;
-use crate::engine::core::zone::selector::selection_context::SelectionContext;
+use crate::command::types::CompareOp;
+use crate::engine::core::Flusher;
+use crate::engine::core::zone::candidate_zone::CandidateZone;
+use crate::engine::core::zone::selector::{
+    builder::ZoneSelectorBuilder, selection_context::SelectionContext,
+};
 
 use crate::test_helpers::factories::command_factory::CommandFactory;
 use crate::test_helpers::factories::filter_group_factory::FilterGroupFactory;
@@ -74,10 +78,7 @@ async fn builder_returns_all_zones_when_context_id_missing_uid() {
 
     let selector = ZoneSelectorBuilder::new(ctx).build();
     let zones = selector.select_for_segment("seg1");
-    let all_zones =
-        crate::engine::core::zone::candidate_zone::CandidateZone::create_all_zones_for_segment(
-            "seg1",
-        );
+    let all_zones = CandidateZone::create_all_zones_for_segment("seg1");
     assert_eq!(
         zones.len(),
         all_zones.len(),
@@ -155,7 +156,7 @@ async fn builder_routes_event_type_and_context_to_index_selector() {
         .with_events(vec![e])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem,
         1,
         &seg_dir,
@@ -177,7 +178,7 @@ async fn builder_routes_event_type_and_context_to_index_selector() {
         .await;
     let fp = FilterGroupFactory::new()
         .with_column("event_type")
-        .with_operation(crate::command::types::CompareOp::Eq)
+        .with_operation(CompareOp::Eq)
         .with_value(serde_json::json!(event_type))
         .with_uid(&uid)
         .create();
@@ -187,15 +188,14 @@ async fn builder_routes_event_type_and_context_to_index_selector() {
         base_dir: &shard_dir,
         caches: None,
     };
-    let selector =
-        crate::engine::core::zone::selector::builder::ZoneSelectorBuilder::new(ctx).build();
+    let selector = ZoneSelectorBuilder::new(ctx).build();
     let zones = selector.select_for_segment("001");
     assert!(!zones.is_empty());
 
     // context_id filter -> IndexZoneSelector with policy AllZones
     let fp2 = FilterGroupFactory::new()
         .with_column("context_id")
-        .with_operation(crate::command::types::CompareOp::Eq)
+        .with_operation(CompareOp::Eq)
         .with_value(serde_json::json!("c1"))
         .with_uid(&uid)
         .create();
@@ -205,8 +205,7 @@ async fn builder_routes_event_type_and_context_to_index_selector() {
         base_dir: &shard_dir,
         caches: None,
     };
-    let selector2 =
-        crate::engine::core::zone::selector::builder::ZoneSelectorBuilder::new(ctx2).build();
+    let selector2 = ZoneSelectorBuilder::new(ctx2).build();
     let zones2 = selector2.select_for_segment("001");
     assert!(!zones2.is_empty());
 }

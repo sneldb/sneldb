@@ -1,3 +1,4 @@
+use crate::command::types::Command;
 use crate::engine::core::{
     Event, EventId, ExecutionStep, MemTable, MemTableQueryRunner, QueryCaches, QueryContext,
     QueryPlan, SegmentQueryRunner,
@@ -183,7 +184,7 @@ impl<'a> QueryExecution<'a> {
 
     /// Checks if the query is a sequence query (has event_sequence and link_field).
     fn is_sequence_query(&self) -> bool {
-        if let crate::command::types::Command::Query {
+        if let Command::Query {
             event_sequence,
             link_field,
             ..

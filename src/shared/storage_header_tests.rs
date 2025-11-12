@@ -261,10 +261,7 @@ fn filekind_all_magic_values() {
 #[test]
 fn materialization_catalog_entry_magic_value() {
     // Specific test for the new MaterializationCatalogEntry file kind
-    assert_eq!(
-        FileKind::MaterializationCatalogEntry.magic(),
-        *b"EVDBMCE\0"
-    );
+    assert_eq!(FileKind::MaterializationCatalogEntry.magic(), *b"EVDBMCE\0");
 
     // Verify it's different from other materialization-related file kinds
     assert_ne!(
@@ -589,7 +586,6 @@ fn header_debug_format() {
 
 #[test]
 fn open_and_header_offset_validates_magic() {
-    use crate::shared::storage_header::open_and_header_offset;
     use std::fs::OpenOptions;
     use std::io::Write;
 

@@ -12,7 +12,7 @@ pub use cache::{
     CacheOutcome, GlobalMaterializationCatalogCache, MaterializationCatalogCacheStats,
 };
 pub use entry::MaterializationEntry;
-pub use entry_file::{entry_file_path, EntryFile};
+pub use entry_file::{EntryFile, entry_file_path};
 pub use index::{CatalogIndex, IndexEntry, IndexFile};
 pub use policy::RetentionPolicy;
 pub use schema::SchemaSnapshot;

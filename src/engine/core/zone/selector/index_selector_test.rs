@@ -2,9 +2,11 @@ use std::sync::Arc;
 
 use tempfile::tempdir;
 
+use crate::engine::core::zone::candidate_zone::CandidateZone;
 use crate::engine::core::zone::selector::index_selector::{IndexZoneSelector, MissingIndexPolicy};
 use crate::engine::core::zone::selector::selector_kind::ZoneSelector;
 use crate::engine::core::zone::zone_artifacts::ZoneArtifacts;
+use crate::engine::core::zone::zone_index::ZoneIndex;
 
 use crate::test_helpers::factories::command_factory::CommandFactory;
 use crate::test_helpers::factories::query_plan_factory::QueryPlanFactory;
@@ -49,10 +51,7 @@ async fn index_selector_no_context_returns_all_zones_on_missing_index() {
     };
 
     let zones = selector.select_for_segment("seg1");
-    let all_zones =
-        crate::engine::core::zone::candidate_zone::CandidateZone::create_all_zones_for_segment(
-            "seg1",
-        );
+    let all_zones = CandidateZone::create_all_zones_for_segment("seg1");
     assert_eq!(zones.len(), all_zones.len());
     assert!(zones.iter().all(|z| z.segment_id == "seg1"));
 }
@@ -75,7 +74,6 @@ async fn index_selector_aggregates_zones_from_index() {
 
     // Write ZoneIndex with multiple contexts and multiple zone ids
     {
-        use crate::engine::core::zone::zone_index::ZoneIndex;
         let mut fac = ZoneIndexFactory::new();
         fac = fac.with_entry(event_type, "ctxA", 0);
         fac = fac.with_entry(event_type, "ctxA", 2);
@@ -132,7 +130,6 @@ async fn index_selector_context_uses_index_when_present() {
 
     // Write ZoneIndex mapping (event_type, ctxA) -> [0]
     {
-        use crate::engine::core::zone::zone_index::ZoneIndex;
         let mut fac = ZoneIndexFactory::new();
         fac = fac.with_entry(event_type, "ctxA", 0);
         let idx: ZoneIndex = fac.create();

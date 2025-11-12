@@ -4,6 +4,7 @@ use serde_json::json;
 use tempfile::tempdir;
 
 use crate::command::types::CompareOp;
+use crate::engine::core::Flusher;
 use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::engine::core::zone::selector::builder::ZoneSelectorBuilder;
 use crate::engine::core::zone::selector::selection_context::SelectionContext;
@@ -54,7 +55,7 @@ async fn enum_pruner_handles_unknown_variant_and_empty_index() {
         .with_events(vec![ev])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem,
         1,
         &seg1,
@@ -166,7 +167,7 @@ async fn enum_pruner_multiple_variants_same_zone_dedupes() {
         .with_events(vec![a, b])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem,
         1,
         &seg1,

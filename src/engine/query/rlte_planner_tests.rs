@@ -1,9 +1,13 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use crate::command::types::{CompareOp, Expr};
 use crate::engine::core::read::query_plan::QueryPlan;
 use crate::engine::core::zone::rlte_index::RlteIndex;
+use crate::engine::core::{ZonePlanner, ZoneWriter};
 use crate::engine::query::rlte_planner::plan_with_rlte;
+use crate::engine::schema::registry::SchemaRegistry;
+use crate::shared::config::CONFIG;
 use crate::test_helpers::factories::{CommandFactory, EventFactory, SchemaRegistryFactory};
 use std::sync::Arc;
 
@@ -14,12 +18,7 @@ async fn seed_segments_with_field(
     field: &str,
     segments: usize,
     zones_per_segment: usize,
-) -> (
-    Arc<tokio::sync::RwLock<crate::engine::schema::registry::SchemaRegistry>>,
-    String,
-) {
-    use crate::engine::core::{ZonePlanner, ZoneWriter};
-    use crate::shared::config::CONFIG;
+) -> (Arc<tokio::sync::RwLock<SchemaRegistry>>, String) {
     use std::sync::Arc;
     std::fs::create_dir_all(shard_dir).unwrap();
 
@@ -201,9 +200,9 @@ async fn test_planner_where_lt_small_skips_rlte() {
     let (registry, _uid) = seed_segments_with_field(&shard_dir, event_type, field, 2, 5).await;
 
     // Build command: WHERE score < 10, ORDER BY score ASC LIMIT 2
-    let where_expr = crate::command::types::Expr::Compare {
+    let where_expr = Expr::Compare {
         field: field.to_string(),
-        op: crate::command::types::CompareOp::Lt,
+        op: CompareOp::Lt,
         value: serde_json::json!(10),
     };
     let cmd = CommandFactory::query()
@@ -254,9 +253,9 @@ async fn test_planner_desc_where_gt_small_limit() {
     let (registry, _uid) = seed_segments_with_field(&shard_dir, event_type, field, 1, 20).await;
 
     // WHERE score > modest threshold should keep many zones; with small LIMIT, RLTE should plan
-    let where_expr = crate::command::types::Expr::Compare {
+    let where_expr = Expr::Compare {
         field: field.to_string(),
-        op: crate::command::types::CompareOp::Gt,
+        op: CompareOp::Gt,
         value: serde_json::json!(100_000),
     };
     let cmd = CommandFactory::query()
@@ -305,7 +304,6 @@ async fn test_planner_where_on_other_field_does_not_refine() {
 
     // Define both fields; seed zones with increasing score and fixed rank
     let (registry, _uid) = {
-        use crate::engine::core::{ZonePlanner, ZoneWriter};
         std::fs::create_dir_all(&shard_dir).unwrap();
         let factory = SchemaRegistryFactory::new();
         let registry = factory.registry();
@@ -319,7 +317,7 @@ async fn test_planner_where_on_other_field_does_not_refine() {
         std::fs::create_dir_all(&segment_dir).unwrap();
         let mut events = Vec::new();
         for z in 0..20 {
-            for i in 0..crate::shared::config::CONFIG.engine.event_per_zone {
+            for i in 0..CONFIG.engine.event_per_zone {
                 let score = (z * 100_000 + i) as i64;
                 let payload = serde_json::json!({ order_field: score, other_field: 1 });
                 events.push(
@@ -338,9 +336,9 @@ async fn test_planner_where_on_other_field_does_not_refine() {
     };
 
     // WHERE on different field should not prune RLTE candidates for score
-    let where_expr = crate::command::types::Expr::Compare {
+    let where_expr = Expr::Compare {
         field: other_field.to_string(),
-        op: crate::command::types::CompareOp::Gt,
+        op: CompareOp::Gt,
         value: serde_json::json!(0),
     };
     let cmd = CommandFactory::query()

@@ -55,14 +55,12 @@ impl<'a> TemporalPruner<'a> {
                         self.artifacts
                             .load_field_calendar(segment_id, uid, "timestamp")
                     {
-                        let zones =
-                            cal.zones_intersecting(crate::command::types::CompareOp::Eq, ts as i64);
+                        let zones = cal.zones_intersecting(CompareOp::Eq, ts as i64);
                         zone_ids = zones.iter().map(|zid| zid as u32).collect();
                     }
                 } else if let Ok(cal) = self.artifacts.load_field_calendar(segment_id, uid, column)
                 {
-                    let zones =
-                        cal.zones_intersecting(crate::command::types::CompareOp::Eq, ts as i64);
+                    let zones = cal.zones_intersecting(CompareOp::Eq, ts as i64);
                     zone_ids = zones.iter().map(|zid| zid as u32).collect();
                 } else {
                     return None;

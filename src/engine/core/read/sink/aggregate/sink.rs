@@ -1,8 +1,8 @@
 use super::super::ResultSink;
 use super::group_key::GroupKey;
-use crate::command::types::TimeGranularity;
+use crate::command::types::{Command, TimeGranularity};
 use crate::engine::core::column::column_values::ColumnValues;
-use crate::engine::core::read::aggregate::ops::AggregatorImpl;
+use crate::engine::core::read::aggregate::ops::{AggOutput, AggregatorImpl};
 use crate::engine::core::read::aggregate::partial::{
     AggPartial, AggState, GroupKey as PartialKey, snapshot_aggregator,
 };
@@ -52,7 +52,7 @@ impl AggregateSink {
     /// Construct from full QueryPlan to honor selected time field for bucketing.
     pub fn from_query_plan(plan: &QueryPlan, agg: &AggregatePlan) -> Self {
         let time_field = match &plan.command {
-            crate::command::types::Command::Query { time_field, .. } => time_field
+            Command::Query { time_field, .. } => time_field
                 .clone()
                 .unwrap_or_else(|| "timestamp".to_string()),
             _ => "timestamp".to_string(),
@@ -140,58 +140,37 @@ impl AggregateSink {
 
             for (spec, outv) in self.specs.iter().zip(aggs.iter().map(|a| a.finalize())) {
                 let (key, val) = match (spec, outv) {
-                    (
-                        AggregateOpSpec::CountAll,
-                        crate::engine::core::read::aggregate::ops::AggOutput::Count(v),
-                    ) => ("count".to_string(), ScalarValue::Int64(v as i64)),
-                    (
-                        AggregateOpSpec::CountField { field },
-                        crate::engine::core::read::aggregate::ops::AggOutput::Count(v),
-                    ) => (format!("count_{}", field), ScalarValue::Int64(v as i64)),
-                    (
-                        AggregateOpSpec::CountUnique { field },
-                        crate::engine::core::read::aggregate::ops::AggOutput::CountUnique(v),
-                    ) => (
+                    (AggregateOpSpec::CountAll, AggOutput::Count(v)) => {
+                        ("count".to_string(), ScalarValue::Int64(v as i64))
+                    }
+                    (AggregateOpSpec::CountField { field }, AggOutput::Count(v)) => {
+                        (format!("count_{}", field), ScalarValue::Int64(v as i64))
+                    }
+                    (AggregateOpSpec::CountUnique { field }, AggOutput::CountUnique(v)) => (
                         format!("count_unique_{}", field),
                         ScalarValue::Int64(v as i64),
                     ),
-                    (
-                        AggregateOpSpec::Total { field },
-                        crate::engine::core::read::aggregate::ops::AggOutput::Sum(v),
-                    ) => (format!("total_{}", field), ScalarValue::Int64(v)),
-                    (
-                        AggregateOpSpec::Avg { field },
-                        crate::engine::core::read::aggregate::ops::AggOutput::Avg(v),
-                    ) => (format!("avg_{}", field), ScalarValue::Float64(v)),
-                    (
-                        AggregateOpSpec::Min { field },
-                        crate::engine::core::read::aggregate::ops::AggOutput::Min(v),
-                    ) => (format!("min_{}", field), ScalarValue::Utf8(v)),
-                    (
-                        AggregateOpSpec::Max { field },
-                        crate::engine::core::read::aggregate::ops::AggOutput::Max(v),
-                    ) => (format!("max_{}", field), ScalarValue::Utf8(v)),
+                    (AggregateOpSpec::Total { field }, AggOutput::Sum(v)) => {
+                        (format!("total_{}", field), ScalarValue::Int64(v))
+                    }
+                    (AggregateOpSpec::Avg { field }, AggOutput::Avg(v)) => {
+                        (format!("avg_{}", field), ScalarValue::Float64(v))
+                    }
+                    (AggregateOpSpec::Min { field }, AggOutput::Min(v)) => {
+                        (format!("min_{}", field), ScalarValue::Utf8(v))
+                    }
+                    (AggregateOpSpec::Max { field }, AggOutput::Max(v)) => {
+                        (format!("max_{}", field), ScalarValue::Utf8(v))
+                    }
                     (_, other) => (
                         "metric".to_string(),
                         match other {
-                            crate::engine::core::read::aggregate::ops::AggOutput::Count(v) => {
-                                ScalarValue::Int64(v as i64)
-                            }
-                            crate::engine::core::read::aggregate::ops::AggOutput::CountUnique(
-                                v,
-                            ) => ScalarValue::Int64(v as i64),
-                            crate::engine::core::read::aggregate::ops::AggOutput::Sum(v) => {
-                                ScalarValue::Int64(v)
-                            }
-                            crate::engine::core::read::aggregate::ops::AggOutput::Min(v) => {
-                                ScalarValue::Utf8(v)
-                            }
-                            crate::engine::core::read::aggregate::ops::AggOutput::Max(v) => {
-                                ScalarValue::Utf8(v)
-                            }
-                            crate::engine::core::read::aggregate::ops::AggOutput::Avg(v) => {
-                                ScalarValue::Float64(v)
-                            }
+                            AggOutput::Count(v) => ScalarValue::Int64(v as i64),
+                            AggOutput::CountUnique(v) => ScalarValue::Int64(v as i64),
+                            AggOutput::Sum(v) => ScalarValue::Int64(v),
+                            AggOutput::Min(v) => ScalarValue::Utf8(v),
+                            AggOutput::Max(v) => ScalarValue::Utf8(v),
+                            AggOutput::Avg(v) => ScalarValue::Float64(v),
                         },
                     ),
                 };

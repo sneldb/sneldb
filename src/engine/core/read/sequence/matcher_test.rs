@@ -1,7 +1,10 @@
-use crate::command::types::{EventSequence, EventTarget, SequenceLink};
+use crate::command::types::{CompareOp, EventSequence, EventTarget, Expr, SequenceLink};
 use crate::engine::core::CandidateZone;
+use crate::engine::core::column::column_values::ColumnValues;
+use crate::engine::core::read::cache::DecompressedBlock;
 use crate::engine::core::read::sequence::group::ColumnarGrouper;
 use crate::engine::core::read::sequence::matcher::SequenceMatcher;
+use crate::engine::core::read::sequence::where_evaluator::SequenceWhereEvaluator;
 use crate::engine::schema::registry::{MiniSchema, SchemaRegistry};
 use crate::engine::schema::types::FieldType;
 use std::collections::HashMap;
@@ -41,8 +44,6 @@ fn create_test_zone(
     user_ids: &[&str],
     timestamps: &[i64],
 ) -> CandidateZone {
-    use crate::engine::core::column::column_values::ColumnValues;
-    use crate::engine::core::read::cache::DecompressedBlock;
     use std::sync::Arc;
 
     let mut values_map: HashMap<String, ColumnValues> = HashMap::new();
@@ -359,9 +360,9 @@ async fn test_match_followed_by_with_where_clause() {
     let groups = grouper.group_zones_by_link_field(&zones_by_type);
 
     // Create WHERE clause: page_view.page = "/checkout"
-    let where_clause = crate::command::types::Expr::Compare {
+    let where_clause = Expr::Compare {
         field: "page_view.page".to_string(),
-        op: crate::command::types::CompareOp::Eq,
+        op: CompareOp::Eq,
         value: serde_json::json!("/checkout"),
     };
 
@@ -369,12 +370,7 @@ async fn test_match_followed_by_with_where_clause() {
     let event_types = vec!["page_view".to_string(), "order_created".to_string()];
     let registry =
         create_test_registry(&[("page_view", &["page"]), ("order_created", &["status"])]).await;
-    let where_evaluator =
-        crate::engine::core::read::sequence::where_evaluator::SequenceWhereEvaluator::new(
-            Some(&where_clause),
-            &event_types,
-            &registry,
-        )
+    let where_evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry)
         .await
         .expect("Should create evaluator");
 
@@ -439,9 +435,9 @@ async fn test_match_preceded_by_with_where_clause() {
     let groups = grouper.group_zones_by_link_field(&zones_by_type);
 
     // Create WHERE clause: order_created.status = "done"
-    let where_clause = crate::command::types::Expr::Compare {
+    let where_clause = Expr::Compare {
         field: "order_created.status".to_string(),
-        op: crate::command::types::CompareOp::Eq,
+        op: CompareOp::Eq,
         value: serde_json::json!("done"),
     };
 
@@ -452,12 +448,7 @@ async fn test_match_preceded_by_with_where_clause() {
         ("order_created", &["status"]),
     ])
     .await;
-    let where_evaluator =
-        crate::engine::core::read::sequence::where_evaluator::SequenceWhereEvaluator::new(
-            Some(&where_clause),
-            &event_types,
-            &registry,
-        )
+    let where_evaluator = SequenceWhereEvaluator::new(Some(&where_clause), &event_types, &registry)
         .await
         .expect("Should create evaluator");
 
@@ -500,8 +491,6 @@ fn create_test_zone_with_payload(
     timestamps: &[i64],
     payload_fields: &std::collections::HashMap<String, Vec<String>>,
 ) -> CandidateZone {
-    use crate::engine::core::column::column_values::ColumnValues;
-    use crate::engine::core::read::cache::DecompressedBlock;
     use std::sync::Arc;
 
     let mut values_map: HashMap<String, ColumnValues> = HashMap::new();

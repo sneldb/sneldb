@@ -1,11 +1,13 @@
 use crate::command::handlers::compare::ComparisonCommandHandler;
 #[cfg(test)]
 use crate::command::handlers::query::set_streaming_enabled;
+use crate::command::handlers::store;
 use crate::command::parser::commands::plotql;
 use crate::command::types::{AggSpec, Command, QueryCommand, TimeGranularity};
+use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
 use crate::logging::init_for_tests;
-use crate::shared::response::JsonRenderer;
+use crate::shared::response::{JsonRenderer, render::Renderer};
 use crate::test_helpers::factories::{CommandFactory, SchemaRegistryFactory};
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -15,9 +17,9 @@ use tokio::time::{Duration, sleep};
 async fn execute_comparison<W: AsyncWrite + Unpin>(
     cmd: &Command,
     shard_manager: &ShardManager,
-    registry: &Arc<tokio::sync::RwLock<crate::engine::schema::SchemaRegistry>>,
+    registry: &Arc<tokio::sync::RwLock<SchemaRegistry>>,
     writer: &mut W,
-    renderer: &dyn crate::shared::response::render::Renderer,
+    renderer: &dyn Renderer,
 ) -> std::io::Result<()> {
     ComparisonCommandHandler::new(cmd, shard_manager, Arc::clone(registry), writer, renderer)
         .handle()
@@ -225,15 +227,9 @@ async fn test_comparison_handler_basic_two_way_comparison() {
             .with_payload(serde_json::json!({ "amount": amount, "created_at": 1000 }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     // Store some payment events
@@ -244,15 +240,9 @@ async fn test_comparison_handler_basic_two_way_comparison() {
             .with_payload(serde_json::json!({ "amount": amount, "created_at": 1000 }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(400)).await;
@@ -316,15 +306,9 @@ async fn test_comparison_handler_three_way_comparison() {
             .with_payload(serde_json::json!({ "value": value }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(400)).await;
@@ -387,15 +371,9 @@ async fn test_comparison_handler_with_time_bucket() {
             }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(400)).await;
@@ -457,15 +435,9 @@ async fn test_comparison_handler_with_breakdown() {
             }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(400)).await;
@@ -527,15 +499,9 @@ async fn test_comparison_handler_with_per_side_filters() {
             }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(400)).await;
@@ -635,15 +601,9 @@ async fn test_comparison_handler_same_event_type_uses_fallback_prefixes() {
             }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(400)).await;
@@ -788,15 +748,9 @@ async fn test_comparison_handler_with_multiple_metrics() {
             }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(400)).await;
@@ -908,15 +862,9 @@ async fn test_comparison_handler_with_shared_time_and_breakdown() {
             }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(400)).await;

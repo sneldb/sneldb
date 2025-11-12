@@ -8,6 +8,7 @@ use crate::engine::core::zone::enum_bitmap_index::EnumBitmapBuilder;
 use crate::engine::core::zone::index_build_planner::{BuildPlan, IndexBuildPlanner};
 use crate::engine::core::zone::index_build_policy::IndexBuildPolicy;
 use crate::engine::core::zone::rlte_index::RlteIndex;
+use crate::engine::core::zone::zone_meta::ZoneMeta;
 use crate::engine::core::zone::zone_metadata_writer::ZoneMetadataWriter;
 use crate::engine::core::zone::zone_xor_index::build_all_zxf_filtered;
 use crate::engine::core::{ZoneIndex, ZonePlan};
@@ -99,7 +100,7 @@ impl<'a> ZoneWriter<'a> {
         }
         // CalendarDir from ZoneMeta ranges
         let zones_meta_path = self.segment_dir.join(format!("{}.zones", self.uid));
-        let metas = crate::engine::core::zone::zone_meta::ZoneMeta::load(&zones_meta_path)
+        let metas = ZoneMeta::load(&zones_meta_path)
             .map_err(|e| StoreError::FlushFailed(format!("Failed to load zone meta: {}", e)))?;
         let mut cal = CalendarDir::new();
         for m in &metas {

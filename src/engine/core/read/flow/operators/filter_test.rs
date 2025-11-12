@@ -3,15 +3,16 @@ use std::sync::Arc;
 use serde_json::json;
 
 use crate::engine::core::read::flow::{
-    BatchSchema, FlowChannel, FlowContext, FlowMetrics, FlowOperator, FlowTelemetry,
+    BatchPool, BatchSchema, FlowChannel, FlowContext, FlowMetrics, FlowOperator, FlowTelemetry,
 };
 use crate::engine::core::read::result::ColumnSpec;
+use crate::engine::types::ScalarValue;
 
 use super::{FilterOp, FilterPredicate};
 
 fn test_context() -> Arc<FlowContext> {
     let metrics = FlowMetrics::new();
-    let pool = crate::engine::core::read::flow::BatchPool::new(8).unwrap();
+    let pool = BatchPool::new(8).unwrap();
     Arc::new(FlowContext::new(
         8,
         pool,
@@ -47,7 +48,6 @@ async fn filter_op_drops_rows() {
     let (tx, rx) = FlowChannel::bounded(4, Arc::clone(ctx.metrics()));
     let (out_tx, mut out_rx) = FlowChannel::bounded(4, Arc::clone(ctx.metrics()));
 
-    use crate::engine::types::ScalarValue;
     let mut builder = ctx.pool().acquire(Arc::clone(&schema));
     for value in 0..6 {
         builder

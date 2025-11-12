@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::command::types::Command;
 use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
 use crate::engine::query::streaming::builders::FlowBuilders;
 use crate::engine::query::streaming::context::StreamingContext;
@@ -13,7 +14,7 @@ use tokio::time::timeout;
 
 async fn build_context(
     registry_factory: &SchemaRegistryFactory,
-    command: crate::command::types::Command,
+    command: Command,
     batch_size: usize,
 ) -> StreamingContext {
     let plan = QueryPlanFactory::new()

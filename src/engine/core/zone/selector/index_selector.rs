@@ -1,6 +1,6 @@
 use crate::engine::core::zone::selector::pruner::materialization_pruner::MaterializationPruner;
 use crate::engine::core::zone::selector::selector_kind::ZoneSelector;
-use crate::engine::core::zone::zone_artifacts::ZoneArtifacts;
+use crate::engine::core::zone::{zone_artifacts::ZoneArtifacts, zone_meta::ZoneMeta};
 use crate::engine::core::{CandidateZone, QueryCaches, QueryPlan};
 
 #[derive(Debug)]
@@ -56,8 +56,7 @@ impl<'a> ZoneSelector for IndexZoneSelector<'a> {
                         .map(|arc| (*arc).clone())
                         .map_err(|e| format!("{:?}", e))
                 } else {
-                    crate::engine::core::zone::zone_meta::ZoneMeta::load(&zones_path)
-                        .map_err(|e| format!("{:?}", e))
+                    ZoneMeta::load(&zones_path).map_err(|e| format!("{:?}", e))
                 };
 
                 if let Ok(zone_metas) = zone_metas_result {

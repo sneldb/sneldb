@@ -333,7 +333,8 @@ fn watermark_advances_with_missing_values() {
     // Row 0: (100, 10) - both valid
     // Row 1: (None, 20) - timestamp missing, not considered for advancement
     // Row 2: (150, None) - event_id missing, not considered for advancement
-    let batch = build_batch_with_missing_values(&[Some(100), None, Some(150)], &[Some(10), Some(20), None]);
+    let batch =
+        build_batch_with_missing_values(&[Some(100), None, Some(150)], &[Some(10), Some(20), None]);
     let mut dedup = WatermarkDeduplicator::new(HighWaterMark::new(90, 5), Some(0), Some(1));
 
     let _filtered = dedup.filter(batch);
@@ -347,7 +348,10 @@ fn watermark_advances_with_missing_values() {
 #[test]
 fn watermark_advances_with_partial_missing_values() {
     // Test that watermark advances correctly when some rows have both values
-    let batch = build_batch_with_missing_values(&[Some(100), Some(150), None], &[Some(10), Some(20), Some(30)]);
+    let batch = build_batch_with_missing_values(
+        &[Some(100), Some(150), None],
+        &[Some(10), Some(20), Some(30)],
+    );
     let mut dedup = WatermarkDeduplicator::new(HighWaterMark::new(90, 5), Some(0), Some(1));
 
     let _filtered = dedup.filter(batch);
@@ -428,13 +432,7 @@ fn handles_missing_timestamp_column_gracefully() {
     );
 
     let batch = Arc::new(
-        ColumnBatch::new(
-            schema,
-            vec![vec![ScalarValue::from(json!(10))]],
-            1,
-            None,
-        )
-        .expect("batch"),
+        ColumnBatch::new(schema, vec![vec![ScalarValue::from(json!(10))]], 1, None).expect("batch"),
     );
 
     // Use None for timestamp_idx since column doesn't exist
@@ -461,13 +459,8 @@ fn handles_missing_event_id_column_gracefully() {
     );
 
     let batch = Arc::new(
-        ColumnBatch::new(
-            schema,
-            vec![vec![ScalarValue::from(json!(150))]],
-            1,
-            None,
-        )
-        .expect("batch"),
+        ColumnBatch::new(schema, vec![vec![ScalarValue::from(json!(150))]], 1, None)
+            .expect("batch"),
     );
 
     let mut dedup = WatermarkDeduplicator::new(HighWaterMark::new(100, 10), Some(0), Some(0));
@@ -539,11 +532,7 @@ fn handles_very_large_watermark() {
 
 #[test]
 fn handles_context_id_column_when_present() {
-    let batch = build_batch_with_context_id(
-        &[100, 150],
-        &[10, 20],
-        &["ctx1", "ctx2"],
-    );
+    let batch = build_batch_with_context_id(&[100, 150], &[10, 20], &["ctx1", "ctx2"]);
     let mut dedup = WatermarkDeduplicator::new(HighWaterMark::new(90, 5), Some(0), Some(1));
 
     let filtered = dedup.filter(batch).expect("filtered batch");

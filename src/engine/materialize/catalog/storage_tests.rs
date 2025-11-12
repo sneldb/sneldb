@@ -57,7 +57,10 @@ fn insert_creates_entry_file() -> Result<(), MaterializationError> {
     let entry = new_entry("orders_daily", catalog.root_dir());
     catalog.insert(entry)?;
 
-    let entry_path = catalog.root_dir().join("orders_daily").join("entry.mcatentry");
+    let entry_path = catalog
+        .root_dir()
+        .join("orders_daily")
+        .join("entry.mcatentry");
     assert!(entry_path.exists());
     Ok(())
 }
@@ -97,7 +100,10 @@ fn remove_deletes_entry_file() -> Result<(), MaterializationError> {
     let entry = new_entry("orders_daily", catalog.root_dir());
     catalog.insert(entry)?;
 
-    let entry_path = catalog.root_dir().join("orders_daily").join("entry.mcatentry");
+    let entry_path = catalog
+        .root_dir()
+        .join("orders_daily")
+        .join("entry.mcatentry");
     assert!(entry_path.exists());
 
     catalog.remove("orders_daily")?;
@@ -291,4 +297,3 @@ fn catalog_handles_large_number_of_entries() -> Result<(), MaterializationError>
     assert_eq!(loaded.unwrap().name, "entry_50");
     Ok(())
 }
-

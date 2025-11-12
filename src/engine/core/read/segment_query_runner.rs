@@ -1,7 +1,7 @@
 use crate::engine::core::read::flow::{BatchSchema, BatchSender, FlowContext, FlowOperatorError};
 use crate::engine::core::{
-    ConditionEvaluatorBuilder, Event, EventSorter, ExecutionStep, QueryCaches, QueryContext,
-    QueryPlan, ZoneHydrator,
+    CandidateZone, ConditionEvaluatorBuilder, Event, EventSorter, ExecutionStep, QueryCaches,
+    QueryContext, QueryPlan, ZoneHydrator,
 };
 use crate::engine::types::ScalarValue;
 use std::cmp::Ordering;
@@ -62,7 +62,7 @@ impl<'a> SegmentQueryRunner<'a> {
     }
 
     /// Hydrates candidate zones, applying zone filtering if present in context.
-    async fn hydrate_zones(&self, ctx: &QueryContext) -> Vec<crate::engine::core::CandidateZone> {
+    async fn hydrate_zones(&self, ctx: &QueryContext) -> Vec<CandidateZone> {
         ZoneHydrator::new(self.plan, self.steps.clone())
             .with_caches(self.caches)
             .with_allowed_zones(ctx.picked_zones.clone())
@@ -83,11 +83,7 @@ impl<'a> SegmentQueryRunner<'a> {
     }
 
     /// Evaluates zones to produce matching events.
-    fn evaluate_zones(
-        &self,
-        zones: Vec<crate::engine::core::CandidateZone>,
-        limit: Option<usize>,
-    ) -> Vec<Event> {
+    fn evaluate_zones(&self, zones: Vec<CandidateZone>, limit: Option<usize>) -> Vec<Event> {
         let evaluator = ConditionEvaluatorBuilder::build_from_plan(self.plan);
         evaluator.evaluate_zones_with_limit(zones, limit)
     }

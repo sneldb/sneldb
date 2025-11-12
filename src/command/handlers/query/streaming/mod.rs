@@ -3,6 +3,8 @@ mod response_writer;
 #[cfg(test)]
 mod response_writer_test;
 
+use crate::shared::config::CONFIG;
+
 pub use response_writer::QueryResponseWriter;
 
 pub struct QueryStreamingConfig;
@@ -18,7 +20,7 @@ impl QueryStreamingConfig {
         }
 
         // Fall back to config
-        crate::shared::config::CONFIG
+        CONFIG
             .query
             .as_ref()
             .and_then(|cfg| cfg.streaming_enabled)

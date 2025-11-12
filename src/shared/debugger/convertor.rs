@@ -4,9 +4,15 @@ use std::fs::File;
 use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 
+use crate::engine::core::FieldXorFilter;
 use crate::engine::core::ZoneIndex;
 use crate::engine::core::ZoneMeta;
-use crate::engine::schema::registry::MiniSchema;
+use crate::engine::core::column::compression::compressed_column_index::CompressedColumnIndex;
+use crate::engine::core::column::compression::compression_codec::{
+    ALGO_LZ4, CompressionCodec, FLAG_COMPRESSED, Lz4Codec,
+};
+use crate::engine::core::zone::enum_bitmap_index::EnumBitmapIndex;
+use crate::engine::schema::registry::{MiniSchema, SchemaRecord, SchemaRegistry};
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 use serde::Serialize;
 
@@ -89,11 +95,6 @@ pub fn main() {
                 eprintln!("Usage: convertor col <path/to/segment_dir> <uid> <field>");
                 std::process::exit(1);
             }
-
-            use crate::engine::core::column::compression::compressed_column_index::CompressedColumnIndex;
-            use crate::engine::core::column::compression::compression_codec::{
-                CompressionCodec, Lz4Codec,
-            };
 
             let segment_path = Path::new(&args[2]);
             let uid = &args[3];
@@ -300,7 +301,6 @@ pub fn main() {
             }
             let schema_dir = Path::new(&args[2]);
             let schema_path = schema_dir.join("schemas.bin");
-            use crate::engine::schema::registry::SchemaRegistry;
             match SchemaRegistry::new_with_path(schema_path) {
                 Ok(registry) => {
                     let all = registry.get_all();
@@ -328,7 +328,6 @@ pub fn main() {
             let event_type = &args[3];
             let schema_path = schema_dir.join("schemas.bin");
 
-            use crate::engine::schema::registry::SchemaRegistry;
             match SchemaRegistry::new_with_path(schema_path) {
                 Ok(registry) => {
                     #[derive(Serialize)]
@@ -366,7 +365,6 @@ pub fn main() {
             }
             let schema_path = Path::new(&args[2]);
 
-            use crate::engine::schema::registry::{SchemaRecord, SchemaRegistry};
             match SchemaRegistry::new_with_path(schema_path.to_path_buf()) {
                 Ok(registry) => {
                     let mut records = Vec::new();
@@ -485,7 +483,7 @@ pub fn main() {
                 println!("----------------------------------------");
 
                 // Load the XOR filter
-                let filter = match crate::engine::core::FieldXorFilter::load(&filter_path) {
+                let filter = match FieldXorFilter::load(&filter_path) {
                     Ok(f) => f,
                     Err(e) => {
                         eprintln!("Failed to load XOR filter: {}", e);
@@ -591,7 +589,6 @@ pub fn main() {
                 std::process::exit(1);
             }
 
-            use crate::engine::core::zone::enum_bitmap_index::EnumBitmapIndex;
             use serde::Serialize;
 
             let segment_path = Path::new(&args[2]);

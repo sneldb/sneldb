@@ -1,4 +1,7 @@
-use crate::engine::core::compaction::handover::CompactionHandover;
+use crate::engine::core::compaction::{
+    handover::CompactionHandover,
+    policy::{CompactionPolicy, KWayCountPolicy},
+};
 use crate::engine::core::utils::system_info_cache::get_system_info_cache;
 use crate::engine::core::{CompactionWorker, IoMonitor, SegmentIndex};
 use crate::engine::schema::SchemaRegistry;
@@ -53,9 +56,6 @@ pub async fn start_background_compactor(
                 Ok(segment_index) => {
                     warn!(shard_id, "Segment index loaded");
                     // Policy-based trigger: run only if there are plans
-                    use crate::engine::core::compaction::policy::{
-                        CompactionPolicy, KWayCountPolicy,
-                    };
                     let policy = KWayCountPolicy::default();
                     let plans = CompactionPolicy::plan(&policy, &segment_index);
                     if !plans.is_empty() {

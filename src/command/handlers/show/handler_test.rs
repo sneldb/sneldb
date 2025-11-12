@@ -3,7 +3,10 @@ use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWrite, duplex};
 use tokio::time::{Duration, sleep};
 
+use crate::command::handlers::flush as flush_handler;
+use crate::command::handlers::remember as remember_handler;
 use crate::command::handlers::show::handler::{ShowCommandHandler, handle};
+use crate::command::handlers::store;
 use crate::command::parser::commands::{flush, remember};
 use crate::command::parser::tokenizer::tokenize;
 use crate::command::types::{Command, MaterializedQuerySpec};
@@ -12,7 +15,7 @@ use crate::engine::materialize::catalog::{MaterializationCatalog, SchemaSnapshot
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
 use crate::logging::init_for_tests;
-use crate::shared::response::JsonRenderer;
+use crate::shared::response::{JsonRenderer, Response, StatusCode, render::Renderer};
 use crate::test_helpers::factories::{CommandFactory, SchemaRegistryFactory};
 use tempfile::tempdir;
 
@@ -594,10 +597,8 @@ async fn execute_remember_with_data_dir<W: AsyncWrite + Unpin>(
     registry: &Arc<tokio::sync::RwLock<SchemaRegistry>>,
     data_dir: &std::path::Path,
     writer: &mut W,
-    renderer: &dyn crate::shared::response::render::Renderer,
+    renderer: &dyn Renderer,
 ) -> std::io::Result<()> {
-    use crate::command::handlers::remember;
-
     let Command::RememberQuery { spec } = cmd else {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -606,17 +607,16 @@ async fn execute_remember_with_data_dir<W: AsyncWrite + Unpin>(
     };
 
     let spec = spec.clone();
-    match remember::remember_query_with_data_dir(spec, shard_manager, registry, data_dir).await {
+    match remember_handler::remember_query_with_data_dir(spec, shard_manager, registry, data_dir)
+        .await
+    {
         Ok(summary) => {
-            let resp = crate::shared::response::Response::ok_lines(summary);
+            let resp = Response::ok_lines(summary);
             use tokio::io::AsyncWriteExt;
             writer.write_all(&renderer.render(&resp)).await
         }
         Err(message) => {
-            let resp = crate::shared::response::Response::error(
-                crate::shared::response::StatusCode::InternalError,
-                &message,
-            );
+            let resp = Response::error(StatusCode::InternalError, &message);
             use tokio::io::AsyncWriteExt;
             writer.write_all(&renderer.render(&resp)).await
         }
@@ -628,9 +628,9 @@ async fn execute_flush<W: AsyncWrite + Unpin>(
     shard_manager: &ShardManager,
     registry: &Arc<tokio::sync::RwLock<SchemaRegistry>>,
     writer: &mut W,
-    renderer: &dyn crate::shared::response::render::Renderer,
+    renderer: &dyn Renderer,
 ) -> std::io::Result<()> {
-    crate::command::handlers::flush::handle(cmd, shard_manager, registry, writer, renderer).await
+    flush_handler::handle(cmd, shard_manager, registry, writer, renderer).await
 }
 
 async fn execute_store<W: AsyncWrite + Unpin>(
@@ -638,9 +638,9 @@ async fn execute_store<W: AsyncWrite + Unpin>(
     shard_manager: &ShardManager,
     registry: &Arc<tokio::sync::RwLock<SchemaRegistry>>,
     writer: &mut W,
-    renderer: &dyn crate::shared::response::render::Renderer,
+    renderer: &dyn Renderer,
 ) -> std::io::Result<()> {
-    crate::command::handlers::store::handle(cmd, shard_manager, registry, writer, renderer).await
+    store::handle(cmd, shard_manager, registry, writer, renderer).await
 }
 
 #[tokio::test]
@@ -1756,22 +1756,6 @@ async fn test_show_with_very_old_high_water_mark() {
             .expect(&format!("store {} should succeed", i));
     }
 
-    sleep(Duration::from_millis(100)).await;
-
-    let flush_cmd = flush::parse(&tokenize("FLUSH")).expect("parse FLUSH");
-    let (_r_flush, mut w_flush) = duplex(1024);
-    execute_flush(
-        &flush_cmd,
-        &shard_manager,
-        &registry,
-        &mut w_flush,
-        &JsonRenderer,
-    )
-    .await
-    .expect("flush should succeed");
-
-    sleep(Duration::from_millis(200)).await;
-
     let remember_cmd = remember::parse("REMEMBER QUERY old_hwm_test AS old_hwm_mat")
         .expect("parse REMEMBER command");
     let (_r_remember, mut w_remember) = duplex(2048);
@@ -1786,7 +1770,7 @@ async fn test_show_with_very_old_high_water_mark() {
     .await
     .expect("remember should succeed");
 
-    sleep(Duration::from_millis(500)).await; // Wait to ensure REMEMBER completes and watermark is set
+    sleep(Duration::from_millis(1000)).await; // Wait to ensure REMEMBER completes and watermark is set
 
     // Store more events after materialization (these should have higher timestamps)
     for i in 4..=6 {

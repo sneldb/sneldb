@@ -1,6 +1,7 @@
 use crate::command::parser::error::ParseError;
 use crate::command::types::{
-    AggSpec, Command, CompareOp, EventSequence, EventTarget, Expr, SequenceLink, TimeGranularity,
+    AggSpec, Command, CompareOp, EventSequence, EventTarget, Expr, OrderSpec, SequenceLink,
+    TimeGranularity,
 };
 use serde_json::{Number, Value};
 
@@ -302,7 +303,7 @@ struct QueryParts {
     group_by: Option<Vec<String>>,
     limit: Option<u32>,
     offset: Option<u32>,
-    order_by: Option<crate::command::types::OrderSpec>,
+    order_by: Option<OrderSpec>,
 }
 
 impl QueryParts {
@@ -330,9 +331,7 @@ impl QueryParts {
             }
             Clause::Limit(n) => self.limit = Some(n),
             Clause::Offset(n) => self.offset = Some(n),
-            Clause::Order(f, desc) => {
-                self.order_by = Some(crate::command::types::OrderSpec { field: f, desc })
-            }
+            Clause::Order(f, desc) => self.order_by = Some(OrderSpec { field: f, desc }),
         }
     }
 

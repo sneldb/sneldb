@@ -1,4 +1,5 @@
 use crate::command::handlers::flush::handle;
+use crate::command::types::Command;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
 use crate::engine::shard::message::ShardMessage;
@@ -24,7 +25,7 @@ async fn test_flush_dispatches_message_to_all_shards() {
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // Create dummy command (content is irrelevant for flush)
-    let cmd = crate::command::types::Command::Flush;
+    let cmd = Command::Flush;
 
     // Setup fake writer
     let (_reader, mut writer) = duplex(1024);

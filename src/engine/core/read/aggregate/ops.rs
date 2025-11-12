@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use crate::engine::core::Event;
 use crate::engine::core::column::column_values::ColumnValues;
 use crate::engine::core::read::aggregate::plan::AggregateOpSpec;
 
@@ -95,7 +96,7 @@ impl AggregatorImpl {
     }
 
     /// Update aggregator using a row from a full `Event` (row-based path)
-    pub fn update_from_event(&mut self, event: &crate::engine::core::Event) {
+    pub fn update_from_event(&mut self, event: &Event) {
         match self {
             AggregatorImpl::CountAll(a) => a.update(),
             AggregatorImpl::CountField(a) => {

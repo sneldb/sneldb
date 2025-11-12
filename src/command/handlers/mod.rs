@@ -27,6 +27,8 @@ mod query_batch_stream_test;
 #[cfg(test)]
 mod query_tests;
 #[cfg(test)]
+mod remember_tests;
+#[cfg(test)]
 mod replay_tests;
 #[cfg(test)]
 mod rlte_coordinator_test;
@@ -36,7 +38,5 @@ mod row_comparator_test;
 mod segment_discovery_test;
 #[cfg(test)]
 mod shard_command_builder_test;
-#[cfg(test)]
-mod remember_tests;
 #[cfg(test)]
 mod store_tests;

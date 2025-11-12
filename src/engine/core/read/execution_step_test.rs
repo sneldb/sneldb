@@ -1,6 +1,7 @@
 use crate::command::types::{CompareOp, Expr};
 use crate::engine::core::ExecutionStep;
 use crate::engine::core::read::index_strategy::IndexStrategy;
+use crate::engine::core::zone::zone_index::ZoneIndex;
 use crate::test_helpers::factories::{
     CommandFactory, FieldXorFilterFactory, FilterGroupFactory, QueryPlanFactory,
     SchemaRegistryFactory,
@@ -287,7 +288,6 @@ async fn execution_step_context_id_respects_subset() {
 
     // Write ZoneIndex only in seg1 for ctxA, and a non-matching index in seg2
     {
-        use crate::engine::core::zone::zone_index::ZoneIndex;
         use crate::test_helpers::factories::zone_index_factory::ZoneIndexFactory;
         let mut fac = ZoneIndexFactory::new();
         fac = fac.with_entry(event_type, "ctxA", 0);
@@ -296,7 +296,6 @@ async fn execution_step_context_id_respects_subset() {
             .unwrap();
     }
     {
-        use crate::engine::core::zone::zone_index::ZoneIndex;
         use crate::test_helpers::factories::zone_index_factory::ZoneIndexFactory;
         let mut fac = ZoneIndexFactory::new();
         fac = fac.with_entry(event_type, "ctxB", 0);

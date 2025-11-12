@@ -2,6 +2,7 @@ use super::aggregate_stream::AggregateStreamMerger;
 use super::streaming::{OrderedStreamMerger, UnorderedStreamMerger};
 use crate::command::handlers::query::context::QueryContext;
 use crate::command::handlers::query_batch_stream::QueryBatchStream;
+use crate::command::types::Command;
 use crate::engine::core::read::flow::shard_pipeline::ShardFlowHandle;
 
 /// Merger kind for streaming query results, handling ordered, unordered, and aggregate cases.
@@ -15,12 +16,12 @@ impl StreamMergerKind {
     /// Creates a StreamMergerKind appropriate for the given context.
     pub fn for_context(ctx: &QueryContext<'_>) -> Self {
         // Check for aggregate queries first (aggregates now support ORDER BY in streaming)
-        if let crate::command::types::Command::Query { aggs: Some(_), .. } = ctx.command {
+        if let Command::Query { aggs: Some(_), .. } = ctx.command {
             return StreamMergerKind::Aggregate(AggregateStreamMerger::new(ctx.command));
         }
 
         // Check for ORDER BY
-        if let crate::command::types::Command::Query {
+        if let Command::Query {
             order_by: Some(order_by),
             limit,
             offset,

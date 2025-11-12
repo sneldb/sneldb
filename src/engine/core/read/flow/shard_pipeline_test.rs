@@ -2,10 +2,11 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use serde_json::json;
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 
-use crate::engine::core::read::flow::{BatchPool, FlowContext, FlowMetrics, FlowTelemetry};
+use crate::command::types::AggSpec;
 use crate::engine::core::read::cache::QueryCaches;
+use crate::engine::core::read::flow::{BatchPool, FlowContext, FlowMetrics, FlowTelemetry};
 use crate::test_helpers::factories::{
     CommandFactory, EventFactory, MemTableFactory, QueryPlanFactory, SchemaRegistryFactory,
 };
@@ -346,15 +347,9 @@ async fn memtable_flow_handles_none_memtable() {
 
     let ctx = create_flow_context();
 
-    let handle = build_memtable_flow(
-        Arc::new(plan),
-        None,
-        Vec::new(),
-        Arc::clone(&ctx),
-        None,
-    )
-    .await
-    .unwrap();
+    let handle = build_memtable_flow(Arc::new(plan), None, Vec::new(), Arc::clone(&ctx), None)
+        .await
+        .unwrap();
 
     let mut receiver = handle.receiver;
     let mut count = 0;
@@ -521,7 +516,10 @@ async fn memtable_flow_with_return_fields_projection() {
             .with("context_id", "ctx1")
             .with("timestamp", 10)
             .with("event_type", "flow_event")
-            .with("payload", json!({"value": 5, "other": "test", "extra": true}))
+            .with(
+                "payload",
+                json!({"value": 5, "other": "test", "extra": true}),
+            )
             .create(),
     ];
 
@@ -622,7 +620,6 @@ async fn memtable_flow_with_empty_return_fields() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn memtable_flow_with_aggregate() {
-    use crate::command::types::AggSpec;
     let registry = SchemaRegistryFactory::new();
     registry
         .define_with_fields("flow_event", &[("value", "int")])
@@ -942,7 +939,6 @@ async fn segment_stream_with_return_fields() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn segment_stream_with_aggregate() {
-    use crate::command::types::AggSpec;
     let registry = SchemaRegistryFactory::new();
     registry
         .define_with_fields("flow_event", &[("value", "int")])
@@ -998,7 +994,7 @@ async fn return_projection_handles_duplicate_fields() {
         .with_event_type("flow_event")
         .with_return_fields(vec![
             "value",
-            "value", // duplicate
+            "value",      // duplicate
             "context_id", // core field (should be included anyway)
         ])
         .create();

@@ -1,4 +1,4 @@
-use crate::command::types::{CompareOp, Expr};
+use crate::command::types::{Command, CompareOp, Expr};
 use crate::engine::core::ConditionEvaluatorBuilder;
 use crate::test_helpers::factories::{
     CommandFactory, EventFactory, QueryPlanFactory, SchemaRegistryFactory,
@@ -37,7 +37,7 @@ async fn builds_evaluator_from_command_factory_and_filters_correctly() {
     builder.add_special_fields(&plan);
 
     if let Some(expr) = match &command {
-        crate::command::types::Command::Query { where_clause, .. } => where_clause.as_ref(),
+        Command::Query { where_clause, .. } => where_clause.as_ref(),
         _ => None,
     } {
         builder.add_where_clause(expr);
@@ -337,8 +337,6 @@ async fn build_from_plan_adds_special_fields_when_not_aggregated() {
 
 #[tokio::test]
 async fn build_from_plan_skips_special_fields_for_aggregation() {
-    use crate::command::types::{CompareOp, Expr};
-
     // Aggregation command: adds COUNT to ensure aggregate_plan is Some
     let command = CommandFactory::query()
         .with_event_type("evt")

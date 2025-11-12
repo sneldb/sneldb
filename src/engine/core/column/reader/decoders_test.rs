@@ -1,5 +1,5 @@
 use crate::engine::core::column::format::{ColumnBlockHeader, PhysicalType};
-use crate::engine::core::column::reader::decoders::decoder_for;
+use crate::engine::core::column::reader::{decoders::decoder_for, view::ColumnBlockView};
 use crate::engine::core::read::cache::DecompressedBlock;
 use std::sync::Arc;
 
@@ -39,8 +39,7 @@ fn decode_varbytes() {
     let aux = [5u32.to_le_bytes(), 2u32.to_le_bytes()].concat();
     let payload = b"helloZZ".to_vec();
     let block = make_block(PhysicalType::VarBytes, 0, 2, aux, payload);
-    let view =
-        crate::engine::core::column::reader::view::ColumnBlockView::parse(&block.bytes).unwrap();
+    let view = ColumnBlockView::parse(&block.bytes).unwrap();
     let vals = decoder_for(view.phys)
         .build_values(&view, 2, Arc::clone(&block))
         .unwrap();
@@ -64,8 +63,7 @@ fn decode_i64() {
         aux,
         payload,
     );
-    let view =
-        crate::engine::core::column::reader::view::ColumnBlockView::parse(&block.bytes).unwrap();
+    let view = ColumnBlockView::parse(&block.bytes).unwrap();
     let vals = decoder_for(view.phys)
         .build_values(&view, rows as usize, Arc::clone(&block))
         .unwrap();

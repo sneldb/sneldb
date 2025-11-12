@@ -14,6 +14,7 @@ use serde_json::json;
 use super::{BatchError, BatchPool, BatchSchema, ColumnBatch, ColumnBatchBuilder};
 use crate::engine::core::read::result::ColumnSpec;
 use crate::engine::types::ScalarValue;
+use crate::shared::response::arrow::build_arrow_schema;
 use crate::test_helpers::factories::ColumnSpecFactory;
 
 fn make_schema() -> Arc<BatchSchema> {
@@ -413,8 +414,6 @@ fn column_batch_record_batch_conversion_on_demand() {
 // ==================== ColumnBatch Tests - Arrow Creation ====================
 
 fn create_test_record_batch(schema: &Arc<BatchSchema>) -> RecordBatch {
-    use crate::shared::response::arrow::build_arrow_schema;
-
     let arrow_schema = build_arrow_schema(schema).expect("arrow schema should build");
     let mut arrays: Vec<ArrayRef> = Vec::new();
 

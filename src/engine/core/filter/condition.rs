@@ -1,5 +1,7 @@
 use crate::command::types::CompareOp as CommandCompareOp;
 use crate::command::types::Expr;
+use crate::engine::core::column::column_values::ColumnValues;
+use crate::engine::core::filter::direct_event_accessor::DirectEventAccessor;
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
@@ -20,10 +22,7 @@ pub trait Condition: Send + Sync + Debug {
 
     /// Fast path evaluation against a single event without materializing all fields.
     /// All implementors must override this for optimal memtable query performance.
-    fn evaluate_event_direct(
-        &self,
-        accessor: &crate::engine::core::filter::direct_event_accessor::DirectEventAccessor,
-    ) -> bool;
+    fn evaluate_event_direct(&self, accessor: &DirectEventAccessor) -> bool;
 
     /// Indicates whether this condition (or any of its descendants) requires numeric access.
     fn is_numeric(&self) -> bool {
@@ -50,14 +49,12 @@ pub trait FieldAccessor {
 /// A concrete accessor over a zone's columnar values that lazily builds
 /// per-column numeric caches to avoid repeated string parsing.
 pub struct PreparedAccessor<'a> {
-    columns: &'a HashMap<String, crate::engine::core::column::column_values::ColumnValues>,
+    columns: &'a HashMap<String, ColumnValues>,
     event_count: usize,
 }
 
 impl<'a> PreparedAccessor<'a> {
-    pub fn new(
-        columns: &'a HashMap<String, crate::engine::core::column::column_values::ColumnValues>,
-    ) -> Self {
+    pub fn new(columns: &'a HashMap<String, ColumnValues>) -> Self {
         let event_count = columns.values().next().map(|v| v.len()).unwrap_or(0);
         Self {
             columns,
@@ -362,10 +359,7 @@ impl Condition for NumericCondition {
         false
     }
 
-    fn evaluate_event_direct(
-        &self,
-        accessor: &crate::engine::core::filter::direct_event_accessor::DirectEventAccessor,
-    ) -> bool {
+    fn evaluate_event_direct(&self, accessor: &DirectEventAccessor) -> bool {
         if let Some(num) = accessor.get_field_as_i64(&self.field) {
             match self.operation {
                 CompareOp::Gt => num > self.value,
@@ -448,10 +442,7 @@ impl Condition for StringCondition {
         }
     }
 
-    fn evaluate_event_direct(
-        &self,
-        accessor: &crate::engine::core::filter::direct_event_accessor::DirectEventAccessor,
-    ) -> bool {
+    fn evaluate_event_direct(&self, accessor: &DirectEventAccessor) -> bool {
         let val = accessor.get_field_value(&self.field);
         match self.operation {
             CompareOp::Eq => val == self.value,
@@ -533,10 +524,7 @@ impl Condition for InNumericCondition {
         false
     }
 
-    fn evaluate_event_direct(
-        &self,
-        accessor: &crate::engine::core::filter::direct_event_accessor::DirectEventAccessor,
-    ) -> bool {
+    fn evaluate_event_direct(&self, accessor: &DirectEventAccessor) -> bool {
         if let Some(num) = accessor.get_field_as_i64(&self.field) {
             self.values.contains(&num)
         } else {
@@ -600,10 +588,7 @@ impl Condition for InStringCondition {
         }
     }
 
-    fn evaluate_event_direct(
-        &self,
-        accessor: &crate::engine::core::filter::direct_event_accessor::DirectEventAccessor,
-    ) -> bool {
+    fn evaluate_event_direct(&self, accessor: &DirectEventAccessor) -> bool {
         let val = accessor.get_field_value(&self.field);
         self.values.contains(&val)
     }
@@ -652,10 +637,7 @@ impl Condition for LogicalCondition {
         }
     }
 
-    fn evaluate_event_direct(
-        &self,
-        accessor: &crate::engine::core::filter::direct_event_accessor::DirectEventAccessor,
-    ) -> bool {
+    fn evaluate_event_direct(&self, accessor: &DirectEventAccessor) -> bool {
         match self.operation {
             LogicalOp::And => self
                 .conditions

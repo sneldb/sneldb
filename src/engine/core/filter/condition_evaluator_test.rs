@@ -1,5 +1,5 @@
 use crate::engine::core::column::column_values::ColumnValues;
-use crate::engine::core::filter::condition::CompareOp;
+use crate::engine::core::filter::condition::{CompareOp, PreparedAccessor};
 use crate::engine::core::filter::condition_evaluator::ConditionEvaluator;
 use crate::engine::core::read::cache::DecompressedBlock;
 use crate::engine::core::zone::candidate_zone::CandidateZone;
@@ -88,7 +88,6 @@ fn evaluates_zone_with_mixed_conditions() {
 
 #[test]
 fn evaluate_row_at_works_with_accessor() {
-    use crate::engine::core::filter::condition::PreparedAccessor;
     // Build a small zone-like columns map with two rows
     let mut values = HashMap::new();
     values.insert("timestamp".to_string(), vec!["100".into(), "200".into()]);
@@ -493,7 +492,6 @@ fn in_numeric_condition_with_limit() {
 
 #[test]
 fn in_numeric_condition_with_evaluate_row_at() {
-    use crate::engine::core::filter::condition::PreparedAccessor;
     let mut values = HashMap::new();
     values.insert(
         "id".to_string(),
@@ -522,7 +520,6 @@ fn in_numeric_condition_with_evaluate_row_at() {
 
 #[test]
 fn in_string_condition_with_evaluate_row_at() {
-    use crate::engine::core::filter::condition::PreparedAccessor;
     let mut values = HashMap::new();
     values.insert(
         "status".to_string(),

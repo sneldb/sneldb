@@ -4,7 +4,9 @@ use std::sync::Arc;
 use crate::command::types::TimeGranularity;
 use crate::engine::core::read::aggregate::partial::{AggState, GroupKey};
 use crate::engine::core::read::aggregate::plan::{AggregateOpSpec, AggregatePlan};
-use crate::engine::core::read::flow::{BatchPool, BatchSchema, ColumnBatch};
+use crate::engine::core::read::flow::{
+    BatchPool, BatchSchema, ColumnBatch, FlowChannel, FlowMetrics,
+};
 use crate::engine::core::read::result::ColumnSpec;
 use crate::engine::types::ScalarValue;
 
@@ -1229,10 +1231,7 @@ async fn emit_merged_groups_filters_empty_groups() {
         vec![AggState::CountAll { count: 2 }],
     );
 
-    let (tx, mut rx) = crate::engine::core::read::flow::FlowChannel::bounded(
-        10,
-        crate::engine::core::read::flow::FlowMetrics::new(),
-    );
+    let (tx, mut rx) = FlowChannel::bounded(10, FlowMetrics::new());
 
     AggregateStreamMerger::emit_merged_groups(
         merged_groups,
@@ -1242,7 +1241,7 @@ async fn emit_merged_groups_filters_empty_groups() {
         None,
         None,
         tx,
-        crate::engine::core::read::flow::FlowMetrics::new(),
+        FlowMetrics::new(),
     )
     .await
     .unwrap();
@@ -1270,10 +1269,7 @@ async fn emit_merged_groups_scalar_no_filtering() {
         vec![AggState::CountAll { count: 10 }],
     );
 
-    let (tx, mut rx) = crate::engine::core::read::flow::FlowChannel::bounded(
-        10,
-        crate::engine::core::read::flow::FlowMetrics::new(),
-    );
+    let (tx, mut rx) = FlowChannel::bounded(10, FlowMetrics::new());
 
     AggregateStreamMerger::emit_merged_groups(
         merged_groups,
@@ -1283,7 +1279,7 @@ async fn emit_merged_groups_scalar_no_filtering() {
         None,
         None,
         tx,
-        crate::engine::core::read::flow::FlowMetrics::new(),
+        FlowMetrics::new(),
     )
     .await
     .unwrap();
@@ -1316,10 +1312,7 @@ async fn emit_merged_groups_applies_limit() {
         );
     }
 
-    let (tx, mut rx) = crate::engine::core::read::flow::FlowChannel::bounded(
-        10,
-        crate::engine::core::read::flow::FlowMetrics::new(),
-    );
+    let (tx, mut rx) = FlowChannel::bounded(10, FlowMetrics::new());
 
     AggregateStreamMerger::emit_merged_groups(
         merged_groups,
@@ -1329,7 +1322,7 @@ async fn emit_merged_groups_applies_limit() {
         None,
         None,
         tx,
-        crate::engine::core::read::flow::FlowMetrics::new(),
+        FlowMetrics::new(),
     )
     .await
     .unwrap();
@@ -1353,10 +1346,7 @@ async fn emit_merged_groups_empty_groups_returns_nothing() {
 
     let merged_groups: HashMap<GroupKey, Vec<AggState>> = HashMap::new();
 
-    let (tx, mut rx) = crate::engine::core::read::flow::FlowChannel::bounded(
-        10,
-        crate::engine::core::read::flow::FlowMetrics::new(),
-    );
+    let (tx, mut rx) = FlowChannel::bounded(10, FlowMetrics::new());
 
     AggregateStreamMerger::emit_merged_groups(
         merged_groups,
@@ -1366,7 +1356,7 @@ async fn emit_merged_groups_empty_groups_returns_nothing() {
         None,
         None,
         tx,
-        crate::engine::core::read::flow::FlowMetrics::new(),
+        FlowMetrics::new(),
     )
     .await
     .unwrap();
@@ -1423,10 +1413,7 @@ async fn emit_merged_groups_complex_output() {
         ],
     );
 
-    let (tx, mut rx) = crate::engine::core::read::flow::FlowChannel::bounded(
-        10,
-        crate::engine::core::read::flow::FlowMetrics::new(),
-    );
+    let (tx, mut rx) = FlowChannel::bounded(10, FlowMetrics::new());
 
     AggregateStreamMerger::emit_merged_groups(
         merged_groups,
@@ -1436,7 +1423,7 @@ async fn emit_merged_groups_complex_output() {
         None,
         None,
         tx,
-        crate::engine::core::read::flow::FlowMetrics::new(),
+        FlowMetrics::new(),
     )
     .await
     .unwrap();
@@ -1624,10 +1611,7 @@ async fn emit_merged_groups_limit_exceeds_groups() {
         vec![AggState::CountAll { count: 5 }],
     );
 
-    let (tx, mut rx) = crate::engine::core::read::flow::FlowChannel::bounded(
-        10,
-        crate::engine::core::read::flow::FlowMetrics::new(),
-    );
+    let (tx, mut rx) = FlowChannel::bounded(10, FlowMetrics::new());
 
     AggregateStreamMerger::emit_merged_groups(
         merged_groups,
@@ -1637,7 +1621,7 @@ async fn emit_merged_groups_limit_exceeds_groups() {
         None,
         None,
         tx,
-        crate::engine::core::read::flow::FlowMetrics::new(),
+        FlowMetrics::new(),
     )
     .await
     .unwrap();
@@ -1671,10 +1655,7 @@ async fn emit_merged_groups_large_batch_splits() {
         );
     }
 
-    let (tx, mut rx) = crate::engine::core::read::flow::FlowChannel::bounded(
-        10,
-        crate::engine::core::read::flow::FlowMetrics::new(),
-    );
+    let (tx, mut rx) = FlowChannel::bounded(10, FlowMetrics::new());
 
     AggregateStreamMerger::emit_merged_groups(
         merged_groups,
@@ -1684,7 +1665,7 @@ async fn emit_merged_groups_large_batch_splits() {
         None,
         None,
         tx,
-        crate::engine::core::read::flow::FlowMetrics::new(),
+        FlowMetrics::new(),
     )
     .await
     .unwrap();

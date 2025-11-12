@@ -1,10 +1,9 @@
 use crate::engine::core::QueryCaches;
 use crate::engine::core::column::column_block_snapshot::ColumnBlockSnapshot;
 use crate::engine::core::column::column_values::ColumnValues;
-use crate::engine::core::column::compression::CompressedColumnIndex;
-use crate::engine::core::column::format::PhysicalType;
-use crate::engine::core::column::reader::decompress;
-use crate::engine::core::column::reader::io;
+use crate::engine::core::column::compression::{CompressedColumnIndex, ZoneBlockEntry};
+use crate::engine::core::column::format::{ColumnBlockHeader, PhysicalType};
+use crate::engine::core::column::reader::{decompress, io, view::ColumnBlockView};
 use crate::engine::core::read::cache::DecompressedBlock;
 use crate::engine::errors::QueryExecutionError;
 use std::path::Path;
@@ -29,12 +28,10 @@ impl ColumnReader {
     /// var-bytes (no header) constructs ranges directly; otherwise parses a
     /// ColumnBlockView and delegates to decoders.
     fn build_zero_copy_values(
-        entry: &crate::engine::core::column::compression::ZoneBlockEntry,
+        entry: &ZoneBlockEntry,
         block: &Arc<DecompressedBlock>,
     ) -> Result<(PhysicalType, ColumnValues), QueryExecutionError> {
         let decompressed: &[u8] = &block.bytes;
-
-        use crate::engine::core::column::format::ColumnBlockHeader;
 
         // Legacy var-bytes blocks had no typed header; detect by size.
         if decompressed.len() < ColumnBlockHeader::LEN {
@@ -77,7 +74,7 @@ impl ColumnReader {
         }
 
         // Delegate type-specific decode to decoders
-        let view = crate::engine::core::column::reader::view::ColumnBlockView::parse(decompressed)?;
+        let view = ColumnBlockView::parse(decompressed)?;
         let phys = view.phys;
         let values = super::reader::decoders::decoder_for(phys).build_values(
             &view,

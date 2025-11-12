@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use crate::engine::materialize::MaterializationError;
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 use crate::shared::time::now;
+use std::io::Cursor;
 use tracing::{error, warn};
 
 /// Lightweight index entry mapping name to entry file path
@@ -136,14 +137,14 @@ impl IndexFile {
             }
         }
 
-        if buf.len() < crate::shared::storage_header::BinaryHeader::TOTAL_LEN {
+        if buf.len() < BinaryHeader::TOTAL_LEN {
             return Ok(CatalogIndex::new());
         }
 
         // Validate header
         {
             use std::io::Cursor;
-            let mut cursor = Cursor::new(&buf[..crate::shared::storage_header::BinaryHeader::TOTAL_LEN]);
+            let mut cursor = Cursor::new(&buf[..BinaryHeader::TOTAL_LEN]);
             if let Err(err) = self.validate_header(&mut cursor) {
                 warn!(
                     error = %err,
@@ -156,7 +157,7 @@ impl IndexFile {
         }
 
         // Skip header when deserializing
-        let data = &buf[crate::shared::storage_header::BinaryHeader::TOTAL_LEN..];
+        let data = &buf[BinaryHeader::TOTAL_LEN..];
         match bincode::deserialize::<CatalogIndex>(data) {
             Ok(index) => Ok(index),
             Err(err) => {
@@ -198,7 +199,10 @@ impl IndexFile {
         Ok(())
     }
 
-    fn validate_header<R: std::io::Read>(&self, reader: &mut R) -> Result<(), MaterializationError> {
+    fn validate_header<R: std::io::Read>(
+        &self,
+        reader: &mut R,
+    ) -> Result<(), MaterializationError> {
         let header = BinaryHeader::read_from(reader)?;
         let expected_magic = FileKind::MaterializationCatalog.magic();
 
@@ -236,4 +240,3 @@ impl IndexFile {
         }
     }
 }
-

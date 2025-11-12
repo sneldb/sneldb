@@ -1,10 +1,12 @@
 use crate::command::handlers::compare::orchestrator::ComparisonExecutionPipeline;
 #[cfg(test)]
 use crate::command::handlers::query::set_streaming_enabled;
+use crate::command::handlers::store;
 use crate::command::parser::commands::plotql;
-use crate::command::types::{AggSpec, QueryCommand, TimeGranularity};
+use crate::command::types::{AggSpec, Command, QueryCommand, TimeGranularity};
 use crate::engine::shard::manager::ShardManager;
 use crate::logging::init_for_tests;
+use crate::shared::response::JsonRenderer;
 use crate::test_helpers::factories::{CommandFactory, SchemaRegistryFactory};
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -103,15 +105,9 @@ async fn test_execute_streaming_single_query() {
         .with_payload(serde_json::json!({ "amount": 100 }))
         .create();
     let (mut _r, mut w) = tokio::io::duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &crate::shared::response::JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(200)).await;
 
@@ -159,15 +155,9 @@ async fn test_execute_streaming_two_queries() {
             .with_payload(serde_json::json!({ "amount": amount }))
             .create();
         let (mut _r, mut w) = tokio::io::duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &crate::shared::response::JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(200)).await;
@@ -239,15 +229,9 @@ async fn test_execute_streaming_three_queries() {
             .with_payload(serde_json::json!({ "amount": amount }))
             .create();
         let (mut _r, mut w) = tokio::io::duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &crate::shared::response::JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(200)).await;
@@ -307,15 +291,9 @@ async fn test_execute_streaming_with_breakdown() {
             }))
             .create();
         let (mut _r, mut w) = tokio::io::duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &crate::shared::response::JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(200)).await;
@@ -379,15 +357,9 @@ async fn test_execute_streaming_with_time_bucket() {
             }))
             .create();
         let (mut _r, mut w) = tokio::io::duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &crate::shared::response::JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(200)).await;
@@ -474,15 +446,9 @@ async fn test_execute_streaming_parses_plotql_query() {
             .with_payload(serde_json::json!({ "amount": amount }))
             .create();
         let (mut _r, mut w) = tokio::io::duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &crate::shared::response::JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(200)).await;
@@ -492,7 +458,7 @@ async fn test_execute_streaming_parses_plotql_query() {
     let cmd = plotql::parse(cmd_str).expect("parse comparison query");
 
     // Extract queries from Command::Compare
-    if let crate::command::types::Command::Compare { queries } = cmd {
+    if let Command::Compare { queries } = cmd {
         let pipeline =
             ComparisonExecutionPipeline::new(&queries, &shard_manager, Arc::clone(&registry));
 

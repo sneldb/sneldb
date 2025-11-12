@@ -1,3 +1,4 @@
+use crate::command::types::CompareOp;
 use crate::engine::core::filter::filter_group::FilterGroup;
 use crate::engine::core::read::catalog::{IndexKind, IndexRegistry, SegmentIndexCatalog};
 use crate::engine::core::read::index_planner::IndexPlanner;
@@ -73,7 +74,7 @@ async fn planner_temporal_eq_and_range_for_timestamp() {
 
     let fp_eq = FilterGroup::Filter {
         column: "timestamp".to_string(),
-        operation: Some(crate::command::types::CompareOp::Eq),
+        operation: Some(CompareOp::Eq),
         value: None,
         priority: 0,
         uid: None,
@@ -84,7 +85,7 @@ async fn planner_temporal_eq_and_range_for_timestamp() {
 
     let fp_ge = FilterGroup::Filter {
         column: "timestamp".to_string(),
-        operation: Some(crate::command::types::CompareOp::Gte),
+        operation: Some(CompareOp::Gte),
         value: None,
         priority: 0,
         uid: None,
@@ -106,7 +107,7 @@ async fn planner_temporal_for_non_timestamp_field_uses_schema() {
 
     let fp = FilterGroup::Filter {
         column: "created_at".to_string(),
-        operation: Some(crate::command::types::CompareOp::Lt),
+        operation: Some(CompareOp::Lt),
         value: None,
         priority: 0,
         uid: None,
@@ -130,7 +131,7 @@ async fn planner_enum_bitmap_when_available() {
 
     let fp = FilterGroup::Filter {
         column: "kind".to_string(),
-        operation: Some(crate::command::types::CompareOp::Eq),
+        operation: Some(CompareOp::Eq),
         value: None,
         priority: 0,
         uid: None,
@@ -154,7 +155,7 @@ async fn planner_range_prefers_surf_when_available() {
 
     let fp = FilterGroup::Filter {
         column: "id".to_string(),
-        operation: Some(crate::command::types::CompareOp::Gt),
+        operation: Some(CompareOp::Gt),
         value: None,
         priority: 0,
         uid: None,
@@ -181,7 +182,7 @@ async fn planner_equality_prefers_zxf_then_xf_then_fullscan() {
     let planner = IndexPlanner::new(&registry, &idx, Some(uid.clone()));
     let fp = FilterGroup::Filter {
         column: "id".to_string(),
-        operation: Some(crate::command::types::CompareOp::Eq),
+        operation: Some(CompareOp::Eq),
         value: None,
         priority: 0,
         uid: None,

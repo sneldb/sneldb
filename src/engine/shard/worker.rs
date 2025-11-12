@@ -1,4 +1,7 @@
+use crate::command::types::Command;
+use crate::engine::core::Event;
 use crate::engine::core::MemTable;
+use crate::engine::core::read::flow::shard_pipeline::ShardFlowHandle;
 use crate::engine::core::read::result::QueryResult;
 use crate::engine::query::scan::{scan, scan_streaming};
 use crate::engine::replay::scan::scan as replay_scan;
@@ -89,7 +92,7 @@ pub async fn run_worker_loop(mut ctx: ShardContext, mut rx: Receiver<ShardMessag
 
 /// Handles Store messages.
 async fn on_store(
-    event: crate::engine::core::Event,
+    event: Event,
     ctx: &mut ShardContext,
     registry: &Arc<tokio::sync::RwLock<SchemaRegistry>>,
 ) -> Result<(), String> {
@@ -105,7 +108,7 @@ async fn on_store(
 
 /// Handles Query messages.
 async fn on_query(
-    command: crate::command::types::Command,
+    command: Command,
     metadata: Option<std::collections::HashMap<String, String>>,
     tx: tokio::sync::mpsc::Sender<QueryResult>,
     ctx: &ShardContext,
@@ -129,11 +132,11 @@ async fn on_query(
 }
 
 async fn on_query_streaming(
-    command: crate::command::types::Command,
+    command: Command,
     metadata: Option<std::collections::HashMap<String, String>>,
     ctx: &ShardContext,
     registry: &Arc<tokio::sync::RwLock<SchemaRegistry>>,
-) -> Result<crate::engine::core::read::flow::shard_pipeline::ShardFlowHandle, String> {
+) -> Result<ShardFlowHandle, String> {
     scan_streaming(
         &command,
         metadata,
@@ -149,8 +152,8 @@ async fn on_query_streaming(
 
 /// Handles Replay messages.
 async fn on_replay(
-    command: crate::command::types::Command,
-    tx: tokio::sync::mpsc::Sender<Vec<crate::engine::core::Event>>,
+    command: Command,
+    tx: tokio::sync::mpsc::Sender<Vec<Event>>,
     ctx: &ShardContext,
     registry: &Arc<tokio::sync::RwLock<SchemaRegistry>>,
 ) -> Result<(), String> {

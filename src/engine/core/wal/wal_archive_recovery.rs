@@ -1,5 +1,6 @@
 use crate::engine::core::WalEntry;
 use crate::engine::core::wal::wal_archive::WalArchive;
+use crate::shared::time;
 use std::path::{Path, PathBuf};
 use tracing::{error, info, warn};
 
@@ -201,9 +202,9 @@ pub struct ArchiveInfo {
 impl ArchiveInfo {
     /// Format archive info as a human-readable string
     pub fn format(&self) -> String {
-        let start_time = crate::shared::time::format_timestamp(self.start_timestamp);
-        let end_time = crate::shared::time::format_timestamp(self.end_timestamp);
-        let created = crate::shared::time::format_timestamp(self.created_at);
+        let start_time = time::format_timestamp(self.start_timestamp);
+        let end_time = time::format_timestamp(self.end_timestamp);
+        let created = time::format_timestamp(self.created_at);
 
         format!(
             "Archive: {}\n  Shard: {}, Log ID: {:05}\n  Entries: {}\n  Time range: {} to {}\n  Created: {}\n  Compression: {} (level {})\n  Version: {}",

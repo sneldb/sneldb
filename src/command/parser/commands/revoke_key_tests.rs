@@ -1,4 +1,5 @@
 use crate::command::parser::commands::revoke_key;
+use crate::command::parser::error::ParseError;
 use crate::command::parser::tokenizer::tokenize;
 use crate::command::types::Command;
 
@@ -79,7 +80,7 @@ mod revoke_key_tests {
             "Expected failure due to missing KEY keyword"
         );
         match result {
-            Err(crate::command::parser::error::ParseError::ExpectedKeyword(expected, _)) => {
+            Err(ParseError::ExpectedKeyword(expected, _)) => {
                 assert_eq!(expected, "KEY");
             }
             _ => panic!("Expected ExpectedKeyword error"),
@@ -95,7 +96,7 @@ mod revoke_key_tests {
 
         assert!(result.is_err(), "Expected failure due to missing user_id");
         match result {
-            Err(crate::command::parser::error::ParseError::MissingArgument(arg)) => {
+            Err(ParseError::MissingArgument(arg)) => {
                 assert_eq!(arg, "user_id");
             }
             _ => panic!("Expected MissingArgument error"),
@@ -124,7 +125,7 @@ mod revoke_key_tests {
 
         assert!(result.is_err(), "Expected failure due to empty input");
         match result {
-            Err(crate::command::parser::error::ParseError::MissingArgument(arg)) => {
+            Err(ParseError::MissingArgument(arg)) => {
                 assert_eq!(arg, "REVOKE");
             }
             _ => panic!("Expected MissingArgument error"),
@@ -140,7 +141,7 @@ mod revoke_key_tests {
 
         assert!(result.is_err(), "Expected failure due to extra tokens");
         match result {
-            Err(crate::command::parser::error::ParseError::UnexpectedToken(msg)) => {
+            Err(ParseError::UnexpectedToken(msg)) => {
                 assert!(msg.contains("Extra tokens"));
             }
             _ => panic!("Expected UnexpectedToken error"),
@@ -169,7 +170,7 @@ mod revoke_key_tests {
             "Expected failure due to wrong keyword after REVOKE"
         );
         match result {
-            Err(crate::command::parser::error::ParseError::ExpectedKeyword(expected, _)) => {
+            Err(ParseError::ExpectedKeyword(expected, _)) => {
                 assert_eq!(expected, "KEY");
             }
             _ => panic!("Expected ExpectedKeyword error"),

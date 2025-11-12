@@ -100,8 +100,6 @@ async fn partial_to_batches(
     ctx: Arc<FlowContext>,
     output: BatchSender,
 ) -> Result<(), FlowOperatorError> {
-    use crate::engine::core::read::aggregate::plan::AggregateOpSpec;
-
     let mut builder = ctx.pool().acquire(Arc::clone(&schema));
 
     for (group_key, states) in partial.groups {

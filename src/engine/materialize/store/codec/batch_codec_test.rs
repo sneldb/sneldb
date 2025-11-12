@@ -1,11 +1,11 @@
 use super::batch_codec::{BatchCodec, Lz4BatchCodec};
 use crate::engine::core::read::flow::{BatchPool, BatchSchema, ColumnBatch};
 use crate::engine::core::read::result::ColumnSpec;
-use crate::engine::materialize::high_water::HighWaterMark;
 use crate::engine::materialize::store::codec::batch_schema_to_snapshots;
 use crate::engine::materialize::store::frame::data::FrameData;
 use crate::engine::materialize::store::frame::header::FrameHeader;
 use crate::engine::materialize::store::frame::metadata::StoredFrameMeta;
+use crate::engine::materialize::{MaterializationError, high_water::HighWaterMark};
 use crate::engine::types::ScalarValue;
 use crc32fast::Hasher as Crc32Hasher;
 use serde_json::{Value, json};
@@ -236,7 +236,6 @@ fn encode_decode_handles_all_types() {
 
     let pool = BatchPool::new(100).unwrap();
     let mut builder = pool.acquire(Arc::clone(&schema));
-    use crate::engine::types::ScalarValue;
     builder
         .push_row(&[
             ScalarValue::from(json!(1000_u64)),
@@ -353,10 +352,7 @@ fn decode_fails_on_payload_length_mismatch() {
 
     let err = codec.decode(&meta, frame_data).unwrap_err();
     // The error may come from decompression (LZ4) or length mismatch check
-    assert!(matches!(
-        err,
-        crate::engine::materialize::MaterializationError::Corrupt(_)
-    ));
+    assert!(matches!(err, MaterializationError::Corrupt(_)));
 }
 
 #[test]

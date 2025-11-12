@@ -8,6 +8,7 @@ use crate::engine::core::filter::condition::PreparedAccessor;
 use crate::engine::core::filter::condition_evaluator::ConditionEvaluator;
 use crate::engine::core::filter::condition_evaluator_builder::ConditionEvaluatorBuilder;
 use crate::engine::core::read::sequence::group::RowIndex;
+use crate::engine::core::read::sequence::utils;
 use crate::engine::schema::registry::SchemaRegistry;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -72,7 +73,6 @@ impl SequenceWhereEvaluator {
             Self::validate_field_ambiguity(expr, event_types, registry).await?;
 
             // Transform WHERE clause for each event type, preserving logical structure (OR/NOT/AND)
-            use crate::engine::core::read::sequence::utils::transform_where_clause_for_event_type;
 
             if tracing::enabled!(tracing::Level::DEBUG) {
                 debug!(
@@ -84,7 +84,7 @@ impl SequenceWhereEvaluator {
             // Build evaluators for each event type
             for event_type in event_types {
                 if let Some(transformed_expr) =
-                    transform_where_clause_for_event_type(expr, event_type)
+                    utils::transform_where_clause_for_event_type(expr, event_type)
                 {
                     if tracing::enabled!(tracing::Level::DEBUG) {
                         debug!(

@@ -2,6 +2,7 @@ use super::{MaterializedStore, StoredFrameMeta, batch_schema_to_snapshots};
 use crate::engine::core::read::flow::{BatchPool, BatchSchema, ColumnBatch};
 use crate::engine::core::read::result::ColumnSpec;
 use crate::engine::materialize::high_water::HighWaterMark;
+use crate::engine::types::ScalarValue;
 use serde_json::{Value, json};
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -25,7 +26,6 @@ fn build_schema() -> BatchSchema {
 }
 
 fn batch_to_rows(batch: &ColumnBatch) -> Vec<Vec<serde_json::Value>> {
-    use crate::engine::types::ScalarValue;
     let column_count = batch.schema().column_count();
     let mut rows = vec![vec![serde_json::Value::Null; column_count]; batch.len()];
     for col_idx in 0..column_count {
@@ -42,7 +42,6 @@ fn materialized_store_roundtrip() {
     let dir = tempdir().unwrap();
     let mut store = MaterializedStore::open(dir.path()).unwrap();
 
-    use crate::engine::types::ScalarValue;
     let schema = build_schema();
     let schema_arc = Arc::new(schema);
     let pool = BatchPool::new(16).unwrap();
@@ -89,7 +88,6 @@ fn manifest_persists_across_reopen() {
     let pool = BatchPool::new(8).unwrap();
 
     {
-        use crate::engine::types::ScalarValue;
         let mut store = MaterializedStore::open(dir.path()).unwrap();
         let mut builder = pool.acquire(Arc::clone(&schema));
         builder
