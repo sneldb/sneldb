@@ -12,11 +12,17 @@ pub struct TestConfig {
     pub playground: PlaygroundConfig,
     pub time: TimeConfig,
     pub query: QueryConfig,
+    pub auth: AuthConfig,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct SchemaConfig {
     pub def_dir: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct AuthConfig {
+    pub bypass_auth: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -109,6 +115,7 @@ fn derive_paths(name: &str) -> TestPaths {
 /// Construct the default test configuration for a scenario, derived from its paths.
 fn default_test_config(paths: &TestPaths) -> TestConfig {
     TestConfig {
+        auth: AuthConfig { bypass_auth: true },
         time: TimeConfig {
             timezone: "UTC".to_string(),
             week_start: "Mon".to_string(),

@@ -62,6 +62,7 @@ pub async fn run_http_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
                             Arc::clone(&ctx.registry),
                             Arc::clone(&ctx.shard_manager),
                             Arc::clone(&ctx.server_state),
+                            ctx.auth_manager.clone(),
                         )
                     }),
                 )

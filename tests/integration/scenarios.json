@@ -3812,5 +3812,57 @@
         "value": "\"type\":\"end\""
       }
     ]
+  },
+  {
+    "name": "auth_create_user_and_list",
+    "input_commands": [
+      "CREATE USER testuser",
+      "LIST USERS"
+    ],
+    "matchers": [
+      {
+        "kind": "include",
+        "value": "User 'testuser' created"
+      },
+      {
+        "kind": "include",
+        "value": "Secret key:"
+      },
+      {
+        "kind": "include",
+        "value": "testuser: active"
+      }
+    ]
+  },
+  {
+    "name": "auth_bypass_enabled_allows_unauthenticated_commands",
+    "config": {
+      "auth": { "bypass_auth": true }
+    },
+    "input_commands": [
+      "DEFINE auth_test FIELDS { \"value\": \"int\" }",
+      "STORE auth_test FOR ctx1 PAYLOAD {\"value\":42}",
+      "QUERY auth_test WHERE value=42"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": ["ctx1", "42"]
+      }
+    ]
+  },
+  {
+    "name": "auth_bypass_disabled_requires_authentication",
+    "config": {
+      "auth": { "bypass_auth": false }
+    },
+    "input_commands": [
+      "DEFINE auth_required FIELDS { \"value\": \"int\" }",
+      "STORE auth_required FOR ctx1 PAYLOAD {\"value\":42}"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "Authentication failed"
+    }
   }
 ]

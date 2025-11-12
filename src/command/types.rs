@@ -51,6 +51,14 @@ pub enum Command {
     Compare {
         queries: Vec<QueryCommand>,
     },
+    CreateUser {
+        user_id: String,
+        secret_key: Option<String>,
+    },
+    RevokeKey {
+        user_id: String,
+    },
+    ListUsers,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

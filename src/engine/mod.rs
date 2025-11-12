@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod compactor;
 pub mod core;
 pub mod define;
@@ -11,3 +12,6 @@ pub mod store;
 pub mod types;
 
 pub use errors::*;
+
+#[cfg(test)]
+mod auth_test;

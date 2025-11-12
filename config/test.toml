@@ -41,6 +41,9 @@ auth_token = "mysecrettoken"
 enabled = true
 allow_unauthenticated = true
 
+[auth]
+bypass_auth = true
+
 [logging]
 log_dir = "../data/logs"
 stdout_level = "debug"

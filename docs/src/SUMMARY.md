@@ -23,6 +23,7 @@
   - [Flush](./commands/flush.md)
   - [Remember](./commands/remember.md)
   - [Show](./commands/show.md)
+  - [User Management](./commands/user_management.md)
 
 - [Design](./design.md)
 

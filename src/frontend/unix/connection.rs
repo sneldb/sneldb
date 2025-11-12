@@ -1,13 +1,24 @@
 use crate::command::dispatcher::dispatch_command;
 use crate::command::parser::parse_command;
+use crate::engine::auth::AuthManager;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
+use crate::shared::config::CONFIG;
 use crate::shared::response::render::Renderer;
 use crate::shared::response::{Response, StatusCode};
 use std::io::ErrorKind;
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, BufReader};
+
+/// Case-insensitive byte comparison helper
+#[inline]
+fn bytes_eq_ignore_ascii_case(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len()
+        && a.iter()
+            .zip(b.iter())
+            .all(|(x, y)| x.eq_ignore_ascii_case(y))
+}
 
 pub struct Connection<R, W> {
     pub pid: u32,
@@ -16,6 +27,7 @@ pub struct Connection<R, W> {
     pub shard_manager: Arc<ShardManager>,
     pub registry: Arc<tokio::sync::RwLock<SchemaRegistry>>,
     pub renderer: Arc<dyn Renderer + Send + Sync>,
+    pub auth_manager: Option<Arc<AuthManager>>,
 }
 
 impl<R, W> Connection<R, W>
@@ -23,6 +35,57 @@ where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
 {
+    /// Check authentication before parsing command
+    /// Returns command if authenticated, or None if auth check failed
+    async fn check_auth<'a>(&self, input: &'a str) -> Option<&'a str> {
+        // Check if authentication is bypassed via config - do this first for performance
+        if CONFIG.auth.as_ref().map(|a| a.bypass_auth).unwrap_or(false) {
+            return Some(input);
+        }
+
+        // Cache trimmed input and use case-insensitive byte checks
+        let trimmed = input.trim();
+        let trimmed_bytes = trimmed.as_bytes();
+
+        // Auth commands don't require authentication (case-insensitive byte checks)
+        if trimmed_bytes.len() >= 11
+            && bytes_eq_ignore_ascii_case(&trimmed_bytes[..11], b"CREATE USER")
+        {
+            return Some(input);
+        }
+        if trimmed_bytes.len() >= 10
+            && bytes_eq_ignore_ascii_case(&trimmed_bytes[..10], b"REVOKE KEY")
+        {
+            return Some(input);
+        }
+        if trimmed_bytes.len() >= 10
+            && bytes_eq_ignore_ascii_case(&trimmed_bytes[..10], b"LIST USERS")
+        {
+            return Some(input);
+        }
+
+        // If auth manager is not configured, allow all commands
+        let auth_mgr = match &self.auth_manager {
+            Some(am) => am,
+            None => return Some(input),
+        };
+
+        // Parse auth format: user_id:signature:command
+        match auth_mgr.parse_auth(trimmed) {
+            Ok((user_id, signature, command)) => {
+                // Verify signature
+                match auth_mgr.verify_signature(command, user_id, signature).await {
+                    Ok(_) => Some(command),
+                    Err(_) => None,
+                }
+            }
+            Err(_) => {
+                // If parsing fails, authentication is required for all commands
+                None
+            }
+        }
+    }
+
     pub async fn run(&mut self) -> std::io::Result<()> {
         tracing::info!("[PID {}] Connection started", self.pid);
 
@@ -51,13 +114,33 @@ where
                 break;
             }
 
-            match parse_command(input) {
+            // Check authentication before parsing
+            let command_to_parse = match self.check_auth(input).await {
+                Some(cmd) => cmd,
+                None => {
+                    let resp = Response::error(
+                        StatusCode::BadRequest,
+                        "Authentication failed".to_string(),
+                    );
+                    if let Err(e) = self.writer.write_all(&self.renderer.render(&resp)).await {
+                        if e.kind() == ErrorKind::BrokenPipe {
+                            tracing::info!("[PID {}] Client disconnected", self.pid);
+                            break;
+                        }
+                        return Err(e);
+                    }
+                    continue;
+                }
+            };
+
+            match parse_command(command_to_parse) {
                 Ok(cmd) => {
                     if let Err(e) = dispatch_command(
                         &cmd,
                         &mut self.writer,
                         &self.shard_manager,
                         &self.registry,
+                        self.auth_manager.as_ref(),
                         self.renderer.as_ref(),
                     )
                     .await

@@ -40,6 +40,9 @@ backpressure_threshold = 90
 enabled = true
 allow_unauthenticated = true
 
+[auth]
+bypass_auth = false
+
 [logging]
 log_dir = "../data/logs"
 stdout_level = "warn"

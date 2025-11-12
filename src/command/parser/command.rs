@@ -48,6 +48,15 @@ pub fn parse_command(input: &str) -> Result<Command, ParseError> {
         Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("PLOT") => {
             commands::plotql::parse(input)
         }
+        Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("CREATE") => {
+            commands::create_user::parse(&tokens)
+        }
+        Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("REVOKE") => {
+            commands::revoke_key::parse(&tokens)
+        }
+        Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("LIST") => {
+            commands::list_users::parse(&tokens)
+        }
         _ => {
             warn!(target: "sneldb::parse", input, "Unknown command keyword");
             Err(ParseError::UnknownCommand(input.into()))

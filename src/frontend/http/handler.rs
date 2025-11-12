@@ -1,13 +1,13 @@
+use crate::engine::auth::AuthManager;
+use crate::engine::schema::SchemaRegistry;
+use crate::engine::shard::manager::ShardManager;
+use crate::frontend::server_state::ServerState;
+use crate::shared::config::CONFIG;
 use bytes::Bytes;
 use http_body_util::Full;
 use hyper::{Request, Response, StatusCode, body::Incoming};
 use std::{convert::Infallible, sync::Arc};
 use tokio::sync::RwLock;
-
-use crate::engine::schema::SchemaRegistry;
-use crate::engine::shard::manager::ShardManager;
-use crate::frontend::server_state::ServerState;
-use crate::shared::config::CONFIG;
 
 use super::dispatcher::{handle_json_command, handle_line_command};
 use super::static_files::{serve_asset, serve_index};
@@ -16,6 +16,7 @@ struct HttpHandler {
     registry: Arc<RwLock<SchemaRegistry>>,
     shard_manager: Arc<ShardManager>,
     server_state: Arc<ServerState>,
+    auth_manager: Option<Arc<AuthManager>>,
 }
 
 impl HttpHandler {
@@ -23,11 +24,13 @@ impl HttpHandler {
         registry: Arc<RwLock<SchemaRegistry>>,
         shard_manager: Arc<ShardManager>,
         server_state: Arc<ServerState>,
+        auth_manager: Option<Arc<AuthManager>>,
     ) -> Self {
         Self {
             registry,
             shard_manager,
             server_state,
+            auth_manager,
         }
     }
 
@@ -88,6 +91,7 @@ impl HttpHandler {
                     Arc::clone(&self.registry),
                     Arc::clone(&self.shard_manager),
                     Arc::clone(&self.server_state),
+                    self.auth_manager.clone(),
                 )
                 .await
             }
@@ -97,6 +101,7 @@ impl HttpHandler {
                     Arc::clone(&self.registry),
                     Arc::clone(&self.shard_manager),
                     Arc::clone(&self.server_state),
+                    self.auth_manager.clone(),
                 )
                 .await
             }
@@ -110,8 +115,9 @@ pub async fn handle_request(
     registry: Arc<RwLock<SchemaRegistry>>,
     shard_manager: Arc<ShardManager>,
     server_state: Arc<ServerState>,
+    auth_manager: Option<Arc<AuthManager>>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
-    let handler = HttpHandler::new(registry, shard_manager, server_state);
+    let handler = HttpHandler::new(registry, shard_manager, server_state, auth_manager);
     handler.handle(req).await
 }
 
