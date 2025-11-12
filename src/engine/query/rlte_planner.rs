@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::command::types::PickedZones;
+use crate::command::types::{CompareOp, Expr, PickedZones};
 use crate::engine::core::read::cache::GlobalIndexCatalogCache;
 use crate::engine::core::read::catalog::IndexKind;
 use crate::engine::core::read::query_plan::QueryPlan;
 use crate::engine::core::zone::rlte_index::RlteIndex;
+use crate::shared::config::CONFIG;
 use tracing::debug;
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -559,7 +560,7 @@ pub async fn plan_with_rlte(
         }
     }
     let zones_with_field = catalog.zones_with_field(&field);
-    let zone_size = crate::shared::config::CONFIG.engine.event_per_zone;
+    let zone_size = CONFIG.engine.event_per_zone;
     debug!(target: "rlte::planner",
         "RLTE load summary: uid={} field='{}' asc={} k={} zone_size={} rlte_fields_loaded={} zones_with_field={}",
         uid, field, asc, k, zone_size, loaded_fields, zones_with_field
@@ -652,7 +653,6 @@ struct WhereBound {
 
 impl WhereBound {
     fn from_plan_field(plan: &QueryPlan, field: &str) -> Option<Self> {
-        use crate::command::types::{CompareOp, Expr};
         let expr = plan.where_clause()?;
         match expr {
             Expr::Compare {

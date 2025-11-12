@@ -1,11 +1,13 @@
-use crate::command::types::{Command, Expr};
+use crate::command::types::{Command, CompareOp, Expr, OrderSpec};
 use crate::engine::core::filter::filter_group::FilterGroup;
 use crate::engine::core::filter::filter_group_builder::FilterGroupBuilder;
 use crate::engine::core::read::aggregate::plan::AggregatePlan;
 use crate::engine::core::read::cache::GlobalIndexCatalogCache;
 use crate::engine::core::read::catalog::IndexRegistry;
 use crate::engine::core::read::index_planner::IndexPlanner;
+use crate::engine::core::read::projection::ProjectionPlanner;
 use crate::engine::schema::registry::SchemaRegistry;
+use crate::engine::types::ScalarValue;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -80,10 +82,11 @@ impl QueryPlan {
                                     return true;
                                 }
                                 match (operation, value) {
-                                    (
-                                        Some(crate::command::types::CompareOp::Gte),
-                                        Some(crate::engine::types::ScalarValue::Utf8(s)),
-                                    ) if since.as_deref() == Some(s.as_str()) => false,
+                                    (Some(CompareOp::Gte), Some(ScalarValue::Utf8(s)))
+                                        if since.as_deref() == Some(s.as_str()) =>
+                                    {
+                                        false
+                                    }
                                     _ => true,
                                 }
                             }
@@ -183,7 +186,7 @@ impl QueryPlan {
         }
     }
 
-    pub fn order_by(&self) -> Option<&crate::command::types::OrderSpec> {
+    pub fn order_by(&self) -> Option<&OrderSpec> {
         if let Command::Query { order_by, .. } = &self.command {
             order_by.as_ref()
         } else {
@@ -200,7 +203,7 @@ impl QueryPlan {
     /// 3. Final ordering happens on merged results in AggregateStreamMerger
     ///
     /// For non-aggregate queries, ordering can happen at the shard level.
-    pub fn order_by_for_shard_level(&self) -> Option<&crate::command::types::OrderSpec> {
+    pub fn order_by_for_shard_level(&self) -> Option<&OrderSpec> {
         // If there's an aggregate plan, ordering must happen after aggregation
         if self.aggregate_plan.is_some() {
             return None;
@@ -228,9 +231,7 @@ impl QueryPlan {
 
     /// Delegates to the ProjectionPlanner to compute required columns.
     pub async fn columns_to_load(&self) -> Vec<String> {
-        crate::engine::core::read::projection::ProjectionPlanner::new(self)
-            .columns_to_load()
-            .await
+        ProjectionPlanner::new(self).columns_to_load().await
     }
 
     pub async fn event_type_uid(&self) -> Option<String> {

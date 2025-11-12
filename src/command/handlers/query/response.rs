@@ -2,7 +2,7 @@ use std::io;
 
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
-use crate::engine::core::read::result::QueryResult;
+use crate::engine::core::read::result::{ColumnSpec, QueryResult};
 use crate::engine::types::ScalarValue;
 use crate::shared::response::Response;
 use crate::shared::response::render::Renderer;
@@ -42,7 +42,7 @@ impl<'a> QueryResponseFormatter<'a> {
 
     fn build_table_response(
         &self,
-        columns: Vec<crate::engine::core::read::result::ColumnSpec>,
+        columns: Vec<ColumnSpec>,
         rows: Vec<Vec<ScalarValue>>,
     ) -> Response {
         let column_metadata = columns

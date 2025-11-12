@@ -1,5 +1,7 @@
 use super::index::{CatalogIndex, IndexEntry, IndexFile};
 use crate::engine::materialize::MaterializationError;
+use crate::shared::storage_header::{BinaryHeader, FileKind};
+use crate::shared::time;
 use std::fs;
 use std::path::PathBuf;
 use tempfile::tempdir;
@@ -8,7 +10,7 @@ fn make_index_entry(name: &str, entry_path: PathBuf) -> IndexEntry {
     IndexEntry {
         name: name.to_string(),
         entry_path,
-        created_at: crate::shared::time::now(),
+        created_at: time::now(),
     }
 }
 
@@ -194,7 +196,6 @@ fn index_file_persist_atomic_write() -> Result<(), MaterializationError> {
 
 #[test]
 fn index_file_load_accepts_version_2() -> Result<(), MaterializationError> {
-    use crate::shared::storage_header::{BinaryHeader, FileKind};
     use std::fs::File;
     use std::io::Write;
 
@@ -224,4 +225,3 @@ fn catalog_index_default_equals_new() {
     assert_eq!(index1.len(), index2.len());
     assert_eq!(index1.version, index2.version);
 }
-

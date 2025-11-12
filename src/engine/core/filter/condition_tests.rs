@@ -1,8 +1,12 @@
 use crate::command::types::CompareOp as CommandCompareOp;
 use crate::command::types::Expr;
+use crate::engine::core::CandidateZone;
 use crate::engine::core::ColumnValues;
 use crate::engine::core::Condition;
+use crate::engine::core::Event;
+use crate::engine::core::event::event_builder::EventBuilder;
 use crate::engine::core::filter::condition::{CompareOp, FieldAccessor, PreparedAccessor};
+use crate::engine::core::filter::direct_event_accessor::DirectEventAccessor;
 use crate::engine::core::read::cache::DecompressedBlock;
 use crate::engine::core::{
     InNumericCondition, InStringCondition, LogicalCondition, LogicalOp, NumericCondition,
@@ -110,7 +114,7 @@ fn make_typed_u64_column(values: &[u64]) -> ColumnValues {
 #[test]
 fn numeric_condition_evaluate_at_prefers_u64_and_handles_negative() {
     // Build a single-zone with typed u64 id values
-    let mut zone = crate::engine::core::CandidateZone::new(0, "seg".into());
+    let mut zone = CandidateZone::new(0, "seg".into());
     let mut cols = std::collections::HashMap::new();
     cols.insert("id".to_string(), make_typed_u64_column(&[1, 10, 25]));
     zone.set_values(cols);
@@ -189,11 +193,8 @@ fn logical_collect_numeric_fields_accumulates_nested() {
 
 #[test]
 fn evaluate_event_direct_numeric_and_string() {
-    use crate::engine::core::Event;
-    use crate::engine::core::filter::direct_event_accessor::DirectEventAccessor;
-
     // Build an Event via EventBuilder-like fields
-    let mut eb = crate::engine::core::event::event_builder::EventBuilder::new();
+    let mut eb = EventBuilder::new();
     eb.add_field("event_type", "login");
     eb.add_field("context_id", "abc");
     eb.add_field("timestamp", "123");
@@ -286,7 +287,7 @@ fn in_numeric_condition_evaluates_correctly() {
 
 #[test]
 fn in_numeric_condition_evaluate_at_works() {
-    let mut zone = crate::engine::core::CandidateZone::new(0, "seg".into());
+    let mut zone = CandidateZone::new(0, "seg".into());
     let mut cols = std::collections::HashMap::new();
     cols.insert("id".to_string(), make_typed_u64_column(&[2, 4, 6, 10]));
     zone.set_values(cols);
@@ -328,10 +329,7 @@ fn in_numeric_condition_evaluate_at_handles_i64() {
 
 #[test]
 fn in_numeric_condition_evaluate_event_direct_works() {
-    use crate::engine::core::Event;
-    use crate::engine::core::filter::direct_event_accessor::DirectEventAccessor;
-
-    let mut eb = crate::engine::core::event::event_builder::EventBuilder::new();
+    let mut eb = EventBuilder::new();
     eb.add_field("event_type", "test");
     eb.add_field("context_id", "ctx1");
     eb.add_field("timestamp", "123");
@@ -343,7 +341,7 @@ fn in_numeric_condition_evaluate_event_direct_works() {
 
     assert!(in_condition.evaluate_event_direct(&acc));
 
-    let mut eb2 = crate::engine::core::event::event_builder::EventBuilder::new();
+    let mut eb2 = EventBuilder::new();
     eb2.add_field("event_type", "test");
     eb2.add_field("context_id", "ctx1");
     eb2.add_field("timestamp", "123");
@@ -439,10 +437,7 @@ fn in_string_condition_evaluate_at_works() {
 
 #[test]
 fn in_string_condition_evaluate_event_direct_works() {
-    use crate::engine::core::Event;
-    use crate::engine::core::filter::direct_event_accessor::DirectEventAccessor;
-
-    let mut eb = crate::engine::core::event::event_builder::EventBuilder::new();
+    let mut eb = EventBuilder::new();
     eb.add_field("event_type", "test");
     eb.add_field("context_id", "ctx1");
     eb.add_field("timestamp", "123");
@@ -455,7 +450,7 @@ fn in_string_condition_evaluate_event_direct_works() {
 
     assert!(in_condition.evaluate_event_direct(&acc));
 
-    let mut eb2 = crate::engine::core::event::event_builder::EventBuilder::new();
+    let mut eb2 = EventBuilder::new();
     eb2.add_field("event_type", "test");
     eb2.add_field("context_id", "ctx1");
     eb2.add_field("timestamp", "123");

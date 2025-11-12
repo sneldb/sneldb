@@ -164,7 +164,7 @@ impl CompactionHandover {
             // Retire all UIDs from the input segments
             // We need to deduplicate drained segments since the same segment might be returned
             // multiple times if it becomes empty after retiring different UIDs
-            let mut all_drained: Vec<crate::engine::core::SegmentEntry> = Vec::new();
+            let mut all_drained: Vec<SegmentEntry> = Vec::new();
             let mut seen_drained_labels: HashSet<String> = HashSet::new();
 
             if tracing::enabled!(tracing::Level::DEBUG) {

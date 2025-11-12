@@ -1,4 +1,5 @@
 use crate::command::parser::commands::list_users;
+use crate::command::parser::error::ParseError;
 use crate::command::parser::tokenizer::tokenize;
 use crate::command::types::Command;
 
@@ -48,7 +49,7 @@ mod list_users_tests {
             "Expected failure due to missing USERS keyword"
         );
         match result {
-            Err(crate::command::parser::error::ParseError::MissingArgument(arg)) => {
+            Err(ParseError::MissingArgument(arg)) => {
                 assert_eq!(arg, "USERS");
             }
             _ => panic!("Expected MissingArgument error"),
@@ -77,7 +78,7 @@ mod list_users_tests {
 
         assert!(result.is_err(), "Expected failure due to empty input");
         match result {
-            Err(crate::command::parser::error::ParseError::MissingArgument(arg)) => {
+            Err(ParseError::MissingArgument(arg)) => {
                 assert_eq!(arg, "LIST");
             }
             _ => panic!("Expected MissingArgument error"),
@@ -93,7 +94,7 @@ mod list_users_tests {
 
         assert!(result.is_err(), "Expected failure due to extra tokens");
         match result {
-            Err(crate::command::parser::error::ParseError::UnexpectedToken(msg)) => {
+            Err(ParseError::UnexpectedToken(msg)) => {
                 assert!(msg.contains("Extra tokens"));
             }
             _ => panic!("Expected UnexpectedToken error"),
@@ -122,7 +123,7 @@ mod list_users_tests {
             "Expected failure due to wrong keyword after LIST"
         );
         match result {
-            Err(crate::command::parser::error::ParseError::ExpectedKeyword(expected, _)) => {
+            Err(ParseError::ExpectedKeyword(expected, _)) => {
                 assert_eq!(expected, "USERS");
             }
             _ => panic!("Expected ExpectedKeyword error"),

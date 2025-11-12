@@ -1,5 +1,5 @@
 use crate::engine::core::read::cache::ColumnHandle;
-use crate::shared::storage_header::FileKind;
+use crate::shared::storage_header::{BinaryHeader, FileKind};
 use crate::test_helpers::factories::column_factory::ColumnFactory;
 use std::fs::create_dir_all;
 
@@ -21,7 +21,7 @@ fn open_succeeds_with_minimal_files() {
         .write_minimal();
 
     let handle = ColumnHandle::open(&seg_dir, uid, field).expect("open handle");
-    assert!(handle.col_mmap.len() >= crate::shared::storage_header::BinaryHeader::TOTAL_LEN);
+    assert!(handle.col_mmap.len() >= BinaryHeader::TOTAL_LEN);
     assert!(handle.zfc_index.entries.is_empty());
 }
 

@@ -5,6 +5,7 @@ use crate::engine::core::read::flow::{BatchSchema, ColumnBatch, FlowChannel, Flo
 use crate::engine::core::read::result::ColumnSpec;
 use crate::engine::materialize::MaterializedStore;
 use crate::engine::materialize::catalog::SchemaSnapshot;
+use crate::engine::types::ScalarValue;
 use serde_json::json;
 
 fn build_schema_snapshots() -> Vec<SchemaSnapshot> {
@@ -29,7 +30,6 @@ fn build_column_batch(len: usize) -> ColumnBatch {
         .expect("schema"),
     );
 
-    use crate::engine::types::ScalarValue;
     let mut timestamps = Vec::with_capacity(len);
     let mut event_ids = Vec::with_capacity(len);
     for idx in 0..len {

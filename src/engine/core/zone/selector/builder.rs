@@ -1,3 +1,5 @@
+use crate::engine::core::CandidateZone;
+use crate::engine::core::filter::filter_group::FilterGroup;
 use crate::engine::core::zone::selector::field_selector::FieldSelector;
 use crate::engine::core::zone::selector::index_selector::{IndexZoneSelector, MissingIndexPolicy};
 use crate::engine::core::zone::selector::pruner::enum_pruner::EnumPruner;
@@ -58,10 +60,7 @@ impl<'a> ZoneSelectorBuilder<'a> {
                     .and_then(|_| {
                         // Get uid from FilterGroup
                         match self.inputs.plan {
-                            crate::engine::core::filter::filter_group::FilterGroup::Filter {
-                                uid,
-                                ..
-                            } => uid.as_deref(),
+                            FilterGroup::Filter { uid, .. } => uid.as_deref(),
                             _ => None,
                         }
                     });
@@ -95,9 +94,7 @@ impl<'a> ZoneSelectorBuilder<'a> {
                     .and_then(|p| p.value().and_then(|v| v.as_str()));
                 let context_id = self.inputs.plan.value().and_then(|v| v.as_str());
                 let uid = match self.inputs.plan {
-                    crate::engine::core::filter::filter_group::FilterGroup::Filter {
-                        uid, ..
-                    } => uid.as_deref(),
+                    FilterGroup::Filter { uid, .. } => uid.as_deref(),
                     _ => None,
                 };
 
@@ -130,8 +127,6 @@ impl<'a> ZoneSelectorBuilder<'a> {
         }
     }
 }
-
-use crate::engine::core::CandidateZone;
 
 struct AllZonesSelector {}
 impl ZoneSelector for AllZonesSelector {

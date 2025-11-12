@@ -1,4 +1,4 @@
-use crate::engine::core::WalRecovery;
+use crate::engine::core::{WalEntry, WalRecovery};
 use crate::test_helpers::factories::EventFactory;
 use crate::test_helpers::factories::ShardContextFactory;
 use std::fs::read_dir;
@@ -40,7 +40,7 @@ async fn test_wal_recovery_recovers_inserted_events() {
     ];
 
     for event in &events {
-        let entry = crate::engine::core::WalEntry::from_event(event);
+        let entry = WalEntry::from_event(event);
         ctx.wal.as_ref().unwrap().append(entry).await;
     }
 

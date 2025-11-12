@@ -4,7 +4,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::engine::core::ZoneMeta;
-use crate::engine::core::column::compression::compressed_column_index::ZoneBlockEntry;
+use crate::engine::core::column::compression::{
+    CompressionCodec, Lz4Codec, compressed_column_index::ZoneBlockEntry,
+};
 use crate::engine::core::read::cache::{DecompressedBlock, GlobalColumnBlockCache};
 use crate::engine::core::zone::zone_index::ZoneIndex;
 
@@ -128,16 +130,15 @@ impl QueryCaches {
                     ));
                 }
                 let compressed = &handle.col_mmap[start..end];
-                let codec = crate::engine::core::column::compression::Lz4Codec;
+                let codec = Lz4Codec;
                 let decompressed =
-                    crate::engine::core::column::compression::CompressionCodec::decompress(
-                        &codec,
-                        compressed,
-                        entry.uncomp_len as usize,
-                    )
-                    .map_err(|e| {
-                        std::io::Error::new(std::io::ErrorKind::Other, format!("decompress: {}", e))
-                    })?;
+                    CompressionCodec::decompress(&codec, compressed, entry.uncomp_len as usize)
+                        .map_err(|e| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                format!("decompress: {}", e),
+                            )
+                        })?;
                 Ok(decompressed)
             })?;
 
@@ -458,11 +459,7 @@ impl QueryCaches {
         uid: &str,
         field: &str,
     ) -> Result<Arc<EnumBitmapIndex>, std::io::Error> {
-        let key = (
-            segment_id.to_string(),
-            uid.to_string(),
-            field.to_string(),
-        );
+        let key = (segment_id.to_string(), uid.to_string(), field.to_string());
 
         // Fast path: per-query memoization
         if let Some(v) = self
@@ -476,18 +473,11 @@ impl QueryCaches {
         }
 
         // Fallback to global cache
-        let (arc, _outcome) = GlobalEnumCache::instance().get_or_load(
-            &self.base_dir,
-            segment_id,
-            uid,
-            field,
-        )?;
+        let (arc, _outcome) =
+            GlobalEnumCache::instance().get_or_load(&self.base_dir, segment_id, uid, field)?;
 
         // Memoize for subsequent lookups within this query
-        let mut map = self
-            .enum_by_key
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
+        let mut map = self.enum_by_key.lock().unwrap_or_else(|p| p.into_inner());
         map.entry(key).or_insert_with(|| Arc::clone(&arc));
 
         Ok(arc)

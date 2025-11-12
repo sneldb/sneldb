@@ -1,7 +1,9 @@
 #[cfg(test)]
 mod tests {
     use crate::engine::core::CandidateZone;
+    use crate::engine::core::column::column_values::ColumnValues;
     use crate::engine::core::filter::condition::{FieldAccessor, PreparedAccessor};
+    use crate::engine::core::read::cache::DecompressedBlock;
     use crate::engine::core::read::sequence::group::ColumnarGrouper;
     use std::collections::HashMap;
 
@@ -13,8 +15,6 @@ mod tests {
         user_ids: &[&str],
         timestamps: &[i64],
     ) -> CandidateZone {
-        use crate::engine::core::column::column_values::ColumnValues;
-        use crate::engine::core::read::cache::DecompressedBlock;
         use std::sync::Arc;
 
         let mut values_map: HashMap<String, ColumnValues> = HashMap::new();
@@ -137,8 +137,6 @@ mod tests {
         let mut zones_by_type = HashMap::new();
 
         // Create zone without user_id field
-        use crate::engine::core::column::column_values::ColumnValues;
-        use crate::engine::core::read::cache::DecompressedBlock;
         use std::sync::Arc;
 
         let mut values = HashMap::new();

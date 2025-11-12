@@ -1,6 +1,7 @@
 use crate::engine::core::{Event, ZoneRow};
 use crate::engine::errors::StoreError;
 use crate::engine::types::ScalarValue;
+use crate::shared::time;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use tracing::{info, trace, warn};
 
@@ -66,7 +67,7 @@ impl ZonePlan {
                 uid: uid.clone(),
                 event_type: event_type.clone(),
                 segment_id,
-                created_at: crate::shared::time::now(),
+                created_at: time::now(),
             });
 
             zone_id += 1;

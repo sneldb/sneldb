@@ -34,23 +34,19 @@ impl EntryFile {
         let mut buf = Vec::new();
         {
             let mut file = File::open(&self.path)?;
-            file.read_to_end(&mut buf)
-                .map_err(|e| MaterializationError::Corrupt(format!(
-                    "Failed to read entry file: {}",
-                    e
-                )))?;
+            file.read_to_end(&mut buf).map_err(|e| {
+                MaterializationError::Corrupt(format!("Failed to read entry file: {}", e))
+            })?;
         }
 
-        if buf.len() < crate::shared::storage_header::BinaryHeader::TOTAL_LEN {
-            return Err(MaterializationError::Corrupt(
-                "Entry file too small".into(),
-            ));
+        if buf.len() < BinaryHeader::TOTAL_LEN {
+            return Err(MaterializationError::Corrupt("Entry file too small".into()));
         }
 
         // Validate header from buffer
         {
             use std::io::Cursor;
-            let mut cursor = Cursor::new(&buf[..crate::shared::storage_header::BinaryHeader::TOTAL_LEN]);
+            let mut cursor = Cursor::new(&buf[..BinaryHeader::TOTAL_LEN]);
             if let Err(err) = self.validate_header(&mut cursor) {
                 warn!(
                     error = %err,
@@ -65,12 +61,10 @@ impl EntryFile {
         }
 
         // Skip header when deserializing
-        let data = &buf[crate::shared::storage_header::BinaryHeader::TOTAL_LEN..];
-        bincode::deserialize::<MaterializationEntry>(data)
-            .map_err(|e| MaterializationError::Corrupt(format!(
-                "Failed to deserialize entry: {}",
-                e
-            )))
+        let data = &buf[BinaryHeader::TOTAL_LEN..];
+        bincode::deserialize::<MaterializationEntry>(data).map_err(|e| {
+            MaterializationError::Corrupt(format!("Failed to deserialize entry: {}", e))
+        })
     }
 
     pub fn persist(&self, entry: &MaterializationEntry) -> Result<(), MaterializationError> {
@@ -105,7 +99,10 @@ impl EntryFile {
         Ok(())
     }
 
-    fn validate_header<R: std::io::Read>(&self, reader: &mut R) -> Result<(), MaterializationError> {
+    fn validate_header<R: std::io::Read>(
+        &self,
+        reader: &mut R,
+    ) -> Result<(), MaterializationError> {
         let header = BinaryHeader::read_from(reader)?;
         let expected_magic = FileKind::MaterializationCatalogEntry.magic();
 
@@ -130,4 +127,3 @@ impl EntryFile {
 pub fn entry_file_path(root_dir: &Path, name: &str) -> PathBuf {
     root_dir.join(name).join("entry.mcatentry")
 }
-

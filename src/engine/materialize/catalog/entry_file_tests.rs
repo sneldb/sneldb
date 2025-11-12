@@ -1,7 +1,8 @@
 use super::entry::MaterializationEntry;
-use super::entry_file::{entry_file_path, EntryFile};
+use super::entry_file::{EntryFile, entry_file_path};
 use crate::command::types::MaterializedQuerySpec;
 use crate::engine::materialize::MaterializationError;
+use crate::shared::storage_header::{BinaryHeader, FileKind};
 use crate::test_helpers::factories::CommandFactory;
 use std::fs;
 use tempfile::tempdir;
@@ -30,7 +31,10 @@ fn entry_file_load_missing_file_returns_error() {
 
     let result = entry_file.load();
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), MaterializationError::Corrupt(_)));
+    assert!(matches!(
+        result.unwrap_err(),
+        MaterializationError::Corrupt(_)
+    ));
 }
 
 #[test]
@@ -73,7 +77,10 @@ fn entry_file_load_corrupt_file_returns_error() -> Result<(), MaterializationErr
     let entry_file = EntryFile::new(entry_path);
     let result = entry_file.load();
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), MaterializationError::Corrupt(_)));
+    assert!(matches!(
+        result.unwrap_err(),
+        MaterializationError::Corrupt(_)
+    ));
     Ok(())
 }
 
@@ -86,7 +93,10 @@ fn entry_file_load_file_too_small_returns_error() -> Result<(), MaterializationE
     let entry_file = EntryFile::new(entry_path);
     let result = entry_file.load();
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), MaterializationError::Corrupt(_)));
+    assert!(matches!(
+        result.unwrap_err(),
+        MaterializationError::Corrupt(_)
+    ));
     Ok(())
 }
 
@@ -108,7 +118,6 @@ fn entry_file_persist_atomic_write() -> Result<(), MaterializationError> {
 
 #[test]
 fn entry_file_load_rejects_wrong_magic() -> Result<(), MaterializationError> {
-    use crate::shared::storage_header::{BinaryHeader, FileKind};
     use std::fs::File;
     use std::io::Write;
 
@@ -126,7 +135,10 @@ fn entry_file_load_rejects_wrong_magic() -> Result<(), MaterializationError> {
     let entry_file = EntryFile::new(entry_path);
     let result = entry_file.load();
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), MaterializationError::Corrupt(_)));
+    assert!(matches!(
+        result.unwrap_err(),
+        MaterializationError::Corrupt(_)
+    ));
     Ok(())
 }
 
@@ -155,4 +167,3 @@ fn entry_file_path_handles_nested_directories() {
     let path = entry_file_path(root, "nested/deep/entry");
     assert!(path.ends_with("nested/deep/entry/entry.mcatentry"));
 }
-

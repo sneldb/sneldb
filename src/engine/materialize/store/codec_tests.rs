@@ -27,7 +27,6 @@ fn build_schema() -> BatchSchema {
 }
 
 fn build_batch(schema: &Arc<BatchSchema>) -> ColumnBatch {
-    use crate::engine::types::ScalarValue;
     let pool = BatchPool::new(4).unwrap();
     let mut builder = pool.acquire(Arc::clone(schema));
     builder

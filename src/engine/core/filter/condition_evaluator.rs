@@ -2,7 +2,7 @@ use crate::engine::core::column::format::PhysicalType;
 use crate::engine::core::filter::condition::{FieldAccessor, PreparedAccessor};
 use crate::engine::core::filter::direct_event_accessor::DirectEventAccessor;
 use crate::engine::core::{
-    CandidateZone, Condition, Event, EventBuilder, InNumericCondition, InStringCondition,
+    CandidateZone, Condition, Event, EventBuilder, EventId, InNumericCondition, InStringCondition,
     LogicalCondition, NumericCondition, StringCondition,
 };
 use std::collections::HashSet;
@@ -192,7 +192,7 @@ impl ConditionEvaluator {
                 // Only check/update if we know the column is missing (optimization)
                 if event_id_missing || event.event_id().is_zero() {
                     let synthetic_id = (zone.zone_id as u64) << 32 | (i as u64);
-                    event.set_event_id(crate::engine::core::EventId::from(synthetic_id));
+                    event.set_event_id(EventId::from(synthetic_id));
                 }
                 results.push(event);
             }

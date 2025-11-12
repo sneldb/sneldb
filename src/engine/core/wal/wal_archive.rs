@@ -1,4 +1,5 @@
 use crate::engine::core::WalEntry;
+use crate::shared::time;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -51,7 +52,7 @@ impl WalArchiveHeader {
             entry_count,
             compression,
             compression_level,
-            created_at: crate::shared::time::now(),
+            created_at: time::now(),
         }
     }
 }

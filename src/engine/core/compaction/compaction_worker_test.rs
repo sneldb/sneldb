@@ -1,5 +1,5 @@
 use crate::engine::core::compaction::handover::{CompactionHandover, SegmentCache};
-use crate::engine::core::{CompactionWorker, Flusher, SegmentIndex};
+use crate::engine::core::{ColumnReader, CompactionWorker, Flusher, SegmentIndex, ZoneMeta};
 use crate::test_helpers::factories::*;
 use serde_json::json;
 use std::collections::HashSet;
@@ -133,7 +133,6 @@ async fn compacts_l0_segments_into_l1() {
     }
 
     // Read back context_id values across both outputs and verify global sort and total count
-    use crate::engine::core::{ColumnReader, ZoneMeta};
     let mut all_ctx = Vec::new();
     for entry in index.iter_all() {
         let label = format!("{:05}", entry.id);
@@ -196,7 +195,6 @@ async fn compacts_l0_segments_into_l1() {
 
 #[tokio::test]
 async fn compaction_preserves_segments_shared_by_multiple_uids() {
-    use crate::engine::core::ZoneMeta;
     use crate::logging::init_for_tests;
     init_for_tests();
 

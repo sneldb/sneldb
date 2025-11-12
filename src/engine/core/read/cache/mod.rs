@@ -38,9 +38,7 @@ pub use decompressed_block::DecompressedBlock;
 pub use enum_cache_entry::EnumCacheEntry;
 pub use enum_cache_key::EnumCacheKey;
 pub use global_column_handle_cache::GlobalColumnHandleCache;
-pub use global_enum_cache::{
-    CacheOutcome as EnumCacheOutcome, GlobalEnumCache, EnumCacheStats,
-};
+pub use global_enum_cache::{CacheOutcome as EnumCacheOutcome, EnumCacheStats, GlobalEnumCache};
 pub use global_index_catalog_cache::{
     CacheOutcome as IndexCatalogCacheOutcome, GlobalIndexCatalogCache, IndexCatalogCacheStats,
 };

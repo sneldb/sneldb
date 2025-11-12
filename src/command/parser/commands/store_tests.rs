@@ -1,4 +1,5 @@
 use crate::command::parser::commands::store;
+use crate::command::parser::error::ParseError;
 use crate::command::parser::tokenizer::tokenize;
 use crate::command::types::Command;
 use serde_json::json;
@@ -71,10 +72,7 @@ mod store_tests {
 
         let result = store::parse(&tokens);
 
-        assert!(matches!(
-            result,
-            Err(crate::command::parser::error::ParseError::NestedJsonNotAllowed)
-        ));
+        assert!(matches!(result, Err(ParseError::NestedJsonNotAllowed)));
     }
 
     #[test]
@@ -94,10 +92,7 @@ mod store_tests {
 
         let result = store::parse(&tokens);
 
-        assert!(matches!(
-            result,
-            Err(crate::command::parser::error::ParseError::ExpectedJsonBlock)
-        ));
+        assert!(matches!(result, Err(ParseError::ExpectedJsonBlock)));
     }
 
     #[test]
@@ -135,9 +130,6 @@ mod store_tests {
 
         let result = store::parse(&tokens);
 
-        assert!(matches!(
-            result,
-            Err(crate::command::parser::error::ParseError::InvalidJson(_))
-        ));
+        assert!(matches!(result, Err(ParseError::InvalidJson(_))));
     }
 }

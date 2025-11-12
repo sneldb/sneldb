@@ -8,6 +8,7 @@ use super::response_writer::ShowResponseWriter;
 use crate::command::handlers::query_batch_stream::QueryBatchStream;
 use crate::engine::core::read::flow::{BatchSchema, ColumnBatch, FlowChannel, FlowMetrics};
 use crate::engine::core::read::result::ColumnSpec;
+use crate::engine::types::ScalarValue;
 use crate::shared::response::{ArrowRenderer, JsonRenderer};
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, duplex};
@@ -33,7 +34,6 @@ fn build_schema() -> Arc<BatchSchema> {
 }
 
 fn build_batch(schema: Arc<BatchSchema>, rows: &[(u64, u64, &str)]) -> Arc<ColumnBatch> {
-    use crate::engine::types::ScalarValue;
     let timestamps: Vec<ScalarValue> = rows
         .iter()
         .map(|(ts, _, _)| ScalarValue::from(json!(ts)))
@@ -346,7 +346,6 @@ async fn writes_arrow_format_with_u64_event_ids() {
         (1u64, 1000000000000u64, "first"),
         (2u64, 1000000000001u64, "second"),
     ];
-    use crate::engine::types::ScalarValue;
     let timestamps: Vec<ScalarValue> = rows
         .iter()
         .map(|(ts, _, _)| ScalarValue::from(json!(*ts)))

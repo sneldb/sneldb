@@ -6,6 +6,7 @@ use crate::engine::materialize::catalog::SchemaSnapshot;
 use crate::engine::materialize::high_water::HighWaterMark;
 use crate::engine::materialize::store::frame::header::FrameHeader;
 use crate::engine::materialize::store::frame::metadata::StoredFrameMeta;
+use crate::engine::types::ScalarValue;
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -28,7 +29,6 @@ fn build_schema_with_types(types: Vec<(&str, &str)>) -> (Arc<BatchSchema>, Vec<S
 }
 
 fn build_batch(schema: &Arc<BatchSchema>, rows: Vec<Vec<Value>>) -> ColumnBatch {
-    use crate::engine::types::ScalarValue;
     let pool = BatchPool::new(100).unwrap();
     let mut builder = pool.acquire(Arc::clone(schema));
 
@@ -109,7 +109,6 @@ fn decode_basic_batch() {
     let decoded = Decoder::decode(&meta, payload, &header).unwrap();
 
     assert_eq!(decoded.len(), 2);
-    use crate::engine::types::ScalarValue;
     assert_eq!(
         decoded.column(0).unwrap()[0],
         ScalarValue::from(json!(1700000000_u64))
@@ -146,7 +145,6 @@ fn decode_handles_null_values() {
     let decoded = Decoder::decode(&meta, payload, &header).unwrap();
 
     assert_eq!(decoded.len(), 3);
-    use crate::engine::types::ScalarValue;
     assert_eq!(decoded.column(0).unwrap()[0], ScalarValue::from(json!(1)));
     assert_eq!(decoded.column(0).unwrap()[2], ScalarValue::Null);
     assert_eq!(decoded.column(1).unwrap()[1], ScalarValue::Null);
@@ -179,7 +177,6 @@ fn decode_handles_all_column_types() {
     let decoded = Decoder::decode(&meta, payload, &header).unwrap();
 
     assert_eq!(decoded.len(), 1);
-    use crate::engine::types::ScalarValue;
     assert_eq!(
         decoded.column(0).unwrap()[0],
         ScalarValue::from(json!(1000_u64))
@@ -214,7 +211,6 @@ fn decode_handles_string_columns() {
     let decoded = Decoder::decode(&meta, payload, &header).unwrap();
 
     assert_eq!(decoded.len(), 2);
-    use crate::engine::types::ScalarValue;
     assert_eq!(
         decoded.column(1).unwrap()[0],
         ScalarValue::from(json!("short"))
@@ -241,7 +237,6 @@ fn decode_handles_json_columns() {
     let decoded = Decoder::decode(&meta, payload, &header).unwrap();
 
     assert_eq!(decoded.len(), 2);
-    use crate::engine::types::ScalarValue;
     assert_eq!(
         decoded.column(1).unwrap()[0],
         ScalarValue::from(json!({"key": "value"}))
@@ -348,7 +343,6 @@ fn encode_decode_roundtrip_complex() {
 
     assert_eq!(decoded.len(), 3);
     // Verify first row
-    use crate::engine::types::ScalarValue;
     assert_eq!(
         decoded.column(0).unwrap()[0],
         ScalarValue::from(json!(1000_u64))

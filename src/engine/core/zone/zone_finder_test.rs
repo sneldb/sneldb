@@ -1,7 +1,8 @@
 use crate::command::types::CompareOp;
 use crate::engine::core::read::index_strategy::IndexStrategy;
-use crate::engine::core::{Flusher, ZoneFinder};
+use crate::engine::core::{Flusher, LogicalOp, ZoneCombiner, ZoneFinder};
 use crate::engine::schema::{EnumType, FieldType};
+use crate::shared::config::CONFIG;
 use crate::test_helpers::factories::{
     CommandFactory, EventFactory, FilterGroupFactory, MemTableFactory, QueryPlanFactory,
     SchemaRegistryFactory,
@@ -397,7 +398,7 @@ async fn ebm_eq_prunes_zones() {
 
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].segment_id, "001");
-    let expected_zone_id = (1usize / crate::shared::config::CONFIG.engine.event_per_zone) as u32;
+    let expected_zone_id = (1usize / CONFIG.engine.event_per_zone) as u32;
     assert_eq!(found[0].zone_id, expected_zone_id);
 }
 
@@ -525,7 +526,7 @@ async fn ebm_neq_prunes_zones() {
     // With dynamic zone size, the NEQ("pro") matches:
     // 001: index 0 ("free") => one zone id = 0 / zone_size
     // 002: indices 0 ("premium"), 1 ("enterprise") => zone ids = {0/zone_size, 1/zone_size}
-    let zone_size = crate::shared::config::CONFIG.engine.event_per_zone;
+    let zone_size = CONFIG.engine.event_per_zone;
     let seg1_zone_id = (0usize / zone_size) as u32;
     let mut seg2_zone_ids = vec![(0usize / zone_size) as u32, (1usize / zone_size) as u32];
     seg2_zone_ids.sort_unstable();
@@ -1125,11 +1126,7 @@ async fn zone_surf_between_three_segments_and() {
     let zones_lt = lt_finder.find();
 
     // AND combine
-    let combined = crate::engine::core::ZoneCombiner::new(
-        vec![zones_gt, zones_lt],
-        crate::engine::core::LogicalOp::And,
-    )
-    .combine();
+    let combined = ZoneCombiner::new(vec![zones_gt, zones_lt], LogicalOp::And).combine();
 
     // Expect segments: 001 (12), 003 (15,29), 002 (25); exclude 5 and 31 via intersection logic
     let segs: std::collections::HashSet<_> =

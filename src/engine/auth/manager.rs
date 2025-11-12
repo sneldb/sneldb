@@ -1,5 +1,8 @@
 use super::types::{AuthError, AuthResult, User, UserCache, UserKey};
+use crate::engine::core::{Event, EventId};
+use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
+use crate::engine::shard::message::ShardMessage;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use std::sync::Arc;
@@ -197,8 +200,6 @@ impl AuthManager {
 
     /// Store user in SnelDB via STORE command
     async fn store_user_in_db(&self, user: &User) -> AuthResult<()> {
-        use crate::engine::core::{Event, EventId};
-        use crate::engine::shard::message::ShardMessage;
         use std::collections::BTreeMap;
 
         let context_id = "__system_auth";
@@ -235,9 +236,7 @@ impl AuthManager {
             .tx
             .send(ShardMessage::Store(
                 event,
-                Arc::new(tokio::sync::RwLock::new(
-                    crate::engine::schema::SchemaRegistry::new().unwrap(),
-                )),
+                Arc::new(tokio::sync::RwLock::new(SchemaRegistry::new().unwrap())),
             ))
             .await
             .map_err(|e| {
@@ -261,4 +260,3 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
         .fold(0u8, |acc, x| acc | x)
         == 0
 }
-

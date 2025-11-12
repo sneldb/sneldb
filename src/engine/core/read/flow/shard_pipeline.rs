@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tokio::task::JoinHandle;
 use tracing::{debug, error};
 
+use crate::command::types::Command;
 use crate::engine::core::Event;
 use crate::engine::core::MemTable;
 use crate::engine::core::QueryCaches;
@@ -17,6 +18,7 @@ use crate::engine::core::read::flow::{
     FlowSource,
 };
 use crate::engine::core::read::segment_query_runner::SegmentQueryRunner;
+use crate::engine::schema::registry::SchemaRegistry;
 
 pub const DEFAULT_MEMTABLE_COLUMNS: &[&str] =
     &["context_id", "event_type", "timestamp", "event_id"];
@@ -27,7 +29,7 @@ pub const DEFAULT_MEMTABLE_COLUMNS: &[&str] =
 fn compute_return_projection(
     input_schema: &BatchSchema,
     return_fields: Option<&[String]>,
-    registry: &crate::engine::schema::registry::SchemaRegistry,
+    registry: &SchemaRegistry,
     event_type: &str,
 ) -> Result<(Arc<BatchSchema>, Vec<usize>), FlowOperatorError> {
     let return_fields = match return_fields {
@@ -207,7 +209,7 @@ pub async fn build_memtable_flow(
     }
 
     // Compute projection for RETURN fields if specified
-    let projection = if let crate::command::types::Command::Query {
+    let projection = if let Command::Query {
         return_fields,
         event_type,
         ..
@@ -436,7 +438,7 @@ pub async fn build_segment_stream(
     }
 
     // Compute projection for RETURN fields if specified
-    let projection = if let crate::command::types::Command::Query {
+    let projection = if let Command::Query {
         return_fields,
         event_type,
         ..

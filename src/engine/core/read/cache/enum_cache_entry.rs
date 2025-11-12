@@ -68,4 +68,3 @@ impl EnumCacheEntry {
         total.max(self.size as usize)
     }
 }
-

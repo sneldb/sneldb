@@ -1,10 +1,17 @@
+use crate::command::handlers::flush;
 use crate::command::handlers::query::QueryCommandHandler;
 #[cfg(test)]
 use crate::command::handlers::query::set_streaming_enabled;
+use crate::command::handlers::store;
+use crate::command::parser;
 use crate::command::parser::commands::query::parse;
+use crate::command::types::Command;
+use crate::engine::core::read::cache::column_block_cache::GlobalColumnBlockCache;
+use crate::engine::core::read::cache::global_zone_index_cache::GlobalZoneIndexCache;
+use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
 use crate::logging::init_for_tests;
-use crate::shared::response::JsonRenderer;
+use crate::shared::response::{JsonRenderer, render::Renderer};
 use crate::test_helpers::factories::{CommandFactory, SchemaRegistryFactory};
 use serde_json::Value as JsonValue;
 use std::sync::Arc;
@@ -13,11 +20,11 @@ use tokio::io::{AsyncReadExt, AsyncWrite, duplex};
 use tokio::time::{Duration, sleep};
 
 async fn execute_query<W: AsyncWrite + Unpin>(
-    cmd: &crate::command::types::Command,
+    cmd: &Command,
     shard_manager: &ShardManager,
-    registry: &Arc<tokio::sync::RwLock<crate::engine::schema::SchemaRegistry>>,
+    registry: &Arc<tokio::sync::RwLock<SchemaRegistry>>,
     writer: &mut W,
-    renderer: &dyn crate::shared::response::render::Renderer,
+    renderer: &dyn Renderer,
 ) -> std::io::Result<()> {
     QueryCommandHandler::new(cmd, shard_manager, Arc::clone(registry), writer, renderer)
         .handle()
@@ -106,15 +113,9 @@ async fn test_query_aggregation_count_unique_by_returns_values() {
             .with_payload(payload)
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(200)).await;
 
@@ -173,15 +174,9 @@ async fn test_query_aggregation_count_unique_merging_accuracy() {
             .with_payload(serde_json::json!({ "user_id": user_id, "region": region }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(400)).await;
 
@@ -305,15 +300,9 @@ async fn test_query_aggregation_count_unique_missing_field() {
             .with_payload(serde_json::json!({ "value": value }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(400)).await;
 
@@ -448,15 +437,9 @@ async fn test_query_aggregation_count_field_by_returns_values() {
             .with_payload(payload)
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(400)).await;
 
@@ -501,15 +484,9 @@ async fn test_query_aggregation_per_month_by_country_returns_bucket_and_group() 
             .with_payload(serde_json::json!({ "amount": amt, "country": ctry }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(400)).await;
 
@@ -573,15 +550,9 @@ async fn test_query_aggregation_count_per_day_by_two_fields() {
             .with_payload(payload)
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(200)).await;
 
@@ -625,15 +596,9 @@ async fn test_query_aggregation_multiple_aggs_returns_all_metrics() {
             .with_payload(serde_json::json!({ "id": i }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(200)).await;
@@ -679,15 +644,9 @@ async fn test_query_aggregation_count_returns_value() {
             .with_payload(serde_json::json!({ "id": i }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(200)).await;
 
@@ -740,15 +699,9 @@ async fn test_query_aggregation_avg_with_filter_returns_value() {
             .with_payload(serde_json::json!({ "id": i }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(200)).await;
@@ -835,15 +788,9 @@ async fn test_query_returns_matching_event_as_json() {
         .with_payload(serde_json::json!({ "id": 42 }))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     // Query for it
     let query_cmd = CommandFactory::query()
@@ -918,15 +865,9 @@ async fn test_query_selection_limit_truncates() {
             .with_payload(serde_json::json!({ "id": id }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     // Allow time for store to be processed
@@ -973,15 +914,9 @@ async fn test_query_order_by_with_lt_filter_returns_rows() {
             .with_payload(serde_json::json!({ "id": i }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     // Allow flush (mem or segment) depending on config
@@ -1029,15 +964,9 @@ async fn test_query_aggregation_limit_truncates_and_sorts_groups() {
             .with_payload(serde_json::json!({ "country": country }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(400)).await;
 
@@ -1116,15 +1045,9 @@ async fn test_query_aggregation_scalar_count_streaming() {
             .with_payload(serde_json::json!({ "value": i * 10 }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(400)).await;
 
@@ -1186,15 +1109,9 @@ async fn test_query_aggregation_filters_empty_groups_from_multiple_segments() {
             .with_payload(serde_json::json!({ "region": region }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(400)).await;
 
@@ -1266,15 +1183,9 @@ async fn test_query_aggregation_sum_streaming() {
             .with_payload(serde_json::json!({ "amount": amount }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(400)).await;
 
@@ -1337,15 +1248,9 @@ async fn test_query_aggregation_avg_streaming() {
             .with_payload(serde_json::json!({ "score": score, "category": "test" }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(400)).await;
 
@@ -1408,15 +1313,9 @@ async fn test_query_aggregation_scalar_avg_streaming() {
             .with_payload(serde_json::json!({ "value": value }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(400)).await;
 
@@ -1494,15 +1393,9 @@ async fn test_query_aggregation_avg_merging_accuracy() {
             .with_payload(serde_json::json!({ "amount": amount, "region": region }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(400)).await;
 
@@ -1581,15 +1474,9 @@ async fn test_query_aggregation_avg_with_time_bucket_streaming() {
             .with_payload(serde_json::json!({ "score": score }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(400)).await;
 
@@ -1669,15 +1556,9 @@ async fn test_query_aggregation_min_max_streaming() {
             .with_payload(serde_json::json!({ "value": value, "category": "test" }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(400)).await;
 
@@ -1785,15 +1666,9 @@ async fn test_query_aggregation_scalar_min_max_streaming() {
             .with_payload(serde_json::json!({ "value": value }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(400)).await;
 
@@ -1900,15 +1775,9 @@ async fn test_query_aggregation_group_by_missing_field() {
             .with_payload(serde_json::json!({ "value": 10, "region": region }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(400)).await;
 
@@ -1977,15 +1846,9 @@ async fn test_query_aggregation_limit_with_empty_groups_filtered() {
             .with_payload(serde_json::json!({ "category": cat }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(400)).await;
 
@@ -2054,15 +1917,9 @@ async fn test_query_aggregation_multiple_functions_streaming() {
             .with_payload(serde_json::json!({ "amount": amount, "region": region }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(400)).await;
 
@@ -2124,8 +1981,6 @@ async fn test_query_order_by_limit_with_large_dataset() {
     init_for_tests();
 
     // Clear global caches to prevent cross-test contamination
-    use crate::engine::core::read::cache::column_block_cache::GlobalColumnBlockCache;
-    use crate::engine::core::read::cache::global_zone_index_cache::GlobalZoneIndexCache;
     GlobalZoneIndexCache::instance().clear_for_test();
     GlobalColumnBlockCache::instance().clear_for_test();
 
@@ -2234,15 +2089,9 @@ async fn test_query_order_by_limit_with_large_dataset() {
             }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     // Explicitly flush all shards and wait for completion to ensure all data is persisted
@@ -2529,8 +2378,6 @@ async fn test_query_order_by_limit_with_large_dataset() {
 async fn test_timestamp_order_by_desc_offset_limit() {
     init_for_tests();
 
-    use crate::engine::core::read::cache::column_block_cache::GlobalColumnBlockCache;
-    use crate::engine::core::read::cache::global_zone_index_cache::GlobalZoneIndexCache;
     GlobalZoneIndexCache::instance().clear_for_test();
     GlobalColumnBlockCache::instance().clear_for_test();
 
@@ -2553,15 +2400,9 @@ async fn test_timestamp_order_by_desc_offset_limit() {
             .with_payload(serde_json::json!({"created_at": ts, "val": ts}))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(500)).await;
@@ -2610,28 +2451,16 @@ async fn test_timestamp_where_gt_asc_limit() {
             .with_payload(serde_json::json!({"created_at": ts, "x": ts}))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     // Ensure data is persisted and indexes built
-    let flush_cmd = crate::command::types::Command::Flush;
+    let flush_cmd = Command::Flush;
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::flush::handle(
-        &flush_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("flush should succeed");
+    flush::handle(&flush_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("flush should succeed");
     sleep(Duration::from_millis(600)).await;
 
     let cmd = parse("QUERY ts_evt_range WHERE created_at > 307 ORDER BY created_at ASC LIMIT 3")
@@ -2661,8 +2490,6 @@ async fn test_query_with_datetime_field_and_limit() {
     init_for_tests();
 
     // Clear global caches to prevent cross-test contamination
-    use crate::engine::core::read::cache::column_block_cache::GlobalColumnBlockCache;
-    use crate::engine::core::read::cache::global_zone_index_cache::GlobalZoneIndexCache;
     GlobalZoneIndexCache::instance().clear_for_test();
     GlobalColumnBlockCache::instance().clear_for_test();
 
@@ -2720,15 +2547,9 @@ async fn test_query_with_datetime_field_and_limit() {
             }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     // Allow time for processing and RLTE indices to be built
@@ -2910,15 +2731,9 @@ async fn test_orchestrator_multi_shard_query() {
             .with_payload(serde_json::json!({ "value": i }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     // Query should aggregate results from all shards
@@ -2950,8 +2765,6 @@ async fn test_orchestrator_multi_shard_query() {
 async fn test_orchestrator_order_by_with_offset_and_limit() {
     init_for_tests();
 
-    use crate::engine::core::read::cache::column_block_cache::GlobalColumnBlockCache;
-    use crate::engine::core::read::cache::global_zone_index_cache::GlobalZoneIndexCache;
     GlobalZoneIndexCache::instance().clear_for_test();
     GlobalColumnBlockCache::instance().clear_for_test();
 
@@ -2974,15 +2787,9 @@ async fn test_orchestrator_order_by_with_offset_and_limit() {
             .with_payload(serde_json::json!({ "rank": i }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(1000)).await;
@@ -3030,8 +2837,6 @@ async fn test_orchestrator_order_by_with_offset_and_limit() {
 async fn test_orchestrator_kway_merge_performance() {
     init_for_tests();
 
-    use crate::engine::core::read::cache::column_block_cache::GlobalColumnBlockCache;
-    use crate::engine::core::read::cache::global_zone_index_cache::GlobalZoneIndexCache;
     GlobalZoneIndexCache::instance().clear_for_test();
     GlobalColumnBlockCache::instance().clear_for_test();
 
@@ -3056,15 +2861,9 @@ async fn test_orchestrator_kway_merge_performance() {
             .with_payload(serde_json::json!({ "score": i * 3 }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(1500)).await;
@@ -3129,15 +2928,9 @@ async fn test_orchestrator_handles_empty_shards() {
             .with_payload(serde_json::json!({ "id": i * 10 }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(300)).await;
@@ -3183,15 +2976,9 @@ async fn test_orchestrator_order_by_string_multi_shard() {
             .with_payload(serde_json::json!({ "name": name }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(300)).await;
@@ -3239,15 +3026,9 @@ async fn test_orchestrator_command_builder_efficiency() {
             .with_payload(serde_json::json!({ "data": i }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(300)).await;
@@ -3274,8 +3055,6 @@ async fn test_orchestrator_command_builder_efficiency() {
 async fn test_orchestrator_parallel_segment_discovery() {
     init_for_tests();
 
-    use crate::engine::core::read::cache::column_block_cache::GlobalColumnBlockCache;
-    use crate::engine::core::read::cache::global_zone_index_cache::GlobalZoneIndexCache;
     GlobalZoneIndexCache::instance().clear_for_test();
     GlobalColumnBlockCache::instance().clear_for_test();
 
@@ -3300,15 +3079,9 @@ async fn test_orchestrator_parallel_segment_discovery() {
             .with_payload(serde_json::json!({ "seq": i }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(600)).await;
@@ -3355,8 +3128,6 @@ async fn test_orchestrator_parallel_segment_discovery() {
 async fn test_orchestrator_order_by_with_filter() {
     init_for_tests();
 
-    use crate::engine::core::read::cache::column_block_cache::GlobalColumnBlockCache;
-    use crate::engine::core::read::cache::global_zone_index_cache::GlobalZoneIndexCache;
     GlobalZoneIndexCache::instance().clear_for_test();
     GlobalColumnBlockCache::instance().clear_for_test();
 
@@ -3383,15 +3154,9 @@ async fn test_orchestrator_order_by_with_filter() {
             .with_payload(serde_json::json!({ "amount": i * 5, "status": status }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(800)).await;
@@ -3449,15 +3214,9 @@ async fn test_orchestrator_offset_exceeds_results() {
             .with_payload(serde_json::json!({ "id": i }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(200)).await;
@@ -3486,8 +3245,6 @@ async fn test_orchestrator_offset_exceeds_results() {
 async fn test_orchestrator_order_desc_with_large_offset() {
     init_for_tests();
 
-    use crate::engine::core::read::cache::column_block_cache::GlobalColumnBlockCache;
-    use crate::engine::core::read::cache::global_zone_index_cache::GlobalZoneIndexCache;
     GlobalZoneIndexCache::instance().clear_for_test();
     GlobalColumnBlockCache::instance().clear_for_test();
 
@@ -3510,15 +3267,9 @@ async fn test_orchestrator_order_desc_with_large_offset() {
             .with_payload(serde_json::json!({ "num": i * 2 }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(600)).await;
@@ -3577,15 +3328,9 @@ async fn test_orchestrator_legacy_merge_path() {
             .with_payload(serde_json::json!({ "value": i }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(300)).await;
@@ -3662,29 +3407,17 @@ async fn test_offset_only_without_order_by() {
             .with_payload(serde_json::json!({ "seq": i }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     // Manual flush to ensure all data is on disk
-    let flush_cmd = crate::command::types::Command::Flush;
+    let flush_cmd = Command::Flush;
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::flush::handle(
-        &flush_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("flush should succeed");
+    flush::handle(&flush_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("flush should succeed");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -3739,8 +3472,6 @@ async fn test_offset_only_without_order_by() {
 async fn test_offset_zero_is_noop() {
     init_for_tests();
 
-    use crate::engine::core::read::cache::column_block_cache::GlobalColumnBlockCache;
-    use crate::engine::core::read::cache::global_zone_index_cache::GlobalZoneIndexCache;
     GlobalZoneIndexCache::instance().clear_for_test();
     GlobalColumnBlockCache::instance().clear_for_test();
 
@@ -3763,29 +3494,17 @@ async fn test_offset_zero_is_noop() {
             .with_payload(serde_json::json!({ "val": i * 10 }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     // Manual flush to ensure all data is on disk
-    let flush_cmd = crate::command::types::Command::Flush;
+    let flush_cmd = Command::Flush;
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::flush::handle(
-        &flush_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("flush should succeed");
+    flush::handle(&flush_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("flush should succeed");
 
     // Wait for RLTE indices to be built
     sleep(Duration::from_millis(1500)).await;
@@ -3822,8 +3541,6 @@ async fn test_offset_zero_is_noop() {
 async fn test_offset_equals_dataset_size() {
     init_for_tests();
 
-    use crate::engine::core::read::cache::column_block_cache::GlobalColumnBlockCache;
-    use crate::engine::core::read::cache::global_zone_index_cache::GlobalZoneIndexCache;
     GlobalZoneIndexCache::instance().clear_for_test();
     GlobalColumnBlockCache::instance().clear_for_test();
 
@@ -3846,15 +3563,9 @@ async fn test_offset_equals_dataset_size() {
             .with_payload(serde_json::json!({ "num": i }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(500)).await;
@@ -3883,8 +3594,6 @@ async fn test_offset_equals_dataset_size() {
 async fn test_offset_limit_exact_boundary() {
     init_for_tests();
 
-    use crate::engine::core::read::cache::column_block_cache::GlobalColumnBlockCache;
-    use crate::engine::core::read::cache::global_zone_index_cache::GlobalZoneIndexCache;
     GlobalZoneIndexCache::instance().clear_for_test();
     GlobalColumnBlockCache::instance().clear_for_test();
 
@@ -3907,29 +3616,17 @@ async fn test_offset_limit_exact_boundary() {
             .with_payload(serde_json::json!({ "id": i }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     // Manual flush
-    let flush_cmd = crate::command::types::Command::Flush;
+    let flush_cmd = Command::Flush;
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::flush::handle(
-        &flush_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("flush should succeed");
+    flush::handle(&flush_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("flush should succeed");
 
     sleep(Duration::from_millis(1500)).await;
 
@@ -3965,8 +3662,6 @@ async fn test_offset_limit_exact_boundary() {
 async fn test_large_offset_small_limit() {
     init_for_tests();
 
-    use crate::engine::core::read::cache::column_block_cache::GlobalColumnBlockCache;
-    use crate::engine::core::read::cache::global_zone_index_cache::GlobalZoneIndexCache;
     GlobalZoneIndexCache::instance().clear_for_test();
     GlobalColumnBlockCache::instance().clear_for_test();
 
@@ -3989,15 +3684,9 @@ async fn test_large_offset_small_limit() {
             .with_payload(serde_json::json!({ "idx": i }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(1000)).await;
@@ -4073,8 +3762,6 @@ async fn test_offset_without_limit_is_rejected() {
 async fn test_offset_with_descending_order() {
     init_for_tests();
 
-    use crate::engine::core::read::cache::column_block_cache::GlobalColumnBlockCache;
-    use crate::engine::core::read::cache::global_zone_index_cache::GlobalZoneIndexCache;
     GlobalZoneIndexCache::instance().clear_for_test();
     GlobalColumnBlockCache::instance().clear_for_test();
 
@@ -4097,15 +3784,9 @@ async fn test_offset_with_descending_order() {
             .with_payload(serde_json::json!({ "score": i }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(500)).await;
@@ -4148,8 +3829,6 @@ async fn test_offset_with_descending_order() {
 async fn test_offset_multi_shard_kway_merge() {
     init_for_tests();
 
-    use crate::engine::core::read::cache::column_block_cache::GlobalColumnBlockCache;
-    use crate::engine::core::read::cache::global_zone_index_cache::GlobalZoneIndexCache;
     GlobalZoneIndexCache::instance().clear_for_test();
     GlobalColumnBlockCache::instance().clear_for_test();
 
@@ -4172,29 +3851,17 @@ async fn test_offset_multi_shard_kway_merge() {
             .with_payload(serde_json::json!({ "num": i * 2 }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     // Manual flush
-    let flush_cmd = crate::command::types::Command::Flush;
+    let flush_cmd = Command::Flush;
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::flush::handle(
-        &flush_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("flush should succeed");
+    flush::handle(&flush_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("flush should succeed");
 
     sleep(Duration::from_millis(1500)).await;
 
@@ -4234,8 +3901,6 @@ async fn test_offset_multi_shard_kway_merge() {
 async fn test_offset_one() {
     init_for_tests();
 
-    use crate::engine::core::read::cache::column_block_cache::GlobalColumnBlockCache;
-    use crate::engine::core::read::cache::global_zone_index_cache::GlobalZoneIndexCache;
     GlobalZoneIndexCache::instance().clear_for_test();
     GlobalColumnBlockCache::instance().clear_for_test();
 
@@ -4258,29 +3923,17 @@ async fn test_offset_one() {
             .with_payload(serde_json::json!({ "letter": letter }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     // Manual flush
-    let flush_cmd = crate::command::types::Command::Flush;
+    let flush_cmd = Command::Flush;
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::flush::handle(
-        &flush_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("flush should succeed");
+    flush::handle(&flush_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("flush should succeed");
 
     sleep(Duration::from_millis(1500)).await;
 
@@ -4348,15 +4001,9 @@ async fn test_sequence_followed_by_basic() {
         .with_payload(serde_json::json!({"page": "/home", "user_id": "u1"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(1000)).await;
 
@@ -4367,15 +4014,9 @@ async fn test_sequence_followed_by_basic() {
         .with_payload(serde_json::json!({"order_id": 1, "user_id": "u1"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -4433,15 +4074,9 @@ async fn test_sequence_followed_by_with_where_clause() {
         .with_payload(serde_json::json!({"page": "/checkout", "user_id": "u1"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(1000)).await;
 
@@ -4452,15 +4087,9 @@ async fn test_sequence_followed_by_with_where_clause() {
         .with_payload(serde_json::json!({"order_id": 1, "user_id": "u1"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     // Store page_view for u2 with /home (should not match)
     let store_cmd = CommandFactory::store()
@@ -4469,15 +4098,9 @@ async fn test_sequence_followed_by_with_where_clause() {
         .with_payload(serde_json::json!({"page": "/home", "user_id": "u2"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(1000)).await;
 
@@ -4488,15 +4111,9 @@ async fn test_sequence_followed_by_with_where_clause() {
         .with_payload(serde_json::json!({"order_id": 2, "user_id": "u2"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -4557,15 +4174,9 @@ async fn test_sequence_preceded_by_basic() {
         .with_payload(serde_json::json!({"user_id": "u1", "amount": 100}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(1000)).await;
 
@@ -4576,15 +4187,9 @@ async fn test_sequence_preceded_by_basic() {
         .with_payload(serde_json::json!({"order_id": 1, "user_id": "u1"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -4645,15 +4250,9 @@ async fn test_sequence_with_numeric_link_field() {
         .with_payload(serde_json::json!({"order_id": 1, "customer_id": 100}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(1000)).await;
 
@@ -4664,15 +4263,9 @@ async fn test_sequence_with_numeric_link_field() {
         .with_payload(serde_json::json!({"order_id": 1, "customer_id": 100}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -4737,15 +4330,9 @@ async fn test_sequence_multiple_sequences_same_link_value() {
             .with_payload(serde_json::json!({"page": page.0, "user_id": "u1"}))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
         sleep(Duration::from_millis(500)).await;
     }
 
@@ -4757,15 +4344,9 @@ async fn test_sequence_multiple_sequences_same_link_value() {
             .with_payload(serde_json::json!({"order_id": i, "user_id": "u1"}))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
         sleep(Duration::from_millis(500)).await;
     }
 
@@ -4823,15 +4404,9 @@ async fn test_sequence_no_matching_sequences() {
         .with_payload(serde_json::json!({"user_id": "u1"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(1000)).await;
 
@@ -4842,15 +4417,9 @@ async fn test_sequence_no_matching_sequences() {
         .with_payload(serde_json::json!({"order_id": 1, "user_id": "u2"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -4903,15 +4472,9 @@ async fn test_sequence_wrong_temporal_order() {
         .with_payload(serde_json::json!({"user_id": "u1"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(1000)).await;
 
@@ -4922,15 +4485,9 @@ async fn test_sequence_wrong_temporal_order() {
         .with_payload(serde_json::json!({"user_id": "u1"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -4983,15 +4540,9 @@ async fn test_sequence_multiple_users_partial_matches() {
         .with_payload(serde_json::json!({"item_id": 1, "user_id": "u1"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(1000)).await;
 
@@ -5001,15 +4552,9 @@ async fn test_sequence_multiple_users_partial_matches() {
         .with_payload(serde_json::json!({"item_id": 1, "user_id": "u1"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -5020,15 +4565,9 @@ async fn test_sequence_multiple_users_partial_matches() {
         .with_payload(serde_json::json!({"item_id": 2, "user_id": "u2"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -5086,15 +4625,9 @@ async fn test_sequence_with_limit() {
             .with_payload(serde_json::json!({"user_id": user_id, "button": "buy"}))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
 
         sleep(Duration::from_millis(500)).await;
 
@@ -5105,15 +4638,9 @@ async fn test_sequence_with_limit() {
             .with_payload(serde_json::json!({"user_id": user_id, "value": 100}))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
 
         sleep(Duration::from_millis(500)).await;
     }
@@ -5177,15 +4704,9 @@ async fn test_sequence_where_clause_on_second_event() {
         .with_payload(serde_json::json!({"query": "laptop", "user_id": "u1"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(1000)).await;
 
@@ -5195,15 +4716,9 @@ async fn test_sequence_where_clause_on_second_event() {
         .with_payload(serde_json::json!({"order_id": 1, "user_id": "u1", "amount": 50}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(1000)).await;
 
@@ -5214,15 +4729,9 @@ async fn test_sequence_where_clause_on_second_event() {
         .with_payload(serde_json::json!({"query": "phone", "user_id": "u2"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(1000)).await;
 
@@ -5232,15 +4741,9 @@ async fn test_sequence_where_clause_on_second_event() {
         .with_payload(serde_json::json!({"order_id": 2, "user_id": "u2", "amount": 200}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -5297,15 +4800,9 @@ async fn test_sequence_duplicate_events_same_link() {
             .with_payload(serde_json::json!({"page": page, "user_id": "u1"}))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
         sleep(Duration::from_millis(500)).await;
     }
 
@@ -5316,15 +4813,9 @@ async fn test_sequence_duplicate_events_same_link() {
         .with_payload(serde_json::json!({"user_id": "u1"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -5381,15 +4872,9 @@ async fn test_sequence_across_multiple_shards() {
         .with_payload(serde_json::json!({"user_id": "u1"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(1000)).await;
 
@@ -5400,15 +4885,9 @@ async fn test_sequence_across_multiple_shards() {
         .with_payload(serde_json::json!({"user_id": "u1"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -5464,15 +4943,9 @@ async fn test_sequence_preceded_by_wrong_order() {
         .with_payload(serde_json::json!({"user_id": "u1"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(1000)).await;
 
@@ -5483,15 +4956,9 @@ async fn test_sequence_preceded_by_wrong_order() {
         .with_payload(serde_json::json!({"user_id": "u1"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -5564,15 +5031,9 @@ async fn test_sequence_where_clause_both_events() {
         )
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(1000)).await;
 
@@ -5582,15 +5043,9 @@ async fn test_sequence_where_clause_both_events() {
         .with_payload(serde_json::json!({"product": "laptop", "user_id": "u1", "price": 100}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(1000)).await;
 
@@ -5603,15 +5058,9 @@ async fn test_sequence_where_clause_both_events() {
         )
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(1000)).await;
 
@@ -5621,15 +5070,9 @@ async fn test_sequence_where_clause_both_events() {
         .with_payload(serde_json::json!({"product": "shirt", "user_id": "u2", "price": 50}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -5685,15 +5128,9 @@ async fn test_sequence_very_close_timestamps() {
         .with_payload(serde_json::json!({"user_id": "u1"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     // Store end immediately after (very close timestamps)
     sleep(Duration::from_millis(10)).await;
@@ -5704,15 +5141,9 @@ async fn test_sequence_very_close_timestamps() {
         .with_payload(serde_json::json!({"user_id": "u1"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -5784,15 +5215,9 @@ async fn test_sequence_ambiguous_field_error() {
         .with_payload(serde_json::json!({"order_id": 1, "user_id": "u1", "status": "done"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(1000)).await;
 
@@ -5802,15 +5227,9 @@ async fn test_sequence_ambiguous_field_error() {
         .with_payload(serde_json::json!({"user_id": "u1", "amount": 100, "status": "failed"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -5886,15 +5305,9 @@ async fn test_sequence_non_ambiguous_field_passes() {
         .with_payload(serde_json::json!({"order_id": 1, "user_id": "u1", "status": "done"}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(1000)).await;
 
@@ -5904,15 +5317,9 @@ async fn test_sequence_non_ambiguous_field_passes() {
         .with_payload(serde_json::json!({"user_id": "u1", "amount": 100}))
         .create();
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::store::handle(
-        &store_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("store should succeed");
+    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("store should succeed");
 
     sleep(Duration::from_millis(500)).await;
 
@@ -5964,15 +5371,9 @@ async fn test_query_in_operator_basic() {
             .with_payload(serde_json::json!({ "id": i }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(400)).await;
@@ -6037,31 +5438,19 @@ async fn test_query_in_operator_string() {
             .with_payload(serde_json::json!({ "status": status, "value": i * 10 }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(400)).await;
 
     // Flush to ensure all data is persisted
-    let flush_cmd = crate::command::types::Command::Flush;
+    let flush_cmd = Command::Flush;
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::flush::handle(
-        &flush_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("flush should succeed");
+    flush::handle(&flush_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("flush should succeed");
     // Wait for flush to complete and indices to be built
     sleep(Duration::from_millis(1500)).await;
 
@@ -6153,31 +5542,19 @@ async fn test_query_in_operator_with_and() {
             .with_payload(serde_json::json!({ "id": i, "status": status }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(400)).await;
 
     // Flush to ensure all data is persisted
-    let flush_cmd = crate::command::types::Command::Flush;
+    let flush_cmd = Command::Flush;
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::flush::handle(
-        &flush_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("flush should succeed");
+    flush::handle(&flush_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("flush should succeed");
     // Wait for flush to complete and indices to be built
     sleep(Duration::from_millis(1500)).await;
 
@@ -6236,15 +5613,9 @@ async fn test_query_in_operator_with_or() {
             .with_payload(serde_json::json!({ "id": i, "category": category }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(400)).await;
@@ -6293,31 +5664,19 @@ async fn test_query_in_operator_with_order_by_limit() {
             .with_payload(serde_json::json!({ "id": i, "score": i * 10 }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(400)).await;
 
     // Flush to ensure all data is persisted
-    let flush_cmd = crate::command::types::Command::Flush;
+    let flush_cmd = Command::Flush;
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::flush::handle(
-        &flush_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("flush should succeed");
+    flush::handle(&flush_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("flush should succeed");
     // Wait for flush to complete and indices to be built
     sleep(Duration::from_millis(1500)).await;
 
@@ -6376,31 +5735,19 @@ async fn test_query_in_operator_with_not() {
             .with_payload(serde_json::json!({ "id": i }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(100)).await;
 
     // Flush to ensure all data is persisted
-    let flush_cmd = crate::command::types::Command::Flush;
+    let flush_cmd = Command::Flush;
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::flush::handle(
-        &flush_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("flush should succeed");
+    flush::handle(&flush_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("flush should succeed");
 
     // Wait for flush to complete and indices to be built with retry logic
     let mut attempts = 0;
@@ -6485,31 +5832,19 @@ async fn test_query_parentheses_simple() {
             .with_payload(serde_json::json!({ "id": i, "status": status }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(400)).await;
 
     // Flush to ensure all data is persisted
-    let flush_cmd = crate::command::types::Command::Flush;
+    let flush_cmd = Command::Flush;
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::flush::handle(
-        &flush_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("flush should succeed");
+    flush::handle(&flush_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("flush should succeed");
     sleep(Duration::from_millis(1500)).await;
 
     // Query: WHERE (status = "active")
@@ -6566,31 +5901,19 @@ async fn test_query_parentheses_with_and() {
             )
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(400)).await;
 
     // Flush to ensure all data is persisted
-    let flush_cmd = crate::command::types::Command::Flush;
+    let flush_cmd = Command::Flush;
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::flush::handle(
-        &flush_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("flush should succeed");
+    flush::handle(&flush_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("flush should succeed");
     sleep(Duration::from_millis(1500)).await;
 
     // Query: WHERE (id IN (1, 2, 3) AND category IN ("A", "B"))
@@ -6641,31 +5964,19 @@ async fn test_query_parentheses_nested() {
             .with_payload(serde_json::json!({ "id": id, "category": category }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(400)).await;
 
     // Flush to ensure all data is persisted
-    let flush_cmd = crate::command::types::Command::Flush;
+    let flush_cmd = Command::Flush;
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::flush::handle(
-        &flush_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("flush should succeed");
+    flush::handle(&flush_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("flush should succeed");
     sleep(Duration::from_millis(1500)).await;
 
     // Query: WHERE ((id IN (1, 2) AND category = "A") OR (id IN (3, 4) AND category = "B"))
@@ -6722,31 +6033,19 @@ async fn test_query_parentheses_with_not() {
             .with_payload(serde_json::json!({ "id": id, "status": status }))
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(400)).await;
 
     // Flush to ensure all data is persisted
-    let flush_cmd = crate::command::types::Command::Flush;
+    let flush_cmd = Command::Flush;
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::flush::handle(
-        &flush_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("flush should succeed");
+    flush::handle(&flush_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("flush should succeed");
     sleep(Duration::from_millis(1500)).await;
 
     // Query: WHERE NOT (status = "cancelled" OR status = "refunded")
@@ -6812,31 +6111,19 @@ async fn test_query_parentheses_complex() {
             )
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(400)).await;
 
     // Flush to ensure all data is persisted
-    let flush_cmd = crate::command::types::Command::Flush;
+    let flush_cmd = Command::Flush;
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::flush::handle(
-        &flush_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("flush should succeed");
+    flush::handle(&flush_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("flush should succeed");
     sleep(Duration::from_millis(1500)).await;
 
     // Query: WHERE (id IN (1, 2, 3) AND category IN ("A", "B")) OR priority IN (3)
@@ -6947,30 +6234,18 @@ async fn test_plotql_order_by_different_metric() {
             .with_payload(payload)
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(400)).await;
 
     // Flush to ensure all data is persisted to segments
-    let flush_cmd = crate::command::types::Command::Flush;
+    let flush_cmd = Command::Flush;
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::flush::handle(
-        &flush_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("flush should succeed");
+    flush::handle(&flush_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("flush should succeed");
     sleep(Duration::from_millis(1500)).await;
 
     // PlotQL query: plot count of orders breakdown by product_id top 3 by avg(price)
@@ -6979,10 +6254,9 @@ async fn test_plotql_order_by_different_metric() {
     // 2. Group by product_id
     // 3. Sort by avg(price) descending
     // 4. Return top 3
-    let cmd = crate::command::parser::parse_command(
-        "PLOT count of orders breakdown by product_id top 3 by avg(price)",
-    )
-    .expect("parse PlotQL query");
+    let cmd =
+        parser::parse_command("PLOT count of orders breakdown by product_id top 3 by avg(price)")
+            .expect("parse PlotQL query");
 
     let (mut reader, mut writer) = duplex(4096);
     execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
@@ -7128,30 +6402,18 @@ async fn test_plotql_order_by_count_when_main_is_avg() {
             .with_payload(payload)
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(400)).await;
 
     // Flush to ensure all data is persisted to segments
-    let flush_cmd = crate::command::types::Command::Flush;
+    let flush_cmd = Command::Flush;
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::flush::handle(
-        &flush_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("flush should succeed");
+    flush::handle(&flush_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("flush should succeed");
     sleep(Duration::from_millis(1500)).await;
 
     // PlotQL query: plot avg(rating) of reviews breakdown by product_id top 3 by count
@@ -7160,10 +6422,9 @@ async fn test_plotql_order_by_count_when_main_is_avg() {
     // 2. Group by product_id
     // 3. Sort by count descending
     // 4. Return top 3
-    let cmd = crate::command::parser::parse_command(
-        "PLOT avg(rating) of reviews breakdown by product_id top 3 by count",
-    )
-    .expect("parse PlotQL query");
+    let cmd =
+        parser::parse_command("PLOT avg(rating) of reviews breakdown by product_id top 3 by count")
+            .expect("parse PlotQL query");
 
     let (mut reader, mut writer) = duplex(4096);
     execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
@@ -7310,30 +6571,18 @@ async fn test_plotql_order_by_field_not_metric() {
             .with_payload(payload)
             .create();
         let (mut _r, mut w) = duplex(1024);
-        crate::command::handlers::store::handle(
-            &store_cmd,
-            &shard_manager,
-            &registry,
-            &mut w,
-            &JsonRenderer,
-        )
-        .await
-        .expect("store should succeed");
+        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+            .await
+            .expect("store should succeed");
     }
     sleep(Duration::from_millis(400)).await;
 
     // Flush to ensure all data is persisted to segments
-    let flush_cmd = crate::command::types::Command::Flush;
+    let flush_cmd = Command::Flush;
     let (mut _r, mut w) = duplex(1024);
-    crate::command::handlers::flush::handle(
-        &flush_cmd,
-        &shard_manager,
-        &registry,
-        &mut w,
-        &JsonRenderer,
-    )
-    .await
-    .expect("flush should succeed");
+    flush::handle(&flush_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("flush should succeed");
     sleep(Duration::from_millis(1500)).await;
 
     // PlotQL query: plot count of sales breakdown by product_id top 3 by product_id
@@ -7342,10 +6591,9 @@ async fn test_plotql_order_by_field_not_metric() {
     // 2. Group by product_id
     // 3. Sort by product_id descending (field ordering, not metric)
     // 4. Return top 3
-    let cmd = crate::command::parser::parse_command(
-        "PLOT count of sales breakdown by product_id top 3 by product_id",
-    )
-    .expect("parse PlotQL query");
+    let cmd =
+        parser::parse_command("PLOT count of sales breakdown by product_id top 3 by product_id")
+            .expect("parse PlotQL query");
 
     let (mut reader, mut writer) = duplex(4096);
     execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)

@@ -1,4 +1,5 @@
 use crate::command::parser::commands::define;
+use crate::command::parser::error::ParseError;
 use crate::command::parser::tokenizer::tokenize;
 use crate::command::types::{Command, FieldSpec, MiniSchema};
 
@@ -93,12 +94,7 @@ mod define_tests {
 
         let result = define::parse(&tokens);
 
-        assert!(matches!(
-            result,
-            Err(crate::command::parser::error::ParseError::UnexpectedToken(
-                _
-            ))
-        ));
+        assert!(matches!(result, Err(ParseError::UnexpectedToken(_))));
     }
 
     #[test]
@@ -118,10 +114,7 @@ mod define_tests {
 
         let result = define::parse(&tokens);
 
-        assert!(matches!(
-            result,
-            Err(crate::command::parser::error::ParseError::InvalidJson(_))
-        ));
+        assert!(matches!(result, Err(ParseError::InvalidJson(_))));
     }
 
     #[test]
@@ -145,10 +138,7 @@ mod define_tests {
         let result = define::parse(&tokens);
 
         assert!(
-            matches!(
-                result,
-                Err(crate::command::parser::error::ParseError::InvalidJson(_))
-            ),
+            matches!(result, Err(ParseError::InvalidJson(_))),
             "Expected failure due to invalid JSON inside FIELDS block"
         );
     }
@@ -200,9 +190,6 @@ mod define_tests {
 
         let result = define::parse(&tokens);
 
-        assert!(matches!(
-            result,
-            Err(crate::command::parser::error::ParseError::InvalidJson(_))
-        ));
+        assert!(matches!(result, Err(ParseError::InvalidJson(_))));
     }
 }

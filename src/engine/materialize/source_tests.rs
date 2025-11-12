@@ -1,10 +1,12 @@
 use super::source::MaterializedSource;
 use super::store::MaterializedStore;
 use crate::engine::core::read::flow::{
-    BatchPool, BatchSchema, FlowChannel, FlowContext, FlowMetrics, FlowSource, FlowTelemetry,
+    BatchPool, BatchSchema, ColumnBatch, FlowChannel, FlowContext, FlowMetrics, FlowSource,
+    FlowTelemetry,
 };
 use crate::engine::core::read::result::ColumnSpec;
 use crate::engine::materialize::sink::MaterializedSink;
+use crate::engine::types::ScalarValue;
 use serde_json::json;
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -27,9 +29,7 @@ fn build_schema() -> BatchSchema {
     .expect("valid schema")
 }
 
-fn batch_to_rows(
-    batch: &crate::engine::core::read::flow::ColumnBatch,
-) -> Vec<Vec<serde_json::Value>> {
+fn batch_to_rows(batch: &ColumnBatch) -> Vec<Vec<serde_json::Value>> {
     let column_count = batch.schema().column_count();
     let mut rows = vec![vec![serde_json::Value::Null; column_count]; batch.len()];
     for col_idx in 0..column_count {
@@ -49,7 +49,6 @@ async fn materialized_source_streams_frames() {
     let schema_arc = Arc::new(schema);
     let mut sink = MaterializedSink::from_batch_schema(store, &schema_arc).unwrap();
 
-    use crate::engine::types::ScalarValue;
     let pool = BatchPool::new(8).unwrap();
     let mut builder = pool.acquire(Arc::clone(&schema_arc));
     builder

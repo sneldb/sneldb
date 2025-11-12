@@ -317,9 +317,9 @@ fn load_ebm_with_multiple_zones() {
     let index = EnumBitmapIndexFactory::new()
         .with_variants(&["pro", "basic", "trial"])
         .with_rows_per_zone(10)
-        .with_zone_variant_bits(0, 0, &[0, 1, 2])  // zone 0: pro
-        .with_zone_variant_bits(1, 1, &[0, 1])     // zone 1: basic
-        .with_zone_variant_bits(2, 2, &[0])        // zone 2: trial
+        .with_zone_variant_bits(0, 0, &[0, 1, 2]) // zone 0: pro
+        .with_zone_variant_bits(1, 1, &[0, 1]) // zone 1: basic
+        .with_zone_variant_bits(2, 2, &[0]) // zone 2: trial
         .build();
 
     let ebm_path = seg_dir.join(format!("{}_{}.ebm", uid, field));
@@ -437,4 +437,3 @@ fn load_ebm_empty_bitmap() {
     assert!(!loaded.has_any(0, 0)); // No bits set
     assert!(!loaded.has_any(0, 1));
 }
-

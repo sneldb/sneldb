@@ -4,12 +4,14 @@ use serde_json::json;
 use tempfile::tempdir;
 
 use crate::command::types::CompareOp;
+use crate::engine::core::Flusher;
 use crate::engine::core::QueryCaches;
 use crate::engine::core::zone::selector::builder::ZoneSelectorBuilder;
 use crate::engine::core::zone::selector::pruner::xor_pruner::XorPruner;
 use crate::engine::core::zone::selector::selection_context::SelectionContext;
 use crate::engine::core::zone::zone_artifacts::ZoneArtifacts;
 use crate::engine::schema::FieldType;
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::{
     CommandFactory, EventFactory, FilterGroupFactory, MemTableFactory, QueryPlanFactory,
     SchemaRegistryFactory,
@@ -50,7 +52,7 @@ async fn skips_xor_for_payload_temporal_field() {
         .with_events(vec![a])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem,
         1,
         &seg1,
@@ -67,7 +69,6 @@ async fn skips_xor_for_payload_temporal_field() {
     assert!(cal.exists());
 
     let artifacts = ZoneArtifacts::new(&shard_dir, Some(&caches));
-    use crate::engine::types::ScalarValue;
     let pruner = XorPruner { artifacts };
     let val = ScalarValue::from(json!(123u64));
     let args = super::PruneArgs {

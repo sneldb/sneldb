@@ -11,6 +11,10 @@ use crate::engine::core::read::flow::{FlowChannel, FlowMetrics};
 use crate::engine::materialize::{
     HighWaterMark, MaterializationEntry, MaterializedQuerySpecExt, MaterializedSink,
 };
+use crate::engine::schema::SchemaRegistry;
+use crate::engine::shard::manager::ShardManager;
+use crate::shared::config;
+use crate::shared::path;
 use crate::shared::response::render::Renderer;
 
 use super::catalog::{CatalogGateway, CatalogHandle, FileCatalogGateway};
@@ -29,19 +33,19 @@ pub struct ShowExecutionPipeline<'a, G: CatalogGateway> {
 impl<'a> ShowExecutionPipeline<'a, FileCatalogGateway> {
     pub fn new(
         alias: &'a str,
-        shard_manager: &'a crate::engine::shard::manager::ShardManager,
-        registry: Arc<tokio::sync::RwLock<crate::engine::schema::SchemaRegistry>>,
+        shard_manager: &'a ShardManager,
+        registry: Arc<tokio::sync::RwLock<SchemaRegistry>>,
     ) -> ShowResult<Self> {
-        let data_dir = crate::shared::path::absolutize(
-            std::path::PathBuf::from(crate::shared::config::CONFIG.engine.data_dir.as_str()),
-        );
+        let data_dir = path::absolutize(std::path::PathBuf::from(
+            config::CONFIG.engine.data_dir.as_str(),
+        ));
         Self::new_with_data_dir(alias, shard_manager, registry, data_dir)
     }
 
     pub fn new_with_data_dir(
         alias: &'a str,
-        shard_manager: &'a crate::engine::shard::manager::ShardManager,
-        registry: Arc<tokio::sync::RwLock<crate::engine::schema::SchemaRegistry>>,
+        shard_manager: &'a ShardManager,
+        registry: Arc<tokio::sync::RwLock<SchemaRegistry>>,
         data_dir: impl AsRef<std::path::Path>,
     ) -> ShowResult<Self> {
         let context = ShowContext::new(alias, shard_manager, registry);

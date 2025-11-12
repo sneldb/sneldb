@@ -114,7 +114,9 @@ impl GlobalEnumCache {
         uid: &str,
         field: &str,
     ) -> Result<(Arc<EnumBitmapIndex>, CacheOutcome), io::Error> {
-        let index_path = base_dir.join(segment_id).join(format!("{}_{}.ebm", uid, field));
+        let index_path = base_dir
+            .join(segment_id)
+            .join(format!("{}_{}.ebm", uid, field));
         let abs_path = index_path.clone();
         let key = EnumCacheKey {
             path: abs_path.clone(),
@@ -212,8 +214,7 @@ impl GlobalEnumCache {
     }
 }
 
-pub static GLOBAL_ENUM_CACHE: Lazy<GlobalEnumCache> =
-    Lazy::new(|| GlobalEnumCache::new(1024));
+pub static GLOBAL_ENUM_CACHE: Lazy<GlobalEnumCache> = Lazy::new(|| GlobalEnumCache::new(1024));
 
 fn file_identity(path: &Path) -> Result<(u64, i64, u64), io::Error> {
     let meta = fs::metadata(path)?;
@@ -238,4 +239,3 @@ fn file_identity(path: &Path) -> Result<(u64, i64, u64), io::Error> {
         Ok((0, mtime, size))
     }
 }
-

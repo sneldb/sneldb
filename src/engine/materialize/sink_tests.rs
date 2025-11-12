@@ -4,6 +4,7 @@ use crate::engine::core::read::flow::{BatchPool, BatchSchema};
 use crate::engine::core::read::result::ColumnSpec;
 use crate::engine::materialize::high_water::HighWaterMark;
 use crate::engine::materialize::{MaterializationError, SchemaSnapshot};
+use crate::engine::types::ScalarValue;
 use serde_json::json;
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -37,7 +38,6 @@ fn sink_appends_and_tracks_stats() {
     assert_eq!(sink.total_rows(), 0);
     assert_eq!(sink.high_water_mark(), HighWaterMark::default());
 
-    use crate::engine::types::ScalarValue;
     let pool = BatchPool::new(8).unwrap();
     let mut builder = pool.acquire(Arc::clone(&schema_arc));
     builder
@@ -68,7 +68,6 @@ fn sink_rejects_schema_mismatch_with_existing_frames() {
     let schema = build_schema();
     let schema_arc = Arc::new(schema);
 
-    use crate::engine::types::ScalarValue;
     let mut sink = MaterializedSink::from_batch_schema(store, &schema_arc).unwrap();
     let pool = BatchPool::new(4).unwrap();
     let mut builder = pool.acquire(Arc::clone(&schema_arc));
@@ -115,7 +114,6 @@ fn sink_rejects_mismatched_batch_schema() {
         },
     ])
     .expect("valid schema");
-    use crate::engine::types::ScalarValue;
     let mismatched_arc = Arc::new(mismatched_schema);
     let pool = BatchPool::new(4).unwrap();
     let mut builder = pool.acquire(Arc::clone(&mismatched_arc));

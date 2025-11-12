@@ -1,4 +1,5 @@
 use crate::engine::core::wal::wal_archiver::WalArchiver;
+use crate::shared::config::CONFIG;
 use std::path::PathBuf;
 use tracing::{error, info, warn};
 
@@ -12,8 +13,7 @@ pub struct WalCleaner {
 impl WalCleaner {
     /// Create a new cleaner for a given shard
     pub fn new(shard_id: usize) -> Self {
-        let wal_dir = PathBuf::from(crate::shared::config::CONFIG.wal.dir.clone())
-            .join(format!("shard-{}", shard_id));
+        let wal_dir = PathBuf::from(CONFIG.wal.dir.clone()).join(format!("shard-{}", shard_id));
         Self { shard_id, wal_dir }
     }
 
@@ -27,7 +27,7 @@ impl WalCleaner {
     /// This should be called after segment flushes.
     pub fn cleanup_up_to(&self, keep_from_log_id: u64) {
         // Check if conservative mode is enabled
-        let conservative_mode = crate::shared::config::CONFIG.wal.conservative_mode;
+        let conservative_mode = CONFIG.wal.conservative_mode;
 
         if conservative_mode {
             info!(

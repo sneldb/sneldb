@@ -1,15 +1,16 @@
 use std::cmp::Ordering;
 use std::sync::Arc;
 
-use crate::engine::types::ScalarValue;
-use tracing::{debug, info};
-
+use crate::engine::core::ConditionEvaluator;
 use crate::engine::core::MemTable;
 use crate::engine::core::read::flow::{
     BatchSchema, ColumnBatchBuilder, FlowContext, FlowOperatorError, FlowSource,
 };
 use crate::engine::core::read::result::ColumnSpec;
 use crate::engine::core::{ConditionEvaluatorBuilder, QueryContext, QueryPlan};
+use crate::engine::schema::types::FieldType;
+use crate::engine::types::ScalarValue;
+use tracing::{debug, info};
 
 use super::super::BatchSender;
 
@@ -80,7 +81,7 @@ impl MemTableSource {
         memtable: &MemTable,
         limit: Option<usize>,
         columns: &[ColumnSpec],
-        evaluator: &crate::engine::core::ConditionEvaluator,
+        evaluator: &ConditionEvaluator,
         builder: &mut Option<ColumnBatchBuilder>,
         schema: &Arc<BatchSchema>,
         output: &BatchSender,
@@ -143,7 +144,7 @@ impl MemTableSource {
         memtable: &MemTable,
         limit: Option<usize>,
         columns: &[ColumnSpec],
-        evaluator: &crate::engine::core::ConditionEvaluator,
+        evaluator: &ConditionEvaluator,
         rows: &mut Vec<Vec<ScalarValue>>,
         emitted: &mut usize,
     ) -> Result<(), FlowOperatorError> {
@@ -393,8 +394,7 @@ fn compare_scalar_values(a: &ScalarValue, b: &ScalarValue) -> Ordering {
     a.compare(b)
 }
 
-fn field_type_to_logical(field_type: &crate::engine::schema::types::FieldType) -> String {
-    use crate::engine::schema::types::FieldType;
+fn field_type_to_logical(field_type: &FieldType) -> String {
     match field_type {
         FieldType::String => "String".into(),
         FieldType::U64 | FieldType::I64 => "Integer".into(),

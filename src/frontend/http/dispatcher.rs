@@ -8,7 +8,8 @@ use crate::frontend::http::json_command::JsonCommand;
 use crate::frontend::server_state::ServerState;
 use crate::shared::config::CONFIG;
 use crate::shared::response::{
-    ArrowRenderer, JsonRenderer, Response as ResponseType, render::Renderer, unix::UnixRenderer,
+    ArrowRenderer, JsonRenderer, Response as ResponseType, StatusCode as ResponseStatusCode,
+    render::Renderer, unix::UnixRenderer,
 };
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
@@ -349,10 +350,7 @@ fn render_error(
     status: StatusCode,
     renderer: Arc<dyn Renderer + Send + Sync>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
-    let resp = ResponseType::error(
-        crate::shared::response::StatusCode::from(status),
-        msg.to_string(),
-    );
+    let resp = ResponseType::error(ResponseStatusCode::from(status), msg.to_string());
     let body = renderer.render(&resp);
     Ok(Response::builder()
         .status(status)

@@ -1,3 +1,4 @@
+use crate::command::types::{CompareOp, Expr};
 use crate::engine::core::ExecutionStep;
 use crate::engine::core::zone::{
     zone_step_planner::ZoneStepPlanner, zone_step_runner::ZoneStepRunner,
@@ -24,9 +25,9 @@ async fn runner_derives_pruned_segments_when_context_first_and_and() {
     let command = CommandFactory::query()
         .with_event_type(event_type)
         .with_context_id("ctx-keep")
-        .with_where_clause(crate::command::types::Expr::Compare {
+        .with_where_clause(Expr::Compare {
             field: "id".into(),
-            op: crate::command::types::CompareOp::Eq,
+            op: CompareOp::Eq,
             value: json!(1),
         })
         .create();
@@ -43,13 +44,13 @@ async fn runner_derives_pruned_segments_when_context_first_and_and() {
 
     let fp_ctx = FilterGroupFactory::new()
         .with_column("context_id")
-        .with_operation(crate::command::types::CompareOp::Eq)
+        .with_operation(CompareOp::Eq)
         .with_value(json!("ctx-keep"))
         .with_uid(&uid)
         .create();
     let fp_id = FilterGroupFactory::new()
         .with_column("id")
-        .with_operation(crate::command::types::CompareOp::Eq)
+        .with_operation(CompareOp::Eq)
         .with_value(json!(1))
         .with_uid(&uid)
         .create();
@@ -84,15 +85,15 @@ async fn runner_does_not_prune_under_or() {
 
     let command = CommandFactory::query()
         .with_event_type(event_type)
-        .with_where_clause(crate::command::types::Expr::Or(
-            Box::new(crate::command::types::Expr::Compare {
+        .with_where_clause(Expr::Or(
+            Box::new(Expr::Compare {
                 field: "id".into(),
-                op: crate::command::types::CompareOp::Eq,
+                op: CompareOp::Eq,
                 value: json!(1),
             }),
-            Box::new(crate::command::types::Expr::Compare {
+            Box::new(Expr::Compare {
                 field: "id".into(),
-                op: crate::command::types::CompareOp::Eq,
+                op: CompareOp::Eq,
                 value: json!(2),
             }),
         ))
@@ -110,7 +111,7 @@ async fn runner_does_not_prune_under_or() {
 
     let fp_id = FilterGroupFactory::new()
         .with_column("id")
-        .with_operation(crate::command::types::CompareOp::Eq)
+        .with_operation(CompareOp::Eq)
         .with_value(json!(1))
         .with_uid(&uid)
         .create();
@@ -175,9 +176,9 @@ async fn runner_respects_explicit_subset_in_plan() {
     let command = CommandFactory::query()
         .with_event_type(event_type)
         .with_context_id("ctx-keep")
-        .with_where_clause(crate::command::types::Expr::Compare {
+        .with_where_clause(Expr::Compare {
             field: "id".into(),
-            op: crate::command::types::CompareOp::Eq,
+            op: CompareOp::Eq,
             value: json!(1),
         })
         .create();
@@ -194,13 +195,13 @@ async fn runner_respects_explicit_subset_in_plan() {
 
     let fp_ctx = FilterGroupFactory::new()
         .with_column("context_id")
-        .with_operation(crate::command::types::CompareOp::Eq)
+        .with_operation(CompareOp::Eq)
         .with_value(json!("ctx-keep"))
         .with_uid(&uid)
         .create();
     let fp_id = FilterGroupFactory::new()
         .with_column("id")
-        .with_operation(crate::command::types::CompareOp::Eq)
+        .with_operation(CompareOp::Eq)
         .with_value(json!(1))
         .with_uid(&uid)
         .create();
@@ -240,9 +241,9 @@ async fn runner_pruned_empty_first_step_still_executes_following_steps() {
     let command = CommandFactory::query()
         .with_event_type(event_type)
         .with_context_id("ctx-will-prune-to-empty")
-        .with_where_clause(crate::command::types::Expr::Compare {
+        .with_where_clause(Expr::Compare {
             field: "id".into(),
-            op: crate::command::types::CompareOp::Eq,
+            op: CompareOp::Eq,
             value: json!(1),
         })
         .create();
@@ -258,7 +259,7 @@ async fn runner_pruned_empty_first_step_still_executes_following_steps() {
     let uid = plan.event_type_uid().await.expect("uid");
     let fp_ctx = FilterGroupFactory::new()
         .with_column("context_id")
-        .with_operation(crate::command::types::CompareOp::Eq)
+        .with_operation(CompareOp::Eq)
         .with_value(json!("ctx-will-prune-to-empty"))
         .with_uid(&uid)
         .create();
@@ -266,7 +267,7 @@ async fn runner_pruned_empty_first_step_still_executes_following_steps() {
     // A second step that should still run (over empty segment list)
     let fp_id = FilterGroupFactory::new()
         .with_column("id")
-        .with_operation(crate::command::types::CompareOp::Eq)
+        .with_operation(CompareOp::Eq)
         .with_value(json!(1))
         .with_uid(&uid)
         .create();

@@ -4,12 +4,14 @@ use std::sync::Arc;
 
 use crate::command::handlers::query::context::QueryContext;
 use crate::command::handlers::query_batch_stream::QueryBatchStream;
+use crate::command::types::{Command, OrderSpec};
 use crate::engine::core::read::aggregate::partial::{AggState, GroupKey};
 use crate::engine::core::read::aggregate::plan::{AggregateOpSpec, AggregatePlan};
 use crate::engine::core::read::flow::shard_pipeline::ShardFlowHandle;
 use crate::engine::core::read::flow::{
-    BatchPool, BatchReceiver, BatchSchema, FlowChannel, FlowMetrics,
+    BatchPool, BatchReceiver, BatchSchema, BatchSender, ColumnBatch, FlowChannel, FlowMetrics,
 };
+use crate::engine::core::read::result::ColumnSpec;
 use crate::engine::types::ScalarValue;
 use serde_json;
 use tokio::task::JoinHandle;
@@ -30,16 +32,16 @@ pub struct AggregateStreamMerger {
     aggregate_plan: AggregatePlan,
     limit: Option<u32>,
     offset: Option<u32>,
-    order_by: Option<crate::command::types::OrderSpec>,
+    order_by: Option<OrderSpec>,
 }
 
 impl AggregateStreamMerger {
     /// Creates a new aggregate stream merger for the given command.
-    pub fn new(command: &crate::command::types::Command) -> Self {
+    pub fn new(command: &Command) -> Self {
         let aggregate_plan = AggregatePlan::from_command(command)
             .expect("AggregateStreamMerger should only be used for aggregate queries");
         let (limit, offset, order_by) = match command {
-            crate::command::types::Command::Query {
+            Command::Query {
                 limit,
                 offset,
                 order_by,
@@ -128,12 +130,12 @@ impl AggregateStreamMerger {
     /// Merges aggregate batches from multiple receivers.
     async fn merge_aggregate_batches(
         receivers: Vec<BatchReceiver>,
-        output: crate::engine::core::read::flow::BatchSender,
+        output: BatchSender,
         schema: Arc<BatchSchema>,
         aggregate_plan: AggregatePlan,
         limit: Option<u32>,
         offset: Option<u32>,
-        order_by: Option<crate::command::types::OrderSpec>,
+        order_by: Option<OrderSpec>,
         metrics: Arc<FlowMetrics>,
     ) -> Result<(), String> {
         // Map to store merged groups: GroupKey -> Vec<AggState>
@@ -174,7 +176,7 @@ impl AggregateStreamMerger {
 
     /// Merges a single batch into the merged_groups HashMap.
     pub(crate) fn merge_batch_into_groups(
-        batch: &crate::engine::core::read::flow::ColumnBatch,
+        batch: &ColumnBatch,
         schema: &Arc<BatchSchema>,
         aggregate_plan: &AggregatePlan,
         merged_groups: &mut HashMap<GroupKey, Vec<AggState>>,
@@ -434,8 +436,8 @@ impl AggregateStreamMerger {
         aggregate_plan: AggregatePlan,
         limit: Option<u32>,
         offset: Option<u32>,
-        order_by: Option<crate::command::types::OrderSpec>,
-        output: crate::engine::core::read::flow::BatchSender,
+        order_by: Option<OrderSpec>,
+        output: BatchSender,
         _metrics: Arc<FlowMetrics>,
     ) -> Result<(), String> {
         // Build final output schema (with average, not sum/count)
@@ -597,9 +599,6 @@ impl AggregateStreamMerger {
     pub(crate) fn build_final_output_schema(
         plan: &AggregatePlan,
     ) -> Result<Arc<BatchSchema>, String> {
-        use crate::engine::core::read::flow::BatchSchema;
-        use crate::engine::core::read::result::ColumnSpec;
-
         let mut columns: Vec<ColumnSpec> = Vec::new();
 
         // Add bucket column if present

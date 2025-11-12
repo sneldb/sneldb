@@ -1,4 +1,5 @@
 use crate::command::parser::commands::create_user;
+use crate::command::parser::error::ParseError;
 use crate::command::parser::tokenizer::tokenize;
 use crate::command::types::Command;
 
@@ -118,7 +119,7 @@ mod create_user_tests {
             "Expected failure due to missing USER keyword"
         );
         match result {
-            Err(crate::command::parser::error::ParseError::ExpectedKeyword(expected, _)) => {
+            Err(ParseError::ExpectedKeyword(expected, _)) => {
                 assert_eq!(expected, "USER");
             }
             _ => panic!("Expected ExpectedKeyword error"),
@@ -134,7 +135,7 @@ mod create_user_tests {
 
         assert!(result.is_err(), "Expected failure due to missing user_id");
         match result {
-            Err(crate::command::parser::error::ParseError::MissingArgument(arg)) => {
+            Err(ParseError::MissingArgument(arg)) => {
                 assert_eq!(arg, "user_id");
             }
             _ => panic!("Expected MissingArgument error"),
@@ -163,7 +164,7 @@ mod create_user_tests {
 
         assert!(result.is_err(), "Expected failure due to empty input");
         match result {
-            Err(crate::command::parser::error::ParseError::MissingArgument(arg)) => {
+            Err(ParseError::MissingArgument(arg)) => {
                 assert_eq!(arg, "CREATE");
             }
             _ => panic!("Expected MissingArgument error"),
@@ -182,7 +183,7 @@ mod create_user_tests {
             "Expected failure due to missing KEY after WITH"
         );
         match result {
-            Err(crate::command::parser::error::ParseError::MissingArgument(arg)) => {
+            Err(ParseError::MissingArgument(arg)) => {
                 assert_eq!(arg, "KEY");
             }
             _ => panic!("Expected MissingArgument error"),
@@ -201,7 +202,7 @@ mod create_user_tests {
             "Expected failure due to missing secret_key after KEY"
         );
         match result {
-            Err(crate::command::parser::error::ParseError::MissingArgument(arg)) => {
+            Err(ParseError::MissingArgument(arg)) => {
                 assert_eq!(arg, "secret_key");
             }
             _ => panic!("Expected MissingArgument error"),
@@ -220,7 +221,7 @@ mod create_user_tests {
             "Expected failure due to invalid keyword after WITH"
         );
         match result {
-            Err(crate::command::parser::error::ParseError::ExpectedKeyword(expected, _)) => {
+            Err(ParseError::ExpectedKeyword(expected, _)) => {
                 assert_eq!(expected, "KEY");
             }
             _ => panic!("Expected ExpectedKeyword error"),
@@ -236,7 +237,7 @@ mod create_user_tests {
 
         assert!(result.is_err(), "Expected failure due to extra tokens");
         match result {
-            Err(crate::command::parser::error::ParseError::UnexpectedToken(msg)) => {
+            Err(ParseError::UnexpectedToken(msg)) => {
                 assert!(msg.contains("Extra tokens"));
             }
             _ => panic!("Expected UnexpectedToken error"),
@@ -255,7 +256,7 @@ mod create_user_tests {
             "Expected failure due to extra tokens after secret key"
         );
         match result {
-            Err(crate::command::parser::error::ParseError::UnexpectedToken(msg)) => {
+            Err(ParseError::UnexpectedToken(msg)) => {
                 assert!(msg.contains("Extra tokens"));
             }
             _ => panic!("Expected UnexpectedToken error"),

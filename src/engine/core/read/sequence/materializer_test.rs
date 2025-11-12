@@ -1,4 +1,6 @@
 use crate::engine::core::CandidateZone;
+use crate::engine::core::column::column_values::ColumnValues;
+use crate::engine::core::read::cache::DecompressedBlock;
 use crate::engine::core::read::sequence::group::RowIndex;
 use crate::engine::core::read::sequence::matcher::MatchedSequenceIndices;
 use crate::engine::core::read::sequence::materializer::SequenceMaterializer;
@@ -13,8 +15,6 @@ fn create_test_zone(
     user_ids: &[&str],
     timestamps: &[i64],
 ) -> CandidateZone {
-    use crate::engine::core::column::column_values::ColumnValues;
-    use crate::engine::core::read::cache::DecompressedBlock;
     use std::sync::Arc;
 
     let mut values_map: HashMap<String, ColumnValues> = HashMap::new();

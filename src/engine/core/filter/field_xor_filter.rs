@@ -1,5 +1,6 @@
 use crate::engine::core::ZonePlan;
 use crate::engine::types::ScalarValue;
+use crate::shared::hash::stable_hash64;
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 use std::collections::HashSet;
 use std::fs::OpenOptions;
@@ -30,7 +31,7 @@ impl FieldXorFilter {
         // but we deduplicate hashes to handle hash collisions)
         let mut unique_hashes: HashSet<u64> = HashSet::with_capacity(values.len());
         for value in values {
-            let hash = crate::shared::hash::stable_hash64(value);
+            let hash = stable_hash64(value);
             unique_hashes.insert(hash);
         }
 
@@ -63,7 +64,7 @@ impl FieldXorFilter {
     }
 
     pub fn contains(&self, value: &str) -> bool {
-        let h = crate::shared::hash::stable_hash64(&value);
+        let h = stable_hash64(&value);
         self.inner.contains(&h)
     }
 

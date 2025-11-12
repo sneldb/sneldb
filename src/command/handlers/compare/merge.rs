@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::command::handlers::query::merge::aggregate_stream::AggregateStreamMerger;
 use crate::command::handlers::query_batch_stream::QueryBatchStream;
 use crate::command::types::QueryCommand;
 use crate::engine::core::read::aggregate::partial::{AggState, GroupKey};
@@ -126,8 +127,6 @@ impl ComparisonStreamMerger {
         schema: &BatchSchema,
         aggregate_plan: &AggregatePlan,
     ) -> Result<Vec<(GroupKey, Vec<ScalarValue>)>, String> {
-        use crate::command::handlers::query::merge::aggregate_stream::AggregateStreamMerger;
-
         let mut rows = Vec::new();
         let columns = batch.columns();
         let column_views: Vec<&[ScalarValue]> = columns.iter().map(|c| c.as_slice()).collect();

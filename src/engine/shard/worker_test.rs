@@ -1,4 +1,5 @@
 use crate::engine::shard::ShardManager;
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::{
     CommandFactory, EventFactory, SchemaRegistryFactory, ShardMessageFactory,
 };
@@ -80,7 +81,6 @@ async fn test_store_flush_query_lifecycle() {
     let table = result.finalize_table();
     assert_eq!(table.rows.len(), 1);
     let row = &table.rows[0];
-    use crate::engine::types::ScalarValue;
     // Selection rows: [context_id, event_type, timestamp, payload]
     assert_eq!(row[0], ScalarValue::from(serde_json::json!("ctx-42")));
     assert_eq!(row[1], ScalarValue::from(serde_json::json!("payment")));

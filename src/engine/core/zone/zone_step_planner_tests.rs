@@ -1,3 +1,4 @@
+use crate::command::types::{CompareOp, Expr};
 use crate::engine::core::ExecutionStep;
 use crate::engine::core::zone::zone_step_planner::ZoneStepPlanner;
 use crate::test_helpers::factories::{
@@ -24,9 +25,9 @@ async fn planner_places_context_first_on_and() {
     let command = CommandFactory::query()
         .with_event_type(event_type)
         .with_context_id("ctx-1")
-        .with_where_clause(crate::command::types::Expr::Compare {
+        .with_where_clause(Expr::Compare {
             field: "id".into(),
-            op: crate::command::types::CompareOp::Eq,
+            op: CompareOp::Eq,
             value: json!(1),
         })
         .create();
@@ -43,13 +44,13 @@ async fn planner_places_context_first_on_and() {
     let uid = plan.event_type_uid().await.expect("uid");
     let fp_ctx = FilterGroupFactory::new()
         .with_column("context_id")
-        .with_operation(crate::command::types::CompareOp::Eq)
+        .with_operation(CompareOp::Eq)
         .with_value(json!("ctx-1"))
         .with_uid(&uid)
         .create();
     let fp_id = FilterGroupFactory::new()
         .with_column("id")
-        .with_operation(crate::command::types::CompareOp::Eq)
+        .with_operation(CompareOp::Eq)
         .with_value(json!(1))
         .with_uid(&uid)
         .create();
@@ -81,9 +82,9 @@ async fn planner_keeps_order_when_no_context() {
 
     let command = CommandFactory::query()
         .with_event_type(event_type)
-        .with_where_clause(crate::command::types::Expr::Compare {
+        .with_where_clause(Expr::Compare {
             field: "id".into(),
-            op: crate::command::types::CompareOp::Eq,
+            op: CompareOp::Eq,
             value: json!(1),
         })
         .create();
@@ -99,13 +100,13 @@ async fn planner_keeps_order_when_no_context() {
     let uid = plan.event_type_uid().await.expect("uid");
     let fp_id = FilterGroupFactory::new()
         .with_column("id")
-        .with_operation(crate::command::types::CompareOp::Eq)
+        .with_operation(CompareOp::Eq)
         .with_value(json!(1))
         .with_uid(&uid)
         .create();
     let fp_other = FilterGroupFactory::new()
         .with_column("timestamp")
-        .with_operation(crate::command::types::CompareOp::Gt)
+        .with_operation(CompareOp::Gt)
         .with_value(json!(0))
         .with_uid(&uid)
         .create();
@@ -141,15 +142,15 @@ async fn planner_keeps_order_on_or_even_with_context() {
     let command = CommandFactory::query()
         .with_event_type(event_type)
         .with_context_id("ctx-1")
-        .with_where_clause(crate::command::types::Expr::Or(
-            Box::new(crate::command::types::Expr::Compare {
+        .with_where_clause(Expr::Or(
+            Box::new(Expr::Compare {
                 field: "id".into(),
-                op: crate::command::types::CompareOp::Eq,
+                op: CompareOp::Eq,
                 value: serde_json::json!(1),
             }),
-            Box::new(crate::command::types::Expr::Compare {
+            Box::new(Expr::Compare {
                 field: "id".into(),
-                op: crate::command::types::CompareOp::Eq,
+                op: CompareOp::Eq,
                 value: serde_json::json!(2),
             }),
         ))
@@ -166,13 +167,13 @@ async fn planner_keeps_order_on_or_even_with_context() {
     let uid = plan.event_type_uid().await.expect("uid");
     let fp_ctx = FilterGroupFactory::new()
         .with_column("context_id")
-        .with_operation(crate::command::types::CompareOp::Eq)
+        .with_operation(CompareOp::Eq)
         .with_value(serde_json::json!("ctx-1"))
         .with_uid(&uid)
         .create();
     let fp_id = FilterGroupFactory::new()
         .with_column("id")
-        .with_operation(crate::command::types::CompareOp::Eq)
+        .with_operation(CompareOp::Eq)
         .with_value(serde_json::json!(1))
         .with_uid(&uid)
         .create();
@@ -209,13 +210,11 @@ async fn planner_keeps_order_on_not() {
     // where: NOT(id = 1)
     let command = CommandFactory::query()
         .with_event_type(event_type)
-        .with_where_clause(crate::command::types::Expr::Not(Box::new(
-            crate::command::types::Expr::Compare {
-                field: "id".into(),
-                op: crate::command::types::CompareOp::Eq,
-                value: serde_json::json!(1),
-            },
-        )))
+        .with_where_clause(Expr::Not(Box::new(Expr::Compare {
+            field: "id".into(),
+            op: CompareOp::Eq,
+            value: serde_json::json!(1),
+        })))
         .create();
 
     let plan = QueryPlanFactory::new()
@@ -229,7 +228,7 @@ async fn planner_keeps_order_on_not() {
     let uid = plan.event_type_uid().await.expect("uid");
     let fp_id = FilterGroupFactory::new()
         .with_column("id")
-        .with_operation(crate::command::types::CompareOp::Eq)
+        .with_operation(CompareOp::Eq)
         .with_value(serde_json::json!(1))
         .with_uid(&uid)
         .create();
@@ -286,9 +285,9 @@ async fn planner_preserves_when_context_already_first() {
     let command = CommandFactory::query()
         .with_event_type(event_type)
         .with_context_id("ctx1")
-        .with_where_clause(crate::command::types::Expr::Compare {
+        .with_where_clause(Expr::Compare {
             field: "id".into(),
-            op: crate::command::types::CompareOp::Eq,
+            op: CompareOp::Eq,
             value: serde_json::json!(1),
         })
         .create();
@@ -304,13 +303,13 @@ async fn planner_preserves_when_context_already_first() {
     let uid = plan.event_type_uid().await.expect("uid");
     let fp_ctx = FilterGroupFactory::new()
         .with_column("context_id")
-        .with_operation(crate::command::types::CompareOp::Eq)
+        .with_operation(CompareOp::Eq)
         .with_value(serde_json::json!("ctx1"))
         .with_uid(&uid)
         .create();
     let fp_id = FilterGroupFactory::new()
         .with_column("id")
-        .with_operation(crate::command::types::CompareOp::Eq)
+        .with_operation(CompareOp::Eq)
         .with_value(serde_json::json!(1))
         .with_uid(&uid)
         .create();

@@ -4,8 +4,11 @@ use serde_json::json;
 use tempfile::tempdir;
 
 use crate::command::types::CompareOp;
+use crate::engine::core::Flusher;
+use crate::engine::core::ZoneMeta;
 use crate::engine::core::read::cache::QueryCaches;
 use crate::engine::core::read::index_strategy::IndexStrategy;
+use crate::engine::core::zone::candidate_zone::CandidateZone;
 use crate::engine::core::zone::selector::builder::ZoneSelectorBuilder;
 use crate::engine::core::zone::selector::selection_context::SelectionContext;
 use crate::engine::schema::{EnumType, FieldType};
@@ -46,7 +49,7 @@ async fn xor_eq_uses_zxf_to_narrow_zones() {
             .with_events(vec![e1])
             .create()
             .unwrap();
-        crate::engine::core::Flusher::new(
+        Flusher::new(
             mem,
             1,
             &seg1,
@@ -68,7 +71,7 @@ async fn xor_eq_uses_zxf_to_narrow_zones() {
             .with_events(vec![e2])
             .create()
             .unwrap();
-        crate::engine::core::Flusher::new(
+        Flusher::new(
             mem,
             2,
             &seg2,
@@ -169,7 +172,7 @@ async fn range_pruner_uses_zonesurf_for_gt_and_lte() {
         .with_events(vec![e1, e2])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem1,
         1,
         &seg1,
@@ -210,7 +213,7 @@ async fn range_pruner_uses_zonesurf_for_gt_and_lte() {
         .with_events(vec![e3, e4])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem2,
         2,
         &seg2,
@@ -341,7 +344,7 @@ async fn enum_pruner_respects_eq_and_neq() {
         .with_events(vec![a, b])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem1,
         1,
         &seg1,
@@ -363,7 +366,7 @@ async fn enum_pruner_respects_eq_and_neq() {
         .with_events(vec![c])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem2,
         2,
         &seg2,
@@ -457,7 +460,7 @@ async fn returns_all_zones_when_value_missing() {
         .with_events(vec![e])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem,
         1,
         &seg1,
@@ -488,10 +491,7 @@ async fn returns_all_zones_when_value_missing() {
     let sel = ZoneSelectorBuilder::new(ctx).build();
     let zones = sel.select_for_segment("001");
 
-    let all =
-        crate::engine::core::zone::candidate_zone::CandidateZone::create_all_zones_for_segment(
-            "001",
-        );
+    let all = CandidateZone::create_all_zones_for_segment("001");
     assert_eq!(zones.len(), all.len());
 }
 
@@ -523,7 +523,7 @@ async fn returns_empty_when_uid_missing() {
         .with_events(vec![e])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem,
         1,
         &seg1,
@@ -584,7 +584,7 @@ async fn xor_pruner_skips_on_neq_operation() {
         .with_events(vec![e])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem,
         1,
         &seg1,
@@ -655,7 +655,7 @@ async fn zonesurf_ge_gt_le_lte_cover_boundaries_and_cross_segment() {
         .with_events(vec![a, b])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem1,
         1,
         &seg1,
@@ -682,7 +682,7 @@ async fn zonesurf_ge_gt_le_lte_cover_boundaries_and_cross_segment() {
         .with_events(vec![c, d])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem2,
         2,
         &seg2,
@@ -836,7 +836,7 @@ async fn temporal_pruner_routed_by_field_selector() {
         .with_events(vec![a, b])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem1,
         1,
         &seg1,
@@ -859,7 +859,7 @@ async fn temporal_pruner_routed_by_field_selector() {
         .with_events(vec![c])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem2,
         2,
         &seg2,
@@ -963,7 +963,7 @@ async fn temporal_payload_field_routed_by_field_selector() {
         .with_events(vec![a, b])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem1,
         1,
         &seg1,
@@ -985,7 +985,7 @@ async fn temporal_payload_field_routed_by_field_selector() {
         .with_events(vec![c])
         .create()
         .unwrap();
-    crate::engine::core::Flusher::new(
+    Flusher::new(
         mem2,
         2,
         &seg2,
@@ -1099,7 +1099,7 @@ async fn materialization_pruner_filters_zones_created_before_materialization() {
         .with("created_at", 2000u64)
         .create();
 
-    crate::engine::core::ZoneMeta::save(&uid, &[zone_0.clone(), zone_1.clone()], &seg1).unwrap();
+    ZoneMeta::save(&uid, &[zone_0.clone(), zone_1.clone()], &seg1).unwrap();
 
     // Create query plan with materialization metadata
     let cmd = CommandFactory::query().with_event_type(event_type).create();
@@ -1189,7 +1189,7 @@ async fn materialization_pruner_no_filter_when_metadata_missing() {
         .with("created_at", 2000u64)
         .create();
 
-    crate::engine::core::ZoneMeta::save(&uid, &[zone_0.clone(), zone_1.clone()], &seg1).unwrap();
+    ZoneMeta::save(&uid, &[zone_0.clone(), zone_1.clone()], &seg1).unwrap();
 
     // Create query plan WITHOUT materialization metadata
     let cmd = CommandFactory::query().with_event_type(event_type).create();
@@ -1275,7 +1275,7 @@ async fn materialization_pruner_filters_zones_with_equal_created_at() {
         .with("created_at", materialization_created_at + 1) // One millisecond after
         .create();
 
-    crate::engine::core::ZoneMeta::save(&uid, &[zone_0.clone(), zone_1.clone()], &seg1).unwrap();
+    ZoneMeta::save(&uid, &[zone_0.clone(), zone_1.clone()], &seg1).unwrap();
 
     let cmd = CommandFactory::query().with_event_type(event_type).create();
     let mut q = QueryPlanFactory::new()

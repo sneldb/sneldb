@@ -1,4 +1,5 @@
 use crate::command::types::Command;
+use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
 use crate::engine::core::read::flow::shard_pipeline::ShardFlowHandle;
 use crate::engine::core::read::result::QueryResult;
 use crate::engine::core::{MemTable, QueryPlan};
@@ -19,7 +20,7 @@ pub async fn scan(
     segment_base_dir: &Path,
     segment_ids: &Arc<std::sync::RwLock<Vec<String>>>,
     memtable: &MemTable,
-    passive_buffers: &Arc<crate::engine::core::memory::passive_buffer_set::PassiveBufferSet>,
+    passive_buffers: &Arc<PassiveBufferSet>,
 ) -> Result<QueryResult, QueryExecutionError> {
     debug!(
         target: "engine::query::scan",
@@ -70,7 +71,7 @@ pub async fn scan_streaming(
     segment_base_dir: &Path,
     segment_ids: &Arc<std::sync::RwLock<Vec<String>>>,
     memtable: &MemTable,
-    passive_buffers: &Arc<crate::engine::core::memory::passive_buffer_set::PassiveBufferSet>,
+    passive_buffers: &Arc<PassiveBufferSet>,
 ) -> Result<ShardFlowHandle, QueryExecutionError> {
     let scan = StreamingScan::new(
         command,

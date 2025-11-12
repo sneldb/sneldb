@@ -1,5 +1,6 @@
-use crate::engine::core::read::cache::ColumnBlockCacheStats;
-use crate::engine::core::read::cache::GlobalColumnBlockCache;
+use crate::engine::core::read::cache::{
+    CacheOutcome, ColumnBlockCacheStats, GlobalColumnBlockCache,
+};
 use once_cell::sync::Lazy;
 use std::sync::Mutex as StdMutex;
 
@@ -45,10 +46,7 @@ fn block_cache_hit_then_miss_counters_and_eviction() {
     let (_b3_again, o3_hit) = cache
         .get_or_load(fake_path, 3, make_loader(600))
         .expect("hit");
-    assert!(matches!(
-        o3_hit,
-        crate::engine::core::read::cache::CacheOutcome::Hit
-    ));
+    assert!(matches!(o3_hit, CacheOutcome::Hit));
 }
 
 #[test]

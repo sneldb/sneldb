@@ -4,6 +4,7 @@ use crate::engine::core::column::compression::compression_codec::{
 };
 use crate::engine::core::filter::surf_encoding::encode_value;
 use crate::engine::core::filter::surf_trie::SurfTrie;
+use crate::engine::core::zone::candidate_zone::CandidateZone;
 use crate::engine::types::ScalarValue;
 // removed schema-aware builder; these imports remain only if reintroduced
 use crate::shared::storage_header::{BinaryHeader, FileKind};
@@ -213,7 +214,7 @@ impl ZoneSurfFilter {
         lower: &[u8],
         inclusive: bool,
         segment_id: &str,
-    ) -> Vec<crate::engine::core::zone::candidate_zone::CandidateZone> {
+    ) -> Vec<CandidateZone> {
         let mut result = Vec::new();
         let mut total_nodes_visited: usize = 0;
         let mut total_edges_examined: usize = 0;
@@ -229,12 +230,7 @@ impl ZoneSurfFilter {
             total_left_descents += stats.leftmost_descents;
 
             if overlaps {
-                result.push(
-                    crate::engine::core::zone::candidate_zone::CandidateZone::new(
-                        e.zone_id,
-                        segment_id.to_string(),
-                    ),
-                );
+                result.push(CandidateZone::new(e.zone_id, segment_id.to_string()));
             }
         }
 
@@ -262,7 +258,7 @@ impl ZoneSurfFilter {
         upper: &[u8],
         inclusive: bool,
         segment_id: &str,
-    ) -> Vec<crate::engine::core::zone::candidate_zone::CandidateZone> {
+    ) -> Vec<CandidateZone> {
         let mut result = Vec::new();
         let mut total_nodes_visited: usize = 0;
         let mut total_edges_examined: usize = 0;
@@ -278,12 +274,7 @@ impl ZoneSurfFilter {
             total_right_descents += stats.rightmost_descents;
 
             if overlaps {
-                result.push(
-                    crate::engine::core::zone::candidate_zone::CandidateZone::new(
-                        e.zone_id,
-                        segment_id.to_string(),
-                    ),
-                );
+                result.push(CandidateZone::new(e.zone_id, segment_id.to_string()));
             }
         }
 

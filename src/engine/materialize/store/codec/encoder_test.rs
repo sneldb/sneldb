@@ -2,6 +2,7 @@ use super::encoder::Encoder;
 use crate::engine::core::read::flow::{BatchPool, BatchSchema, ColumnBatch};
 use crate::engine::core::read::result::ColumnSpec;
 use crate::engine::materialize::catalog::SchemaSnapshot;
+use crate::engine::types::ScalarValue;
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -24,7 +25,6 @@ fn build_schema_with_types(types: Vec<(&str, &str)>) -> (Arc<BatchSchema>, Vec<S
 }
 
 fn build_batch(schema: &Arc<BatchSchema>, rows: Vec<Vec<Value>>) -> ColumnBatch {
-    use crate::engine::types::ScalarValue;
     // Use capacity larger than needed for large batch tests
     let capacity = rows.len().max(1000);
     let pool = BatchPool::new(capacity).unwrap();

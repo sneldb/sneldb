@@ -3,16 +3,17 @@ use std::sync::Arc;
 use tokio::io::{AsyncWrite, duplex};
 use tokio::time::{Duration, sleep};
 
+use crate::command::handlers::flush;
 use crate::command::handlers::remember::remember_query_with_data_dir;
 use crate::command::handlers::store;
-use crate::command::parser::commands::{flush, remember};
+use crate::command::parser::commands::{flush as flush_parser, remember};
 use crate::command::parser::tokenizer::tokenize;
 use crate::command::types::Command;
 use crate::engine::materialize::MaterializationCatalog;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
 use crate::logging::init_for_tests;
-use crate::shared::response::JsonRenderer;
+use crate::shared::response::{JsonRenderer, render::Renderer};
 use crate::test_helpers::factories::{CommandFactory, SchemaRegistryFactory};
 use tempfile::tempdir;
 
@@ -46,7 +47,7 @@ async fn execute_store<W: AsyncWrite + Unpin>(
     shard_manager: &ShardManager,
     registry: &Arc<tokio::sync::RwLock<SchemaRegistry>>,
     writer: &mut W,
-    renderer: &dyn crate::shared::response::render::Renderer,
+    renderer: &dyn Renderer,
 ) -> std::io::Result<()> {
     store::handle(cmd, shard_manager, registry, writer, renderer).await
 }
@@ -56,9 +57,9 @@ async fn execute_flush<W: AsyncWrite + Unpin>(
     shard_manager: &ShardManager,
     registry: &Arc<tokio::sync::RwLock<SchemaRegistry>>,
     writer: &mut W,
-    renderer: &dyn crate::shared::response::render::Renderer,
+    renderer: &dyn Renderer,
 ) -> std::io::Result<()> {
-    crate::command::handlers::flush::handle(cmd, shard_manager, registry, writer, renderer).await
+    flush::handle(cmd, shard_manager, registry, writer, renderer).await
 }
 
 #[tokio::test]
@@ -81,7 +82,7 @@ async fn test_remember_basic_query() {
     sleep(Duration::from_millis(100)).await;
 
     // Flush to persist data
-    let flush_cmd = flush::parse(&tokenize("FLUSH")).expect("parse FLUSH");
+    let flush_cmd = flush_parser::parse(&tokenize("FLUSH")).expect("parse FLUSH");
     let (_r_flush, mut w_flush) = duplex(1024);
     execute_flush(
         &flush_cmd,
@@ -96,9 +97,8 @@ async fn test_remember_basic_query() {
     sleep(Duration::from_millis(200)).await;
 
     // Remember the query
-    let remember_cmd =
-        remember::parse("REMEMBER QUERY test_event AS basic_materialization")
-            .expect("parse REMEMBER command");
+    let remember_cmd = remember::parse("REMEMBER QUERY test_event AS basic_materialization")
+        .expect("parse REMEMBER command");
 
     let Command::RememberQuery { spec } = remember_cmd else {
         panic!("Expected RememberQuery command");
@@ -111,7 +111,9 @@ async fn test_remember_basic_query() {
 
     // Verify summary contains expected information
     assert!(
-        summary.iter().any(|s| s.contains("remembered query 'basic_materialization'")),
+        summary
+            .iter()
+            .any(|s| s.contains("remembered query 'basic_materialization'")),
         "Summary should contain remembered query message"
     );
     assert!(
@@ -150,7 +152,7 @@ async fn test_remember_with_limit() {
 
     sleep(Duration::from_millis(100)).await;
 
-    let flush_cmd = flush::parse(&tokenize("FLUSH")).expect("parse FLUSH");
+    let flush_cmd = flush_parser::parse(&tokenize("FLUSH")).expect("parse FLUSH");
     let (_r_flush, mut w_flush) = duplex(1024);
     execute_flush(
         &flush_cmd,
@@ -214,7 +216,7 @@ async fn test_remember_with_limit_truncation() {
 
     sleep(Duration::from_millis(100)).await;
 
-    let flush_cmd = flush::parse(&tokenize("FLUSH")).expect("parse FLUSH");
+    let flush_cmd = flush_parser::parse(&tokenize("FLUSH")).expect("parse FLUSH");
     let (_r_flush, mut w_flush) = duplex(1024);
     execute_flush(
         &flush_cmd,
@@ -275,7 +277,7 @@ async fn test_remember_duplicate_name_error() {
 
     sleep(Duration::from_millis(100)).await;
 
-    let flush_cmd = flush::parse(&tokenize("FLUSH")).expect("parse FLUSH");
+    let flush_cmd = flush_parser::parse(&tokenize("FLUSH")).expect("parse FLUSH");
     let (_r_flush, mut w_flush) = duplex(1024);
     execute_flush(
         &flush_cmd,
@@ -290,9 +292,8 @@ async fn test_remember_duplicate_name_error() {
     sleep(Duration::from_millis(200)).await;
 
     // First remember
-    let remember_cmd1 =
-        remember::parse("REMEMBER QUERY test_event AS duplicate_test")
-            .expect("parse REMEMBER command");
+    let remember_cmd1 = remember::parse("REMEMBER QUERY test_event AS duplicate_test")
+        .expect("parse REMEMBER command");
 
     let Command::RememberQuery { spec: spec1 } = remember_cmd1 else {
         panic!("Expected RememberQuery command");
@@ -302,16 +303,18 @@ async fn test_remember_duplicate_name_error() {
     assert!(result1.is_ok(), "First remember should succeed");
 
     // Try to remember again with same name
-    let remember_cmd2 =
-        remember::parse("REMEMBER QUERY test_event AS duplicate_test")
-            .expect("parse REMEMBER command");
+    let remember_cmd2 = remember::parse("REMEMBER QUERY test_event AS duplicate_test")
+        .expect("parse REMEMBER command");
 
     let Command::RememberQuery { spec: spec2 } = remember_cmd2 else {
         panic!("Expected RememberQuery command");
     };
 
     let result2 = remember_query_with_data_dir(spec2, &shard_manager, &registry, &data_dir).await;
-    assert!(result2.is_err(), "Second remember with duplicate name should fail");
+    assert!(
+        result2.is_err(),
+        "Second remember with duplicate name should fail"
+    );
     assert!(
         result2.unwrap_err().contains("already exists"),
         "Error should mention duplicate name"
@@ -323,7 +326,7 @@ async fn test_remember_empty_results() {
     let (_temp_dir, shard_manager, registry, data_dir) = setup_test_environment().await;
 
     // Don't store any events, just flush
-    let flush_cmd = flush::parse(&tokenize("FLUSH")).expect("parse FLUSH");
+    let flush_cmd = flush_parser::parse(&tokenize("FLUSH")).expect("parse FLUSH");
     let (_r_flush, mut w_flush) = duplex(1024);
     execute_flush(
         &flush_cmd,
@@ -338,9 +341,8 @@ async fn test_remember_empty_results() {
     sleep(Duration::from_millis(200)).await;
 
     // Remember query that returns no results
-    let remember_cmd =
-        remember::parse("REMEMBER QUERY test_event AS empty_materialization")
-            .expect("parse REMEMBER command");
+    let remember_cmd = remember::parse("REMEMBER QUERY test_event AS empty_materialization")
+        .expect("parse REMEMBER command");
 
     let Command::RememberQuery { spec } = remember_cmd else {
         panic!("Expected RememberQuery command");
@@ -348,7 +350,10 @@ async fn test_remember_empty_results() {
 
     let result = remember_query_with_data_dir(spec, &shard_manager, &registry, &data_dir).await;
 
-    assert!(result.is_ok(), "remember should succeed even with empty results");
+    assert!(
+        result.is_ok(),
+        "remember should succeed even with empty results"
+    );
     let summary = result.unwrap();
 
     // Verify summary indicates zero rows
@@ -389,7 +394,7 @@ async fn test_remember_high_water_mark_tracking() {
 
     sleep(Duration::from_millis(100)).await;
 
-    let flush_cmd = flush::parse(&tokenize("FLUSH")).expect("parse FLUSH");
+    let flush_cmd = flush_parser::parse(&tokenize("FLUSH")).expect("parse FLUSH");
     let (_r_flush, mut w_flush) = duplex(1024);
     execute_flush(
         &flush_cmd,
@@ -404,9 +409,8 @@ async fn test_remember_high_water_mark_tracking() {
     sleep(Duration::from_millis(200)).await;
 
     // Remember the query
-    let remember_cmd =
-        remember::parse("REMEMBER QUERY test_event AS hwm_materialization")
-            .expect("parse REMEMBER command");
+    let remember_cmd = remember::parse("REMEMBER QUERY test_event AS hwm_materialization")
+        .expect("parse REMEMBER command");
 
     let Command::RememberQuery { spec } = remember_cmd else {
         panic!("Expected RememberQuery command");
@@ -419,7 +423,11 @@ async fn test_remember_high_water_mark_tracking() {
 
     // Verify high water mark is tracked
     let has_hwm = summary.iter().any(|s| s.contains("high-water mark"));
-    assert!(has_hwm, "Summary should contain high-water mark, summary: {:?}", summary);
+    assert!(
+        has_hwm,
+        "Summary should contain high-water mark, summary: {:?}",
+        summary
+    );
 
     // Verify catalog entry has high water mark
     let catalog = MaterializationCatalog::load(&data_dir).expect("catalog should load");
@@ -434,8 +442,14 @@ async fn test_remember_high_water_mark_tracking() {
     );
 
     if let Some(hwm) = entry.high_water_mark {
-        assert!(hwm.timestamp > 0, "High water mark should have valid timestamp");
-        assert!(hwm.event_id > 0, "High water mark should have valid event_id");
+        assert!(
+            hwm.timestamp > 0,
+            "High water mark should have valid timestamp"
+        );
+        assert!(
+            hwm.event_id > 0,
+            "High water mark should have valid event_id"
+        );
     }
 }
 
@@ -444,7 +458,7 @@ async fn test_remember_zero_high_water_mark() {
     let (_temp_dir, shard_manager, registry, data_dir) = setup_test_environment().await;
 
     // Flush without storing (empty state)
-    let flush_cmd = flush::parse(&tokenize("FLUSH")).expect("parse FLUSH");
+    let flush_cmd = flush_parser::parse(&tokenize("FLUSH")).expect("parse FLUSH");
     let (_r_flush, mut w_flush) = duplex(1024);
     execute_flush(
         &flush_cmd,
@@ -459,9 +473,8 @@ async fn test_remember_zero_high_water_mark() {
     sleep(Duration::from_millis(200)).await;
 
     // Remember query that returns no results
-    let remember_cmd =
-        remember::parse("REMEMBER QUERY test_event AS zero_hwm_materialization")
-            .expect("parse REMEMBER command");
+    let remember_cmd = remember::parse("REMEMBER QUERY test_event AS zero_hwm_materialization")
+        .expect("parse REMEMBER command");
 
     let Command::RememberQuery { spec } = remember_cmd else {
         panic!("Expected RememberQuery command");
@@ -506,7 +519,7 @@ async fn test_remember_with_where_clause() {
 
     sleep(Duration::from_millis(100)).await;
 
-    let flush_cmd = flush::parse(&tokenize("FLUSH")).expect("parse FLUSH");
+    let flush_cmd = flush_parser::parse(&tokenize("FLUSH")).expect("parse FLUSH");
     let (_r_flush, mut w_flush) = duplex(1024);
     execute_flush(
         &flush_cmd,
@@ -521,9 +534,10 @@ async fn test_remember_with_where_clause() {
     sleep(Duration::from_millis(200)).await;
 
     // Remember query with WHERE clause
-    let remember_cmd =
-        remember::parse("REMEMBER QUERY test_event WHERE value=\"even\" AS filtered_materialization")
-            .expect("parse REMEMBER command");
+    let remember_cmd = remember::parse(
+        "REMEMBER QUERY test_event WHERE value=\"even\" AS filtered_materialization",
+    )
+    .expect("parse REMEMBER command");
 
     let Command::RememberQuery { spec } = remember_cmd else {
         panic!("Expected RememberQuery command");
@@ -569,7 +583,7 @@ async fn test_remember_with_return_fields() {
 
     sleep(Duration::from_millis(100)).await;
 
-    let flush_cmd = flush::parse(&tokenize("FLUSH")).expect("parse FLUSH");
+    let flush_cmd = flush_parser::parse(&tokenize("FLUSH")).expect("parse FLUSH");
     let (_r_flush, mut w_flush) = duplex(1024);
     execute_flush(
         &flush_cmd,
@@ -615,18 +629,23 @@ async fn test_remember_catalog_load_error() {
     let invalid_data_dir = std::path::PathBuf::from("/nonexistent/path/to/catalog");
 
     let remember_cmd =
-        remember::parse("REMEMBER QUERY test_event AS error_test")
-            .expect("parse REMEMBER command");
+        remember::parse("REMEMBER QUERY test_event AS error_test").expect("parse REMEMBER command");
 
     let Command::RememberQuery { spec } = remember_cmd else {
         panic!("Expected RememberQuery command");
     };
 
-    let result = remember_query_with_data_dir(spec, &shard_manager, &registry, &invalid_data_dir).await;
+    let result =
+        remember_query_with_data_dir(spec, &shard_manager, &registry, &invalid_data_dir).await;
 
-    assert!(result.is_err(), "remember should fail with invalid data directory");
     assert!(
-        result.unwrap_err().contains("Failed to load materialization catalog"),
+        result.is_err(),
+        "remember should fail with invalid data directory"
+    );
+    assert!(
+        result
+            .unwrap_err()
+            .contains("Failed to load materialization catalog"),
         "Error should mention catalog load failure"
     );
 }
@@ -650,7 +669,7 @@ async fn test_remember_summary_includes_all_metrics() {
 
     sleep(Duration::from_millis(100)).await;
 
-    let flush_cmd = flush::parse(&tokenize("FLUSH")).expect("parse FLUSH");
+    let flush_cmd = flush_parser::parse(&tokenize("FLUSH")).expect("parse FLUSH");
     let (_r_flush, mut w_flush) = duplex(1024);
     execute_flush(
         &flush_cmd,
@@ -664,9 +683,8 @@ async fn test_remember_summary_includes_all_metrics() {
 
     sleep(Duration::from_millis(200)).await;
 
-    let remember_cmd =
-        remember::parse("REMEMBER QUERY test_event AS metrics_test")
-            .expect("parse REMEMBER command");
+    let remember_cmd = remember::parse("REMEMBER QUERY test_event AS metrics_test")
+        .expect("parse REMEMBER command");
 
     let Command::RememberQuery { spec } = remember_cmd else {
         panic!("Expected RememberQuery command");
@@ -720,7 +738,7 @@ async fn test_remember_limit_zero() {
 
     sleep(Duration::from_millis(100)).await;
 
-    let flush_cmd = flush::parse(&tokenize("FLUSH")).expect("parse FLUSH");
+    let flush_cmd = flush_parser::parse(&tokenize("FLUSH")).expect("parse FLUSH");
     let (_r_flush, mut w_flush) = duplex(1024);
     execute_flush(
         &flush_cmd,
@@ -783,7 +801,7 @@ async fn test_remember_limit_larger_than_results() {
 
     sleep(Duration::from_millis(100)).await;
 
-    let flush_cmd = flush::parse(&tokenize("FLUSH")).expect("parse FLUSH");
+    let flush_cmd = flush_parser::parse(&tokenize("FLUSH")).expect("parse FLUSH");
     let (_r_flush, mut w_flush) = duplex(1024);
     execute_flush(
         &flush_cmd,
@@ -824,6 +842,8 @@ async fn test_remember_limit_larger_than_results() {
         .expect("should get entry")
         .expect("entry should exist");
 
-    assert_eq!(entry.row_count, 3, "Entry should have 3 rows (all available)");
+    assert_eq!(
+        entry.row_count, 3,
+        "Entry should have 3 rows (all available)"
+    );
 }
-

@@ -9,6 +9,7 @@ use xorf::{BinaryFuse8, Filter};
 
 use crate::engine::core::ZonePlan;
 use crate::engine::types::ScalarValue;
+use crate::shared::hash::stable_hash64;
 use crate::shared::storage_header::{BinaryHeader, FileKind, open_and_header_offset};
 
 #[derive(Debug, Clone)]
@@ -38,7 +39,7 @@ impl ZoneXorFilterIndex {
         };
         match value_to_string(value) {
             Some(s) => {
-                let h = crate::shared::hash::stable_hash64(&s);
+                let h = stable_hash64(&s);
                 filter.contains(&h)
             }
             None => false,
@@ -49,7 +50,7 @@ impl ZoneXorFilterIndex {
         let Some(s) = value_to_string(value) else {
             return Vec::new();
         };
-        let h = crate::shared::hash::stable_hash64(&s);
+        let h = stable_hash64(&s);
         self.filters
             .iter()
             .filter_map(|(z, f)| if f.contains(&h) { Some(*z) } else { None })
@@ -92,7 +93,7 @@ impl ZoneXorFilterIndex {
             let mut unique_hashes: std::collections::HashSet<u64> =
                 std::collections::HashSet::with_capacity(unique_values.len());
             for value in &unique_values {
-                unique_hashes.insert(crate::shared::hash::stable_hash64(value));
+                unique_hashes.insert(stable_hash64(value));
             }
 
             // Convert HashSet to Vec for iterator (order doesn't matter)

@@ -4,13 +4,14 @@ use crate::engine::core::read::aggregate::plan::{AggregateOpSpec, AggregatePlan}
 use crate::engine::core::read::sink::AggregateSink as ReExportedAggregateSink;
 use crate::engine::core::read::sink::ResultSink;
 use crate::engine::core::read::sink::aggregate::sink::AggregateSink;
+use crate::engine::core::{Event, QueryPlan};
 use crate::test_helpers::factories::{
     CommandFactory, DecompressedBlockFactory, EventFactory, QueryPlanFactory, SchemaRegistryFactory,
 };
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
-fn payload_map(event: &crate::engine::core::Event) -> serde_json::Map<String, Value> {
+fn payload_map(event: &Event) -> serde_json::Map<String, Value> {
     match event.payload_as_json() {
         Value::Object(map) => map,
         _ => panic!("expected object payload"),
@@ -26,7 +27,7 @@ fn make_columns(field_rows: &[(&str, Vec<&str>)]) -> HashMap<String, ColumnValue
     map
 }
 
-async fn make_plan(event_type: &str, context_id: Option<&str>) -> crate::engine::core::QueryPlan {
+async fn make_plan(event_type: &str, context_id: Option<&str>) -> QueryPlan {
     let registry_factory = SchemaRegistryFactory::new();
     registry_factory
         .define_with_fields(event_type, &[("dummy", "int")])

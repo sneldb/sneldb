@@ -9,7 +9,7 @@ fn build_single_zone_plan(
     event_type: &str,
     field: &str,
     values: Vec<serde_json::Value>,
-) -> Vec<crate::engine::core::ZonePlan> {
+) -> Vec<ZonePlan> {
     // Prepare events with payload { field: value }
     let mut events = Vec::with_capacity(values.len());
     for v in values {

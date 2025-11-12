@@ -1,5 +1,5 @@
 use crate::command::handlers::query::orchestrator::QueryExecutionPipeline;
-use crate::command::types::Command;
+use crate::command::types::{Command, EventSequence, EventTarget, SequenceLink, TimeGranularity};
 use crate::engine::shard::manager::ShardManager;
 use crate::test_helpers::factories::{CommandFactory, SchemaRegistryFactory};
 use std::sync::Arc;
@@ -63,7 +63,7 @@ fn streaming_supported_returns_true_with_time_bucket() {
 
     let command = CommandFactory::query()
         .with_event_type("evt")
-        .with_time_bucket(crate::command::types::TimeGranularity::Hour)
+        .with_time_bucket(TimeGranularity::Hour)
         .create();
     let pipeline = QueryExecutionPipeline::new(&command, &manager, Arc::clone(&registry));
     // Time bucketing now supports streaming via AggregateOp
@@ -96,14 +96,14 @@ fn streaming_supported_returns_true_with_event_sequence() {
         ..
     } = &mut command
     {
-        *event_sequence = Some(crate::command::types::EventSequence {
-            head: crate::command::types::EventTarget {
+        *event_sequence = Some(EventSequence {
+            head: EventTarget {
                 event: "evt1".to_string(),
                 field: None,
             },
             links: vec![(
-                crate::command::types::SequenceLink::FollowedBy,
-                crate::command::types::EventTarget {
+                SequenceLink::FollowedBy,
+                EventTarget {
                     event: "evt2".to_string(),
                     field: None,
                 },
@@ -128,14 +128,14 @@ fn is_sequence_query_returns_true_for_sequence_query() {
         ..
     } = &mut command
     {
-        *event_sequence = Some(crate::command::types::EventSequence {
-            head: crate::command::types::EventTarget {
+        *event_sequence = Some(EventSequence {
+            head: EventTarget {
                 event: "evt1".to_string(),
                 field: None,
             },
             links: vec![(
-                crate::command::types::SequenceLink::FollowedBy,
-                crate::command::types::EventTarget {
+                SequenceLink::FollowedBy,
+                EventTarget {
                     event: "evt2".to_string(),
                     field: None,
                 },
@@ -177,14 +177,14 @@ fn is_sequence_query_returns_false_when_link_field_missing() {
 
     let mut command = base_command();
     if let Command::Query { event_sequence, .. } = &mut command {
-        *event_sequence = Some(crate::command::types::EventSequence {
-            head: crate::command::types::EventTarget {
+        *event_sequence = Some(EventSequence {
+            head: EventTarget {
                 event: "evt1".to_string(),
                 field: None,
             },
             links: vec![(
-                crate::command::types::SequenceLink::FollowedBy,
-                crate::command::types::EventTarget {
+                SequenceLink::FollowedBy,
+                EventTarget {
                     event: "evt2".to_string(),
                     field: None,
                 },
@@ -207,14 +207,14 @@ fn is_sequence_query_returns_true_for_preceded_by_sequence() {
         ..
     } = &mut command
     {
-        *event_sequence = Some(crate::command::types::EventSequence {
-            head: crate::command::types::EventTarget {
+        *event_sequence = Some(EventSequence {
+            head: EventTarget {
                 event: "evt1".to_string(),
                 field: None,
             },
             links: vec![(
-                crate::command::types::SequenceLink::PrecededBy,
-                crate::command::types::EventTarget {
+                SequenceLink::PrecededBy,
+                EventTarget {
                     event: "evt2".to_string(),
                     field: None,
                 },

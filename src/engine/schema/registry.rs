@@ -1,3 +1,4 @@
+use crate::command::types::{FieldSpec, MiniSchema as CommandMiniSchema};
 use crate::engine::schema::errors::SchemaError;
 use crate::engine::schema::schema_store::SchemaStore;
 use crate::engine::schema::types::{EnumType, FieldType};
@@ -135,12 +136,12 @@ impl SchemaRegistry {
     }
 }
 
-impl From<crate::command::types::MiniSchema> for MiniSchema {
-    fn from(cmd_schema: crate::command::types::MiniSchema) -> Self {
+impl From<CommandMiniSchema> for MiniSchema {
+    fn from(cmd_schema: CommandMiniSchema) -> Self {
         let mut fields: HashMap<String, FieldType> = HashMap::new();
         for (name, spec) in cmd_schema.fields.into_iter() {
             match spec {
-                crate::command::types::FieldSpec::Primitive(s) => {
+                FieldSpec::Primitive(s) => {
                     if let Some(ft) = FieldType::from_spec_with_nullable(&s) {
                         fields.insert(name, ft);
                     } else {
@@ -148,7 +149,7 @@ impl From<crate::command::types::MiniSchema> for MiniSchema {
                         fields.insert(name, FieldType::String);
                     }
                 }
-                crate::command::types::FieldSpec::Enum(variants) => {
+                FieldSpec::Enum(variants) => {
                     let et = EnumType { variants };
                     fields.insert(name, FieldType::Enum(et));
                 }

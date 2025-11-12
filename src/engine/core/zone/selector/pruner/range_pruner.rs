@@ -1,5 +1,6 @@
 use crate::command::types::CompareOp;
 use crate::engine::core::CandidateZone;
+use crate::engine::core::filter::surf_encoding;
 use crate::engine::core::zone::selector::pruner::PruneArgs;
 use crate::engine::core::zone::zone_artifacts::ZoneArtifacts;
 
@@ -39,9 +40,7 @@ impl<'a> RangePruner<'a> {
                     return None;
                 }
 
-                if let Some(bytes) =
-                    crate::engine::core::filter::surf_encoding::encode_value(value).as_deref()
-                {
+                if let Some(bytes) = surf_encoding::encode_value(value).as_deref() {
                     let zones = match op {
                         CompareOp::Gt => zsf.zones_overlapping_ge(bytes, false, args.segment_id),
                         CompareOp::Gte => zsf.zones_overlapping_ge(bytes, true, args.segment_id),

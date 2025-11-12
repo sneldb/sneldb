@@ -1,5 +1,5 @@
 use crate::command::types::{CompareOp, Expr};
-use crate::engine::core::MemTableQueryRunner;
+use crate::engine::core::{MemTable, MemTableQueryRunner};
 use crate::test_helpers::factories::{
     CommandFactory, EventFactory, MemTableFactory, QueryPlanFactory, SchemaRegistryFactory,
 };
@@ -60,7 +60,7 @@ async fn runs_memtable_query_runner_and_returns_matching_events() {
         .unwrap();
 
     // Run the MemTableQueryRunner
-    let passives: Vec<&Arc<tokio::sync::Mutex<crate::engine::core::MemTable>>> = Vec::new();
+    let passives: Vec<&Arc<tokio::sync::Mutex<MemTable>>> = Vec::new();
     let runner = MemTableQueryRunner::new(Some(&memtable), &passives, &plan);
     let result = runner.run().await;
 
@@ -94,7 +94,7 @@ async fn returns_empty_when_memtable_is_none() {
         .create()
         .await;
 
-    let passives: Vec<&Arc<tokio::sync::Mutex<crate::engine::core::MemTable>>> = Vec::new();
+    let passives: Vec<&Arc<tokio::sync::Mutex<MemTable>>> = Vec::new();
     let runner = MemTableQueryRunner::new(None, &passives, &plan);
     let result = runner.run().await;
 
@@ -140,7 +140,7 @@ async fn respects_limit_without_order_by() {
     }
     let memtable = builder.create().unwrap();
 
-    let passives: Vec<&Arc<tokio::sync::Mutex<crate::engine::core::MemTable>>> = Vec::new();
+    let passives: Vec<&Arc<tokio::sync::Mutex<MemTable>>> = Vec::new();
     let runner = MemTableQueryRunner::new(Some(&memtable), &passives, &plan).with_limit(Some(3)); // Explicitly set limit
 
     let result = runner.run().await;
@@ -188,7 +188,7 @@ async fn returns_all_events_when_order_by_present() {
     }
     let memtable = builder.create().unwrap();
 
-    let passives: Vec<&Arc<tokio::sync::Mutex<crate::engine::core::MemTable>>> = Vec::new();
+    let passives: Vec<&Arc<tokio::sync::Mutex<MemTable>>> = Vec::new();
     let runner = MemTableQueryRunner::new(Some(&memtable), &passives, &plan).with_limit(Some(3)); // Set limit
 
     let result = runner.run().await;
@@ -247,7 +247,7 @@ async fn sorts_events_descending_when_order_by_desc() {
     }
     let memtable = builder.create().unwrap();
 
-    let passives: Vec<&Arc<tokio::sync::Mutex<crate::engine::core::MemTable>>> = Vec::new();
+    let passives: Vec<&Arc<tokio::sync::Mutex<MemTable>>> = Vec::new();
     let runner = MemTableQueryRunner::new(Some(&memtable), &passives, &plan);
     let result = runner.run().await;
 

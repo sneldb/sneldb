@@ -2,6 +2,7 @@ use super::codec::{BatchCodec, Lz4BatchCodec, batch_schema_to_snapshots};
 use super::frame::storage::FrameStorage;
 use crate::engine::core::read::flow::{BatchPool, BatchSchema};
 use crate::engine::core::read::result::ColumnSpec;
+use crate::engine::types::ScalarValue;
 use serde_json::json;
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -26,7 +27,6 @@ fn frame_writer_reader_roundtrip() {
     let schema = Arc::new(build_schema());
     let snapshots = batch_schema_to_snapshots(&schema);
 
-    use crate::engine::types::ScalarValue;
     let pool = BatchPool::new(8).unwrap();
     let mut builder = pool.acquire(Arc::clone(&schema));
     builder

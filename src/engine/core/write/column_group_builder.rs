@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::engine::core::column::format::PhysicalType;
+use crate::engine::core::column::format::{ColumnBlockHeader, PhysicalType};
 use crate::engine::core::{ColumnKey, WriteJob};
 use crate::engine::types::ScalarValue;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
@@ -55,7 +55,6 @@ impl ColumnGroupBuilder {
     }
 
     pub fn finish(self) -> BTreeMap<(ColumnKey, u32), (Vec<u8>, Vec<u32>, Vec<String>)> {
-        use crate::engine::core::column::format::ColumnBlockHeader;
         let mut out: BTreeMap<(ColumnKey, u32), (Vec<u8>, Vec<u32>, Vec<String>)> = BTreeMap::new();
         for (key_zone, values) in self.groups {
             let (key, _zone) = &key_zone;

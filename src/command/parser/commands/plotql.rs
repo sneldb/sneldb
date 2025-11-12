@@ -1,7 +1,7 @@
 use crate::command::parser::error::ParseError;
 use crate::command::types::{
-    AggSpec, Command, CompareOp, EventSequence, EventTarget, Expr, OrderSpec, SequenceLink,
-    TimeGranularity,
+    AggSpec, Command, CompareOp, EventSequence, EventTarget, Expr, OrderSpec, QueryCommand,
+    SequenceLink, TimeGranularity,
 };
 use serde_json::{Number, Value};
 
@@ -539,7 +539,7 @@ impl PlotQueryParts {
         shared_breakdown: &Option<Vec<String>>,
         shared_top: Option<u32>,
         shared_top_by_target: &Option<TopByTarget>,
-    ) -> crate::command::types::QueryCommand {
+    ) -> QueryCommand {
         let (event_type, event_sequence) = Self::build_event_sequence(events);
 
         let (time_bucket, time_field) = match shared_time {
@@ -556,7 +556,7 @@ impl PlotQueryParts {
         let mut aggs = vec![metric.clone().into()];
         let order_by = Self::build_order_spec_for_metrics(&metric, top, &top_by_target, &mut aggs);
 
-        crate::command::types::QueryCommand {
+        QueryCommand {
             event_type,
             context_id: None,
             since: None,

@@ -5,6 +5,7 @@ use crate::command::handlers::query::merge::streaming::{
 use crate::command::types::Command;
 use crate::engine::core::read::flow::shard_pipeline::ShardFlowHandle;
 use crate::engine::core::read::flow::{BatchPool, BatchSchema, FlowChannel, FlowMetrics};
+use crate::engine::core::read::result::ColumnSpec;
 use crate::engine::shard::manager::ShardManager;
 use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::SchemaRegistryFactory;
@@ -14,11 +15,11 @@ use std::sync::Arc;
 fn sample_schema() -> Arc<BatchSchema> {
     Arc::new(
         BatchSchema::new(vec![
-            crate::engine::core::read::result::ColumnSpec {
+            ColumnSpec {
                 name: "context_id".to_string(),
                 logical_type: "String".to_string(),
             },
-            crate::engine::core::read::result::ColumnSpec {
+            ColumnSpec {
                 name: "value".to_string(),
                 logical_type: "Integer".to_string(),
             },
@@ -118,14 +119,14 @@ async fn unordered_merger_combines_rows() {
 #[tokio::test]
 async fn unordered_merger_rejects_schema_mismatch() {
     let schema_a = Arc::new(
-        BatchSchema::new(vec![crate::engine::core::read::result::ColumnSpec {
+        BatchSchema::new(vec![ColumnSpec {
             name: "context_id".to_string(),
             logical_type: "String".to_string(),
         }])
         .expect("schema a"),
     );
     let schema_b = Arc::new(
-        BatchSchema::new(vec![crate::engine::core::read::result::ColumnSpec {
+        BatchSchema::new(vec![ColumnSpec {
             name: "other".to_string(),
             logical_type: "String".to_string(),
         }])
@@ -243,14 +244,14 @@ async fn ordered_merger_rejects_missing_field() {
 #[tokio::test]
 async fn ordered_merger_rejects_schema_mismatch() {
     let schema_a = Arc::new(
-        BatchSchema::new(vec![crate::engine::core::read::result::ColumnSpec {
+        BatchSchema::new(vec![ColumnSpec {
             name: "context_id".to_string(),
             logical_type: "String".to_string(),
         }])
         .expect("schema a"),
     );
     let schema_b = Arc::new(
-        BatchSchema::new(vec![crate::engine::core::read::result::ColumnSpec {
+        BatchSchema::new(vec![ColumnSpec {
             name: "other".to_string(),
             logical_type: "String".to_string(),
         }])

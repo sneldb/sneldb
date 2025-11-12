@@ -1,4 +1,7 @@
 use crate::command::types::{CompareOp, Expr};
+use crate::engine::core::CandidateZone;
+use crate::engine::core::column::column_values::ColumnValues;
+use crate::engine::core::read::cache::DecompressedBlock;
 use crate::engine::core::read::sequence::group::RowIndex;
 use crate::engine::core::read::sequence::where_evaluator::SequenceWhereEvaluator;
 use crate::engine::schema::registry::{MiniSchema, SchemaRegistry};
@@ -41,9 +44,7 @@ fn create_zone_with_payload(
     user_ids: &[&str],
     timestamps: &[i64],
     payload_fields: &HashMap<String, Vec<String>>,
-) -> crate::engine::core::CandidateZone {
-    use crate::engine::core::column::column_values::ColumnValues;
-    use crate::engine::core::read::cache::DecompressedBlock;
+) -> CandidateZone {
     use std::sync::Arc;
 
     let mut values_map: HashMap<String, ColumnValues> = HashMap::new();
@@ -74,7 +75,7 @@ fn create_zone_with_payload(
         values_map.insert(field_name.clone(), create_column(&value_strs));
     }
 
-    let mut zone = crate::engine::core::CandidateZone::new(zone_id, segment_id.to_string());
+    let mut zone = CandidateZone::new(zone_id, segment_id.to_string());
     zone.set_values(values_map);
     zone
 }

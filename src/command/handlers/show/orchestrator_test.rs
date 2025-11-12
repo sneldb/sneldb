@@ -14,6 +14,7 @@ use crate::engine::materialize::{
 };
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
+use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::command_factory::CommandFactory;
 use serde_json::json;
 
@@ -128,7 +129,6 @@ fn build_outcome_updates_entry_metrics() {
     let store = MaterializedStore::open(&entry.storage_path).expect("store");
     let mut sink = MaterializedSink::new(store, entry.schema.clone()).expect("materialized sink");
 
-    use crate::engine::types::ScalarValue;
     let batch = ColumnBatch::new(
         Arc::clone(&schema),
         vec![
