@@ -127,8 +127,35 @@ impl<'a> ZoneArtifacts<'a> {
         uid: &str,
         column: &str,
     ) -> Result<EnumBitmapIndex, String> {
+        if let Some(caches) = self.caches {
+            match caches.get_or_load_enum(segment_id, uid, column) {
+                Ok(index) => {
+                    if tracing::enabled!(tracing::Level::INFO) {
+                        tracing::info!(target: "sneldb::enum", %segment_id, %uid, field = %column, "Loaded EnumBitmapIndex via cache");
+                    }
+                    // Return owned value (clone from Arc)
+                    return Ok((*index).clone());
+                }
+                Err(e) => {
+                    if tracing::enabled!(tracing::Level::WARN) {
+                        tracing::warn!(
+                            target: "sneldb::enum",
+                            %segment_id,
+                            %uid,
+                            field = %column,
+                            error = %e,
+                            "Failed to load EnumBitmapIndex via cache, falling back to direct file load"
+                        );
+                    }
+                }
+            }
+        }
+        // Fallback to direct file load
         let path = self.ebm_path(segment_id, uid, column);
-        EnumBitmapIndex::load(&path).map_err(|_| "ebm load error".to_string())
+        if tracing::enabled!(tracing::Level::INFO) {
+            tracing::info!(target: "sneldb::enum", %segment_id, %uid, field = %column, path = %path.display(), "Loading EnumBitmapIndex directly from file");
+        }
+        EnumBitmapIndex::load(&path).map_err(|e| format!("Failed to load EnumBitmapIndex from {}: {:?}", path.display(), e))
     }
 
     pub fn load_zxf(

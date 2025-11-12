@@ -12,6 +12,7 @@ use super::column_handle::ColumnHandle;
 use super::column_handle_key::ColumnHandleKey;
 use super::global_calendar_cache::GlobalFieldCalendarCache;
 use super::global_column_handle_cache::GlobalColumnHandleCache;
+use super::global_enum_cache::GlobalEnumCache;
 use super::global_temporal_index_cache::GlobalFieldTemporalIndexCache;
 use super::global_zone_index_cache::{CacheOutcome, GlobalZoneIndexCache};
 use super::global_zone_surf_cache::GlobalZoneSurfCache;
@@ -20,6 +21,7 @@ use super::zone_surf_cache_key::ZoneSurfCacheKey;
 use super::zone_xor_filter_cache_key::ZoneXorFilterCacheKey;
 use crate::engine::core::filter::zone_surf_filter::ZoneSurfFilter;
 use crate::engine::core::time::{TemporalCalendarIndex, ZoneTemporalIndex};
+use crate::engine::core::zone::enum_bitmap_index::EnumBitmapIndex;
 use crate::engine::core::zone::zone_xor_index::ZoneXorFilterIndex;
 use crate::shared::path::absolutize;
 
@@ -47,6 +49,8 @@ pub struct QueryCaches {
         Mutex<HashMap<(String, String, String, u32), Arc<ZoneTemporalIndex>>>,
     // Per-query memoization for zone metadata (segment, uid) -> Vec<ZoneMeta>
     zone_meta_by_key: Mutex<HashMap<(String, String), Arc<Vec<ZoneMeta>>>>,
+    // Per-query memoization for enum bitmap indexes: (segment, uid, field) -> EnumBitmapIndex
+    enum_by_key: Mutex<HashMap<(String, String, String), Arc<EnumBitmapIndex>>>,
 }
 
 impl QueryCaches {
@@ -73,6 +77,7 @@ impl QueryCaches {
             field_calendar_by_key: Mutex::new(HashMap::new()),
             field_temporal_index_by_key: Mutex::new(HashMap::new()),
             zone_meta_by_key: Mutex::new(HashMap::new()),
+            enum_by_key: Mutex::new(HashMap::new()),
         }
     }
 
@@ -444,6 +449,47 @@ impl QueryCaches {
             .lock()
             .unwrap_or_else(|p| p.into_inner());
         map.entry(key).or_insert_with(|| Arc::clone(&arc));
+        Ok(arc)
+    }
+
+    pub fn get_or_load_enum(
+        &self,
+        segment_id: &str,
+        uid: &str,
+        field: &str,
+    ) -> Result<Arc<EnumBitmapIndex>, std::io::Error> {
+        let key = (
+            segment_id.to_string(),
+            uid.to_string(),
+            field.to_string(),
+        );
+
+        // Fast path: per-query memoization
+        if let Some(v) = self
+            .enum_by_key
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(&key)
+            .cloned()
+        {
+            return Ok(v);
+        }
+
+        // Fallback to global cache
+        let (arc, _outcome) = GlobalEnumCache::instance().get_or_load(
+            &self.base_dir,
+            segment_id,
+            uid,
+            field,
+        )?;
+
+        // Memoize for subsequent lookups within this query
+        let mut map = self
+            .enum_by_key
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        map.entry(key).or_insert_with(|| Arc::clone(&arc));
+
         Ok(arc)
     }
 }

@@ -4,8 +4,11 @@ pub mod column_block_cache_stats;
 pub mod column_handle;
 pub mod column_handle_key;
 pub mod decompressed_block;
+pub mod enum_cache_entry;
+pub mod enum_cache_key;
 pub mod global_calendar_cache;
 pub mod global_column_handle_cache;
+pub mod global_enum_cache;
 pub mod global_index_catalog_cache;
 pub mod global_materialized_frame_cache;
 pub mod global_temporal_index_cache;
@@ -32,7 +35,12 @@ pub use column_block_cache_stats::ColumnBlockCacheStats;
 pub use column_handle::ColumnHandle;
 pub use column_handle_key::ColumnHandleKey;
 pub use decompressed_block::DecompressedBlock;
+pub use enum_cache_entry::EnumCacheEntry;
+pub use enum_cache_key::EnumCacheKey;
 pub use global_column_handle_cache::GlobalColumnHandleCache;
+pub use global_enum_cache::{
+    CacheOutcome as EnumCacheOutcome, GlobalEnumCache, EnumCacheStats,
+};
 pub use global_index_catalog_cache::{
     CacheOutcome as IndexCatalogCacheOutcome, GlobalIndexCatalogCache, IndexCatalogCacheStats,
 };
