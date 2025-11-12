@@ -32,8 +32,20 @@ impl<'a> ShowExecutionPipeline<'a, FileCatalogGateway> {
         shard_manager: &'a crate::engine::shard::manager::ShardManager,
         registry: Arc<tokio::sync::RwLock<crate::engine::schema::SchemaRegistry>>,
     ) -> ShowResult<Self> {
+        let data_dir = crate::shared::path::absolutize(
+            std::path::PathBuf::from(crate::shared::config::CONFIG.engine.data_dir.as_str()),
+        );
+        Self::new_with_data_dir(alias, shard_manager, registry, data_dir)
+    }
+
+    pub fn new_with_data_dir(
+        alias: &'a str,
+        shard_manager: &'a crate::engine::shard::manager::ShardManager,
+        registry: Arc<tokio::sync::RwLock<crate::engine::schema::SchemaRegistry>>,
+        data_dir: impl AsRef<std::path::Path>,
+    ) -> ShowResult<Self> {
         let context = ShowContext::new(alias, shard_manager, registry);
-        let catalog_gateway = FileCatalogGateway::from_config()?;
+        let catalog_gateway = FileCatalogGateway::new(data_dir);
         Ok(Self {
             context,
             catalog_gateway,

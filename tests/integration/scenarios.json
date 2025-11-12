@@ -3864,5 +3864,216 @@
       "kind": "include",
       "value": "Authentication failed"
     }
+  },
+  {
+    "name": "remember_basic_query",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\", \"amount\": \"int\" }",
+      "STORE orders FOR c1 PAYLOAD {\"order_id\":1,\"status\":\"confirmed\",\"amount\":100}",
+      "STORE orders FOR c2 PAYLOAD {\"order_id\":2,\"status\":\"pending\",\"amount\":200}",
+      "STORE orders FOR c3 PAYLOAD {\"order_id\":3,\"status\":\"confirmed\",\"amount\":150}",
+      "FLUSH",
+      "REMEMBER QUERY orders AS recent_orders"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "remembered query 'recent_orders'" },
+      { "kind": "include", "value": "rows stored: 3" }
+    ]
+  },
+  {
+    "name": "remember_query_with_where_clause",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE products FIELDS { \"product_id\": \"int\", \"category\": \"string\", \"price\": \"int\" }",
+      "STORE products FOR p1 PAYLOAD {\"product_id\":1,\"category\":\"electronics\",\"price\":500}",
+      "STORE products FOR p2 PAYLOAD {\"product_id\":2,\"category\":\"clothing\",\"price\":50}",
+      "STORE products FOR p3 PAYLOAD {\"product_id\":3,\"category\":\"electronics\",\"price\":300}",
+      "FLUSH",
+      "REMEMBER QUERY products WHERE category=\"electronics\" AS electronics_only"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "remembered query 'electronics_only'" },
+      { "kind": "include", "value": "rows stored: 2" }
+    ]
+  },
+  {
+    "name": "remember_query_with_return_fields",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE users FIELDS { \"user_id\": \"int\", \"name\": \"string\", \"email\": \"string\", \"age\": \"int\" }",
+      "STORE users FOR u1 PAYLOAD {\"user_id\":1,\"name\":\"Alice\",\"email\":\"alice@example.com\",\"age\":30}",
+      "STORE users FOR u2 PAYLOAD {\"user_id\":2,\"name\":\"Bob\",\"email\":\"bob@example.com\",\"age\":25}",
+      "FLUSH",
+      "REMEMBER QUERY users RETURN [user_id, name] AS user_names"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "remembered query 'user_names'" },
+      { "kind": "include", "value": "rows stored: 2" }
+    ]
+  },
+  {
+    "name": "remember_query_with_limit",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE events FIELDS { \"event_id\": \"int\", \"type\": \"string\" }",
+      "STORE events FOR e1 PAYLOAD {\"event_id\":1,\"type\":\"click\"}",
+      "STORE events FOR e2 PAYLOAD {\"event_id\":2,\"type\":\"view\"}",
+      "STORE events FOR e3 PAYLOAD {\"event_id\":3,\"type\":\"click\"}",
+      "FLUSH",
+      "REMEMBER QUERY events LIMIT 2 AS limited_events"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "remembered query 'limited_events'" },
+      { "kind": "include", "value": "rows stored: 2" }
+    ]
+  },
+  {
+    "name": "remember_duplicate_name_error",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE test_dup FIELDS { \"id\": \"int\" }",
+      "STORE test_dup FOR t1 PAYLOAD {\"id\":1}",
+      "FLUSH",
+      "REMEMBER QUERY test_dup AS duplicate_test",
+      "REMEMBER QUERY test_dup AS duplicate_test"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "already exists"
+    }
+  },
+  {
+    "name": "show_basic_materialization",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE show_test FIELDS { \"id\": \"int\", \"value\": \"string\" }",
+      "STORE show_test FOR s1 PAYLOAD {\"id\":1,\"value\":\"first\"}",
+      "STORE show_test FOR s2 PAYLOAD {\"id\":2,\"value\":\"second\"}",
+      "FLUSH",
+      "REMEMBER QUERY show_test AS show_basic",
+      "SHOW show_basic"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"type\":\"schema\"" },
+      { "kind": "include_all", "value": ["s1", "s2"] },
+      { "kind": "include", "value": "\"type\":\"end\"" }
+    ]
+  },
+  {
+    "name": "show_with_incremental_delta",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE delta_test FIELDS { \"id\": \"int\", \"status\": \"string\" }",
+      "STORE delta_test FOR d1 PAYLOAD {\"id\":1,\"status\":\"initial\"}",
+      "STORE delta_test FOR d2 PAYLOAD {\"id\":2,\"status\":\"initial\"}",
+      "REMEMBER QUERY delta_test AS delta_materialization",
+      "STORE delta_test FOR d3 PAYLOAD {\"id\":3,\"status\":\"new\"}",
+      "STORE delta_test FOR d4 PAYLOAD {\"id\":4,\"status\":\"new\"}",
+      "SHOW delta_materialization"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"type\":\"schema\"" },
+      { "kind": "include_all", "value": ["d1", "d2", "d3", "d4"] },
+      { "kind": "include", "value": "\"type\":\"end\"" }
+    ]
+  },
+  {
+    "name": "show_nonexistent_materialization_error",
+    "input_commands": [
+      "SHOW nonexistent_materialization"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "not found"
+    }
+  },
+  {
+    "name": "show_multiple_incremental_updates",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE multi_update FIELDS { \"id\": \"int\", \"batch\": \"string\" }",
+      "STORE multi_update FOR m1 PAYLOAD {\"id\":1,\"batch\":\"A\"}",
+      "REMEMBER QUERY multi_update AS multi_materialization",
+      "SHOW multi_materialization",
+      "STORE multi_update FOR m2 PAYLOAD {\"id\":2,\"batch\":\"B\"}",
+      "SHOW multi_materialization",
+      "STORE multi_update FOR m3 PAYLOAD {\"id\":3,\"batch\":\"C\"}",
+      "SHOW multi_materialization"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"type\":\"schema\"" },
+      { "kind": "include_all", "value": ["m1", "m2", "m3"] },
+      { "kind": "include", "value": "\"type\":\"end\"" }
+    ]
+  },
+  {
+    "name": "remember_and_show_query_with_order_by",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE ordered_test FIELDS { \"id\": \"int\", \"score\": \"int\" }",
+      "STORE ordered_test FOR o1 PAYLOAD {\"id\":1,\"score\":50}",
+      "STORE ordered_test FOR o2 PAYLOAD {\"id\":2,\"score\":100}",
+      "STORE ordered_test FOR o3 PAYLOAD {\"id\":3,\"score\":75}",
+      "REMEMBER QUERY ordered_test ORDER BY score DESC AS ordered_materialization",
+      "SHOW ordered_materialization"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"type\":\"schema\"" },
+      { "kind": "include_all", "value": ["o1", "o2", "o3"] },
+      { "kind": "include", "value": "\"type\":\"end\"" }
+    ]
+  },
+  {
+    "name": "show_with_where_clause_materialization",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE filtered_test FIELDS { \"id\": \"int\", \"status\": \"string\" }",
+      "STORE filtered_test FOR f1 PAYLOAD {\"id\":1,\"status\":\"active\"}",
+      "STORE filtered_test FOR f2 PAYLOAD {\"id\":2,\"status\":\"inactive\"}",
+      "STORE filtered_test FOR f3 PAYLOAD {\"id\":3,\"status\":\"active\"}",
+      "REMEMBER QUERY filtered_test WHERE status=\"active\" AS active_only",
+      "SHOW active_only"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"type\":\"schema\"" },
+      { "kind": "include_all", "value": ["f1", "f3"] },
+      { "kind": "include_none", "value": ["f2"] },
+      { "kind": "include", "value": "\"type\":\"end\"" }
+    ]
+  },
+  {
+    "name": "remember_query_with_context_filter",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE ctx_test FIELDS { \"id\": \"int\", \"value\": \"string\" }",
+      "STORE ctx_test FOR user1 PAYLOAD {\"id\":1,\"value\":\"user1_data\"}",
+      "STORE ctx_test FOR user2 PAYLOAD {\"id\":2,\"value\":\"user2_data\"}",
+      "STORE ctx_test FOR user1 PAYLOAD {\"id\":3,\"value\":\"user1_more\"}",
+      "REMEMBER QUERY ctx_test FOR user1 AS user1_materialization"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "remembered query 'user1_materialization'" },
+      { "kind": "include", "value": "rows stored: 2" }
+    ]
+  },
+  {
+    "name": "show_materialization_with_context_filter",
+    "config": { "query": { "streaming_enabled": true } },
+    "input_commands": [
+      "DEFINE ctx_show FIELDS { \"id\": \"int\", \"data\": \"string\" }",
+      "STORE ctx_show FOR ctx1 PAYLOAD {\"id\":1,\"data\":\"initial\"}",
+      "STORE ctx_show FOR ctx2 PAYLOAD {\"id\":2,\"data\":\"other\"}",
+      "REMEMBER QUERY ctx_show FOR ctx1 AS ctx1_materialization",
+      "STORE ctx_show FOR ctx1 PAYLOAD {\"id\":3,\"data\":\"new\"}",
+      "FLUSH",
+      "SHOW ctx1_materialization"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"type\":\"schema\"" },
+      { "kind": "include_all", "value": ["ctx1"] },
+      { "kind": "include_none", "value": ["ctx2"] },
+      { "kind": "include", "value": "\"type\":\"end\"" }
+    ]
   }
 ]

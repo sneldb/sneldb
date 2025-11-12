@@ -248,6 +248,7 @@ fn filekind_all_magic_values() {
         (FileKind::TemporalIndex, *b"EVDBTFI\0"),
         (FileKind::IndexCatalog, *b"EVDBICX\0"),
         (FileKind::MaterializationCatalog, *b"EVDBMCL\0"),
+        (FileKind::MaterializationCatalogEntry, *b"EVDBMCE\0"),
         (FileKind::MaterializedManifest, *b"EVDBMMF\0"),
         (FileKind::MaterializedFrame, *b"EVDBMFR\0"),
     ];
@@ -255,6 +256,29 @@ fn filekind_all_magic_values() {
     for (kind, expected) in expected_magics {
         assert_eq!(kind.magic(), expected);
     }
+}
+
+#[test]
+fn materialization_catalog_entry_magic_value() {
+    // Specific test for the new MaterializationCatalogEntry file kind
+    assert_eq!(
+        FileKind::MaterializationCatalogEntry.magic(),
+        *b"EVDBMCE\0"
+    );
+
+    // Verify it's different from other materialization-related file kinds
+    assert_ne!(
+        FileKind::MaterializationCatalogEntry.magic(),
+        FileKind::MaterializationCatalog.magic()
+    );
+    assert_ne!(
+        FileKind::MaterializationCatalogEntry.magic(),
+        FileKind::MaterializedManifest.magic()
+    );
+    assert_ne!(
+        FileKind::MaterializationCatalogEntry.magic(),
+        FileKind::MaterializedFrame.magic()
+    );
 }
 
 #[test]
@@ -432,6 +456,7 @@ fn ensure_header_if_new_multiple_file_kinds() {
         FileKind::ZoneOffsets,
         FileKind::ZoneMeta,
         FileKind::XorFilter,
+        FileKind::MaterializationCatalogEntry,
     ];
 
     for (idx, kind) in kinds.iter().enumerate() {
@@ -528,6 +553,7 @@ fn open_and_header_offset_all_file_kinds() {
         FileKind::ZoneCompressedOffsets,
         FileKind::ZoneXorFilter,
         FileKind::MaterializedFrame,
+        FileKind::MaterializationCatalogEntry,
     ];
 
     for (idx, kind) in kinds.iter().enumerate() {
@@ -592,4 +618,20 @@ fn open_and_header_offset_validates_magic() {
     let err = open_and_header_offset(&path, FileKind::XorFilter.magic()).unwrap_err();
     let msg = format!("{}", err);
     assert!(msg.contains("invalid magic"));
+}
+
+#[test]
+fn materialization_catalog_entry_header_roundtrip() {
+    // Test the new MaterializationCatalogEntry file kind specifically
+    let hdr = BinaryHeader::new(FileKind::MaterializationCatalogEntry.magic(), 1, 0);
+    let mut buf = Vec::new();
+    hdr.write_to(&mut buf).unwrap();
+    assert_eq!(buf.len(), BinaryHeader::TOTAL_LEN);
+
+    let mut cur = Cursor::new(buf);
+    let read = BinaryHeader::read_from(&mut cur).unwrap();
+    assert_eq!(read.magic, FileKind::MaterializationCatalogEntry.magic());
+    assert_eq!(read.version, 1);
+    assert_eq!(read.flags, 0);
+    assert_eq!(read.header_crc32, hdr.header_crc32);
 }
