@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use crate::engine::materialize::MaterializationCatalog;
 use crate::engine::materialize::MaterializationEntry;
 
-use crate::shared::config::CONFIG;
 use crate::shared::path::absolutize;
 
 use super::errors::{ShowError, ShowResult};
@@ -17,9 +16,10 @@ pub struct FileCatalogGateway {
 }
 
 impl FileCatalogGateway {
-    pub fn from_config() -> ShowResult<Self> {
-        let data_dir = absolutize(PathBuf::from(CONFIG.engine.data_dir.as_str()));
-        Ok(Self { data_dir })
+    pub fn new(data_dir: impl AsRef<std::path::Path>) -> Self {
+        Self {
+            data_dir: absolutize(data_dir.as_ref().to_path_buf()),
+        }
     }
 }
 
@@ -44,7 +44,7 @@ impl CatalogHandle {
     pub fn fetch(&self, alias: &str) -> ShowResult<MaterializationEntry> {
         self.catalog
             .get(alias)
-            .cloned()
+            .map_err(|e| ShowError::new(format!("Failed to load materialization: {e}")))?
             .ok_or_else(|| ShowError::new(format!("Materialization '{alias}' not found")))
     }
 

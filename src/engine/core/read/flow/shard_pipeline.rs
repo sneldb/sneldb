@@ -21,6 +21,85 @@ use crate::engine::core::read::segment_query_runner::SegmentQueryRunner;
 pub const DEFAULT_MEMTABLE_COLUMNS: &[&str] =
     &["context_id", "event_type", "timestamp", "event_id"];
 
+/// Computes the output schema and projection indices for RETURN fields.
+/// Returns (output_schema, projection_indices) where projection_indices maps
+/// from input column positions to output column positions.
+fn compute_return_projection(
+    input_schema: &BatchSchema,
+    return_fields: Option<&[String]>,
+    registry: &crate::engine::schema::registry::SchemaRegistry,
+    event_type: &str,
+) -> Result<(Arc<BatchSchema>, Vec<usize>), FlowOperatorError> {
+    let return_fields = match return_fields {
+        None | Some([]) => {
+            // No RETURN fields specified - identity projection
+            let indices: Vec<usize> = (0..input_schema.column_count()).collect();
+            return Ok((Arc::new(input_schema.clone()), indices));
+        }
+        Some(fields) => fields,
+    };
+
+    // Core fields that are always included
+    let core_fields = vec![
+        "context_id".to_string(),
+        "event_type".to_string(),
+        "timestamp".to_string(),
+        "event_id".to_string(),
+    ];
+
+    // Get payload fields from schema
+    let payload_fields: Vec<String> = registry
+        .get(event_type)
+        .map(|schema| {
+            let mut fields: Vec<String> = schema.fields().cloned().collect();
+            fields.sort();
+            fields
+        })
+        .unwrap_or_default();
+
+    let payload_set: std::collections::HashSet<String> = payload_fields.iter().cloned().collect();
+
+    // Build output column list: core fields first, then RETURN payload fields
+    let mut output_columns = Vec::new();
+    let mut output_indices = Vec::new();
+
+    // Add core fields (always in order: context_id, event_type, timestamp, event_id)
+    for core_field in &core_fields {
+        if let Some(idx) = input_schema
+            .columns()
+            .iter()
+            .position(|c| c.name == *core_field)
+        {
+            output_columns.push(input_schema.columns()[idx].clone());
+            output_indices.push(idx);
+        }
+    }
+
+    // Add RETURN payload fields
+    for return_field in return_fields {
+        if payload_set.contains(return_field) {
+            if let Some(idx) = input_schema
+                .columns()
+                .iter()
+                .position(|c| c.name == *return_field)
+            {
+                // Avoid duplicates
+                if !output_indices.contains(&idx) {
+                    output_columns.push(input_schema.columns()[idx].clone());
+                    output_indices.push(idx);
+                }
+            }
+        }
+    }
+
+    let output_schema =
+        Arc::new(BatchSchema::new(output_columns).map_err(|e| {
+            FlowOperatorError::Batch(format!("failed to build output schema: {}", e))
+        })?);
+
+    Ok((output_schema, output_indices))
+}
+
 /// Handle returned by shard pipeline builders. Owns the downstream receiver,
 /// resulting batch schema, and any background tasks driving the flow.
 pub struct ShardFlowHandle {
@@ -127,9 +206,36 @@ pub async fn build_memtable_flow(
         );
     }
 
-    let projection = Projection {
-        indices: (0..final_schema.column_count()).collect(),
-        schema: Arc::clone(&final_schema),
+    // Compute projection for RETURN fields if specified
+    let projection = if let crate::command::types::Command::Query {
+        return_fields,
+        event_type,
+        ..
+    } = &plan.command
+    {
+        let registry = plan.registry.read().await;
+        match compute_return_projection(
+            &final_schema,
+            return_fields.as_deref(),
+            &registry,
+            event_type,
+        ) {
+            Ok((output_schema, indices)) => {
+                final_schema = output_schema;
+                Projection {
+                    indices,
+                    schema: Arc::clone(&final_schema),
+                }
+            }
+            Err(e) => {
+                return Err(e);
+            }
+        }
+    } else {
+        Projection {
+            indices: (0..final_schema.column_count()).collect(),
+            schema: Arc::clone(&final_schema),
+        }
     };
 
     // Optimize: Skip ProjectOp if it's an identity projection (all columns in same order)
@@ -329,9 +435,36 @@ pub async fn build_segment_stream(
         );
     }
 
-    let projection = Projection {
-        indices: (0..final_schema.column_count()).collect(),
-        schema: Arc::clone(&final_schema),
+    // Compute projection for RETURN fields if specified
+    let projection = if let crate::command::types::Command::Query {
+        return_fields,
+        event_type,
+        ..
+    } = &plan.command
+    {
+        let registry = plan.registry.read().await;
+        match compute_return_projection(
+            &final_schema,
+            return_fields.as_deref(),
+            &registry,
+            event_type,
+        ) {
+            Ok((output_schema, indices)) => {
+                final_schema = output_schema;
+                Projection {
+                    indices,
+                    schema: Arc::clone(&final_schema),
+                }
+            }
+            Err(e) => {
+                return Err(e);
+            }
+        }
+    } else {
+        Projection {
+            indices: (0..final_schema.column_count()).collect(),
+            schema: Arc::clone(&final_schema),
+        }
     };
 
     // Optimize: Skip ProjectOp if it's an identity projection (all columns in same order)

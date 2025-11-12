@@ -37,4 +37,6 @@ mod segment_discovery_test;
 #[cfg(test)]
 mod shard_command_builder_test;
 #[cfg(test)]
+mod remember_tests;
+#[cfg(test)]
 mod store_tests;

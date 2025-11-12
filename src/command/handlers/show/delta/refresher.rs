@@ -41,6 +41,17 @@ impl DeltaRefresher {
         let watermark_template =
             WatermarkDeduplicator::new(initial_high_water, timestamp_idx, event_idx);
 
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            tracing::debug!(
+                target: "sneldb::show",
+                alias = entry.name,
+                initial_watermark_ts = initial_high_water.timestamp,
+                initial_watermark_event_id = initial_high_water.event_id,
+                has_filtering = has_filtering,
+                "Delta refresher: initialized"
+            );
+        }
+
         Ok(Self {
             sink: Arc::new(Mutex::new(sink)),
             watermark_template,
@@ -74,27 +85,56 @@ impl DeltaRefresher {
 
             while let Some(batch) = stream.recv().await {
                 if batch.is_empty() {
+                    tracing::debug!(
+                        target: "sneldb::show",
+                        alias = %alias,
+                        "Delta refresher: received empty batch, skipping"
+                    );
                     continue;
                 }
 
                 let original_rows = batch.len();
+
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    tracing::debug!(
+                        target: "sneldb::show",
+                        alias = %alias,
+                        batch_num = batch_count + 1,
+                        original_rows = original_rows,
+                        "Delta refresher: received batch"
+                    );
+                }
+
                 let mut batch = batch;
                 if watermark.enabled() {
                     match watermark.filter(batch) {
                         Some(filtered) => {
                             if filtered.len() < original_rows {
-                                tracing::warn!(
+                                if tracing::enabled!(tracing::Level::DEBUG) {
+                                    tracing::debug!(
+                                        target: "sneldb::show",
+                                        alias = %alias,
+                                        batch_num = batch_count + 1,
+                                        original_rows = original_rows,
+                                        filtered_rows = filtered.len(),
+                                        "Delta batch filtered by watermark"
+                                    );
+                                }
+                            }
+                            batch = filtered;
+                        }
+                        None => {
+                            if tracing::enabled!(tracing::Level::DEBUG) {
+                                tracing::debug!(
                                     target: "sneldb::show",
                                     alias = %alias,
                                     batch_num = batch_count + 1,
                                     original_rows = original_rows,
-                                    filtered_rows = filtered.len(),
-                                    "Delta batch filtered by watermark"
+                                    "Delta batch filtered out entirely by watermark"
                                 );
                             }
-                            batch = filtered;
+                            continue;
                         }
-                        None => continue,
                     }
                 }
 
@@ -116,14 +156,16 @@ impl DeltaRefresher {
             }
 
             let stream_time = stream_start.elapsed();
-            tracing::warn!(
-                target: "sneldb::show",
-                alias = %alias,
-                batch_count = batch_count,
-                total_rows = total_rows,
-                stream_time_ms = stream_time.as_millis(),
-                "Delta stream completed"
-            );
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                tracing::debug!(
+                    target: "sneldb::show",
+                    alias = %alias,
+                    batch_count = batch_count,
+                    total_rows = total_rows,
+                    stream_time_ms = stream_time.as_millis(),
+                    "Delta stream completed"
+                );
+            }
         })
     }
 

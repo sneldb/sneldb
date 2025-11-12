@@ -5,7 +5,7 @@ use crate::engine::core::read::flow::{
 };
 use crate::engine::core::read::result::ColumnSpec;
 use crate::engine::materialize::sink::MaterializedSink;
-use serde_json::{Value, json};
+use serde_json::json;
 use std::sync::Arc;
 use tempfile::tempdir;
 
@@ -30,7 +30,6 @@ fn build_schema() -> BatchSchema {
 fn batch_to_rows(
     batch: &crate::engine::core::read::flow::ColumnBatch,
 ) -> Vec<Vec<serde_json::Value>> {
-    use crate::engine::types::ScalarValue;
     let column_count = batch.schema().column_count();
     let mut rows = vec![vec![serde_json::Value::Null; column_count]; batch.len()];
     for col_idx in 0..column_count {

@@ -6387,7 +6387,7 @@ async fn test_query_in_operator_with_not() {
         .expect("store should succeed");
     }
 
-    sleep(Duration::from_millis(400)).await;
+    sleep(Duration::from_millis(100)).await;
 
     // Flush to ensure all data is persisted
     let flush_cmd = crate::command::types::Command::Flush;
@@ -6401,23 +6401,49 @@ async fn test_query_in_operator_with_not() {
     )
     .await
     .expect("flush should succeed");
-    // Wait for flush to complete and indices to be built
-    sleep(Duration::from_millis(1500)).await;
 
-    // Query: WHERE NOT id IN (2, 4, 6, 8)
-    let cmd =
-        parse("QUERY in_not_evt WHERE NOT id IN (2, 4, 6, 8)").expect("parse IN query with NOT");
-    let (mut reader, mut writer) = duplex(4096);
-    execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
-        .await
-        .unwrap();
+    // Wait for flush to complete and indices to be built with retry logic
+    let mut attempts = 0;
+    let max_attempts = 30;
+    let mut rows = Vec::new();
 
-    let mut buf = vec![0; 4096];
-    let n = reader.read(&mut buf).await.unwrap();
-    let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    loop {
+        sleep(Duration::from_millis(100)).await;
+        attempts += 1;
+
+        // Query: WHERE NOT id IN (2, 4, 6, 8)
+        let cmd = parse("QUERY in_not_evt WHERE NOT id IN (2, 4, 6, 8)")
+            .expect("parse IN query with NOT");
+        let (mut reader, mut writer) = duplex(4096);
+        execute_query(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+            .await
+            .unwrap();
+
+        let mut buf = vec![0; 4096];
+        let n = reader.read(&mut buf).await.unwrap();
+        let body = String::from_utf8_lossy(&buf[..n]);
+        let json_start = body.find('{').unwrap_or(0);
+        if let Ok(json) = serde_json::from_str::<JsonValue>(&body[json_start..]) {
+            if let Some(results_array) = json["results"].as_array() {
+                if !results_array.is_empty() {
+                    if let Some(rows_array) = results_array[0]["rows"].as_array() {
+                        rows = rows_array.clone();
+                        // Check if we have the expected number of rows
+                        if rows.len() == 6 {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if attempts >= max_attempts {
+            panic!(
+                "Query did not return expected results after {} attempts",
+                max_attempts
+            );
+        }
+    }
 
     // Should return 6 rows (1, 3, 5, 7, 9, 10) - all IDs NOT in (2, 4, 6, 8)
     assert_eq!(rows.len(), 6, "Should return 6 rows not in the IN list");

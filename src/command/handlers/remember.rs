@@ -5,6 +5,7 @@ use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 use crate::command::handlers::query::QueryExecutionPipeline;
 use crate::command::types::{Command, MaterializedQuerySpec};
+use crate::engine::core::read::flow::BatchPool;
 use crate::engine::materialize::{
     HighWaterMark, MaterializationCatalog, MaterializationEntry, MaterializedQuerySpecExt,
     MaterializedSink, MaterializedStore, batch_schema_to_snapshots,
@@ -29,8 +30,9 @@ pub async fn handle<W: AsyncWrite + Unpin>(
     };
 
     let spec = spec.clone();
+    let data_dir = absolutize(PathBuf::from(CONFIG.engine.data_dir.as_str()));
 
-    match remember_query(spec, shard_manager, registry).await {
+    match remember_query_with_data_dir(spec, shard_manager, registry, &data_dir).await {
         Ok(summary) => {
             let resp = Response::ok_lines(summary);
             writer.write_all(&renderer.render(&resp)).await
@@ -42,10 +44,11 @@ pub async fn handle<W: AsyncWrite + Unpin>(
     }
 }
 
-async fn remember_query(
+pub(crate) async fn remember_query_with_data_dir(
     spec: MaterializedQuerySpec,
     shard_manager: &ShardManager,
     registry: &Arc<tokio::sync::RwLock<SchemaRegistry>>,
+    data_dir: &std::path::Path,
 ) -> Result<Vec<String>, String> {
     let query_command = spec.cloned_query();
 
@@ -53,9 +56,14 @@ async fn remember_query(
         return Err("REMEMBER only supports QUERY commands".into());
     }
 
-    let mut catalog = load_catalog()?;
+    let mut catalog = MaterializationCatalog::load(data_dir)
+        .map_err(|e| format!("Failed to load materialization catalog: {e}"))?;
 
-    if catalog.entries().contains_key(spec.alias()) {
+    if catalog
+        .get(spec.alias())
+        .map_err(|e| format!("Failed to check catalog: {e}"))?
+        .is_some()
+    {
         return Err(format!("Materialization '{}' already exists", spec.alias()));
     }
 
@@ -87,9 +95,61 @@ async fn remember_query(
         sink.set_retention_policy(policy);
     }
 
+    // Extract LIMIT from query command
+    let limit = if let Command::Query { limit, .. } = &query_command {
+        limit.map(|l| l as usize)
+    } else {
+        None
+    };
+
+    let mut rows_stored = 0usize;
+    let batch_pool =
+        BatchPool::new(32768).map_err(|e| format!("Failed to create batch pool: {e}"))?;
+
     while let Some(batch) = stream.recv().await {
-        sink.append(&batch)
-            .map_err(|e| format!("Failed to persist batch: {e}"))?;
+        // If LIMIT is specified, check if we've reached it
+        if let Some(limit_val) = limit {
+            if rows_stored >= limit_val {
+                break;
+            }
+
+            // Calculate how many rows we can still store
+            let remaining = limit_val - rows_stored;
+            let batch_len = batch.len();
+
+            if batch_len <= remaining {
+                // Can store entire batch
+                sink.append(&batch)
+                    .map_err(|e| format!("Failed to persist batch: {e}"))?;
+                rows_stored += batch_len;
+            } else {
+                // Need to truncate batch to remaining limit
+                // Create a truncated batch with only the rows we need
+                // Note: batch.schema() returns &BatchSchema, but we need Arc<BatchSchema>
+                // We'll create a new Arc from the schema reference
+                let schema_arc = Arc::new(batch.schema().clone());
+                let mut builder = batch_pool.acquire(schema_arc);
+                for row_idx in 0..remaining {
+                    let row = batch
+                        .row(row_idx)
+                        .map_err(|e| format!("Failed to get row {}: {}", row_idx, e))?;
+                    builder
+                        .push_row(&row)
+                        .map_err(|e| format!("Failed to push row: {e}"))?;
+                }
+                let truncated_batch = builder
+                    .finish()
+                    .map_err(|e| format!("Failed to finish truncated batch: {e}"))?;
+                sink.append(&truncated_batch)
+                    .map_err(|e| format!("Failed to persist truncated batch: {e}"))?;
+                rows_stored = limit_val;
+                break;
+            }
+        } else {
+            // No LIMIT - store entire batch
+            sink.append(&batch)
+                .map_err(|e| format!("Failed to persist batch: {e}"))?;
+        }
     }
 
     entry.schema = sink.schema().to_vec();
@@ -136,12 +196,6 @@ async fn remember_query(
     );
 
     Ok(summary)
-}
-
-fn load_catalog() -> Result<MaterializationCatalog, String> {
-    let data_dir = absolutize(PathBuf::from(CONFIG.engine.data_dir.as_str()));
-    MaterializationCatalog::load(&data_dir)
-        .map_err(|e| format!("Failed to load materialization catalog: {e}"))
 }
 
 fn current_timestamp() -> u64 {
