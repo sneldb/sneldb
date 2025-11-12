@@ -78,6 +78,11 @@ impl TcpAuthState {
 /// 3. Connection-scoped auth (after AUTH command)
 /// Returns (command, should_continue) if authenticated, or None if auth check failed
 async fn check_auth<'a>(input: &'a str, auth_state: &mut TcpAuthState) -> Option<(&'a str, bool)> {
+    // Check if authentication is bypassed via config - do this first for performance
+    if CONFIG.auth.as_ref().map(|a| a.bypass_auth).unwrap_or(false) {
+        return Some((input.trim(), true));
+    }
+
     // Cache trimmed input to avoid multiple trim() calls
     let trimmed = input.trim();
     let trimmed_bytes = trimmed.as_bytes();

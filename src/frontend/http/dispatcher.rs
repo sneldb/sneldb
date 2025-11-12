@@ -1,7 +1,7 @@
-use crate::engine::auth::AuthManager;
 use crate::command::dispatcher::dispatch_command;
 use crate::command::parser::parse_command;
 use crate::command::types::Command;
+use crate::engine::auth::AuthManager;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
 use crate::frontend::http::json_command::JsonCommand;
@@ -88,6 +88,11 @@ async fn check_auth_with_headers<'a>(
     auth_from_headers: Option<(String, String)>,
     auth_manager: Option<&'a Arc<AuthManager>>,
 ) -> Option<&'a str> {
+    // Check if authentication is bypassed via config - do this first for performance
+    if CONFIG.auth.as_ref().map(|a| a.bypass_auth).unwrap_or(false) {
+        return Some(input);
+    }
+
     // Cache trimmed input and use case-insensitive byte checks
     let trimmed = input.trim();
     let trimmed_bytes = trimmed.as_bytes();
@@ -226,34 +231,39 @@ pub async fn handle_json_command(
 
     match sonic_rs::from_slice::<JsonCommand>(&body) {
         Ok(json_cmd) => {
-            // Check authentication for all commands
-            // Try header-based authentication
-            if let Some((user_id, signature)) = auth_from_headers {
-                // Use the raw body string for signature verification (what client signed)
-                if let Some(auth_mgr) = auth_manager.as_ref() {
-                    match auth_mgr
-                        .verify_signature(body_str.trim(), &user_id, &signature)
-                        .await
-                    {
-                        Ok(_) => {
-                            // Authentication successful, proceed
-                        }
-                        Err(_) => {
-                            return render_error(
-                                "Authentication failed",
-                                StatusCode::UNAUTHORIZED,
-                                renderer,
-                            );
+            // Check if authentication is bypassed via config
+            let bypass_auth = CONFIG.auth.as_ref().map(|a| a.bypass_auth).unwrap_or(false);
+
+            if !bypass_auth {
+                // Check authentication for all commands
+                // Try header-based authentication
+                if let Some((user_id, signature)) = auth_from_headers {
+                    // Use the raw body string for signature verification (what client signed)
+                    if let Some(auth_mgr) = auth_manager.as_ref() {
+                        match auth_mgr
+                            .verify_signature(body_str.trim(), &user_id, &signature)
+                            .await
+                        {
+                            Ok(_) => {
+                                // Authentication successful, proceed
+                            }
+                            Err(_) => {
+                                return render_error(
+                                    "Authentication failed",
+                                    StatusCode::UNAUTHORIZED,
+                                    renderer,
+                                );
+                            }
                         }
                     }
+                } else {
+                    // No headers found, require authentication for all commands
+                    return render_error(
+                        "Authentication required: missing X-Auth-User and X-Auth-Signature headers",
+                        StatusCode::UNAUTHORIZED,
+                        renderer,
+                    );
                 }
-            } else {
-                // No headers found, require authentication for all commands
-                return render_error(
-                    "Authentication required: missing X-Auth-User and X-Auth-Signature headers",
-                    StatusCode::UNAUTHORIZED,
-                    renderer,
-                );
             }
 
             let cmd: Command = json_cmd.into();

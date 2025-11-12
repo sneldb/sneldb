@@ -3,6 +3,7 @@ use crate::command::parser::parse_command;
 use crate::engine::auth::AuthManager;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
+use crate::shared::config::CONFIG;
 use crate::shared::response::render::Renderer;
 use crate::shared::response::{Response, StatusCode};
 use std::io::ErrorKind;
@@ -37,6 +38,11 @@ where
     /// Check authentication before parsing command
     /// Returns command if authenticated, or None if auth check failed
     async fn check_auth<'a>(&self, input: &'a str) -> Option<&'a str> {
+        // Check if authentication is bypassed via config - do this first for performance
+        if CONFIG.auth.as_ref().map(|a| a.bypass_auth).unwrap_or(false) {
+            return Some(input);
+        }
+
         // Cache trimmed input and use case-insensitive byte checks
         let trimmed = input.trim();
         let trimmed_bytes = trimmed.as_bytes();

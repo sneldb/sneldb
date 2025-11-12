@@ -8,6 +8,7 @@ pub struct Settings {
     pub logging: LoggingConfig,
     pub schema: SchemaConfig,
     pub playground: PlaygroundConfig,
+    pub auth: Option<AuthConfig>,
     pub query: Option<QueryConfig>,
     pub time: Option<crate::shared::datetime::time::TimeConfig>,
 }
@@ -90,6 +91,17 @@ pub struct LoggingConfig {
     pub log_dir: String,
     pub stdout_level: String,
     pub file_level: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AuthConfig {
+    /// If true, bypass authentication for all commands (useful for development/testing)
+    #[serde(default = "default_bypass_auth")]
+    pub bypass_auth: bool,
+}
+
+fn default_bypass_auth() -> bool {
+    false // Default to requiring authentication
 }
 
 use std::env;
