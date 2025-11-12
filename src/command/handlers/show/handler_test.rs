@@ -1758,20 +1758,6 @@ async fn test_show_with_very_old_high_water_mark() {
 
     sleep(Duration::from_millis(100)).await;
 
-    let flush_cmd = flush::parse(&tokenize("FLUSH")).expect("parse FLUSH");
-    let (_r_flush, mut w_flush) = duplex(1024);
-    execute_flush(
-        &flush_cmd,
-        &shard_manager,
-        &registry,
-        &mut w_flush,
-        &JsonRenderer,
-    )
-    .await
-    .expect("flush should succeed");
-
-    sleep(Duration::from_millis(200)).await;
-
     let remember_cmd = remember::parse("REMEMBER QUERY old_hwm_test AS old_hwm_mat")
         .expect("parse REMEMBER command");
     let (_r_remember, mut w_remember) = duplex(2048);
