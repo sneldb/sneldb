@@ -44,6 +44,8 @@ mod rlte_index_tests;
 #[cfg(test)]
 mod segment_zone_id_test;
 #[cfg(test)]
+mod zone_artifacts_test;
+#[cfg(test)]
 mod zone_batch_sizer_test;
 #[cfg(test)]
 mod zone_collector_tests;
