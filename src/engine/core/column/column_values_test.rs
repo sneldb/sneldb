@@ -253,3 +253,244 @@ fn inequality_when_ranges_differ() {
     let cv_b = ColumnValues::new(block, ranges_b);
     assert_ne!(cv_a, cv_b);
 }
+
+// Helper function to build typed i64 column with optional nulls
+// Ensures payload_start is 8-byte aligned for proper unsafe pointer operations
+fn build_typed_i64(values: &[Option<i64>]) -> ColumnValues {
+    let row_count = values.len();
+    let null_bytes = (row_count + 7) / 8;
+    // Align payload_start to 8 bytes for proper i64 alignment
+    let payload_start = (null_bytes + 7) & !7; // Round up to nearest 8-byte boundary
+    let total_bytes = payload_start + row_count * 8;
+    let mut bytes = vec![0u8; total_bytes];
+    let mut has_null = false;
+
+    for (idx, value) in values.iter().enumerate() {
+        match value {
+            Some(v) => {
+                let offset = payload_start + idx * 8;
+                bytes[offset..offset + 8].copy_from_slice(&v.to_le_bytes());
+            }
+            None => {
+                has_null = true;
+                bytes[idx / 8] |= 1 << (idx % 8);
+            }
+        }
+    }
+
+    let block = Arc::new(DecompressedBlock::from_bytes(bytes));
+    let nulls = has_null.then_some((0, null_bytes));
+    ColumnValues::new_typed_i64(block, payload_start, row_count, nulls)
+}
+
+#[test]
+fn get_i64_slice_with_validity_basic_no_nulls() {
+    let cv = build_typed_i64(&[Some(10), Some(20), Some(30), Some(40)]);
+    let result = cv.get_i64_slice_with_validity(0, 4).unwrap();
+    assert_eq!(result.0, vec![10, 20, 30, 40]);
+    assert_eq!(result.1, vec![true, true, true, true]);
+}
+
+#[test]
+fn get_i64_slice_with_validity_partial_range() {
+    let cv = build_typed_i64(&[Some(10), Some(20), Some(30), Some(40), Some(50)]);
+    let result = cv.get_i64_slice_with_validity(1, 4).unwrap();
+    assert_eq!(result.0, vec![20, 30, 40]);
+    assert_eq!(result.1, vec![true, true, true]);
+}
+
+#[test]
+fn get_i64_slice_with_validity_single_element() {
+    let cv = build_typed_i64(&[Some(42)]);
+    let result = cv.get_i64_slice_with_validity(0, 1).unwrap();
+    assert_eq!(result.0, vec![42]);
+    assert_eq!(result.1, vec![true]);
+}
+
+#[test]
+fn get_i64_slice_with_validity_with_nulls() {
+    // Index 1 and 3 are null
+    let cv = build_typed_i64(&[Some(10), None, Some(30), None, Some(50)]);
+    let result = cv.get_i64_slice_with_validity(0, 5).unwrap();
+    // Null values read as 0 (uninitialized payload bytes)
+    assert_eq!(result.0.len(), 5);
+    assert_eq!(result.0[0], 10);
+    assert_eq!(result.0[1], 0); // Null value
+    assert_eq!(result.0[2], 30);
+    assert_eq!(result.0[3], 0); // Null value
+    assert_eq!(result.0[4], 50);
+    assert_eq!(result.1, vec![true, false, true, false, true]);
+}
+
+#[test]
+fn get_i64_slice_with_validity_with_nulls_partial() {
+    let cv = build_typed_i64(&[Some(10), None, Some(30), None, Some(50)]);
+    let result = cv.get_i64_slice_with_validity(1, 4).unwrap();
+    assert_eq!(result.0.len(), 3);
+    assert_eq!(result.1, vec![false, true, false]); // Index 1, 2, 3
+}
+
+#[test]
+fn get_i64_slice_with_validity_empty_range() {
+    let cv = build_typed_i64(&[Some(10), Some(20), Some(30)]);
+    let result = cv.get_i64_slice_with_validity(1, 1).unwrap();
+    assert_eq!(result.0, Vec::<i64>::new());
+    assert_eq!(result.1, Vec::<bool>::new());
+}
+
+#[test]
+fn get_i64_slice_with_validity_start_equals_end() {
+    let cv = build_typed_i64(&[Some(10), Some(20)]);
+    let result = cv.get_i64_slice_with_validity(2, 2).unwrap();
+    assert_eq!(result.0, Vec::<i64>::new());
+    assert_eq!(result.1, Vec::<bool>::new());
+}
+
+#[test]
+fn get_i64_slice_with_validity_start_greater_than_end() {
+    let cv = build_typed_i64(&[Some(10), Some(20)]);
+    let result = cv.get_i64_slice_with_validity(2, 1).unwrap();
+    assert_eq!(result.0, Vec::<i64>::new());
+    assert_eq!(result.1, Vec::<bool>::new());
+}
+
+#[test]
+fn get_i64_slice_with_validity_start_out_of_bounds() {
+    let cv = build_typed_i64(&[Some(10), Some(20)]);
+    assert_eq!(cv.get_i64_slice_with_validity(3, 4), None);
+}
+
+#[test]
+fn get_i64_slice_with_validity_end_out_of_bounds() {
+    let cv = build_typed_i64(&[Some(10), Some(20)]);
+    assert_eq!(cv.get_i64_slice_with_validity(0, 3), None);
+}
+
+#[test]
+fn get_i64_slice_with_validity_both_out_of_bounds() {
+    let cv = build_typed_i64(&[Some(10), Some(20)]);
+    assert_eq!(cv.get_i64_slice_with_validity(5, 6), None);
+}
+
+#[test]
+fn get_i64_slice_with_validity_start_at_boundary() {
+    let cv = build_typed_i64(&[Some(10), Some(20), Some(30)]);
+    let result = cv.get_i64_slice_with_validity(2, 3).unwrap();
+    assert_eq!(result.0, vec![30]);
+    assert_eq!(result.1, vec![true]);
+}
+
+#[test]
+fn get_i64_slice_with_validity_end_at_boundary() {
+    let cv = build_typed_i64(&[Some(10), Some(20), Some(30)]);
+    let result = cv.get_i64_slice_with_validity(0, 3).unwrap();
+    assert_eq!(result.0, vec![10, 20, 30]);
+    assert_eq!(result.1, vec![true, true, true]);
+}
+
+#[test]
+fn get_i64_slice_with_validity_negative_values() {
+    let cv = build_typed_i64(&[Some(-10), Some(-20), Some(30)]);
+    let result = cv.get_i64_slice_with_validity(0, 3).unwrap();
+    assert_eq!(result.0, vec![-10, -20, 30]);
+    assert_eq!(result.1, vec![true, true, true]);
+}
+
+#[test]
+fn get_i64_slice_with_validity_large_values() {
+    let cv = build_typed_i64(&[Some(i64::MAX), Some(i64::MIN), Some(0)]);
+    let result = cv.get_i64_slice_with_validity(0, 3).unwrap();
+    assert_eq!(result.0, vec![i64::MAX, i64::MIN, 0]);
+    assert_eq!(result.1, vec![true, true, true]);
+}
+
+#[test]
+fn get_i64_slice_with_validity_all_nulls() {
+    // When all values are null, payload bytes are still allocated but contain zeros
+    // The validity bitmap correctly marks them as null
+    let cv = build_typed_i64(&[None, None, None]);
+    let result = cv.get_i64_slice_with_validity(0, 3).unwrap();
+    assert_eq!(result.0.len(), 3);
+    // Values will be read as 0 (uninitialized payload), but validity marks them as null
+    assert_eq!(result.0, vec![0, 0, 0]);
+    assert_eq!(result.1, vec![false, false, false]);
+}
+
+#[test]
+fn get_i64_slice_with_validity_no_nulls_bitmap() {
+    // Create column without nulls bitmap (all values valid)
+    let mut bytes = Vec::new();
+    for n in [10i64, 20, 30] {
+        bytes.extend_from_slice(&n.to_le_bytes());
+    }
+    let block = Arc::new(DecompressedBlock::from_bytes(bytes));
+    let cv = ColumnValues::new_typed_i64(block, 0, 3, None);
+
+    let result = cv.get_i64_slice_with_validity(0, 3).unwrap();
+    assert_eq!(result.0, vec![10, 20, 30]);
+    assert_eq!(result.1, vec![true, true, true]);
+}
+
+#[test]
+fn get_i64_slice_with_validity_not_typed_i64() {
+    // Create a non-typed column
+    let (block, ranges) = make_block_with_values(&["10", "20"]);
+    let cv = ColumnValues::new(block, ranges);
+
+    assert_eq!(cv.get_i64_slice_with_validity(0, 2), None);
+}
+
+#[test]
+fn get_i64_slice_with_validity_nulls_bitmap_multiple_bytes() {
+    // Create column with 10 values, requiring 2 bytes for nulls bitmap
+    let values: Vec<Option<i64>> = (0..10)
+        .map(|i| if i % 2 == 0 { Some(i as i64) } else { None })
+        .collect();
+    let cv = build_typed_i64(&values);
+
+    let result = cv.get_i64_slice_with_validity(0, 10).unwrap();
+    assert_eq!(result.0.len(), 10);
+    assert_eq!(
+        result.1,
+        vec![true, false, true, false, true, false, true, false, true, false]
+    );
+}
+
+#[test]
+fn get_i64_slice_with_validity_block_bounds_exceeded() {
+    // Create a column with insufficient bytes in block
+    let mut bytes = vec![0u8; 8]; // Only 1 i64 value worth of bytes
+    bytes[0..8].copy_from_slice(&10i64.to_le_bytes());
+    let block = Arc::new(DecompressedBlock::from_bytes(bytes));
+    // Claim we have 2 rows but only 1 row worth of data
+    let cv = ColumnValues::new_typed_i64(block, 0, 2, None);
+
+    // Should fail when trying to read beyond available bytes
+    assert_eq!(cv.get_i64_slice_with_validity(0, 2), None);
+}
+
+#[test]
+fn get_i64_slice_with_validity_zero_length_column() {
+    let cv = build_typed_i64(&[]);
+    let result = cv.get_i64_slice_with_validity(0, 0).unwrap();
+    assert_eq!(result.0, Vec::<i64>::new());
+    assert_eq!(result.1, Vec::<bool>::new());
+}
+
+#[test]
+fn get_i64_slice_with_validity_consistency_with_get_i64_at() {
+    let cv = build_typed_i64(&[Some(10), None, Some(30), Some(40)]);
+
+    // Get slice
+    let (slice_values, slice_valid) = cv.get_i64_slice_with_validity(0, 4).unwrap();
+
+    // Compare with individual get_i64_at calls
+    for i in 0..4 {
+        let individual = cv.get_i64_at(i);
+        if slice_valid[i] {
+            assert_eq!(individual, Some(slice_values[i]));
+        } else {
+            assert_eq!(individual, None);
+        }
+    }
+}

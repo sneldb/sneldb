@@ -1,3 +1,4 @@
+mod agg;
 mod aggregate;
 mod filter;
 mod memtable_source;

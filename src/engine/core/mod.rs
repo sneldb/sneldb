@@ -54,6 +54,7 @@ pub use snapshot::snapshot_writer::SnapshotWriter;
 pub use time::CalendarDir;
 pub use time::ZoneTemporalIndex;
 pub use utils::io_monitor::IoMonitor;
+pub use utils::memory_monitor::MemoryMonitor;
 pub use utils::uid_resolver::UidResolver;
 pub use wal::inner_wal_writer::InnerWalWriter;
 pub use wal::wal_archive::WalArchive;

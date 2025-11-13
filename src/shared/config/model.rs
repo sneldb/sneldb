@@ -45,6 +45,9 @@ pub struct EngineConfig {
     pub event_per_zone: usize,
     pub compaction_interval: u64,
     pub sys_io_threshold: usize,
+    /// Minimum available memory in MB required to run compaction (default: 512 MB)
+    #[serde(default = "default_memory_threshold_mb")]
+    pub sys_memory_threshold_mb: usize,
     pub max_inflight_passives: Option<usize>,
     /// Number of L0 segments to merge per compaction unit (k-way)
     pub segments_per_merge: usize,
@@ -104,6 +107,10 @@ pub struct AuthConfig {
 
 fn default_bypass_auth() -> bool {
     false // Default to requiring authentication
+}
+
+fn default_memory_threshold_mb() -> usize {
+    512 // Default to 512 MB minimum available memory
 }
 
 use std::env;

@@ -22,30 +22,36 @@ fn group_key_from_row_with_bucket_and_groups() {
         ("country", vec!["US"]),
         ("plan", vec!["pro"]),
     ]);
-    let key = GroupKey::from_row(
+    let key = GroupKey::from_row_with_indices(
         Some(&TimeGranularity::Month),
         Some(&["country".to_string(), "plan".to_string()][..]),
         "timestamp",
         &cols,
+        None,
         0,
     );
     assert!(key.bucket.is_some());
-    let groups: Vec<&str> = key.groups.iter().map(|s| s.as_str()).collect();
+    let mut key_mut = key;
+    let groups_str = key_mut.groups_str();
+    let groups: Vec<&str> = groups_str.iter().map(|s| s.as_str()).collect();
     assert_eq!(groups, vec!["US", "pro"]);
 }
 
 #[test]
 fn group_key_from_row_missing_group_field_uses_empty_string() {
     let cols = make_columns(&[("country", vec!["US"])]);
-    let key = GroupKey::from_row(
+    let key = GroupKey::from_row_with_indices(
         None,
         Some(&["country".to_string(), "plan".to_string()][..]),
         "timestamp",
         &cols,
+        None,
         0,
     );
     assert_eq!(key.bucket, None);
-    let groups: Vec<&str> = key.groups.iter().map(|s| s.as_str()).collect();
+    let mut key_mut = key;
+    let groups_str = key_mut.groups_str();
+    let groups: Vec<&str> = groups_str.iter().map(|s| s.as_str()).collect();
     assert_eq!(groups, vec!["US", ""]);
 }
 
@@ -62,6 +68,7 @@ fn group_key_from_event_with_custom_time_field() {
         "created_at",
         &e,
     );
-    assert_eq!(key.groups, vec!["US"]);
-    assert_eq!(key.bucket, Some(86_400));
+    let mut key_mut = key;
+    assert_eq!(key_mut.groups_str(), &vec!["US".to_string()]);
+    assert_eq!(key_mut.bucket, Some(86_400));
 }

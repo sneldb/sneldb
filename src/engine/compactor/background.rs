@@ -3,7 +3,7 @@ use crate::engine::core::compaction::{
     policy::{CompactionPolicy, KWayCountPolicy},
 };
 use crate::engine::core::utils::system_info_cache::get_system_info_cache;
-use crate::engine::core::{CompactionWorker, IoMonitor, SegmentIndex};
+use crate::engine::core::{CompactionWorker, IoMonitor, MemoryMonitor, SegmentIndex};
 use crate::engine::schema::SchemaRegistry;
 use crate::shared::config::CONFIG;
 use once_cell::sync::Lazy;
@@ -28,10 +28,12 @@ pub async fn start_background_compactor(
         // Get cached system info (refreshed in background)
         let system_info_cache = get_system_info_cache();
 
-        // Initialize monitor with initial disks snapshot
+        // Initialize monitors with initial system snapshot
         let disks_guard = system_info_cache.get_disks().await;
-        let mut monitor = IoMonitor::new(&*disks_guard);
+        let mut io_monitor = IoMonitor::new(&*disks_guard);
         drop(disks_guard); // Release guard after initialization
+
+        let memory_monitor = MemoryMonitor::new();
 
         let handover = Arc::new(CompactionHandover::new(
             shard_id,
@@ -43,14 +45,25 @@ pub async fn start_background_compactor(
         loop {
             sleep(Duration::from_secs(CONFIG.engine.compaction_interval)).await;
 
-            // Use cached disks info (fast, non-blocking)
+            // Use cached system info (fast, non-blocking)
+            // The cache is refreshed in the background, so we just read from it
             let disks_guard = system_info_cache.get_disks().await;
-            if monitor.is_under_pressure(&*disks_guard) {
+            if io_monitor.is_under_pressure(&*disks_guard) {
                 warn!(shard_id, "IO pressure detected — skipping compaction");
                 drop(disks_guard);
                 continue;
             }
             drop(disks_guard);
+
+            // Check memory pressure using cached system info
+            // The System object is already refreshed in the background cache
+            let system_guard = system_info_cache.get_system().await;
+            if memory_monitor.is_under_pressure(&*system_guard) {
+                warn!(shard_id, "Memory pressure detected — skipping compaction");
+                drop(system_guard);
+                continue;
+            }
+            drop(system_guard);
 
             match SegmentIndex::load(&shard_dir).await {
                 Ok(segment_index) => {

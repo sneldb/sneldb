@@ -1,23 +1,35 @@
 use super::time::TimeConfig;
 use crate::command::types::TimeGranularity;
 use chrono::{DateTime, Datelike, TimeZone, Timelike, Utc};
+use chrono_tz::Tz;
 
 /// Calendar-aware time bucketing implementation
 pub struct CalendarTimeBucketer {
     config: TimeConfig,
+    // Cache parsed timezone to avoid repeated parsing
+    // This is safe because TimeConfig is typically set at startup and doesn't change
+    cached_tz: Option<Tz>,
 }
 
 impl CalendarTimeBucketer {
     pub fn new(config: TimeConfig) -> Self {
-        Self { config }
+        // Parse and cache timezone once at construction
+        // This avoids repeated timezone parsing on every bucket_of call
+        let cached_tz = config.parse_timezone();
+        Self {
+            config,
+            cached_tz,
+        }
     }
 
     /// Calculate the bucket start timestamp for a given granularity
+    /// Uses cached timezone for performance (no mutex contention)
     pub fn bucket_of(&self, ts: u64, gran: &TimeGranularity) -> u64 {
-        if let Some(tz) = self.config.parse_timezone() {
+        // Use cached timezone - no mutex needed since it's immutable after construction
+        if let Some(ref tz) = self.cached_tz {
             let dt = DateTime::from_timestamp(ts as i64, 0)
                 .unwrap_or_else(|| Utc.timestamp_opt(0, 0).single().unwrap())
-                .with_timezone(&tz);
+                .with_timezone(tz);
 
             let bucket_dt = match gran {
                 TimeGranularity::Hour => self.bucket_hour(dt),

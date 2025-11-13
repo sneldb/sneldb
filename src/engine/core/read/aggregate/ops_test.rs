@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use serde_json::json;
 
@@ -7,6 +8,7 @@ use crate::engine::core::read::aggregate::ops::{
     AggOutput, AggregatorImpl, Avg, CountAll, CountField, CountUnique, Max, Min, Sum,
 };
 use crate::engine::core::read::aggregate::plan::AggregateOpSpec;
+use crate::engine::core::read::cache::DecompressedBlock;
 use crate::test_helpers::factories::{DecompressedBlockFactory, EventFactory};
 
 fn make_columns(field_rows: &[(&str, Vec<&str>)]) -> HashMap<String, ColumnValues> {
@@ -14,6 +16,113 @@ fn make_columns(field_rows: &[(&str, Vec<&str>)]) -> HashMap<String, ColumnValue
     for (name, rows) in field_rows.iter() {
         let (block, ranges) = DecompressedBlockFactory::create_with_ranges(rows);
         map.insert((*name).to_string(), ColumnValues::new(block, ranges));
+    }
+    map
+}
+
+// Helper functions to create typed columns for testing
+fn build_typed_i64(values: &[Option<i64>]) -> ColumnValues {
+    let row_count = values.len();
+    let null_bytes = (row_count + 7) / 8;
+    let mut bytes = vec![0u8; null_bytes + row_count * 8];
+    let payload_start = null_bytes;
+    let mut has_null = false;
+
+    for (idx, value) in values.iter().enumerate() {
+        match value {
+            Some(v) => {
+                let offset = payload_start + idx * 8;
+                bytes[offset..offset + 8].copy_from_slice(&v.to_le_bytes());
+            }
+            None => {
+                has_null = true;
+                bytes[idx / 8] |= 1 << (idx % 8);
+            }
+        }
+    }
+
+    let block = Arc::new(DecompressedBlock::from_bytes(bytes));
+    let nulls = has_null.then_some((0, null_bytes));
+    ColumnValues::new_typed_i64(block, payload_start, row_count, nulls)
+}
+
+fn build_typed_u64(values: &[Option<u64>]) -> ColumnValues {
+    let row_count = values.len();
+    let null_bytes = (row_count + 7) / 8;
+    let mut bytes = vec![0u8; null_bytes + row_count * 8];
+    let payload_start = null_bytes;
+    let mut has_null = false;
+
+    for (idx, value) in values.iter().enumerate() {
+        match value {
+            Some(v) => {
+                let offset = payload_start + idx * 8;
+                bytes[offset..offset + 8].copy_from_slice(&v.to_le_bytes());
+            }
+            None => {
+                has_null = true;
+                bytes[idx / 8] |= 1 << (idx % 8);
+            }
+        }
+    }
+
+    let block = Arc::new(DecompressedBlock::from_bytes(bytes));
+    let nulls = has_null.then_some((0, null_bytes));
+    ColumnValues::new_typed_u64(block, payload_start, row_count, nulls)
+}
+
+fn build_typed_f64(values: &[Option<f64>]) -> ColumnValues {
+    let row_count = values.len();
+    let null_bytes = (row_count + 7) / 8;
+    let mut bytes = vec![0u8; null_bytes + row_count * 8];
+    let payload_start = null_bytes;
+    let mut has_null = false;
+
+    for (idx, value) in values.iter().enumerate() {
+        match value {
+            Some(v) => {
+                let offset = payload_start + idx * 8;
+                bytes[offset..offset + 8].copy_from_slice(&v.to_le_bytes());
+            }
+            None => {
+                has_null = true;
+                bytes[idx / 8] |= 1 << (idx % 8);
+            }
+        }
+    }
+
+    let block = Arc::new(DecompressedBlock::from_bytes(bytes));
+    let nulls = has_null.then_some((0, null_bytes));
+    ColumnValues::new_typed_f64(block, payload_start, row_count, nulls)
+}
+
+fn build_typed_bool(values: &[Option<bool>]) -> ColumnValues {
+    let row_count = values.len();
+    let bits_len = (row_count + 7) / 8;
+    let mut bytes = vec![0u8; bits_len * 2];
+    let payload_start = bits_len;
+    let mut has_null = false;
+
+    for (idx, value) in values.iter().enumerate() {
+        match value {
+            Some(true) => bytes[payload_start + idx / 8] |= 1 << (idx % 8),
+            Some(false) => {} // leave zero bit
+            None => {
+                has_null = true;
+                bytes[idx / 8] |= 1 << (idx % 8);
+            }
+        }
+    }
+
+    let block = Arc::new(DecompressedBlock::from_bytes(bytes));
+    let nulls = has_null.then_some((0, bits_len));
+    ColumnValues::new_typed_bool(block, payload_start, row_count, nulls)
+}
+
+fn make_typed_columns(field_values: &[(&str, ColumnValues)]) -> HashMap<String, ColumnValues> {
+    let mut map: HashMap<String, ColumnValues> = HashMap::new();
+    for (name, col) in field_values.iter() {
+        map.insert((*name).to_string(), (*col).clone());
     }
     map
 }
@@ -437,4 +546,453 @@ fn merge_mismatched_variants_is_noop() {
     let bi = AggregatorImpl::Sum(Sum::new("x".into()));
     ai.merge(&bi);
     assert_eq!(ai.finalize(), AggOutput::Count(1));
+}
+
+// Typed column tests ---------------------------------------------------------
+
+#[test]
+fn count_field_typed_i64_counts_non_null_values() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::CountField {
+        field: "order_id".into(),
+    });
+    let col = build_typed_i64(&[Some(1), Some(2), None, Some(4)]);
+    let columns = make_typed_columns(&[("order_id", col)]);
+
+    agg.update(0, &columns); // Some(1) - should count
+    agg.update(1, &columns); // Some(2) - should count
+    agg.update(2, &columns); // None - should NOT count
+    agg.update(3, &columns); // Some(4) - should count
+
+    assert_eq!(agg.finalize(), AggOutput::Count(3));
+}
+
+#[test]
+fn count_field_typed_i64_all_null_returns_zero() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::CountField {
+        field: "order_id".into(),
+    });
+    let col = build_typed_i64(&[None, None, None]);
+    let columns = make_typed_columns(&[("order_id", col)]);
+
+    agg.update(0, &columns);
+    agg.update(1, &columns);
+    agg.update(2, &columns);
+
+    assert_eq!(agg.finalize(), AggOutput::Count(0));
+}
+
+#[test]
+fn count_field_typed_i64_all_non_null_counts_all() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::CountField {
+        field: "order_id".into(),
+    });
+    let col = build_typed_i64(&[Some(1), Some(2), Some(3)]);
+    let columns = make_typed_columns(&[("order_id", col)]);
+
+    agg.update(0, &columns);
+    agg.update(1, &columns);
+    agg.update(2, &columns);
+
+    assert_eq!(agg.finalize(), AggOutput::Count(3));
+}
+
+#[test]
+fn count_field_typed_u64_counts_non_null_values() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::CountField {
+        field: "user_id".into(),
+    });
+    let col = build_typed_u64(&[Some(100), None, Some(200)]);
+    let columns = make_typed_columns(&[("user_id", col)]);
+
+    agg.update(0, &columns);
+    agg.update(1, &columns);
+    agg.update(2, &columns);
+
+    assert_eq!(agg.finalize(), AggOutput::Count(2));
+}
+
+#[test]
+fn count_field_typed_f64_counts_non_null_values() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::CountField {
+        field: "price".into(),
+    });
+    let col = build_typed_f64(&[Some(10.5), None, Some(20.0)]);
+    let columns = make_typed_columns(&[("price", col)]);
+
+    agg.update(0, &columns);
+    agg.update(1, &columns);
+    agg.update(2, &columns);
+
+    assert_eq!(agg.finalize(), AggOutput::Count(2));
+}
+
+#[test]
+fn count_field_typed_bool_counts_non_null_values() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::CountField {
+        field: "active".into(),
+    });
+    let col = build_typed_bool(&[Some(true), None, Some(false)]);
+    let columns = make_typed_columns(&[("active", col)]);
+
+    agg.update(0, &columns);
+    agg.update(1, &columns);
+    agg.update(2, &columns);
+
+    assert_eq!(agg.finalize(), AggOutput::Count(2));
+}
+
+#[test]
+fn count_field_typed_bool_counts_false_as_non_null() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::CountField {
+        field: "active".into(),
+    });
+    let col = build_typed_bool(&[Some(false), Some(true), Some(false)]);
+    let columns = make_typed_columns(&[("active", col)]);
+
+    agg.update(0, &columns);
+    agg.update(1, &columns);
+    agg.update(2, &columns);
+
+    assert_eq!(agg.finalize(), AggOutput::Count(3));
+}
+
+#[test]
+fn sum_typed_i64_sums_non_null_values() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::Total {
+        field: "amount".into(),
+    });
+    let col = build_typed_i64(&[Some(10), Some(20), None, Some(30)]);
+    let columns = make_typed_columns(&[("amount", col)]);
+
+    agg.update(0, &columns);
+    agg.update(1, &columns);
+    agg.update(2, &columns);
+    agg.update(3, &columns);
+
+    assert_eq!(agg.finalize(), AggOutput::Sum(60));
+}
+
+#[test]
+fn sum_typed_i64_ignores_nulls() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::Total {
+        field: "amount".into(),
+    });
+    let col = build_typed_i64(&[Some(5), None, None, Some(15)]);
+    let columns = make_typed_columns(&[("amount", col)]);
+
+    agg.update(0, &columns);
+    agg.update(1, &columns);
+    agg.update(2, &columns);
+    agg.update(3, &columns);
+
+    assert_eq!(agg.finalize(), AggOutput::Sum(20));
+}
+
+#[test]
+fn sum_typed_i64_negative_values() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::Total {
+        field: "amount".into(),
+    });
+    let col = build_typed_i64(&[Some(-10), Some(20), Some(-5)]);
+    let columns = make_typed_columns(&[("amount", col)]);
+
+    agg.update(0, &columns);
+    agg.update(1, &columns);
+    agg.update(2, &columns);
+
+    assert_eq!(agg.finalize(), AggOutput::Sum(5));
+}
+
+#[test]
+fn avg_typed_i64_computes_mean_ignoring_nulls() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::Avg {
+        field: "amount".into(),
+    });
+    let col = build_typed_i64(&[Some(10), Some(20), None, Some(30)]);
+    let columns = make_typed_columns(&[("amount", col)]);
+
+    agg.update(0, &columns);
+    agg.update(1, &columns);
+    agg.update(2, &columns);
+    agg.update(3, &columns);
+
+    match agg.finalize() {
+        AggOutput::Avg(v) => assert_eq!(v, 20.0), // (10 + 20 + 30) / 3
+        other => panic!("expected Avg, got {:?}", other),
+    }
+}
+
+#[test]
+fn avg_typed_i64_zero_when_all_null() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::Avg {
+        field: "amount".into(),
+    });
+    let col = build_typed_i64(&[None, None, None]);
+    let columns = make_typed_columns(&[("amount", col)]);
+
+    agg.update(0, &columns);
+    agg.update(1, &columns);
+    agg.update(2, &columns);
+
+    match agg.finalize() {
+        AggOutput::Avg(v) => assert_eq!(v, 0.0),
+        other => panic!("expected Avg, got {:?}", other),
+    }
+}
+
+#[test]
+fn avg_typed_i64_single_value() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::Avg {
+        field: "amount".into(),
+    });
+    let col = build_typed_i64(&[Some(42)]);
+    let columns = make_typed_columns(&[("amount", col)]);
+
+    agg.update(0, &columns);
+
+    match agg.finalize() {
+        AggOutput::Avg(v) => assert_eq!(v, 42.0),
+        other => panic!("expected Avg, got {:?}", other),
+    }
+}
+
+#[test]
+fn min_typed_i64_picks_smallest_numeric() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::Min {
+        field: "value".into(),
+    });
+    let col = build_typed_i64(&[Some(10), Some(5), None, Some(20)]);
+    let columns = make_typed_columns(&[("value", col)]);
+
+    agg.update(0, &columns);
+    agg.update(1, &columns);
+    agg.update(2, &columns);
+    agg.update(3, &columns);
+
+    assert_eq!(agg.finalize(), AggOutput::Min("5".into()));
+}
+
+#[test]
+fn min_typed_i64_negative_values() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::Min {
+        field: "value".into(),
+    });
+    let col = build_typed_i64(&[Some(-10), Some(5), Some(-20)]);
+    let columns = make_typed_columns(&[("value", col)]);
+
+    agg.update(0, &columns);
+    agg.update(1, &columns);
+    agg.update(2, &columns);
+
+    assert_eq!(agg.finalize(), AggOutput::Min("-20".into()));
+}
+
+#[test]
+fn min_typed_i64_ignores_nulls() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::Min {
+        field: "value".into(),
+    });
+    let col = build_typed_i64(&[None, Some(5), None]);
+    let columns = make_typed_columns(&[("value", col)]);
+
+    agg.update(0, &columns);
+    agg.update(1, &columns);
+    agg.update(2, &columns);
+
+    assert_eq!(agg.finalize(), AggOutput::Min("5".into()));
+}
+
+#[test]
+fn max_typed_i64_picks_largest_numeric() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::Max {
+        field: "value".into(),
+    });
+    let col = build_typed_i64(&[Some(10), Some(5), None, Some(20)]);
+    let columns = make_typed_columns(&[("value", col)]);
+
+    agg.update(0, &columns);
+    agg.update(1, &columns);
+    agg.update(2, &columns);
+    agg.update(3, &columns);
+
+    assert_eq!(agg.finalize(), AggOutput::Max("20".into()));
+}
+
+#[test]
+fn max_typed_i64_negative_values() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::Max {
+        field: "value".into(),
+    });
+    let col = build_typed_i64(&[Some(-10), Some(-5), Some(-20)]);
+    let columns = make_typed_columns(&[("value", col)]);
+
+    agg.update(0, &columns);
+    agg.update(1, &columns);
+    agg.update(2, &columns);
+
+    assert_eq!(agg.finalize(), AggOutput::Max("-5".into()));
+}
+
+#[test]
+fn max_typed_i64_ignores_nulls() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::Max {
+        field: "value".into(),
+    });
+    let col = build_typed_i64(&[None, Some(5), None]);
+    let columns = make_typed_columns(&[("value", col)]);
+
+    agg.update(0, &columns);
+    agg.update(1, &columns);
+    agg.update(2, &columns);
+
+    assert_eq!(agg.finalize(), AggOutput::Max("5".into()));
+}
+
+#[test]
+fn count_field_mixed_typed_and_string_columns() {
+    // Test that CountField works with both typed and string columns
+    let mut agg_typed = AggregatorImpl::from_spec(&AggregateOpSpec::CountField {
+        field: "order_id".into(),
+    });
+    let col_typed = build_typed_i64(&[Some(1), Some(2), None]);
+    let columns_typed = make_typed_columns(&[("order_id", col_typed)]);
+
+    agg_typed.update(0, &columns_typed);
+    agg_typed.update(1, &columns_typed);
+    agg_typed.update(2, &columns_typed);
+
+    let mut agg_string = AggregatorImpl::from_spec(&AggregateOpSpec::CountField {
+        field: "name".into(),
+    });
+    let columns_string = make_columns(&[("name", vec!["a", "b", ""])]);
+
+    agg_string.update(0, &columns_string);
+    agg_string.update(1, &columns_string);
+    agg_string.update(2, &columns_string);
+
+    assert_eq!(agg_typed.finalize(), AggOutput::Count(2));
+    assert_eq!(agg_string.finalize(), AggOutput::Count(3)); // empty string still counts
+}
+
+#[test]
+fn merge_count_field_typed_columns() {
+    let mut a = CountField::new("order_id".into());
+    let col1 = build_typed_i64(&[Some(1), Some(2)]);
+    let cols1 = make_typed_columns(&[("order_id", col1)]);
+    a.update(0, &cols1);
+    a.update(1, &cols1);
+
+    let mut b = CountField::new("order_id".into());
+    let col2 = build_typed_i64(&[Some(3), None]);
+    let cols2 = make_typed_columns(&[("order_id", col2)]);
+    b.update(0, &cols2);
+    b.update(1, &cols2);
+
+    let mut ai = AggregatorImpl::CountField(a);
+    let bi = AggregatorImpl::CountField(b);
+    ai.merge(&bi);
+
+    assert_eq!(ai.finalize(), AggOutput::Count(3)); // 2 from a, 1 from b
+}
+
+#[test]
+fn sum_merge_typed_columns() {
+    let mut a = Sum::new("amount".into());
+    let col1 = build_typed_i64(&[Some(10), Some(20)]);
+    let cols1 = make_typed_columns(&[("amount", col1)]);
+    a.update(0, &cols1);
+    a.update(1, &cols1);
+
+    let mut b = Sum::new("amount".into());
+    let col2 = build_typed_i64(&[Some(30), None]);
+    let cols2 = make_typed_columns(&[("amount", col2)]);
+    b.update(0, &cols2);
+    b.update(1, &cols2);
+
+    let mut ai = AggregatorImpl::Sum(a);
+    let bi = AggregatorImpl::Sum(b);
+    ai.merge(&bi);
+
+    assert_eq!(ai.finalize(), AggOutput::Sum(60)); // 10 + 20 + 30
+}
+
+#[test]
+fn avg_merge_typed_columns() {
+    let mut a = Avg::new("amount".into());
+    let col1 = build_typed_i64(&[Some(10), Some(20)]);
+    let cols1 = make_typed_columns(&[("amount", col1)]);
+    a.update(0, &cols1);
+    a.update(1, &cols1);
+
+    let mut b = Avg::new("amount".into());
+    let col2 = build_typed_i64(&[Some(30)]);
+    let cols2 = make_typed_columns(&[("amount", col2)]);
+    b.update(0, &cols2);
+
+    let mut ai = AggregatorImpl::Avg(a);
+    let bi = AggregatorImpl::Avg(b);
+    ai.merge(&bi);
+
+    match ai.finalize() {
+        AggOutput::Avg(v) => assert_eq!(v, 20.0), // (10 + 20 + 30) / 3
+        other => panic!("expected Avg, got {:?}", other),
+    }
+}
+
+#[test]
+fn min_max_merge_typed_columns() {
+    // Min merge
+    let mut a = Min::new("value".into());
+    let col1 = build_typed_i64(&[Some(10), Some(5)]);
+    let cols1 = make_typed_columns(&[("value", col1)]);
+    a.update(0, &cols1);
+    a.update(1, &cols1);
+
+    let mut b = Min::new("value".into());
+    let col2 = build_typed_i64(&[Some(3), Some(15)]);
+    let cols2 = make_typed_columns(&[("value", col2)]);
+    b.update(0, &cols2);
+    b.update(1, &cols2);
+
+    let mut ai = AggregatorImpl::Min(a);
+    let bi = AggregatorImpl::Min(b);
+    ai.merge(&bi);
+    assert_eq!(ai.finalize(), AggOutput::Min("3".into()));
+
+    // Max merge
+    let mut c = Max::new("value".into());
+    c.update(0, &cols1);
+    c.update(1, &cols1);
+
+    let mut d = Max::new("value".into());
+    d.update(0, &cols2);
+    d.update(1, &cols2);
+
+    let mut ci = AggregatorImpl::Max(c);
+    let di = AggregatorImpl::Max(d);
+    ci.merge(&di);
+    assert_eq!(ci.finalize(), AggOutput::Max("15".into()));
+}
+
+#[test]
+fn count_field_typed_i64_real_world_scenario() {
+    // Simulates the actual bug scenario: COUNT order_id BY country
+    // where order_id is int | null
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::CountField {
+        field: "order_id".into(),
+    });
+
+    // NL country: 2 orders with order_id, 0 without
+    let col_nl = build_typed_i64(&[Some(1), Some(2)]);
+    let cols_nl = make_typed_columns(&[("order_id", col_nl)]);
+    agg.update(0, &cols_nl);
+    agg.update(1, &cols_nl);
+
+    // DE country: 0 orders with order_id, 1 without
+    let col_de = build_typed_i64(&[None]);
+    let cols_de = make_typed_columns(&[("order_id", col_de)]);
+    agg.update(0, &cols_de);
+
+    // Should count 2 (from NL), not 0
+    assert_eq!(agg.finalize(), AggOutput::Count(2));
 }
