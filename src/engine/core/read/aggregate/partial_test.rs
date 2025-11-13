@@ -1,10 +1,120 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
+use crate::engine::core::column::column_values::ColumnValues;
 use crate::engine::core::read::aggregate::ops::AggregatorImpl;
 use crate::engine::core::read::aggregate::partial::{
     AggPartial, AggState, GroupKey, snapshot_aggregator,
 };
 use crate::engine::core::read::aggregate::plan::AggregateOpSpec;
+use crate::engine::core::read::cache::DecompressedBlock;
+
+// Helper functions to create typed columns for testing
+fn build_typed_i64(values: &[Option<i64>]) -> ColumnValues {
+    let row_count = values.len();
+    let null_bytes = (row_count + 7) / 8;
+    let mut bytes = vec![0u8; null_bytes + row_count * 8];
+    let payload_start = null_bytes;
+    let mut has_null = false;
+
+    for (idx, value) in values.iter().enumerate() {
+        match value {
+            Some(v) => {
+                let offset = payload_start + idx * 8;
+                bytes[offset..offset + 8].copy_from_slice(&v.to_le_bytes());
+            }
+            None => {
+                has_null = true;
+                bytes[idx / 8] |= 1 << (idx % 8);
+            }
+        }
+    }
+
+    let block = Arc::new(DecompressedBlock::from_bytes(bytes));
+    let nulls = has_null.then_some((0, null_bytes));
+    ColumnValues::new_typed_i64(block, payload_start, row_count, nulls)
+}
+
+fn build_typed_u64(values: &[Option<u64>]) -> ColumnValues {
+    let row_count = values.len();
+    let null_bytes = (row_count + 7) / 8;
+    let mut bytes = vec![0u8; null_bytes + row_count * 8];
+    let payload_start = null_bytes;
+    let mut has_null = false;
+
+    for (idx, value) in values.iter().enumerate() {
+        match value {
+            Some(v) => {
+                let offset = payload_start + idx * 8;
+                bytes[offset..offset + 8].copy_from_slice(&v.to_le_bytes());
+            }
+            None => {
+                has_null = true;
+                bytes[idx / 8] |= 1 << (idx % 8);
+            }
+        }
+    }
+
+    let block = Arc::new(DecompressedBlock::from_bytes(bytes));
+    let nulls = has_null.then_some((0, null_bytes));
+    ColumnValues::new_typed_u64(block, payload_start, row_count, nulls)
+}
+
+fn build_typed_f64(values: &[Option<f64>]) -> ColumnValues {
+    let row_count = values.len();
+    let null_bytes = (row_count + 7) / 8;
+    let mut bytes = vec![0u8; null_bytes + row_count * 8];
+    let payload_start = null_bytes;
+    let mut has_null = false;
+
+    for (idx, value) in values.iter().enumerate() {
+        match value {
+            Some(v) => {
+                let offset = payload_start + idx * 8;
+                bytes[offset..offset + 8].copy_from_slice(&v.to_le_bytes());
+            }
+            None => {
+                has_null = true;
+                bytes[idx / 8] |= 1 << (idx % 8);
+            }
+        }
+    }
+
+    let block = Arc::new(DecompressedBlock::from_bytes(bytes));
+    let nulls = has_null.then_some((0, null_bytes));
+    ColumnValues::new_typed_f64(block, payload_start, row_count, nulls)
+}
+
+fn build_typed_bool(values: &[Option<bool>]) -> ColumnValues {
+    let row_count = values.len();
+    let bits_len = (row_count + 7) / 8;
+    let mut bytes = vec![0u8; bits_len * 2];
+    let payload_start = bits_len;
+    let mut has_null = false;
+
+    for (idx, value) in values.iter().enumerate() {
+        match value {
+            Some(true) => bytes[payload_start + idx / 8] |= 1 << (idx % 8),
+            Some(false) => {} // leave zero bit
+            None => {
+                has_null = true;
+                bytes[idx / 8] |= 1 << (idx % 8);
+            }
+        }
+    }
+
+    let block = Arc::new(DecompressedBlock::from_bytes(bytes));
+    let nulls = has_null.then_some((0, bits_len));
+    ColumnValues::new_typed_bool(block, payload_start, row_count, nulls)
+}
+
+fn make_typed_columns(field_values: &[(&str, ColumnValues)]) -> HashMap<String, ColumnValues> {
+    let mut map: HashMap<String, ColumnValues> = HashMap::new();
+    for (name, col) in field_values.iter() {
+        map.insert((*name).to_string(), (*col).clone());
+    }
+    map
+}
 
 // AggState::merge ---------------------------------------------------------
 
@@ -403,4 +513,432 @@ fn agg_partial_merge_ignores_mismatched_state_lengths() {
     // unchanged
     let merged = left.groups.get(&key).unwrap();
     assert_eq!(merged, &vec![AggState::CountAll { count: 1 }]);
+}
+
+// Typed column tests for snapshot_aggregator ------------------------------
+
+#[test]
+fn snapshot_countfield_typed_i64_counts_non_null_values() {
+    // Test the bug fix: snapshot_aggregator should correctly capture CountField
+    // from typed i64 columns
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::CountField {
+        field: "order_id".into(),
+    });
+    let col = build_typed_i64(&[Some(1), Some(2), None, Some(4)]);
+    let columns = make_typed_columns(&[("order_id", col)]);
+
+    agg.update(0, &columns); // Some(1) - should count
+    agg.update(1, &columns); // Some(2) - should count
+    agg.update(2, &columns); // None - should NOT count
+    agg.update(3, &columns); // Some(4) - should count
+
+    let state = snapshot_aggregator(&agg);
+    assert_eq!(state, AggState::CountAll { count: 3 });
+}
+
+#[test]
+fn snapshot_countfield_typed_i64_all_null_returns_zero() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::CountField {
+        field: "order_id".into(),
+    });
+    let col = build_typed_i64(&[None, None, None]);
+    let columns = make_typed_columns(&[("order_id", col)]);
+
+    agg.update(0, &columns);
+    agg.update(1, &columns);
+    agg.update(2, &columns);
+
+    let state = snapshot_aggregator(&agg);
+    assert_eq!(state, AggState::CountAll { count: 0 });
+}
+
+#[test]
+fn snapshot_countfield_typed_u64_f64_bool() {
+    // Test u64
+    let mut agg_u64 = AggregatorImpl::from_spec(&AggregateOpSpec::CountField {
+        field: "user_id".into(),
+    });
+    let col_u64 = build_typed_u64(&[Some(100), None, Some(200)]);
+    let cols_u64 = make_typed_columns(&[("user_id", col_u64)]);
+    agg_u64.update(0, &cols_u64);
+    agg_u64.update(1, &cols_u64);
+    agg_u64.update(2, &cols_u64);
+    assert_eq!(
+        snapshot_aggregator(&agg_u64),
+        AggState::CountAll { count: 2 }
+    );
+
+    // Test f64
+    let mut agg_f64 = AggregatorImpl::from_spec(&AggregateOpSpec::CountField {
+        field: "price".into(),
+    });
+    let col_f64 = build_typed_f64(&[Some(10.5), None, Some(20.0)]);
+    let cols_f64 = make_typed_columns(&[("price", col_f64)]);
+    agg_f64.update(0, &cols_f64);
+    agg_f64.update(1, &cols_f64);
+    agg_f64.update(2, &cols_f64);
+    assert_eq!(
+        snapshot_aggregator(&agg_f64),
+        AggState::CountAll { count: 2 }
+    );
+
+    // Test bool
+    let mut agg_bool = AggregatorImpl::from_spec(&AggregateOpSpec::CountField {
+        field: "active".into(),
+    });
+    let col_bool = build_typed_bool(&[Some(true), None, Some(false)]);
+    let cols_bool = make_typed_columns(&[("active", col_bool)]);
+    agg_bool.update(0, &cols_bool);
+    agg_bool.update(1, &cols_bool);
+    agg_bool.update(2, &cols_bool);
+    assert_eq!(
+        snapshot_aggregator(&agg_bool),
+        AggState::CountAll { count: 2 }
+    );
+}
+
+#[test]
+fn snapshot_sum_typed_i64_sums_non_null_values() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::Total {
+        field: "amount".into(),
+    });
+    let col = build_typed_i64(&[Some(10), Some(20), None, Some(30)]);
+    let columns = make_typed_columns(&[("amount", col)]);
+
+    agg.update(0, &columns);
+    agg.update(1, &columns);
+    agg.update(2, &columns);
+    agg.update(3, &columns);
+
+    let state = snapshot_aggregator(&agg);
+    assert_eq!(state, AggState::Sum { sum: 60 });
+}
+
+#[test]
+fn snapshot_avg_typed_i64_preserves_sum_and_count() {
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::Avg {
+        field: "amount".into(),
+    });
+    let col = build_typed_i64(&[Some(10), Some(20), None, Some(30)]);
+    let columns = make_typed_columns(&[("amount", col)]);
+
+    agg.update(0, &columns);
+    agg.update(1, &columns);
+    agg.update(2, &columns);
+    agg.update(3, &columns);
+
+    let state = snapshot_aggregator(&agg);
+    if let AggState::Avg { sum, count } = state {
+        assert_eq!(sum, 60); // 10 + 20 + 30
+        assert_eq!(count, 3); // 3 non-null values
+    } else {
+        panic!("expected Avg state");
+    }
+}
+
+#[test]
+fn snapshot_min_max_typed_i64_picks_correct_extremes() {
+    // Min
+    let mut min_agg = AggregatorImpl::from_spec(&AggregateOpSpec::Min {
+        field: "value".into(),
+    });
+    let col = build_typed_i64(&[Some(10), Some(5), None, Some(20)]);
+    let columns = make_typed_columns(&[("value", col)]);
+    min_agg.update(0, &columns);
+    min_agg.update(1, &columns);
+    min_agg.update(2, &columns);
+    min_agg.update(3, &columns);
+
+    let min_state = snapshot_aggregator(&min_agg);
+    assert_eq!(
+        min_state,
+        AggState::Min {
+            min_num: Some(5),
+            min_str: None
+        }
+    );
+
+    // Max
+    let mut max_agg = AggregatorImpl::from_spec(&AggregateOpSpec::Max {
+        field: "value".into(),
+    });
+    let col2 = build_typed_i64(&[Some(10), Some(5), None, Some(20)]);
+    let columns2 = make_typed_columns(&[("value", col2)]);
+    max_agg.update(0, &columns2);
+    max_agg.update(1, &columns2);
+    max_agg.update(2, &columns2);
+    max_agg.update(3, &columns2);
+
+    let max_state = snapshot_aggregator(&max_agg);
+    assert_eq!(
+        max_state,
+        AggState::Max {
+            max_num: Some(20),
+            max_str: None
+        }
+    );
+}
+
+#[test]
+fn snapshot_countfield_typed_i64_real_world_scenario() {
+    // Simulates the actual bug scenario: COUNT order_id BY country
+    // where order_id is int | null, then snapshot for merging
+    let mut agg = AggregatorImpl::from_spec(&AggregateOpSpec::CountField {
+        field: "order_id".into(),
+    });
+
+    // NL country: 2 orders with order_id
+    let col_nl = build_typed_i64(&[Some(1), Some(2)]);
+    let cols_nl = make_typed_columns(&[("order_id", col_nl)]);
+    agg.update(0, &cols_nl);
+    agg.update(1, &cols_nl);
+
+    // DE country: 0 orders with order_id, 1 without
+    let col_de = build_typed_i64(&[None]);
+    let cols_de = make_typed_columns(&[("order_id", col_de)]);
+    agg.update(0, &cols_de);
+
+    // Snapshot should capture count of 2 (from NL), not 0
+    let state = snapshot_aggregator(&agg);
+    assert_eq!(state, AggState::CountAll { count: 2 });
+}
+
+// Typed column tests for AggPartial merge ----------------------------------
+
+#[test]
+fn agg_partial_merge_countfield_typed_columns() {
+    let specs = vec![AggregateOpSpec::CountField {
+        field: "order_id".into(),
+    }];
+
+    let key = GroupKey {
+        bucket: None,
+        groups: vec!["NL".into()],
+    };
+
+    // Left partial: 2 non-null values
+    let mut left_agg = AggregatorImpl::from_spec(&AggregateOpSpec::CountField {
+        field: "order_id".into(),
+    });
+    let col1 = build_typed_i64(&[Some(1), Some(2)]);
+    let cols1 = make_typed_columns(&[("order_id", col1)]);
+    left_agg.update(0, &cols1);
+    left_agg.update(1, &cols1);
+    let left_state = snapshot_aggregator(&left_agg);
+
+    // Right partial: 1 non-null value, 1 null
+    let mut right_agg = AggregatorImpl::from_spec(&AggregateOpSpec::CountField {
+        field: "order_id".into(),
+    });
+    let col2 = build_typed_i64(&[Some(3), None]);
+    let cols2 = make_typed_columns(&[("order_id", col2)]);
+    right_agg.update(0, &cols2);
+    right_agg.update(1, &cols2);
+    let right_state = snapshot_aggregator(&right_agg);
+
+    let mut left = AggPartial {
+        specs: specs.clone(),
+        group_by: Some(vec!["country".into()]),
+        time_bucket: None,
+        groups: HashMap::from([(key.clone(), vec![left_state])]),
+    };
+
+    let right = AggPartial {
+        specs,
+        group_by: Some(vec!["country".into()]),
+        time_bucket: None,
+        groups: HashMap::from([(key.clone(), vec![right_state])]),
+    };
+
+    left.merge(&right);
+
+    let merged = left.groups.get(&key).unwrap();
+    // Should be 2 + 1 = 3 (nulls don't count)
+    assert_eq!(merged[0], AggState::CountAll { count: 3 });
+}
+
+#[test]
+fn agg_partial_merge_sum_typed_columns() {
+    let specs = vec![AggregateOpSpec::Total {
+        field: "amount".into(),
+    }];
+
+    let key = GroupKey {
+        bucket: None,
+        groups: vec!["US".into()],
+    };
+
+    let mut left_agg = AggregatorImpl::from_spec(&AggregateOpSpec::Total {
+        field: "amount".into(),
+    });
+    let col1 = build_typed_i64(&[Some(10), Some(20)]);
+    let cols1 = make_typed_columns(&[("amount", col1)]);
+    left_agg.update(0, &cols1);
+    left_agg.update(1, &cols1);
+    let left_state = snapshot_aggregator(&left_agg);
+
+    let mut right_agg = AggregatorImpl::from_spec(&AggregateOpSpec::Total {
+        field: "amount".into(),
+    });
+    let col2 = build_typed_i64(&[Some(30), None]);
+    let cols2 = make_typed_columns(&[("amount", col2)]);
+    right_agg.update(0, &cols2);
+    right_agg.update(1, &cols2);
+    let right_state = snapshot_aggregator(&right_agg);
+
+    let mut left = AggPartial {
+        specs: specs.clone(),
+        group_by: Some(vec!["country".into()]),
+        time_bucket: None,
+        groups: HashMap::from([(key.clone(), vec![left_state])]),
+    };
+
+    let right = AggPartial {
+        specs,
+        group_by: Some(vec!["country".into()]),
+        time_bucket: None,
+        groups: HashMap::from([(key.clone(), vec![right_state])]),
+    };
+
+    left.merge(&right);
+
+    let merged = left.groups.get(&key).unwrap();
+    assert_eq!(merged[0], AggState::Sum { sum: 60 }); // 10 + 20 + 30
+}
+
+#[test]
+fn agg_partial_merge_avg_typed_columns() {
+    let specs = vec![AggregateOpSpec::Avg {
+        field: "amount".into(),
+    }];
+
+    let key = GroupKey {
+        bucket: None,
+        groups: vec!["EU".into()],
+    };
+
+    let mut left_agg = AggregatorImpl::from_spec(&AggregateOpSpec::Avg {
+        field: "amount".into(),
+    });
+    let col1 = build_typed_i64(&[Some(10), Some(20)]);
+    let cols1 = make_typed_columns(&[("amount", col1)]);
+    left_agg.update(0, &cols1);
+    left_agg.update(1, &cols1);
+    let left_state = snapshot_aggregator(&left_agg);
+
+    let mut right_agg = AggregatorImpl::from_spec(&AggregateOpSpec::Avg {
+        field: "amount".into(),
+    });
+    let col2 = build_typed_i64(&[Some(30), None]);
+    let cols2 = make_typed_columns(&[("amount", col2)]);
+    right_agg.update(0, &cols2);
+    right_agg.update(1, &cols2);
+    let right_state = snapshot_aggregator(&right_agg);
+
+    let mut left = AggPartial {
+        specs: specs.clone(),
+        group_by: Some(vec!["region".into()]),
+        time_bucket: None,
+        groups: HashMap::from([(key.clone(), vec![left_state])]),
+    };
+
+    let right = AggPartial {
+        specs,
+        group_by: Some(vec!["region".into()]),
+        time_bucket: None,
+        groups: HashMap::from([(key.clone(), vec![right_state])]),
+    };
+
+    left.merge(&right);
+
+    let merged = left.groups.get(&key).unwrap();
+    if let AggState::Avg { sum, count } = merged[0] {
+        assert_eq!(sum, 60); // 10 + 20 + 30
+        assert_eq!(count, 3); // 3 non-null values
+    } else {
+        panic!("expected Avg state");
+    }
+}
+
+#[test]
+fn agg_partial_merge_min_max_typed_columns() {
+    let specs = vec![
+        AggregateOpSpec::Min {
+            field: "value".into(),
+        },
+        AggregateOpSpec::Max {
+            field: "value".into(),
+        },
+    ];
+
+    let key = GroupKey {
+        bucket: None,
+        groups: vec!["A".into()],
+    };
+
+    // Left: min=5, max=10
+    let mut left_min = AggregatorImpl::from_spec(&AggregateOpSpec::Min {
+        field: "value".into(),
+    });
+    let mut left_max = AggregatorImpl::from_spec(&AggregateOpSpec::Max {
+        field: "value".into(),
+    });
+    let col1 = build_typed_i64(&[Some(5), Some(10)]);
+    let cols1 = make_typed_columns(&[("value", col1)]);
+    left_min.update(0, &cols1);
+    left_min.update(1, &cols1);
+    left_max.update(0, &cols1);
+    left_max.update(1, &cols1);
+    let left_min_state = snapshot_aggregator(&left_min);
+    let left_max_state = snapshot_aggregator(&left_max);
+
+    // Right: min=3, max=15
+    let mut right_min = AggregatorImpl::from_spec(&AggregateOpSpec::Min {
+        field: "value".into(),
+    });
+    let mut right_max = AggregatorImpl::from_spec(&AggregateOpSpec::Max {
+        field: "value".into(),
+    });
+    let col2 = build_typed_i64(&[Some(3), Some(15)]);
+    let cols2 = make_typed_columns(&[("value", col2)]);
+    right_min.update(0, &cols2);
+    right_min.update(1, &cols2);
+    right_max.update(0, &cols2);
+    right_max.update(1, &cols2);
+    let right_min_state = snapshot_aggregator(&right_min);
+    let right_max_state = snapshot_aggregator(&right_max);
+
+    let mut left = AggPartial {
+        specs: specs.clone(),
+        group_by: Some(vec!["category".into()]),
+        time_bucket: None,
+        groups: HashMap::from([(key.clone(), vec![left_min_state, left_max_state])]),
+    };
+
+    let right = AggPartial {
+        specs,
+        group_by: Some(vec!["category".into()]),
+        time_bucket: None,
+        groups: HashMap::from([(key.clone(), vec![right_min_state, right_max_state])]),
+    };
+
+    left.merge(&right);
+
+    let merged = left.groups.get(&key).unwrap();
+    // Min should be 3 (smallest of 5, 10, 3, 15)
+    assert_eq!(
+        merged[0],
+        AggState::Min {
+            min_num: Some(3),
+            min_str: None
+        }
+    );
+    // Max should be 15 (largest of 5, 10, 3, 15)
+    assert_eq!(
+        merged[1],
+        AggState::Max {
+            max_num: Some(15),
+            max_str: None
+        }
+    );
 }

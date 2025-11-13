@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::engine::core::Event;
 use crate::engine::core::column::column_values::ColumnValues;
+use crate::engine::core::column::format::PhysicalType;
 use crate::engine::core::read::aggregate::plan::AggregateOpSpec;
 use crate::engine::types::ScalarValue;
 use std::simd::Simd;
@@ -276,7 +277,19 @@ impl CountField {
 
     pub fn update(&mut self, row_idx: usize, columns: &HashMap<String, ColumnValues>) {
         if let Some(col) = columns.get(&self.field) {
-            if col.get_str_at(row_idx).is_some() {
+            // Check if the column is typed and use the appropriate getter
+            let is_non_null = match col.physical_type() {
+                Some(PhysicalType::I64) => col.get_i64_at(row_idx).is_some(),
+                Some(PhysicalType::U64) => col.get_u64_at(row_idx).is_some(),
+                Some(PhysicalType::F64) => col.get_f64_at(row_idx).is_some(),
+                Some(PhysicalType::Bool) => col.get_bool_at(row_idx).is_some(),
+                _ => {
+                    // For string/untyped columns, use get_str_at
+                    col.get_str_at(row_idx).is_some()
+                }
+            };
+
+            if is_non_null {
                 self.count += 1;
             }
         }
