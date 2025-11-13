@@ -50,11 +50,16 @@ impl FlushWorker {
             let flush_coord_lock = Arc::clone(&self.flush_coordination_lock);
 
             let flush_task = tokio::spawn(async move {
+                // Check if memtable is empty before flushing
+                // If empty, we should not clear passive memtable or clean WAL files
+                let was_empty = memtable.is_empty();
+
                 info!(
                     target: "sneldb::flush",
                     shard_id,
                     segment_id,
                     path = ?segment_dir,
+                    empty = was_empty,
                     "Starting flush"
                 );
 
@@ -78,30 +83,39 @@ impl FlushWorker {
                         );
                     }
                     Ok(()) => {
-                        info!(
-                            target: "sneldb::flush",
-                            shard_id,
-                            segment_id,
-                            "Flush succeeded"
-                        );
+                        if was_empty {
+                            debug!(
+                                target: "sneldb::flush",
+                                shard_id,
+                                segment_id,
+                                "Flush skipped (empty memtable), not cleaning up passive memtable or WAL"
+                            );
+                        } else {
+                            info!(
+                                target: "sneldb::flush",
+                                shard_id,
+                                segment_id,
+                                "Flush succeeded"
+                            );
 
-                        debug!(
-                            target: "sneldb::flush",
-                            shard_id,
-                            segment_id,
-                            "Clearing passive MemTable"
-                        );
-                        let mut pmem = passive_memtable.lock().await;
-                        pmem.flush();
+                            debug!(
+                                target: "sneldb::flush",
+                                shard_id,
+                                segment_id,
+                                "Clearing passive MemTable"
+                            );
+                            let mut pmem = passive_memtable.lock().await;
+                            pmem.flush();
 
-                        debug!(
-                            target: "sneldb::flush",
-                            shard_id,
-                            wal_cutoff = segment_id + 1,
-                            "Cleaning up WAL files"
-                        );
-                        let cleaner = WalCleaner::new(shard_id);
-                        cleaner.cleanup_up_to(segment_id + 1);
+                            debug!(
+                                target: "sneldb::flush",
+                                shard_id,
+                                wal_cutoff = segment_id + 1,
+                                "Cleaning up WAL files"
+                            );
+                            let cleaner = WalCleaner::new(shard_id);
+                            cleaner.cleanup_up_to(segment_id + 1);
+                        }
                     }
                 }
 
