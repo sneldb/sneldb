@@ -3,6 +3,11 @@ use std::collections::{HashMap, HashSet};
 use crate::engine::core::Event;
 use crate::engine::core::column::column_values::ColumnValues;
 use crate::engine::core::read::aggregate::plan::AggregateOpSpec;
+use crate::engine::types::ScalarValue;
+use std::simd::Simd;
+use std::simd::prelude::*;
+
+const SIMD_LANES: usize = 4;
 
 /// Finalized output of an aggregator
 #[derive(Debug, Clone, PartialEq)]
@@ -69,6 +74,52 @@ impl AggregatorImpl {
         }
     }
 
+    /// Update aggregator with a column slice (columnar processing path)
+    /// This is optimized for SIMD operations when processing entire columns
+    pub fn update_column(
+        &mut self,
+        start: usize,
+        end: usize,
+        columns: &HashMap<String, ColumnValues>,
+    ) {
+        match self {
+            AggregatorImpl::CountAll(a) => {
+                // Count all: just add the count
+                a.count += (end - start) as i64;
+            }
+            AggregatorImpl::CountField(a) => {
+                // Fallback to row-by-row for CountField
+                for row_idx in start..end {
+                    a.update(row_idx, columns);
+                }
+            }
+            AggregatorImpl::CountUnique(a) => {
+                // Fallback to row-by-row for CountUnique
+                for row_idx in start..end {
+                    a.update(row_idx, columns);
+                }
+            }
+            AggregatorImpl::Sum(a) => {
+                a.update_column_simd(start, end, columns);
+            }
+            AggregatorImpl::Min(a) => {
+                // Fallback to row-by-row for Min (needs comparison)
+                for row_idx in start..end {
+                    a.update(row_idx, columns);
+                }
+            }
+            AggregatorImpl::Max(a) => {
+                // Fallback to row-by-row for Max (needs comparison)
+                for row_idx in start..end {
+                    a.update(row_idx, columns);
+                }
+            }
+            AggregatorImpl::Avg(a) => {
+                a.update_column_simd(start, end, columns);
+            }
+        }
+    }
+
     /// Merge another aggregator of the same variant
     pub fn merge(&mut self, other: &AggregatorImpl) {
         match (self, other) {
@@ -96,12 +147,13 @@ impl AggregatorImpl {
     }
 
     /// Update aggregator using a row from a full `Event` (row-based path)
+    /// Optimized to use get_field_scalar() to avoid string allocations
     pub fn update_from_event(&mut self, event: &Event) {
         match self {
             AggregatorImpl::CountAll(a) => a.update(),
             AggregatorImpl::CountField(a) => {
-                let val = event.get_field(a.field.as_str());
-                if !matches!(val, None | Some(serde_json::Value::Null)) {
+                let val = event.get_field_scalar(a.field.as_str());
+                if !matches!(val, None | Some(ScalarValue::Null)) {
                     a.update_non_null();
                 }
             }
@@ -110,31 +162,73 @@ impl AggregatorImpl {
                     "context_id" => event.context_id.clone(),
                     "event_type" => event.event_type.clone(),
                     "timestamp" => event.timestamp.to_string(),
-                    other => event.get_field_value(other),
+                    other => {
+                        // Use get_field_scalar to avoid string allocation when possible
+                        match event.get_field_scalar(other) {
+                            Some(ScalarValue::Utf8(s)) => s,
+                            Some(ScalarValue::Int64(i)) => i.to_string(),
+                            Some(ScalarValue::Float64(f)) => f.to_string(),
+                            Some(ScalarValue::Boolean(b)) => b.to_string(),
+                            Some(ScalarValue::Timestamp(ts)) => ts.to_string(),
+                            _ => String::new(),
+                        }
+                    }
                 };
                 a.update_value_str(&s);
             }
             AggregatorImpl::Sum(a) => {
                 let n = match a.field.as_str() {
                     "timestamp" => Some(event.timestamp as i64),
-                    other => event.get_field_value(other).parse::<i64>().ok(),
+                    other => {
+                        // Use get_field_scalar to avoid string allocation
+                        match event.get_field_scalar(other) {
+                            Some(ScalarValue::Int64(i)) => Some(i),
+                            Some(ScalarValue::Timestamp(ts)) => Some(ts),
+                            Some(ScalarValue::Utf8(s)) => s.parse::<i64>().ok(),
+                            _ => None,
+                        }
+                    }
                 };
                 if let Some(v) = n {
                     a.update_value_i64(v);
                 }
             }
             AggregatorImpl::Min(a) => {
-                let s = event.get_field_value(&a.field);
+                // Use get_field_scalar to avoid string allocation
+                let s = match event.get_field_scalar(&a.field) {
+                    Some(ScalarValue::Utf8(s)) => s,
+                    Some(ScalarValue::Int64(i)) => i.to_string(),
+                    Some(ScalarValue::Float64(f)) => f.to_string(),
+                    Some(ScalarValue::Boolean(b)) => b.to_string(),
+                    Some(ScalarValue::Timestamp(ts)) => ts.to_string(),
+                    _ => String::new(),
+                };
                 a.update_value_str(&s);
             }
             AggregatorImpl::Max(a) => {
-                let s = event.get_field_value(&a.field);
+                // Use get_field_scalar to avoid string allocation
+                let s = match event.get_field_scalar(&a.field) {
+                    Some(ScalarValue::Utf8(s)) => s,
+                    Some(ScalarValue::Int64(i)) => i.to_string(),
+                    Some(ScalarValue::Float64(f)) => f.to_string(),
+                    Some(ScalarValue::Boolean(b)) => b.to_string(),
+                    Some(ScalarValue::Timestamp(ts)) => ts.to_string(),
+                    _ => String::new(),
+                };
                 a.update_value_str(&s);
             }
             AggregatorImpl::Avg(a) => {
                 let n = match a.field.as_str() {
                     "timestamp" => Some(event.timestamp as i64),
-                    other => event.get_field_value(other).parse::<i64>().ok(),
+                    other => {
+                        // Use get_field_scalar to avoid string allocation
+                        match event.get_field_scalar(other) {
+                            Some(ScalarValue::Int64(i)) => Some(i),
+                            Some(ScalarValue::Timestamp(ts)) => Some(ts),
+                            Some(ScalarValue::Utf8(s)) => s.parse::<i64>().ok(),
+                            _ => None,
+                        }
+                    }
                 };
                 if let Some(v) = n {
                     a.update_value_i64(v);
@@ -223,7 +317,13 @@ impl CountUnique {
         if let Some(col) = columns.get(&self.field) {
             if let Some(s) = col.get_str_at(row_idx) {
                 self.uniq.insert(s.to_string());
+            } else {
+                // Missing value in column: treat as empty string (consistent with update_from_event)
+                self.uniq.insert(String::new());
             }
+        } else {
+            // Missing column: treat as empty string (consistent with update_from_event)
+            self.uniq.insert(String::new());
         }
     }
 
@@ -257,6 +357,61 @@ impl Sum {
         if let Some(col) = columns.get(&self.field) {
             if let Some(v) = col.get_i64_at(row_idx) {
                 self.sum += v;
+            }
+        }
+    }
+
+    /// SIMD-optimized columnar update for Sum aggregation
+    fn update_column_simd(
+        &mut self,
+        start: usize,
+        end: usize,
+        columns: &HashMap<String, ColumnValues>,
+    ) {
+        if let Some(col) = columns.get(&self.field) {
+            if let Some((values, valid)) = col.get_i64_slice_with_validity(start, end) {
+                // Use SIMD for fast summation
+                let mut sum = 0i64;
+                let len = values.len();
+                let mut i = 0;
+
+                // SIMD loop: process 4 values at a time
+                while i + SIMD_LANES <= len {
+                    let vals = Simd::<i64, SIMD_LANES>::from_array(
+                        values[i..i + SIMD_LANES]
+                            .try_into()
+                            .expect("slice to array of SIMD_LANES"),
+                    );
+                    let mask = Simd::<i64, SIMD_LANES>::from_array(
+                        valid[i..i + SIMD_LANES]
+                            .iter()
+                            .map(|&v| if v { 1 } else { 0 })
+                            .collect::<Vec<_>>()
+                            .try_into()
+                            .expect("validity to array"),
+                    );
+                    // Multiply by mask to zero out invalid values
+                    let masked = vals * mask;
+                    // Horizontal sum
+                    let lane_sum: i64 = masked.reduce_sum();
+                    sum += lane_sum;
+                    i += SIMD_LANES;
+                }
+
+                // Scalar tail
+                while i < len {
+                    if valid[i] {
+                        sum += values[i];
+                    }
+                    i += 1;
+                }
+
+                self.sum += sum;
+            } else {
+                // Fallback to row-by-row if columnar path not available
+                for row_idx in start..end {
+                    self.update(row_idx, columns);
+                }
             }
         }
     }
@@ -462,6 +617,65 @@ impl Avg {
             if let Some(v) = col.get_i64_at(row_idx) {
                 self.sum += v;
                 self.count += 1;
+            }
+        }
+    }
+
+    /// SIMD-optimized columnar update for Avg aggregation
+    fn update_column_simd(
+        &mut self,
+        start: usize,
+        end: usize,
+        columns: &HashMap<String, ColumnValues>,
+    ) {
+        if let Some(col) = columns.get(&self.field) {
+            if let Some((values, valid)) = col.get_i64_slice_with_validity(start, end) {
+                // Use SIMD for fast summation and counting
+                let mut sum = 0i64;
+                let mut count = 0i64;
+                let len = values.len();
+                let mut i = 0;
+
+                // SIMD loop: process 4 values at a time
+                while i + SIMD_LANES <= len {
+                    let vals = Simd::<i64, SIMD_LANES>::from_array(
+                        values[i..i + SIMD_LANES]
+                            .try_into()
+                            .expect("slice to array of SIMD_LANES"),
+                    );
+                    let mask = Simd::<i64, SIMD_LANES>::from_array(
+                        valid[i..i + SIMD_LANES]
+                            .iter()
+                            .map(|&v| if v { 1 } else { 0 })
+                            .collect::<Vec<_>>()
+                            .try_into()
+                            .expect("validity to array"),
+                    );
+                    // Multiply by mask to zero out invalid values
+                    let masked = vals * mask;
+                    // Horizontal sum
+                    let lane_sum: i64 = masked.reduce_sum();
+                    sum += lane_sum;
+                    count += mask.reduce_sum();
+                    i += SIMD_LANES;
+                }
+
+                // Scalar tail
+                while i < len {
+                    if valid[i] {
+                        sum += values[i];
+                        count += 1;
+                    }
+                    i += 1;
+                }
+
+                self.sum += sum;
+                self.count += count;
+            } else {
+                // Fallback to row-by-row if columnar path not available
+                for row_idx in start..end {
+                    self.update(row_idx, columns);
+                }
             }
         }
     }

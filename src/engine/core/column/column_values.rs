@@ -163,6 +163,12 @@ impl ColumnValues {
             || self.typed_bool.is_some()
     }
 
+    /// Check if this column is typed as i64 (for SIMD-optimized aggregation)
+    #[inline]
+    pub fn is_typed_i64(&self) -> bool {
+        self.typed_i64.is_some()
+    }
+
     #[inline]
     pub fn get_str_at(&self, index: usize) -> Option<&str> {
         if self.typed_i64.is_some() {
@@ -329,6 +335,79 @@ impl ColumnValues {
             }
             Arc::new(parsed)
         });
+    }
+
+    /// Get a slice of i64 values with validity, optimized for columnar processing
+    /// Returns the values and a validity vector for SIMD-optimized aggregation
+    pub fn get_i64_slice_with_validity(
+        &self,
+        start: usize,
+        end: usize,
+    ) -> Option<(Vec<i64>, Vec<bool>)> {
+        if let Some((payload_start, row_count, nulls)) = self.typed_i64 {
+            // Validate bounds: start and end must be within row_count
+            if start > row_count || end > row_count {
+                return None;
+            }
+            // Handle empty range (start >= end) - return empty vectors
+            if start >= end {
+                return Some((Vec::new(), Vec::new()));
+            }
+            let count = end - start;
+            let base = payload_start + start * 8;
+            // Bounds check: ensure we don't exceed block size
+            let required_bytes = count * 8;
+            if base + required_bytes > self.block.bytes.len() {
+                return None;
+            }
+            let bytes = &self.block.bytes[base..base + required_bytes];
+
+            // Check pointer alignment - if not aligned, fall back to safe method
+            // Use bitwise check (faster than modulo): for 8-byte alignment, check lowest 3 bits are 0
+            let ptr = bytes.as_ptr();
+            let is_aligned = (ptr as usize) & 7 == 0 && !ptr.is_null();
+
+            let mut values = Vec::with_capacity(count);
+            if is_aligned {
+                // SAFETY: Pointer is verified to be aligned and non-null
+                // - payload_start is guaranteed to be 8-byte aligned for numeric types in production
+                // - count > 0 ensures valid slice
+                // - bounds checked above ensure valid slice
+                let values_slice = unsafe { std::slice::from_raw_parts(ptr as *const i64, count) };
+                values.extend_from_slice(values_slice);
+            } else {
+                // Fallback: read values individually (slower but safe when alignment can't be guaranteed)
+                // Read raw bytes and convert, handling nulls via validity vector below
+                for i in start..end {
+                    let offset = payload_start + i * 8;
+                    if offset + 8 <= self.block.bytes.len() {
+                        let val_bytes = &self.block.bytes[offset..offset + 8];
+                        if let Ok(val_arr) = val_bytes.try_into() {
+                            values.push(i64::from_le_bytes(val_arr));
+                        } else {
+                            values.push(0);
+                        }
+                    } else {
+                        values.push(0);
+                    }
+                }
+            }
+
+            let mut valid = Vec::with_capacity(count);
+            if let Some((ns, _nl)) = nulls {
+                let nb = &self.block.bytes[ns..];
+                for i in start..end {
+                    let bit = nb[i / 8] & (1 << (i % 8));
+                    valid.push(bit == 0);
+                }
+            } else {
+                valid.resize(count, true);
+            }
+
+            Some((values, valid))
+        } else {
+            None
+        }
     }
 }
 

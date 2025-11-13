@@ -19,8 +19,9 @@ shard_count = 8
 event_per_zone = 8000
 compaction_interval = 60
 sys_io_threshold = 100
+sys_memory_threshold_mb = 512
 max_inflight_passives = 8
-segments_per_merge = 5
+segments_per_merge = 8
 compaction_max_shard_concurrency = 2
 
 
@@ -41,7 +42,7 @@ enabled = true
 allow_unauthenticated = true
 
 [auth]
-bypass_auth = false
+bypass_auth = true
 
 [logging]
 log_dir = "../data/logs"
