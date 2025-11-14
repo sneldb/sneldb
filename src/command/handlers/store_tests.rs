@@ -1,4 +1,5 @@
 use crate::command::handlers::store::handle;
+use crate::engine::auth::AuthManager;
 use crate::engine::core::read::result::QueryResult;
 use crate::engine::shard::manager::ShardManager;
 use crate::engine::shard::message::ShardMessage;
@@ -879,7 +880,6 @@ async fn test_store_handle_accepts_date_string_field() {
 #[tokio::test]
 async fn test_store_handler_bypass_auth_allows_storage() {
     use crate::logging::init_for_tests;
-    use crate::engine::auth::AuthManager;
     use std::sync::Arc;
     init_for_tests();
 
@@ -949,7 +949,6 @@ async fn test_store_handler_bypass_auth_allows_storage() {
 #[tokio::test]
 async fn test_store_handler_bypass_auth_vs_regular_user() {
     use crate::logging::init_for_tests;
-    use crate::engine::auth::AuthManager;
     use std::sync::Arc;
     use tokio::io::AsyncReadExt;
     init_for_tests();

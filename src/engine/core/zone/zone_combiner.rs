@@ -1,6 +1,6 @@
 use crate::engine::core::{CandidateZone, LogicalOp};
 use std::collections::HashMap;
-use tracing::{debug, warn};
+use tracing::debug;
 
 pub struct ZoneCombiner {
     zones: Vec<Vec<CandidateZone>>,

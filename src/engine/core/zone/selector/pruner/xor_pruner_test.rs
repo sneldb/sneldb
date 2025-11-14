@@ -6,15 +6,12 @@ use tempfile::tempdir;
 use crate::command::types::CompareOp;
 use crate::engine::core::Flusher;
 use crate::engine::core::QueryCaches;
-use crate::engine::core::zone::selector::builder::ZoneSelectorBuilder;
 use crate::engine::core::zone::selector::pruner::xor_pruner::XorPruner;
-use crate::engine::core::zone::selector::selection_context::SelectionContext;
 use crate::engine::core::zone::zone_artifacts::ZoneArtifacts;
 use crate::engine::schema::FieldType;
 use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::{
-    CommandFactory, EventFactory, FilterGroupFactory, MemTableFactory, QueryPlanFactory,
-    SchemaRegistryFactory,
+    EventFactory, MemTableFactory, SchemaRegistryFactory,
 };
 
 #[tokio::test]

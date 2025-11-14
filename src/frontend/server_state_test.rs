@@ -78,11 +78,11 @@ async fn test_server_state_backpressure_no_shards() {
     let base_dir = tempdir().unwrap().into_path();
     let wal_dir = tempdir().unwrap().into_path();
     let shard_manager = Arc::new(ShardManager::new(1, base_dir, wal_dir).await);
-    let server_state = ServerState::new(Arc::clone(&shard_manager), 100);
+    let _server_state = ServerState::new(Arc::clone(&shard_manager), 100);
 
     // Even with 1 shard and some pending ops, threshold 100% should not trigger
     // unless we have exactly 100% capacity
-    let total_capacity = 8096; // 1 shard * 8096 capacity
+    let _total_capacity = 8096; // 1 shard * 8096 capacity
 
     // Add operations to reach exactly threshold (8096 pending ops for 100% threshold)
     // But that would be too many operations, so let's test with lower threshold

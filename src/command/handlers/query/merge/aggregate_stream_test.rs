@@ -746,7 +746,7 @@ fn parse_aggregate_row_avg() {
     }
     let column_views: Vec<&[ScalarValue]> = column_vecs.iter().map(|v| v.as_slice()).collect();
 
-    let (group_key, states) =
+    let (_group_key, states) =
         AggregateStreamMerger::parse_aggregate_row(&column_views, &column_names, 0, &plan).unwrap();
 
     assert_eq!(states.len(), 1);
@@ -779,7 +779,7 @@ fn parse_aggregate_row_count_unique() {
     }
     let column_views: Vec<&[ScalarValue]> = column_vecs.iter().map(|v| v.as_slice()).collect();
 
-    let (group_key, states) =
+    let (_group_key, states) =
         AggregateStreamMerger::parse_aggregate_row(&column_views, &column_names, 0, &plan).unwrap();
 
     assert_eq!(states.len(), 1);
@@ -816,7 +816,7 @@ fn parse_aggregate_row_count_unique_empty_array() {
     }
     let column_views: Vec<&[ScalarValue]> = column_vecs.iter().map(|v| v.as_slice()).collect();
 
-    let (group_key, states) =
+    let (_group_key, states) =
         AggregateStreamMerger::parse_aggregate_row(&column_views, &column_names, 0, &plan).unwrap();
 
     match &states[0] {
@@ -846,7 +846,7 @@ fn parse_aggregate_row_count_unique_empty_string() {
     }
     let column_views: Vec<&[ScalarValue]> = column_vecs.iter().map(|v| v.as_slice()).collect();
 
-    let (group_key, states) =
+    let (_group_key, states) =
         AggregateStreamMerger::parse_aggregate_row(&column_views, &column_names, 0, &plan).unwrap();
 
     match &states[0] {
@@ -895,7 +895,7 @@ fn parse_aggregate_row_multiple_aggregations() {
     }
     let column_views: Vec<&[ScalarValue]> = column_vecs.iter().map(|v| v.as_slice()).collect();
 
-    let (group_key, states) =
+    let (_group_key, states) =
         AggregateStreamMerger::parse_aggregate_row(&column_views, &column_names, 0, &plan).unwrap();
 
     assert_eq!(states.len(), 3);

@@ -123,7 +123,7 @@ fn build_outcome_updates_entry_metrics() {
     let (context, temp_dir) = make_context();
     let pipeline = ShowExecutionPipeline::new_with_gateway(context, StubGateway);
 
-    let mut entry = make_entry(temp_dir.path());
+    let entry = make_entry(temp_dir.path());
     let schema = make_batch_schema();
 
     let store = MaterializedStore::open(&entry.storage_path).expect("store");

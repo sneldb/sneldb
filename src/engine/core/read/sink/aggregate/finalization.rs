@@ -1,4 +1,5 @@
 use super::group_key::GroupKey;
+use crate::command::types::TimeGranularity;
 use crate::engine::core::read::aggregate::ops::{AggOutput, AggregatorImpl};
 use crate::engine::core::read::aggregate::partial::{
     AggPartial, AggState, GroupKey as PartialKey, snapshot_aggregator,
@@ -105,7 +106,7 @@ pub(crate) fn into_partial(
     groups: HashMap<GroupKey, Vec<AggregatorImpl>, AHashRandomState>,
     specs: Vec<AggregateOpSpec>,
     group_by: Option<Vec<String>>,
-    time_bucket: Option<crate::command::types::TimeGranularity>,
+    time_bucket: Option<TimeGranularity>,
 ) -> AggPartial {
     let mut partial_groups: HashMap<PartialKey, Vec<AggState>> = HashMap::new();
     for (mut k, aggs) in groups.into_iter() {

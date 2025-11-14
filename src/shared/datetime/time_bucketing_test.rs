@@ -25,7 +25,7 @@ fn create_bucketer(
 #[test]
 fn calendar_bucketer_constructor() {
     let config = TimeConfig::default();
-    let bucketer = CalendarTimeBucketer::new(config);
+    let _bucketer = CalendarTimeBucketer::new(config);
     // Just ensure it doesn't panic
     assert!(true);
 }

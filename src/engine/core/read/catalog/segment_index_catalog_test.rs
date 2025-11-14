@@ -1,7 +1,7 @@
 use crate::engine::core::read::catalog::{IndexKind, SegmentIndexCatalog};
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 use std::fs::OpenOptions;
-use std::io::{Read, Write};
+use std::io::Write;
 
 #[test]
 fn catalog_new_and_mutators_work() {

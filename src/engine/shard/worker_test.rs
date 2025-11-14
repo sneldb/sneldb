@@ -206,10 +206,8 @@ async fn test_replay_message() {
     // Verify that replay message was handled without error
     // The replay scan may return fewer events than expected if it encounters issues with
     // segment reading, but the important thing is that the message was processed successfully
-    assert!(
-        events.len() >= 0,
-        "Replay message should be processed without error"
-    );
+    // Replay message should be processed without error
+    let _ = events.len();
 }
 
 #[tokio::test]

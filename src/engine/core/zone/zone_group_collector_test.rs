@@ -2,7 +2,7 @@ use crate::command::types::{Command, CompareOp};
 use crate::engine::core::filter::filter_group::{FilterGroup, filter_key};
 use crate::engine::core::read::query_plan::QueryPlan;
 use crate::engine::core::zone::zone_group_collector::ZoneGroupCollector;
-use crate::engine::core::{CandidateZone, QueryCaches};
+use crate::engine::core::CandidateZone;
 use crate::engine::schema::registry::SchemaRegistry;
 use crate::engine::types::ScalarValue;
 use serde_json::json;
@@ -385,7 +385,7 @@ fn zone_group_collector_handles_single_filter() {
 
 #[test]
 fn zone_group_collector_handles_missing_filter_in_cache() {
-    let mut cache = HashMap::new();
+    let cache = HashMap::new();
     // Don't add filter to cache
 
     let filter = create_test_filter("status", CompareOp::Eq, ScalarValue::from(json!("active")));
@@ -969,7 +969,7 @@ fn zone_group_collector_handles_complex_nested_with_in_expansion() {
 fn zone_group_collector_handles_empty_filter_group() {
     // Empty AND group
     let tree = FilterGroup::And(vec![]);
-    let mut cache = HashMap::new();
+    let cache = HashMap::new();
     let plan = create_test_plan();
     let collector = ZoneGroupCollector::new(cache, &plan, None);
     let result = collector.collect_zones_from_group(&tree);
@@ -981,7 +981,7 @@ fn zone_group_collector_handles_empty_filter_group() {
 fn zone_group_collector_handles_empty_or_group() {
     // Empty OR group
     let tree = FilterGroup::Or(vec![]);
-    let mut cache = HashMap::new();
+    let cache = HashMap::new();
     let plan = create_test_plan();
     let collector = ZoneGroupCollector::new(cache, &plan, None);
     let result = collector.collect_zones_from_group(&tree);

@@ -43,5 +43,6 @@ async fn dispatch_handles_empty_shards() {
 #[test]
 fn new_creates_dispatcher() {
     let dispatcher = StreamingShardDispatcher::new();
-    assert!(std::mem::size_of_val(&dispatcher) >= 0);
+    // Just ensure dispatcher is created
+    let _ = dispatcher;
 }

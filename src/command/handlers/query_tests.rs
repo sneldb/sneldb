@@ -6,6 +6,7 @@ use crate::command::handlers::store;
 use crate::command::parser;
 use crate::command::parser::commands::query::parse;
 use crate::command::types::Command;
+use crate::engine::auth::AuthManager;
 use crate::engine::core::read::cache::column_block_cache::GlobalColumnBlockCache;
 use crate::engine::core::read::cache::global_zone_index_cache::GlobalZoneIndexCache;
 use crate::engine::schema::SchemaRegistry;
@@ -6510,14 +6511,6 @@ async fn test_query_in_operator_with_not() {
 
     sleep(Duration::from_millis(100)).await;
 
-    // Flush to ensure all data is persisted
-    let flush_cmd = Command::Flush;
-    let (mut _r, mut w) = duplex(1024);
-    flush::handle(&flush_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
-        .await
-        .expect("flush should succeed");
-
-    // Wait for flush to complete and indices to be built with retry logic
     let mut attempts = 0;
     let max_attempts = 30;
     let mut rows = Vec::new();
@@ -7507,9 +7500,7 @@ async fn test_query_handler_bypass_auth_allows_query() {
     let registry = factory.registry();
 
     let shard_manager = Arc::new(ShardManager::new(1, base_dir, wal_dir).await);
-    let auth_manager = Arc::new(crate::engine::auth::AuthManager::new(Arc::clone(
-        &shard_manager,
-    )));
+    let auth_manager = Arc::new(AuthManager::new(Arc::clone(&shard_manager)));
 
     // Store an event first
     let store_cmd = CommandFactory::store()
@@ -7572,9 +7563,7 @@ async fn test_query_handler_bypass_auth_vs_regular_user() {
     let registry = factory.registry();
 
     let shard_manager = Arc::new(ShardManager::new(1, base_dir, wal_dir).await);
-    let auth_manager = Arc::new(crate::engine::auth::AuthManager::new(Arc::clone(
-        &shard_manager,
-    )));
+    let auth_manager = Arc::new(AuthManager::new(Arc::clone(&shard_manager)));
 
     // Create a regular user without read permission
     auth_manager

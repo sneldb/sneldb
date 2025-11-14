@@ -140,7 +140,7 @@ mod tests {
         use std::sync::Arc;
 
         let mut values = HashMap::new();
-        let mut bytes: Vec<u8> = b"ctx1".to_vec();
+        let bytes: Vec<u8> = b"ctx1".to_vec();
         let ranges = vec![(0, 4)];
         let block = Arc::new(DecompressedBlock::from_bytes(bytes));
         values.insert("context_id".to_string(), ColumnValues::new(block, ranges));

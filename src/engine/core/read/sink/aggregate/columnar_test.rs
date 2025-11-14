@@ -4,6 +4,7 @@ use crate::command::types::TimeGranularity;
 use crate::engine::core::column::column_values::ColumnValues;
 use crate::engine::core::read::aggregate::ops::AggregatorImpl;
 use crate::engine::core::read::aggregate::plan::AggregateOpSpec;
+use crate::engine::core::read::cache::DecompressedBlock;
 use ahash::RandomState as AHashRandomState;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -13,7 +14,7 @@ fn make_typed_i64_column(values: &[i64]) -> ColumnValues {
     for v in values {
         bytes.extend_from_slice(&v.to_le_bytes());
     }
-    let block = Arc::new(crate::engine::core::read::cache::DecompressedBlock::from_bytes(bytes));
+    let block = Arc::new(DecompressedBlock::from_bytes(bytes));
     ColumnValues::new_typed_i64(block, 0, values.len(), None)
 }
 

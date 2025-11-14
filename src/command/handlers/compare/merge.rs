@@ -4,14 +4,13 @@ use std::sync::Arc;
 use crate::command::handlers::query::merge::aggregate_stream::AggregateStreamMerger;
 use crate::command::handlers::query_batch_stream::QueryBatchStream;
 use crate::command::types::QueryCommand;
-use crate::engine::core::read::aggregate::partial::{AggState, GroupKey};
+use crate::engine::core::read::aggregate::partial::GroupKey;
 use crate::engine::core::read::aggregate::plan::{AggregateOpSpec, AggregatePlan};
 use crate::engine::core::read::flow::{
-    BatchPool, BatchReceiver, BatchSchema, BatchSender, ColumnBatch, FlowChannel, FlowMetrics,
+    BatchPool, BatchSchema, BatchSender, ColumnBatch, FlowChannel, FlowMetrics,
 };
 use crate::engine::core::read::result::ColumnSpec;
 use crate::engine::types::ScalarValue;
-use tokio::task::JoinHandle;
 
 /// Merges multiple query streams into a single comparison stream with side-by-side columns.
 pub struct ComparisonStreamMerger {
@@ -60,7 +59,7 @@ impl ComparisonStreamMerger {
     /// Merges multiple query streams into a single comparison stream.
     pub async fn merge_streams(
         &self,
-        mut streams: Vec<QueryBatchStream>,
+        streams: Vec<QueryBatchStream>,
     ) -> Result<QueryBatchStream, String> {
         if streams.len() != self.queries.len() {
             return Err(format!(

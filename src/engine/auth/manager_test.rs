@@ -1,4 +1,4 @@
-use crate::engine::auth::{AuthError, AuthManager, AuthResult, UserKey};
+use crate::engine::auth::{AuthError, AuthManager};
 use crate::engine::shard::manager::ShardManager;
 use crate::logging::init_for_tests;
 use hmac::{Hmac, Mac};
@@ -156,7 +156,7 @@ async fn test_create_user_valid_user_id_formats() {
         "test-user_name",
     ];
 
-    for (i, valid_id) in valid_ids.iter().enumerate() {
+    for (_i, valid_id) in valid_ids.iter().enumerate() {
         let result = auth_manager.create_user(valid_id.to_string(), None).await;
         assert!(result.is_ok(), "Failed to create user '{}'", valid_id);
     }

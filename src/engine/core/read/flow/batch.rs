@@ -57,6 +57,7 @@ pub struct ColumnBatch {
 impl ColumnBatch {
     /// Create a ColumnBatch from Arrow RecordBatch (converts to ScalarValue)
     /// This is used when data comes from Arrow format (e.g., materialized frames)
+    #[allow(dead_code)] // Used in tests
     pub(crate) fn from_record_batch(
         schema: Arc<BatchSchema>,
         record_batch: RecordBatch,
@@ -479,6 +480,7 @@ fn build_string_array_from_scalars(values: &[ScalarValue]) -> ArrayRef {
 }
 
 // Convert Arrow arrays to ScalarValues (used for lazy conversion)
+#[allow(dead_code)] // Used by from_record_batch which is test-only
 fn array_to_scalar_values(array: &ArrayRef, logical_type: &str) -> Vec<ScalarValue> {
     let len = array.len();
     let mut values = Vec::with_capacity(len);
@@ -579,6 +581,7 @@ fn array_to_scalar_values(array: &ArrayRef, logical_type: &str) -> Vec<ScalarVal
     values
 }
 
+#[allow(dead_code)] // Used by array_to_scalar_values which is test-only
 fn array_scalar_at(array: &ArrayRef, idx: usize, logical_type: &str) -> Option<ScalarValue> {
     if array.is_null(idx) {
         return Some(ScalarValue::Null);

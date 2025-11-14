@@ -7,6 +7,7 @@ use super::schema::SchemaCache;
 use crate::command::types::{Command, TimeGranularity};
 use crate::engine::core::column::column_values::ColumnValues;
 use crate::engine::core::read::aggregate::ops::AggregatorImpl;
+use crate::engine::core::read::aggregate::partial::AggPartial;
 use crate::engine::core::read::aggregate::plan::{AggregateOpSpec, AggregatePlan};
 use crate::engine::core::{Event, EventId, QueryPlan};
 use ahash::RandomState as AHashRandomState;
@@ -115,7 +116,7 @@ impl AggregateSink {
         into_events(self.groups, self.specs, self.group_by, plan)
     }
 
-    pub fn into_partial(self) -> crate::engine::core::read::aggregate::partial::AggPartial {
+    pub fn into_partial(self) -> AggPartial {
         into_partial(self.groups, self.specs, self.group_by, self.time_bucket)
     }
 

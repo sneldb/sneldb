@@ -29,6 +29,7 @@ fn make_entry(root: &std::path::Path) -> MaterializationEntry {
     entry
 }
 
+#[allow(dead_code)]
 fn build_schema() -> Arc<BatchSchema> {
     Arc::new(
         BatchSchema::new(vec![

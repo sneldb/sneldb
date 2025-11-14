@@ -11,14 +11,6 @@ use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, BufReader};
 
-/// Case-insensitive byte comparison helper
-#[inline]
-fn bytes_eq_ignore_ascii_case(a: &[u8], b: &[u8]) -> bool {
-    a.len() == b.len()
-        && a.iter()
-            .zip(b.iter())
-            .all(|(x, y)| x.eq_ignore_ascii_case(y))
-}
 
 pub struct Connection<R, W> {
     pub pid: u32,

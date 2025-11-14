@@ -26,6 +26,7 @@ impl StubCache {
         }
     }
 
+    #[allow(dead_code)]
     fn recorded(&self) -> Vec<String> {
         self.calls.read().unwrap().clone()
     }

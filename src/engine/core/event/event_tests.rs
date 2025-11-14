@@ -1,6 +1,5 @@
 use crate::engine::core::{Event, EventId};
 use crate::engine::errors::StoreError;
-use crate::engine::types::ScalarValue;
 use serde_json::{Number, Value, json};
 use std::collections::HashSet;
 

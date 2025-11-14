@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
-use tokio::time::{sleep, timeout};
+use tokio::time::sleep;
 
 // Retail product catalog (prices in cents)
 const PRODUCTS: &[(&str, &str, u64, &str)] = &[

@@ -3,7 +3,7 @@ use crate::engine::core::read::flow::{BatchPool, BatchSchema, ColumnBatch};
 use crate::engine::core::read::result::ColumnSpec;
 use crate::engine::materialize::high_water::HighWaterMark;
 use crate::engine::types::ScalarValue;
-use serde_json::{Value, json};
+use serde_json::json;
 use std::sync::Arc;
 use tempfile::tempdir;
 

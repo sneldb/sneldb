@@ -1,4 +1,5 @@
 use super::column_converter::ColumnConverter;
+use crate::command::types::TimeGranularity;
 use crate::engine::core::read::aggregate::plan::{AggregateOpSpec, AggregatePlan};
 use crate::engine::core::read::flow::{BatchPool, BatchSchema, ColumnBatch};
 use crate::engine::core::read::result::ColumnSpec;
@@ -164,7 +165,7 @@ fn column_converter_converts_with_time_bucket() {
     let plan = AggregatePlan {
         ops: vec![AggregateOpSpec::CountAll],
         group_by: None,
-        time_bucket: Some(crate::command::types::TimeGranularity::Hour),
+        time_bucket: Some(TimeGranularity::Hour),
     };
     let sink = create_aggregate_sink(&plan);
 
@@ -408,7 +409,7 @@ fn column_converter_converts_all_aggregate_types() {
             },
         ],
         group_by: Some(vec!["region".to_string()]),
-        time_bucket: Some(crate::command::types::TimeGranularity::Hour),
+        time_bucket: Some(TimeGranularity::Hour),
     };
     let sink = create_aggregate_sink(&plan);
 
