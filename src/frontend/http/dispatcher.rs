@@ -50,7 +50,6 @@ fn is_authorized(req: &Request<Incoming>) -> bool {
         )
 }
 
-
 /// Extract authentication from HTTP headers
 /// Returns (user_id, signature) if found in headers, None otherwise
 fn extract_auth_from_headers(req: &Request<Incoming>) -> Option<(String, String)> {
@@ -304,14 +303,25 @@ async fn dispatch_and_respond(
             .unwrap());
     }
 
-    let content_type = match CONFIG.server.output_format.as_str() {
-        "json" => "application/json",
-        "arrow" => "application/vnd.apache.arrow.stream",
-        _ => "text/plain",
+    // Extract HTTP status code from response
+    // Error responses are always JSON (even with ArrowRenderer) and contain a "status" field
+    let http_status = extract_http_status_from_response(&output);
+
+    // Set content type based on output format, but note that error responses
+    // from ArrowRenderer are JSON even when output_format is "arrow"
+    let content_type = if http_status != hyper::StatusCode::OK {
+        // Error responses are always JSON (even from ArrowRenderer)
+        "application/json"
+    } else {
+        match CONFIG.server.output_format.as_str() {
+            "json" => "application/json",
+            "arrow" => "application/vnd.apache.arrow.stream",
+            _ => "text/plain",
+        }
     };
 
     Ok(Response::builder()
-        .status(StatusCode::OK)
+        .status(http_status)
         .header(hyper::header::CONTENT_TYPE, content_type)
         .body(full_body(output))
         .unwrap())
@@ -347,6 +357,53 @@ fn render_error(
 
 fn full_body(data: Vec<u8>) -> Full<Bytes> {
     Full::new(Bytes::from(data))
+}
+
+/// Extract HTTP status code from response bytes
+/// Error responses are always JSON (even with ArrowRenderer) and contain a "status" field
+/// Successful responses may be Arrow binary format or large JSON, so we default to OK
+fn extract_http_status_from_response(output: &[u8]) -> hyper::StatusCode {
+    // Only check JSON responses (start with '{')
+    if !output.starts_with(b"{") {
+        return hyper::StatusCode::OK;
+    }
+
+    // Error responses are typically small (< 500 bytes)
+    // For larger responses, check if it's likely an error by looking for status field early
+    let parse_len = if output.len() < 500 {
+        output.len()
+    } else {
+        // For larger responses, only check first 200 bytes for performance
+        // Status field should be near the beginning: {"status":400,...}
+        output.len().min(200)
+    };
+
+    // Try to parse JSON and extract status code
+    if let Ok(json_str) = std::str::from_utf8(&output[..parse_len]) {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(json_str) {
+            if let Some(status_val) = json.get("status") {
+                if let Some(status_num) = status_val.as_u64() {
+                    return map_status_code_to_http(status_num);
+                }
+            }
+        }
+    }
+
+    hyper::StatusCode::OK
+}
+
+/// Map internal status code number to HTTP status code
+fn map_status_code_to_http(status: u64) -> hyper::StatusCode {
+    match status {
+        200 => hyper::StatusCode::OK,
+        400 => hyper::StatusCode::BAD_REQUEST,
+        401 => hyper::StatusCode::UNAUTHORIZED,
+        403 => hyper::StatusCode::FORBIDDEN,
+        404 => hyper::StatusCode::NOT_FOUND,
+        500 => hyper::StatusCode::INTERNAL_SERVER_ERROR,
+        503 => hyper::StatusCode::SERVICE_UNAVAILABLE,
+        _ => hyper::StatusCode::OK,
+    }
 }
 
 fn add_execution_time_header(
