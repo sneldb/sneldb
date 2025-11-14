@@ -1,6 +1,5 @@
 use super::batch_merger::BatchMerger;
 use crate::command::handlers::query::context::QueryContext;
-use crate::command::types::Command;
 use crate::engine::core::read::result::{ColumnSpec, QueryResult, SelectionResult};
 use crate::engine::shard::manager::ShardManager;
 use crate::engine::types::ScalarValue;

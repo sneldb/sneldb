@@ -1248,7 +1248,7 @@ async fn aggregate_op_empty_groups_returns_nothing() {
 
     let plan_arc = Arc::new(plan.clone());
     let ctx = flow_context(10); // Larger batch size for multiple rows
-    let schema = base_schema();
+    let _schema = base_schema();
 
     // Send empty batch
     let (tx, rx) = FlowChannel::bounded(4, Arc::clone(ctx.metrics()));

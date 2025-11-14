@@ -9,7 +9,7 @@ use crate::engine::core::read::result::ColumnSpec;
 use crate::engine::materialize::high_water::HighWaterMark;
 use crate::engine::types::ScalarValue;
 use crc32fast::Hasher as Crc32Hasher;
-use serde_json::{Value, json};
+use serde_json::json;
 use std::sync::Arc;
 
 fn build_schema() -> BatchSchema {

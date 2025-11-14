@@ -2,9 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use serde_json::json;
-use tokio::time::{Duration, timeout};
 
-use crate::command::types::AggSpec;
 use crate::engine::core::read::cache::QueryCaches;
 use crate::engine::core::read::flow::{BatchPool, FlowContext, FlowMetrics, FlowTelemetry};
 use crate::test_helpers::factories::{

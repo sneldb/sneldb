@@ -182,18 +182,6 @@ impl ColumnReader {
         Ok(snapshot.into_strings())
     }
 
-    /// Legacy helper: fully materialize strings from a compressed block.
-    fn load_zone_compressed(
-        segment_dir: &Path,
-        _segment_id: &str,
-        uid: &str,
-        field: &str,
-        zone_id: u32,
-    ) -> Result<Vec<String>, QueryExecutionError> {
-        let snapshot =
-            Self::load_zone_compressed_snapshot(segment_dir, _segment_id, uid, field, zone_id)?;
-        Ok(snapshot.into_strings())
-    }
 
     /// Zero-copy load that returns a ColumnValues view, using the pooled buffer underneath.
     #[inline]

@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use arrow_array::builder::{
@@ -10,7 +9,6 @@ use arrow_schema::{ArrowError, DataType, Field, Schema, TimeUnit};
 use serde_json::Value;
 
 use crate::engine::core::read::flow::{BatchSchema, ColumnBatch};
-use crate::engine::core::read::result::ColumnSpec;
 use crate::engine::types::ScalarValue;
 use crate::shared::response::render::{Renderer, StreamingFormat};
 use crate::shared::response::types::{Response, ResponseBody, StatusCode};
@@ -430,120 +428,6 @@ fn build_record_batch(
     RecordBatch::try_new(arrow_schema.clone(), arrays)
 }
 
-fn build_indices(row_indices: Option<&[usize]>, len: usize) -> Cow<'_, [usize]> {
-    match row_indices {
-        Some(indices) => Cow::Borrowed(indices),
-        None => {
-            let mut all = Vec::with_capacity(len);
-            for idx in 0..len {
-                all.push(idx);
-            }
-            Cow::Owned(all)
-        }
-    }
-}
-
-fn build_int64_array(
-    values: &[Value],
-    row_indices: Option<&[usize]>,
-    row_count: usize,
-) -> ArrayRef {
-    let mut builder = Int64Builder::with_capacity(row_count);
-    let indices = build_indices(row_indices, values.len());
-    for &row in indices.iter() {
-        if let Some(num) = extract_i64(&values[row]) {
-            builder.append_value(num);
-        } else if let Some(num) = extract_u64(&values[row]) {
-            builder.append_value(num as i64);
-        } else {
-            builder.append_null();
-        }
-    }
-    Arc::new(builder.finish())
-}
-
-fn build_float64_array(
-    values: &[Value],
-    row_indices: Option<&[usize]>,
-    row_count: usize,
-) -> ArrayRef {
-    let mut builder = Float64Builder::with_capacity(row_count);
-    let indices = build_indices(row_indices, values.len());
-    for &row in indices.iter() {
-        if let Some(num) = extract_f64(&values[row]) {
-            builder.append_value(num);
-        } else {
-            builder.append_null();
-        }
-    }
-    Arc::new(builder.finish())
-}
-
-fn build_bool_array(values: &[Value], row_indices: Option<&[usize]>, row_count: usize) -> ArrayRef {
-    let mut builder = BooleanBuilder::with_capacity(row_count);
-    let indices = build_indices(row_indices, values.len());
-    for &row in indices.iter() {
-        match &values[row] {
-            Value::Bool(value) => builder.append_value(*value),
-            Value::String(s) => match s.to_ascii_lowercase().as_str() {
-                "true" | "1" => builder.append_value(true),
-                "false" | "0" => builder.append_value(false),
-                _ => builder.append_null(),
-            },
-            Value::Number(num) => {
-                if let Some(n) = num.as_i64() {
-                    builder.append_value(n != 0);
-                } else if let Some(n) = num.as_u64() {
-                    builder.append_value(n != 0);
-                } else {
-                    builder.append_null();
-                }
-            }
-            _ => builder.append_null(),
-        }
-    }
-    Arc::new(builder.finish())
-}
-
-fn build_timestamp_array(
-    values: &[Value],
-    row_indices: Option<&[usize]>,
-    row_count: usize,
-) -> ArrayRef {
-    let mut builder = TimestampMillisecondBuilder::with_capacity(row_count);
-    let indices = build_indices(row_indices, values.len());
-    for &row in indices.iter() {
-        if let Some(num) = extract_i64(&values[row]) {
-            builder.append_value(num);
-        } else if let Some(num) = extract_u64(&values[row]) {
-            builder.append_value(num as i64);
-        } else {
-            builder.append_null();
-        }
-    }
-    Arc::new(builder.finish())
-}
-
-fn build_string_array(
-    values: &[Value],
-    row_indices: Option<&[usize]>,
-    row_count: usize,
-) -> ArrayRef {
-    let mut builder = LargeStringBuilder::with_capacity(row_count, row_count * 8);
-    let indices = build_indices(row_indices, values.len());
-    for &row in indices.iter() {
-        match &values[row] {
-            Value::Null => builder.append_null(),
-            Value::String(s) => builder.append_value(s),
-            other => {
-                let string = other.to_string();
-                builder.append_value(string.as_str());
-            }
-        }
-    }
-    Arc::new(builder.finish())
-}
-
 pub fn response_error_bytes(status: StatusCode, message: &str) -> Vec<u8> {
     let payload = serde_json::json!({
         "status": status.code(),
@@ -559,37 +443,11 @@ pub fn response_error_bytes(status: StatusCode, message: &str) -> Vec<u8> {
 
 const CONTINUATION_MARKER: u32 = 0xFFFF_FFFF;
 
-fn extract_i64(value: &Value) -> Option<i64> {
-    match value {
-        Value::Number(num) => num.as_i64().or_else(|| num.as_u64().map(|u| u as i64)),
-        Value::String(s) => s.parse::<i64>().ok(),
-        _ => None,
-    }
-}
-
-fn extract_u64(value: &Value) -> Option<u64> {
-    match value {
-        Value::Number(num) => num.as_u64().or_else(|| {
-            num.as_i64()
-                .and_then(|i| if i >= 0 { Some(i as u64) } else { None })
-        }),
-        Value::String(s) => s.parse::<u64>().ok(),
-        _ => None,
-    }
-}
-
-fn extract_f64(value: &Value) -> Option<f64> {
-    match value {
-        Value::Number(num) => num.as_f64(),
-        Value::String(s) => s.parse::<f64>().ok(),
-        _ => None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use arrow_ipc::reader::StreamReader;
+    use crate::engine::core::read::result::ColumnSpec;
     use serde_json::json;
     use std::io::Cursor;
 

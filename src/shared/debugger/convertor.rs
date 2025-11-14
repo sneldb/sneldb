@@ -9,7 +9,7 @@ use crate::engine::core::ZoneIndex;
 use crate::engine::core::ZoneMeta;
 use crate::engine::core::column::compression::compressed_column_index::CompressedColumnIndex;
 use crate::engine::core::column::compression::compression_codec::{
-    ALGO_LZ4, CompressionCodec, FLAG_COMPRESSED, Lz4Codec,
+    CompressionCodec, Lz4Codec,
 };
 use crate::engine::core::zone::enum_bitmap_index::EnumBitmapIndex;
 use crate::engine::schema::registry::{MiniSchema, SchemaRecord, SchemaRegistry};

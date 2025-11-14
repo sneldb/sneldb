@@ -175,17 +175,6 @@ impl PermissionCache {
         }
     }
 
-    /// Remove user from cache
-    pub fn remove_user(&mut self, user_id: &str) {
-        self.permissions.remove(user_id);
-        self.admin_users.remove(user_id);
-    }
-
-    /// Clear all cached permissions
-    pub fn clear(&mut self) {
-        self.permissions.clear();
-        self.admin_users.clear();
-    }
 }
 
 impl Default for PermissionCache {

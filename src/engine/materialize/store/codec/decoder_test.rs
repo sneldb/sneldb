@@ -41,7 +41,7 @@ fn build_batch(schema: &Arc<BatchSchema>, rows: Vec<Vec<Value>>) -> ColumnBatch 
 }
 
 fn create_payload_from_batch(
-    schema: &Arc<BatchSchema>,
+    _schema: &Arc<BatchSchema>,
     snapshots: &[SchemaSnapshot],
     batch: &ColumnBatch,
 ) -> (Vec<u8>, FrameHeader, StoredFrameMeta) {
@@ -264,7 +264,7 @@ fn decode_fails_on_insufficient_payload_size() {
 fn decode_fails_on_mismatched_variable_column_count() {
     let (schema, snapshots) = build_schema_with_types(vec![("id", "Integer"), ("name", "String")]);
     let original = build_batch(&schema, vec![vec![json!(1), json!("test")]]);
-    let (mut payload, header, mut meta) = create_payload_from_batch(&schema, &snapshots, &original);
+    let (mut payload, header, meta) = create_payload_from_batch(&schema, &snapshots, &original);
 
     // Corrupt the variable column count
     payload[meta.null_bitmap_len as usize] = 99; // Wrong count

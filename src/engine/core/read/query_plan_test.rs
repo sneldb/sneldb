@@ -1,4 +1,4 @@
-use crate::command::types::{Command, CompareOp, Expr};
+use crate::command::types::{CompareOp, Expr};
 use crate::engine::core::filter::filter_group::FilterGroup;
 use crate::engine::core::read::catalog::{IndexKind, SegmentIndexCatalog};
 use crate::engine::core::read::index_strategy::IndexStrategy;

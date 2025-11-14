@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 use crate::engine::materialize::MaterializationError;
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 use crate::shared::time::now;
-use std::io::Cursor;
 use tracing::{error, warn};
 
 /// Lightweight index entry mapping name to entry file path

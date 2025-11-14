@@ -4,6 +4,7 @@ use crate::engine::core::time::temporal_traits::FieldIndex;
 use crate::shared::storage_header::{BinaryHeader, FileKind};
 use roaring::RoaringBitmap;
 
+#[allow(dead_code)]
 fn bm(ids: &[u32]) -> RoaringBitmap {
     let mut b = RoaringBitmap::new();
     for &id in ids {

@@ -1,6 +1,7 @@
 use crate::engine::core::column::column_values::ColumnValues;
 use crate::engine::core::read::aggregate::plan::AggregateOpSpec;
 use crate::engine::core::read::cache::DecompressedBlock;
+use crate::engine::core::read::flow::batch::ColumnBatch;
 use crate::engine::core::read::flow::FlowOperatorError;
 use crate::engine::core::read::sink::AggregateSink;
 use crate::engine::types::ScalarValue;
@@ -14,7 +15,7 @@ pub struct ColumnConverter;
 impl ColumnConverter {
     /// Convert batch to columns map, only including columns needed by the sink
     pub fn convert(
-        batch: &crate::engine::core::read::flow::batch::ColumnBatch,
+        batch: &ColumnBatch,
         column_names: &[String],
         needed_columns: &HashSet<String>,
     ) -> Result<HashMap<String, ColumnValues>, FlowOperatorError> {

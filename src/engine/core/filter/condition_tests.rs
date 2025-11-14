@@ -582,10 +582,10 @@ fn in_numeric_condition_evaluate_at_handles_f64() {
         vec!["10.0".into(), "20.5".into(), "30.0".into()],
     );
     let zone = CandidateZoneFactory::new().with_values(m).create();
-    let accessor = PreparedAccessor::new(&zone.values);
+    let _accessor = PreparedAccessor::new(&zone.values);
 
     // Note: f64 values are rounded to i64 for IN comparison
-    let in_condition = InNumericCondition::new("score".into(), vec![10, 20, 30]);
+    let _in_condition = InNumericCondition::new("score".into(), vec![10, 20, 30]);
 
     // 10.0 rounds to 10 - matches
     // 20.5 rounds to 21 - doesn't match 20

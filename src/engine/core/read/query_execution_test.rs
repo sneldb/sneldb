@@ -757,7 +757,7 @@ async fn deduplicates_events_by_event_id() {
         .unwrap();
 
     // Create events with duplicate event_ids
-    let mut event1 = EventFactory::new()
+    let event1 = EventFactory::new()
         .with("event_type", event_type)
         .with("context_id", "ctx1")
         .with("payload", json!({"status": "ok"}))
@@ -818,7 +818,7 @@ async fn deduplication_works_with_mixed_valid_and_synthetic_ids() {
         .unwrap();
 
     // Create events with valid event_ids
-    let mut event1 = EventFactory::new()
+    let event1 = EventFactory::new()
         .with("event_type", event_type)
         .with("context_id", "ctx1")
         .with("payload", json!({"status": "ok"}))
@@ -833,7 +833,7 @@ async fn deduplication_works_with_mixed_valid_and_synthetic_ids() {
     // Set same event_id to create duplicate
     event2.set_event_id(event_id_1);
 
-    let mut event3 = EventFactory::new()
+    let event3 = EventFactory::new()
         .with("event_type", event_type)
         .with("context_id", "ctx1")
         .with("payload", json!({"status": "ok"}))

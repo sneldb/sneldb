@@ -3,7 +3,7 @@ use crate::engine::core::filter::filter_group::FilterGroup;
 use crate::engine::core::read::catalog::{IndexKind, IndexRegistry, SegmentIndexCatalog};
 use crate::engine::core::read::index_planner::IndexPlanner;
 use crate::engine::core::read::index_strategy::IndexStrategy;
-use crate::engine::schema::registry::{MiniSchema, SchemaRecord, SchemaRegistry};
+use crate::engine::schema::registry::{MiniSchema, SchemaRegistry};
 use crate::engine::schema::types::{EnumType, FieldType};
 use std::collections::HashMap;
 use std::path::PathBuf;

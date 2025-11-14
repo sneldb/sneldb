@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -48,7 +47,7 @@ impl ZoneXorFilterCacheEntry {
         // BinaryFuse8 filters are roughly proportional to the number of items they contain
         // Each filter has overhead + data, estimate ~8 bytes per item on average
         let mut total: usize = 0;
-        for filter in self.index.filters.values() {
+        for _filter in self.index.filters.values() {
             // BinaryFuse8 internal structure: approximate size
             // This is a rough estimate - actual size depends on filter construction
             // Use a conservative estimate of ~1KB per filter minimum

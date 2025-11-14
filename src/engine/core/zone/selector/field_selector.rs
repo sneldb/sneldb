@@ -8,7 +8,6 @@ use crate::engine::core::zone::selector::pruner::xor_pruner::XorPruner;
 use crate::engine::core::zone::selector::pruner::{PruneArgs, ZonePruner};
 use crate::engine::core::zone::selector::selector_kind::ZoneSelector;
 use crate::engine::core::{CandidateZone, QueryCaches, QueryPlan};
-use tracing::warn;
 
 pub struct FieldSelector<'a> {
     pub plan: &'a FilterGroup,

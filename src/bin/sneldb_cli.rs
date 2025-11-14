@@ -1,9 +1,4 @@
-use arrow_array::{
-    BooleanArray, Float32Array, Float64Array, Int8Array, Int16Array, Int32Array, Int64Array,
-    LargeStringArray, RecordBatch, StringArray, TimestampMicrosecondArray,
-    TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray, UInt8Array,
-    UInt16Array, UInt32Array, UInt64Array,
-};
+use arrow_array::RecordBatch;
 use arrow_ipc::reader::StreamReader;
 use arrow_schema::Schema;
 use clap::Parser;
@@ -71,7 +66,7 @@ fn main() -> anyhow::Result<()> {
 
 fn execute_query(url: &str, token: &str, query: &str) -> anyhow::Result<(Vec<u8>, Option<f64>)> {
     use http_body_util::{BodyExt, Full};
-    use hyper::{Method, Request, Uri};
+    use hyper::{Method, Request};
     use hyper_util::client::legacy::Client;
     use hyper_util::client::legacy::connect::HttpConnector;
     use hyper_util::rt::TokioExecutor;

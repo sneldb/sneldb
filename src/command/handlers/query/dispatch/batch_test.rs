@@ -9,6 +9,7 @@ use crate::test_helpers::factories::SchemaRegistryFactory;
 use tempfile::TempDir;
 use tokio::sync::mpsc;
 
+#[allow(dead_code)]
 fn create_test_context() -> (QueryContext<'static>, TempDir) {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let shard_dir = tempdir.path().join("shard-0");
@@ -84,5 +85,6 @@ async fn dispatch_handles_empty_shards() {
 #[test]
 fn new_creates_dispatcher() {
     let dispatcher = BatchShardDispatcher::new();
-    assert!(std::mem::size_of_val(&dispatcher) >= 0);
+    // Just ensure dispatcher is created
+    let _ = dispatcher;
 }

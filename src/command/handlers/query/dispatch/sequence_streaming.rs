@@ -17,7 +17,6 @@ use crate::engine::shard::message::ShardMessage;
 /// Groups handles by event type for sequence queries.
 pub(crate) struct SequenceHandles {
     pub handles_by_type: HashMap<String, Vec<ShardFlowHandle>>,
-    pub event_types: Vec<String>,
 }
 
 /// Dispatches sequence queries by splitting them into sub-queries per event type
@@ -300,7 +299,6 @@ impl SequenceStreamingDispatcher {
 
         Ok(SequenceHandles {
             handles_by_type,
-            event_types,
         })
     }
 }

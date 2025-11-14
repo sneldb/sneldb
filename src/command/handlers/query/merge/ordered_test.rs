@@ -5,7 +5,7 @@ use crate::engine::core::read::result::{ColumnSpec, QueryResult, SelectionResult
 use crate::engine::shard::manager::ShardManager;
 use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::SchemaRegistryFactory;
-use serde_json::{Value as JsonValue, json};
+use serde_json::json;
 
 fn create_context() -> QueryContext<'static> {
     let command = Box::leak(Box::new(Command::Query {

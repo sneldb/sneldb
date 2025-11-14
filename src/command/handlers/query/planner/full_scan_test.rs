@@ -1,10 +1,9 @@
 use crate::command::handlers::query::context::QueryContext;
 use crate::command::handlers::query::planner::full_scan::FullScanPlanner;
-use crate::command::handlers::query::planner::{PlanOutcome, QueryPlanner};
+use crate::command::handlers::query::planner::QueryPlanner;
 use crate::command::types::Command;
 use crate::engine::shard::manager::ShardManager;
 use crate::test_helpers::factories::SchemaRegistryFactory;
-use std::sync::Arc;
 
 fn create_context() -> QueryContext<'static> {
     let command = Box::leak(Box::new(Command::Query {
@@ -59,5 +58,6 @@ async fn build_plan_is_idempotent() {
 #[test]
 fn new_creates_planner() {
     let planner = FullScanPlanner::new();
-    assert!(std::mem::size_of_val(&planner) >= 0);
+    // Just ensure planner is created
+    let _ = planner;
 }

@@ -1,7 +1,7 @@
 use super::value_codec::ValueCodec;
 use crate::engine::materialize::MaterializationError;
 use crate::engine::types::ScalarValue;
-use serde_json::{Number, Value, json};
+use serde_json::json;
 
 #[test]
 fn encode_decode_timestamp_roundtrip() {

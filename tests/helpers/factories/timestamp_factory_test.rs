@@ -266,8 +266,8 @@ fn test_from_timestamp_months() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_months(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 30 days later
     // For approximate calculations, we just check that the result is valid
@@ -279,8 +279,8 @@ fn test_from_timestamp_years() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_years(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 365 days later
     // For approximate calculations, we just check that the result is valid
@@ -292,8 +292,8 @@ fn test_from_timestamp_leap_years() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_leap_years(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 366 days later
     // For approximate calculations, we just check that the result is valid
@@ -305,8 +305,8 @@ fn test_from_timestamp_quarters() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_quarters(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 90 days later
     // For approximate calculations, we just check that the result is valid
@@ -318,8 +318,8 @@ fn test_from_timestamp_decades() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_decades(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 3650 days later
     // For approximate calculations, we just check that the result is valid
@@ -331,8 +331,8 @@ fn test_from_timestamp_centuries() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_centuries(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 36500 days later
     // For approximate calculations, we just check that the result is valid
@@ -344,8 +344,8 @@ fn test_from_timestamp_millennia() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_millennia(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 365000 days later
     // For approximate calculations, we just check that the result is valid
@@ -368,8 +368,8 @@ fn test_from_timestamp_bienniums() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_bienniums(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 730 days later
     // For approximate calculations, we just check that the result is valid
@@ -381,8 +381,8 @@ fn test_from_timestamp_trienniums() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_trienniums(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 1095 days later
     // For approximate calculations, we just check that the result is valid
@@ -394,8 +394,8 @@ fn test_from_timestamp_quadrenniums() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_quadrenniums(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 1460 days later
     // For approximate calculations, we just check that the result is valid
@@ -407,8 +407,8 @@ fn test_from_timestamp_quinquenniums() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_quinquenniums(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 1825 days later
     // For approximate calculations, we just check that the result is valid
@@ -420,8 +420,8 @@ fn test_from_timestamp_sexenniums() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_sexenniums(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 2190 days later
     // For approximate calculations, we just check that the result is valid
@@ -433,8 +433,8 @@ fn test_from_timestamp_septenniums() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_septenniums(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 2555 days later
     // For approximate calculations, we just check that the result is valid
@@ -446,8 +446,8 @@ fn test_from_timestamp_octenniums() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_octenniums(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 2920 days later
     // For approximate calculations, we just check that the result is valid
@@ -459,8 +459,8 @@ fn test_from_timestamp_novenniums() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_novenniums(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 3285 days later
     // For approximate calculations, we just check that the result is valid
@@ -472,8 +472,8 @@ fn test_from_timestamp_decenniums() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_decenniums(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 3650 days later
     // For approximate calculations, we just check that the result is valid
@@ -485,8 +485,8 @@ fn test_from_timestamp_vicenniums() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_vicenniums(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 7300 days later
     // For approximate calculations, we just check that the result is valid
@@ -498,8 +498,8 @@ fn test_from_timestamp_tricenniums() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_tricenniums(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 10950 days later
     // For approximate calculations, we just check that the result is valid
@@ -511,8 +511,8 @@ fn test_from_timestamp_quadricenniums() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_quadricenniums(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 14600 days later
     // For approximate calculations, we just check that the result is valid
@@ -524,8 +524,8 @@ fn test_from_timestamp_quinquagenniums() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_quinquagenniums(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 18250 days later
     // For approximate calculations, we just check that the result is valid
@@ -537,8 +537,8 @@ fn test_from_timestamp_sexagenniums() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_sexagenniums(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 21900 days later
     // For approximate calculations, we just check that the result is valid
@@ -550,8 +550,8 @@ fn test_from_timestamp_septuagenniums() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_septuagenniums(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 25550 days later
     // For approximate calculations, we just check that the result is valid
@@ -563,8 +563,8 @@ fn test_from_timestamp_octogenniums() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_octogenniums(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 29200 days later
     // For approximate calculations, we just check that the result is valid
@@ -576,8 +576,8 @@ fn test_from_timestamp_nonagenniums() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_nonagenniums(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 32850 days later
     // For approximate calculations, we just check that the result is valid
@@ -589,8 +589,8 @@ fn test_from_timestamp_centenniums() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_centenniums(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 36500 days later
     // For approximate calculations, we just check that the result is valid
@@ -602,8 +602,8 @@ fn test_from_timestamp_millenniums() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_millenniums(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 365000 days later
     // For approximate calculations, we just check that the result is valid
@@ -615,8 +615,8 @@ fn test_from_timestamp_myriads() {
     let base_ts = TimestampFactory::utc_date(2024, 1, 15);
     let ts = TimestampFactory::from_timestamp_myriads(base_ts, 1);
 
-    let base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
-    let dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
+    let _base_dt = Utc.timestamp_opt(base_ts as i64, 0).single().unwrap();
+    let _dt = Utc.timestamp_opt(ts as i64, 0).single().unwrap();
 
     // Approximate - should be around 3650000 days later
     // For approximate calculations, we just check that the result is valid

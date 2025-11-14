@@ -1,4 +1,4 @@
-use crate::engine::core::{EventId, ZoneCursor, ZoneRow};
+use crate::engine::core::{ZoneCursor, ZoneRow};
 use crate::engine::types::ScalarValue;
 use std::collections::HashMap;
 

@@ -1,5 +1,6 @@
 use crate::command::handlers::define;
 use crate::command::types::{Command, FieldSpec, MiniSchema};
+use crate::engine::auth::AuthManager;
 use crate::engine::schema::registry::SchemaRegistry;
 use crate::engine::schema::{EnumType, FieldType};
 use crate::engine::shard::manager::ShardManager;
@@ -202,7 +203,6 @@ async fn test_define_handler_engine_error() {
 
 #[tokio::test]
 async fn test_define_handler_bypass_auth_allows_definition() {
-    use crate::engine::auth::AuthManager;
     use crate::logging::init_for_tests;
     init_for_tests();
 
@@ -251,7 +251,6 @@ async fn test_define_handler_bypass_auth_allows_definition() {
 
 #[tokio::test]
 async fn test_define_handler_bypass_auth_vs_regular_user() {
-    use crate::engine::auth::AuthManager;
     use crate::logging::init_for_tests;
     use tokio::io::AsyncReadExt;
     init_for_tests();

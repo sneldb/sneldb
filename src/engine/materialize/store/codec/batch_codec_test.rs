@@ -8,7 +8,7 @@ use crate::engine::materialize::store::frame::metadata::StoredFrameMeta;
 use crate::engine::materialize::{MaterializationError, high_water::HighWaterMark};
 use crate::engine::types::ScalarValue;
 use crc32fast::Hasher as Crc32Hasher;
-use serde_json::{Value, json};
+use serde_json::json;
 use std::sync::Arc;
 
 fn build_schema() -> BatchSchema {

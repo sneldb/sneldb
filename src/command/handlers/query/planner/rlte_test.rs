@@ -96,5 +96,6 @@ async fn build_plan_handles_empty_shards() {
 #[test]
 fn new_creates_planner() {
     let planner = RltePlanner::new();
-    assert!(std::mem::size_of_val(&planner) >= 0);
+    // Just ensure planner is created
+    let _ = planner;
 }

@@ -9,7 +9,6 @@ use crate::engine::core::column::column_values::ColumnValues;
 use crate::engine::core::column::format::PhysicalType;
 use crate::engine::core::read::cache::DecompressedBlock;
 use crate::engine::types::ScalarValue;
-use serde_json::{Number, Value};
 
 fn build_varbytes(values: &[&str]) -> ColumnValues {
     let mut ranges = Vec::with_capacity(values.len());

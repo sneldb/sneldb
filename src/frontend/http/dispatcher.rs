@@ -50,14 +50,6 @@ fn is_authorized(req: &Request<Incoming>) -> bool {
         )
 }
 
-/// Case-insensitive byte comparison helper
-#[inline]
-fn bytes_eq_ignore_ascii_case(a: &[u8], b: &[u8]) -> bool {
-    a.len() == b.len()
-        && a.iter()
-            .zip(b.iter())
-            .all(|(x, y)| x.eq_ignore_ascii_case(y))
-}
 
 /// Extract authentication from HTTP headers
 /// Returns (user_id, signature) if found in headers, None otherwise

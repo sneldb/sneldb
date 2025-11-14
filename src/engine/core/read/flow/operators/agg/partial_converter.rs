@@ -1,3 +1,4 @@
+use crate::command::types::TimeGranularity;
 use crate::engine::core::read::aggregate::partial::{AggPartial, AggState, GroupKey as PartialKey};
 use crate::engine::core::read::aggregate::plan::AggregateOpSpec;
 use crate::engine::core::read::flow::BatchSender;
@@ -58,7 +59,7 @@ impl PartialConverter {
 
     fn build_row(
         group_key: &PartialKey,
-        time_bucket: &Option<crate::command::types::TimeGranularity>,
+        time_bucket: &Option<TimeGranularity>,
         group_by: &Option<Vec<String>>,
         states: &[AggState],
         specs: &[AggregateOpSpec],

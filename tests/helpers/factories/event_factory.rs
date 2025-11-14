@@ -1,5 +1,4 @@
 use crate::engine::core::{Event, EventId};
-use crate::engine::types::ScalarValue;
 use rand::Rng;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashMap};

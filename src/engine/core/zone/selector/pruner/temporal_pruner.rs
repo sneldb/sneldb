@@ -35,15 +35,6 @@ impl<'a> TemporalPruner<'a> {
                     s.parse::<u64>().ok().unwrap_or(0)
                 }
             }
-            // JSON numbers and strings are now Utf8 - parse from string
-            ScalarValue::Utf8(s) => {
-                if let Some(parsed) = TimeParser::parse_str_to_epoch_seconds(s, TimeKind::DateTime)
-                {
-                    parsed.max(0) as u64
-                } else {
-                    s.parse::<u64>().ok().unwrap_or(0)
-                }
-            }
             _ => 0,
         };
 

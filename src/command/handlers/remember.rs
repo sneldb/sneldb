@@ -142,7 +142,6 @@ pub(crate) async fn remember_query_with_data_dir(
                     .map_err(|e| format!("Failed to finish truncated batch: {e}"))?;
                 sink.append(&truncated_batch)
                     .map_err(|e| format!("Failed to persist truncated batch: {e}"))?;
-                rows_stored = limit_val;
                 break;
             }
         } else {

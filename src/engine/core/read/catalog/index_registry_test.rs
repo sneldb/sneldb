@@ -4,7 +4,7 @@ fn write_icx(
     base_dir: &std::path::Path,
     segment_id: &str,
     uid: &str,
-    mut catalog: SegmentIndexCatalog,
+    catalog: SegmentIndexCatalog,
 ) {
     let seg_dir = base_dir.join(segment_id);
     std::fs::create_dir_all(&seg_dir).expect("failed to create segment dir");

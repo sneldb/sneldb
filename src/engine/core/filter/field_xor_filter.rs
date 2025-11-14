@@ -51,8 +51,6 @@ impl FieldXorFilter {
             ScalarValue::Timestamp(ts) => Some(ts.to_string()),
             ScalarValue::Float64(f) => Some(f.to_string()),
             ScalarValue::Boolean(b) => Some(b.to_string()),
-            // All JSON values are now Utf8 strings
-            ScalarValue::Utf8(s) => Some(s.clone()),
             _ => {
                 info!(
                     target: "sneldb::xorfilter",

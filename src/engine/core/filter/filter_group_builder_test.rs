@@ -17,6 +17,7 @@ fn extract_all_filters(group: &FilterGroup) -> Vec<&FilterGroup> {
 }
 
 /// Helper function to count filters in a FilterGroup tree
+#[allow(dead_code)]
 fn count_filters(group: &FilterGroup) -> usize {
     match group {
         FilterGroup::Filter { .. } => 1,

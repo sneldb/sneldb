@@ -1,7 +1,8 @@
 use crate::command::handlers::permissions::handle;
 use crate::command::types::Command;
 use crate::engine::auth::{AuthManager, PermissionSet};
-use crate::engine::schema::SchemaRegistry;
+use crate::engine::schema::registry::MiniSchema;
+use crate::engine::schema::{types::FieldType, SchemaRegistry};
 use crate::engine::shard::manager::ShardManager;
 use crate::logging::init_for_tests;
 use crate::shared::response::JsonRenderer;
@@ -59,9 +60,8 @@ async fn read_response<R: tokio::io::AsyncRead + Unpin>(reader: &mut R) -> Strin
 }
 
 /// Helper function to convert CommandMiniSchema to MiniSchema
-fn create_mini_schema() -> crate::engine::schema::registry::MiniSchema {
-    use crate::engine::schema::types::FieldType;
-    crate::engine::schema::registry::MiniSchema {
+fn create_mini_schema() -> MiniSchema {
+    MiniSchema {
         fields: HashMap::from([("id".to_string(), FieldType::I64)]),
     }
 }
