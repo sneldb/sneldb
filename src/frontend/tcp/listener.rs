@@ -76,11 +76,14 @@ impl TcpAuthState {
 /// 1. AUTH command to authenticate the connection
 /// 2. Inline format: user_id:signature:command (per-command auth)
 /// 3. Connection-scoped auth (after AUTH command)
-/// Returns (command, should_continue) if authenticated, or None if auth check failed
-async fn check_auth<'a>(input: &'a str, auth_state: &mut TcpAuthState) -> Option<(&'a str, bool)> {
+/// Returns (command, should_continue, user_id) if authenticated, or None if auth check failed
+async fn check_auth<'a>(
+    input: &'a str,
+    auth_state: &mut TcpAuthState,
+) -> Option<(&'a str, bool, Option<String>)> {
     // Check if authentication is bypassed via config - do this first for performance
     if CONFIG.auth.as_ref().map(|a| a.bypass_auth).unwrap_or(false) {
-        return Some((input.trim(), true));
+        return Some((input.trim(), true, Some("bypass".to_string())));
     }
 
     // Cache trimmed input to avoid multiple trim() calls
@@ -91,7 +94,7 @@ async fn check_auth<'a>(input: &'a str, auth_state: &mut TcpAuthState) -> Option
     if trimmed_bytes.len() >= 5 && bytes_eq_ignore_ascii_case(&trimmed_bytes[..5], b"AUTH ") {
         match auth_state.authenticate(trimmed).await {
             Ok(_) => {
-                return Some(("OK", true)); // Return OK response and continue
+                return Some(("OK", true, auth_state.user_id().map(|s| s.to_string()))); // Return OK response and continue
             }
             Err(_) => {
                 return None; // Will send error response
@@ -99,24 +102,12 @@ async fn check_auth<'a>(input: &'a str, auth_state: &mut TcpAuthState) -> Option
         }
     }
 
-    // Auth commands don't require authentication (case-insensitive byte checks - only when needed)
-    if trimmed_bytes.len() >= 11 && bytes_eq_ignore_ascii_case(&trimmed_bytes[..11], b"CREATE USER")
-    {
-        return Some((trimmed, true));
-    }
-    if trimmed_bytes.len() >= 10 && bytes_eq_ignore_ascii_case(&trimmed_bytes[..10], b"REVOKE KEY")
-    {
-        return Some((trimmed, true));
-    }
-    if trimmed_bytes.len() >= 10 && bytes_eq_ignore_ascii_case(&trimmed_bytes[..10], b"LIST USERS")
-    {
-        return Some((trimmed, true));
-    }
+    // User management commands now require authentication
 
     // If auth manager is not configured, allow all commands
     let auth_mgr = match &auth_state.auth_manager {
         Some(am) => am,
-        None => return Some((trimmed, true)),
+        None => return Some((trimmed, true, Some("no-auth".to_string()))),
     };
 
     // Try connection-scoped authentication first
@@ -133,7 +124,7 @@ async fn check_auth<'a>(input: &'a str, auth_state: &mut TcpAuthState) -> Option
                 .verify_signature(command_part_trimmed, user_id, potential_signature)
                 .await
             {
-                Ok(_) => return Some((command_part_trimmed, true)),
+                Ok(_) => return Some((command_part_trimmed, true, Some(user_id.to_string()))),
                 Err(_) => {
                     // Early return on auth failure - don't try inline format for authenticated connections
                     return None;
@@ -150,7 +141,7 @@ async fn check_auth<'a>(input: &'a str, auth_state: &mut TcpAuthState) -> Option
         Ok((user_id, signature, command)) => {
             // Verify signature
             match auth_mgr.verify_signature(command, user_id, signature).await {
-                Ok(_) => Some((command, true)),
+                Ok(_) => Some((command, true, Some(user_id.to_string()))),
                 Err(_) => None,
             }
         }
@@ -238,14 +229,14 @@ pub async fn run_tcp_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
 
                 // Check authentication before parsing
                 match check_auth(trimmed, &mut auth_state).await {
-                    Some(("OK", _)) => {
+                    Some(("OK", _, _)) => {
                         // AUTH command succeeded
                         let writer = reader.get_mut();
                         let _ = writer.write_all(b"OK\n").await;
                         let _ = writer.flush().await;
                         continue;
                     }
-                    Some((command_to_parse, _)) => {
+                    Some((command_to_parse, _, authenticated_user_id)) => {
                         match parse_command(command_to_parse) {
                             Ok(cmd) => {
                                 // Increment pending operations before dispatch
@@ -257,6 +248,7 @@ pub async fn run_tcp_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
                                     &shard_manager,
                                     &registry,
                                     auth_manager.as_ref(),
+                                    authenticated_user_id.as_deref(),
                                     &UnixRenderer,
                                 )
                                 .await;

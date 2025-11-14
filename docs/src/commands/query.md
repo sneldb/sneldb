@@ -19,6 +19,10 @@ QUERY <event_type:WORD>
   [ LIMIT <n:NUMBER> ]
 ```
 
+## Constraints
+
+- Requires authentication and read permission for the event type (or admin role).
+
 ## Examples
 
 ```sneldb
@@ -195,6 +199,11 @@ Sequence queries are optimized for performance:
 - For `PRECEDED BY`, `event_type_b` must occur strictly before `event_type_a` (same timestamp does not match)
 - The query returns both events from each matched sequence
 - `LIMIT` applies to the number of matched sequences, not individual events
+
+## Errors
+
+- `Authentication required`: No user ID provided or authentication failed.
+- `Read permission denied for event type '<event_type>'`: User lacks read permission for the event type.
 
 ## Gotchas
 

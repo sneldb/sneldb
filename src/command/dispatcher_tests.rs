@@ -333,6 +333,20 @@ async fn create_test_components() -> (
     (shard_manager, registry, auth_manager, temp_dir)
 }
 
+/// Helper to create an admin user for testing user management commands
+async fn create_test_admin(auth_manager: &Arc<AuthManager>) -> String {
+    let admin_id = "test_admin";
+    auth_manager
+        .create_user_with_roles(
+            admin_id.to_string(),
+            Some("admin_secret".to_string()),
+            vec!["admin".to_string()],
+        )
+        .await
+        .expect("Failed to create admin user");
+    admin_id.to_string()
+}
+
 #[tokio::test]
 async fn test_dispatch_create_user_with_auth_manager() {
     init_for_tests();
@@ -343,6 +357,16 @@ async fn test_dispatch_create_user_with_auth_manager() {
         secret_key: None,
     };
 
+    // Create admin user for user management commands
+    let _ = auth_manager
+        .create_user_with_roles(
+            "test_admin".to_string(),
+            Some("admin_secret".to_string()),
+            vec!["admin".to_string()],
+        )
+        .await
+        .expect("Failed to create admin user");
+
     let (mut reader, mut writer) = duplex(1024);
 
     dispatch_command(
@@ -351,6 +375,7 @@ async fn test_dispatch_create_user_with_auth_manager() {
         &_shard_manager,
         &registry,
         Some(&auth_manager),
+        Some("test_admin"),
         &UnixRenderer,
     )
     .await
@@ -385,6 +410,7 @@ async fn test_dispatch_create_user_without_auth_manager() {
         &_shard_manager,
         &registry,
         None, // No auth manager
+        None, // No user_id
         &UnixRenderer,
     )
     .await
@@ -406,6 +432,16 @@ async fn test_dispatch_revoke_key_with_auth_manager() {
 
     let (_shard_manager, registry, auth_manager, _temp_dir) = create_test_components().await;
 
+    // Create admin user first
+    let _ = auth_manager
+        .create_user_with_roles(
+            "test_admin".to_string(),
+            Some("admin_secret".to_string()),
+            vec!["admin".to_string()],
+        )
+        .await
+        .expect("Failed to create admin user");
+
     // First create a user
     let create_cmd = Command::CreateUser {
         user_id: "user_to_revoke".to_string(),
@@ -418,6 +454,7 @@ async fn test_dispatch_revoke_key_with_auth_manager() {
         &_shard_manager,
         &registry,
         Some(&auth_manager),
+        Some("test_admin"),
         &UnixRenderer,
     )
     .await
@@ -435,6 +472,7 @@ async fn test_dispatch_revoke_key_with_auth_manager() {
         &_shard_manager,
         &registry,
         Some(&auth_manager),
+        Some("test_admin"),
         &UnixRenderer,
     )
     .await
@@ -467,6 +505,7 @@ async fn test_dispatch_revoke_key_without_auth_manager() {
         &_shard_manager,
         &registry,
         None, // No auth manager
+        None, // No user_id
         &UnixRenderer,
     )
     .await
@@ -488,6 +527,16 @@ async fn test_dispatch_list_users_with_auth_manager() {
 
     let (_shard_manager, registry, auth_manager, _temp_dir) = create_test_components().await;
 
+    // Create admin user first
+    let _ = auth_manager
+        .create_user_with_roles(
+            "test_admin".to_string(),
+            Some("admin_secret".to_string()),
+            vec!["admin".to_string()],
+        )
+        .await
+        .expect("Failed to create admin user");
+
     // Create a user first
     let create_cmd = Command::CreateUser {
         user_id: "list_test_user".to_string(),
@@ -500,6 +549,7 @@ async fn test_dispatch_list_users_with_auth_manager() {
         &_shard_manager,
         &registry,
         Some(&auth_manager),
+        Some("test_admin"),
         &UnixRenderer,
     )
     .await
@@ -515,6 +565,7 @@ async fn test_dispatch_list_users_with_auth_manager() {
         &_shard_manager,
         &registry,
         Some(&auth_manager),
+        Some("test_admin"),
         &UnixRenderer,
     )
     .await
@@ -545,6 +596,7 @@ async fn test_dispatch_list_users_without_auth_manager() {
         &_shard_manager,
         &registry,
         None, // No auth manager
+        None, // No user_id
         &UnixRenderer,
     )
     .await
@@ -565,6 +617,8 @@ async fn test_dispatch_list_users_empty_with_auth_manager() {
     init_for_tests();
 
     let (_shard_manager, registry, auth_manager, _temp_dir) = create_test_components().await;
+    let _ = create_test_admin(&auth_manager).await;
+
     let cmd = Command::ListUsers;
 
     let (mut reader, mut writer) = duplex(1024);
@@ -575,6 +629,7 @@ async fn test_dispatch_list_users_empty_with_auth_manager() {
         &_shard_manager,
         &registry,
         Some(&auth_manager),
+        Some("test_admin"),
         &UnixRenderer,
     )
     .await
@@ -585,9 +640,9 @@ async fn test_dispatch_list_users_empty_with_auth_manager() {
     let n = reader.read(&mut response).await.unwrap();
     let msg = String::from_utf8_lossy(&response[..n]);
 
-    // Verify response shows no users
+    // Verify response shows admin user (since we created one)
     assert!(msg.contains("200 OK"));
-    assert!(msg.contains("No users found"));
+    assert!(msg.contains("test_admin")); // Admin user should be listed
 }
 
 #[tokio::test]
@@ -595,6 +650,7 @@ async fn test_dispatch_create_user_error_user_exists() {
     init_for_tests();
 
     let (_shard_manager, registry, auth_manager, _temp_dir) = create_test_components().await;
+    let _ = create_test_admin(&auth_manager).await;
 
     // Create user first
     let create_cmd1 = Command::CreateUser {
@@ -608,6 +664,7 @@ async fn test_dispatch_create_user_error_user_exists() {
         &_shard_manager,
         &registry,
         Some(&auth_manager),
+        Some("test_admin"),
         &UnixRenderer,
     )
     .await
@@ -626,6 +683,7 @@ async fn test_dispatch_create_user_error_user_exists() {
         &_shard_manager,
         &registry,
         Some(&auth_manager),
+        Some("test_admin"),
         &UnixRenderer,
     )
     .await
@@ -646,6 +704,8 @@ async fn test_dispatch_revoke_key_error_user_not_found() {
     init_for_tests();
 
     let (_shard_manager, registry, auth_manager, _temp_dir) = create_test_components().await;
+    let _ = create_test_admin(&auth_manager).await; // Create admin user first
+
     let cmd = Command::RevokeKey {
         user_id: "non_existent_user".to_string(),
     };
@@ -658,6 +718,7 @@ async fn test_dispatch_revoke_key_error_user_not_found() {
         &_shard_manager,
         &registry,
         Some(&auth_manager),
+        Some("test_admin"),
         &UnixRenderer,
     )
     .await
@@ -678,6 +739,8 @@ async fn test_dispatch_create_user_with_secret_key() {
     init_for_tests();
 
     let (_shard_manager, registry, auth_manager, _temp_dir) = create_test_components().await;
+    let _ = create_test_admin(&auth_manager).await;
+
     let cmd = Command::CreateUser {
         user_id: "user_with_key".to_string(),
         secret_key: Some("my_custom_secret_key".to_string()),
@@ -691,6 +754,7 @@ async fn test_dispatch_create_user_with_secret_key() {
         &_shard_manager,
         &registry,
         Some(&auth_manager),
+        Some("test_admin"),
         &UnixRenderer,
     )
     .await
@@ -712,6 +776,7 @@ async fn test_dispatch_multiple_auth_commands_sequence() {
     init_for_tests();
 
     let (_shard_manager, registry, auth_manager, _temp_dir) = create_test_components().await;
+    let _ = create_test_admin(&auth_manager).await;
 
     // Create user1
     let create_cmd1 = Command::CreateUser {
@@ -725,6 +790,7 @@ async fn test_dispatch_multiple_auth_commands_sequence() {
         &_shard_manager,
         &registry,
         Some(&auth_manager),
+        Some("test_admin"),
         &UnixRenderer,
     )
     .await
@@ -742,6 +808,7 @@ async fn test_dispatch_multiple_auth_commands_sequence() {
         &_shard_manager,
         &registry,
         Some(&auth_manager),
+        Some("test_admin"),
         &UnixRenderer,
     )
     .await
@@ -756,6 +823,7 @@ async fn test_dispatch_multiple_auth_commands_sequence() {
         &_shard_manager,
         &registry,
         Some(&auth_manager),
+        Some("test_admin"),
         &UnixRenderer,
     )
     .await
@@ -778,6 +846,7 @@ async fn test_dispatch_multiple_auth_commands_sequence() {
         &_shard_manager,
         &registry,
         Some(&auth_manager),
+        Some("test_admin"),
         &UnixRenderer,
     )
     .await
@@ -792,6 +861,7 @@ async fn test_dispatch_multiple_auth_commands_sequence() {
         &_shard_manager,
         &registry,
         Some(&auth_manager),
+        Some("test_admin"),
         &UnixRenderer,
     )
     .await

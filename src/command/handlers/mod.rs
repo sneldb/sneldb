@@ -3,6 +3,7 @@ pub mod compare;
 pub mod define;
 pub mod flush;
 pub mod kway_merger;
+pub mod permissions;
 pub mod query;
 pub mod query_batch_stream;
 pub mod remember;
@@ -40,3 +41,5 @@ mod segment_discovery_test;
 mod shard_command_builder_test;
 #[cfg(test)]
 mod store_tests;
+#[cfg(test)]
+mod permissions_test;

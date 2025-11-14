@@ -15,6 +15,7 @@ STORE <event_type:WORD> FOR <context_id:WORD or STRING> PAYLOAD {"key":"value", 
 - `<context_id>` can be a WORD (example: user-1) or a quoted STRING.
 - `PAYLOAD` must be a flat JSON object (no nested objects).
 - `PAYLOAD` must follow schema defined using `DEFINE` command.
+- Requires authentication and write permission for the event type (or admin role).
 
 ## Examples
 
@@ -41,4 +42,6 @@ STORE login FOR user-7 PAYLOAD {"device":"android"}
 - `<event_type>` cannot be empty
 - `<context_id>` cannot be empty
 - Schema validation errors (see `DEFINE`)
+- `Authentication required`: No user ID provided or authentication failed
+- `Write permission denied for event type '<event_type>'`: User lacks write permission for the event type
 - Overload/backpressure (rare): Shard is busy, try again later

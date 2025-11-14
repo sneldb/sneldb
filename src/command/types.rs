@@ -59,6 +59,19 @@ pub enum Command {
         user_id: String,
     },
     ListUsers,
+    GrantPermission {
+        permissions: Vec<String>, // ["read", "write"]
+        event_types: Vec<String>, // ["order_created", "payment_succeeded"]
+        user_id: String,
+    },
+    RevokePermission {
+        permissions: Vec<String>,
+        event_types: Vec<String>,
+        user_id: String,
+    },
+    ShowPermissions {
+        user_id: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

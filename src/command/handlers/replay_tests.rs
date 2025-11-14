@@ -29,9 +29,17 @@ async fn test_replay_returns_matching_event() {
         .create();
 
     let (mut _r, mut w) = duplex(1024);
-    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
-        .await
-        .unwrap();
+    store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .unwrap();
 
     // Replay the event
     let replay_cmd = CommandFactory::replay()

@@ -1,5 +1,7 @@
 use crate::command::handlers::query::QueryCommandHandler;
-use crate::command::handlers::{auth, compare, define, flush, remember, replay, show, store};
+use crate::command::handlers::{
+    auth, compare, define, flush, permissions, remember, replay, show, store,
+};
 use crate::command::types::Command;
 use crate::engine::auth::AuthManager;
 use crate::engine::schema::SchemaRegistry;
@@ -17,6 +19,7 @@ pub async fn dispatch_command<W: AsyncWrite + Unpin>(
     shard_manager: &ShardManager,
     registry: &Arc<RwLock<SchemaRegistry>>,
     auth_manager: Option<&Arc<AuthManager>>,
+    user_id: Option<&str>,
     renderer: &dyn Renderer,
 ) -> std::io::Result<()> {
     use Command::*;
@@ -24,15 +27,45 @@ pub async fn dispatch_command<W: AsyncWrite + Unpin>(
     debug!(target: "sneldb::dispatch", command = ?cmd, "Dispatching command");
 
     match cmd {
-        Store { .. } => store::handle(cmd, shard_manager, registry, writer, renderer).await,
-        Define { .. } => define::handle(cmd, shard_manager, registry, writer, renderer).await,
+        Store { .. } => {
+            store::handle(
+                cmd,
+                shard_manager,
+                registry,
+                auth_manager,
+                user_id,
+                writer,
+                renderer,
+            )
+            .await
+        }
+        Define { .. } => {
+            define::handle(
+                cmd,
+                shard_manager,
+                registry,
+                auth_manager,
+                user_id,
+                writer,
+                renderer,
+            )
+            .await
+        }
         RememberQuery { .. } => {
             remember::handle(cmd, shard_manager, registry, writer, renderer).await
         }
         Query { .. } => {
-            QueryCommandHandler::new(cmd, shard_manager, Arc::clone(registry), writer, renderer)
-                .handle()
-                .await
+            QueryCommandHandler::new(
+                cmd,
+                shard_manager,
+                Arc::clone(registry),
+                auth_manager,
+                user_id,
+                writer,
+                renderer,
+            )
+            .handle()
+            .await
         }
         Compare { .. } => {
             compare::ComparisonCommandHandler::new(
@@ -52,7 +85,19 @@ pub async fn dispatch_command<W: AsyncWrite + Unpin>(
         Flush { .. } => flush::handle(cmd, shard_manager, registry, writer, renderer).await,
         CreateUser { .. } | RevokeKey { .. } | ListUsers => {
             if let Some(auth_mgr) = auth_manager {
-                auth::handle(cmd, auth_mgr, writer, renderer).await
+                auth::handle(cmd, auth_mgr, user_id, writer, renderer).await
+            } else {
+                error!(target: "sneldb::dispatch", "Auth manager not available");
+                let resp =
+                    Response::error(StatusCode::InternalError, "Authentication not configured");
+                writer.write_all(&renderer.render(&resp)).await?;
+                writer.flush().await?;
+                Ok(())
+            }
+        }
+        GrantPermission { .. } | RevokePermission { .. } | ShowPermissions { .. } => {
+            if let Some(auth_mgr) = auth_manager {
+                permissions::handle(cmd, auth_mgr, registry, user_id, writer, renderer).await
             } else {
                 error!(target: "sneldb::dispatch", "Auth manager not available");
                 let resp =

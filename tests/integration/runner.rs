@@ -1,3 +1,4 @@
+use crate::integration::auth_helper::{add_auth_to_command, process_auth_placeholders};
 use crate::integration::config::write_config_for_with_overrides;
 use crate::integration::scenarios::TestScenario;
 use std::io::{Read, Write};
@@ -63,6 +64,27 @@ pub fn run_scenario(scenario: &TestScenario) {
     // Accumulate outputs across reconnects (e.g., after RESTART)
     let mut accumulated_output = String::new();
 
+    // Extract admin credentials from config if available
+    let admin_user = scenario
+        .config
+        .as_ref()
+        .and_then(|c| c.get("auth"))
+        .and_then(|a| a.get("initial_admin_user"))
+        .and_then(|u| u.as_str());
+    let admin_key = scenario
+        .config
+        .as_ref()
+        .and_then(|c| c.get("auth"))
+        .and_then(|a| a.get("initial_admin_key"))
+        .and_then(|k| k.as_str());
+    let bypass_auth = scenario
+        .config
+        .as_ref()
+        .and_then(|c| c.get("auth"))
+        .and_then(|a| a.get("bypass_auth"))
+        .and_then(|b| b.as_bool())
+        .unwrap_or(true);
+
     for (i, command) in scenario.input_commands.iter().enumerate() {
         // Handle SLEEP pseudo-command locally without sending to server
         if let Some(ms) = parse_sleep_ms(command) {
@@ -105,8 +127,69 @@ pub fn run_scenario(scenario: &TestScenario) {
             continue;
         }
 
-        debug!("Sending command {}: {}", i + 1, command);
-        writeln!(stream, "{}", command).expect("Failed to write command");
+        // Process command: replace HMAC placeholders and add auth if needed
+        let mut processed_cmd = process_auth_placeholders(command, admin_key);
+        debug!("After HMAC processing: {}", processed_cmd);
+
+        // If auth is required and command doesn't have auth yet, add it
+        if !bypass_auth && admin_user.is_some() && admin_key.is_some() {
+            // Check if command already has authentication (contains user_id: or signature=)
+            let has_auth =
+                processed_cmd.contains("user_id=") || processed_cmd.contains("signature=");
+
+            if !has_auth {
+                // Commands that require admin: CREATE USER, GRANT, REVOKE, SHOW PERMISSIONS, DEFINE
+                let needs_auth = processed_cmd.trim().starts_with("CREATE USER")
+                    || processed_cmd.trim().starts_with("GRANT")
+                    || processed_cmd.trim().starts_with("REVOKE")
+                    || processed_cmd.trim().starts_with("SHOW PERMISSIONS")
+                    || processed_cmd.trim().starts_with("DEFINE")
+                    || processed_cmd.trim().starts_with("LIST USERS");
+
+                if needs_auth {
+                    debug!("Adding authentication to command: {}", processed_cmd);
+                    processed_cmd = add_auth_to_command(
+                        &processed_cmd,
+                        admin_user.unwrap(),
+                        admin_key.unwrap(),
+                    );
+                }
+            } else {
+                // Command has user_id=... signature=... format, convert to inline format
+                // Extract user_id and signature, then rebuild as user_id:signature:command
+                if let Some(user_id_pos) = processed_cmd.find("user_id=") {
+                    let after_user_id = &processed_cmd[user_id_pos + 8..];
+                    // Find the end of user_id value (whitespace or end of string)
+                    let user_id_end = after_user_id
+                        .find(|c: char| c.is_whitespace())
+                        .unwrap_or(after_user_id.len());
+                    let user_id = after_user_id[..user_id_end].trim();
+
+                    // Find signature=
+                    if let Some(sig_pos) = processed_cmd.find("signature=") {
+                        let after_sig = &processed_cmd[sig_pos + 10..];
+                        // Signature is a hex string, find whitespace or end of string
+                        let sig_end = after_sig
+                            .find(|c: char| c.is_whitespace())
+                            .unwrap_or(after_sig.len());
+                        let signature = after_sig[..sig_end].trim();
+
+                        // Extract the command part (everything before user_id=)
+                        let command_part = processed_cmd[..user_id_pos].trim();
+                        debug!(
+                            "Converting user_id= format to inline format: user_id={}, command={}",
+                            user_id, command_part
+                        );
+                        processed_cmd = format!("{}:{}:{}", user_id, signature, command_part);
+                    } else {
+                        debug!("Command has user_id= but no signature=, skipping auth conversion");
+                    }
+                }
+            }
+        }
+
+        debug!("Sending command {}: {}", i + 1, processed_cmd);
+        writeln!(stream, "{}", processed_cmd).expect("Failed to write command");
         stream.flush().expect("Failed to flush stream");
 
         // If this is a FLUSH command, wait briefly before sending the next command

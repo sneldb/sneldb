@@ -16,10 +16,7 @@ impl CalendarTimeBucketer {
         // Parse and cache timezone once at construction
         // This avoids repeated timezone parsing on every bucket_of call
         let cached_tz = config.parse_timezone();
-        Self {
-            config,
-            cached_tz,
-        }
+        Self { config, cached_tz }
     }
 
     /// Calculate the bucket start timestamp for a given granularity

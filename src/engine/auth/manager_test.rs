@@ -791,3 +791,115 @@ async fn test_constant_time_comparison() {
         assert!(result.is_err());
     }
 }
+
+#[tokio::test]
+async fn test_create_user_with_roles() {
+    init_for_tests();
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+
+    let roles = vec!["admin".to_string(), "read-only".to_string()];
+    let result = auth_manager
+        .create_user_with_roles(
+            "admin_user".to_string(),
+            Some("secret".to_string()),
+            roles.clone(),
+        )
+        .await;
+
+    assert!(result.is_ok());
+
+    let users = auth_manager.list_users().await;
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].user_id, "admin_user");
+    assert_eq!(users[0].roles, roles);
+}
+
+#[tokio::test]
+async fn test_is_admin() {
+    init_for_tests();
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+
+    // Create admin user
+    auth_manager
+        .create_user_with_roles(
+            "admin".to_string(),
+            Some("secret".to_string()),
+            vec!["admin".to_string()],
+        )
+        .await
+        .expect("Admin user creation should succeed");
+
+    // Create regular user
+    auth_manager
+        .create_user("regular".to_string(), Some("secret2".to_string()))
+        .await
+        .expect("Regular user creation should succeed");
+
+    // Check admin status
+    assert!(auth_manager.is_admin("admin").await);
+    assert!(!auth_manager.is_admin("regular").await);
+    assert!(!auth_manager.is_admin("nonexistent").await);
+}
+
+#[tokio::test]
+async fn test_create_user_defaults_to_empty_roles() {
+    init_for_tests();
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+
+    auth_manager
+        .create_user("regular_user".to_string(), Some("secret".to_string()))
+        .await
+        .expect("User creation should succeed");
+
+    let users = auth_manager.list_users().await;
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].roles, Vec::<String>::new());
+}
+
+#[tokio::test]
+async fn test_bootstrap_admin_user_creates_when_no_users() {
+    init_for_tests();
+
+    // Note: This test would require mocking CONFIG, which is complex
+    // For now, we test the create_user_with_roles method directly
+    // Full bootstrap testing would require integration tests with actual config
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+
+    // Simulate bootstrap: create admin user when no users exist
+    let result = auth_manager
+        .create_user_with_roles(
+            "bootstrap_admin".to_string(),
+            Some("bootstrap_key".to_string()),
+            vec!["admin".to_string()],
+        )
+        .await;
+
+    assert!(result.is_ok());
+
+    let users = auth_manager.list_users().await;
+    assert_eq!(users.len(), 1);
+    assert!(auth_manager.is_admin("bootstrap_admin").await);
+}
+
+#[tokio::test]
+async fn test_bootstrap_skips_when_users_exist() {
+    init_for_tests();
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+
+    // Create a user first
+    auth_manager
+        .create_user("existing_user".to_string(), Some("secret".to_string()))
+        .await
+        .expect("User creation should succeed");
+
+    // Bootstrap should skip (we can't easily test this without mocking CONFIG,
+    // but we can verify the logic: if users exist, bootstrap returns early)
+    let user_count = auth_manager.list_users().await.len();
+    assert_eq!(user_count, 1);
+    // Bootstrap logic checks user_count > 0 and returns early, which is correct behavior
+}

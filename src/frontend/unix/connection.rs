@@ -36,38 +36,22 @@ where
     W: AsyncWrite + Unpin,
 {
     /// Check authentication before parsing command
-    /// Returns command if authenticated, or None if auth check failed
-    async fn check_auth<'a>(&self, input: &'a str) -> Option<&'a str> {
+    /// Returns (command, user_id) if authenticated, or None if auth check failed
+    async fn check_auth<'a>(&self, input: &'a str) -> Option<(&'a str, Option<String>)> {
         // Check if authentication is bypassed via config - do this first for performance
         if CONFIG.auth.as_ref().map(|a| a.bypass_auth).unwrap_or(false) {
-            return Some(input);
+            return Some((input, Some("bypass".to_string())));
         }
 
-        // Cache trimmed input and use case-insensitive byte checks
+        // Cache trimmed input
         let trimmed = input.trim();
-        let trimmed_bytes = trimmed.as_bytes();
 
-        // Auth commands don't require authentication (case-insensitive byte checks)
-        if trimmed_bytes.len() >= 11
-            && bytes_eq_ignore_ascii_case(&trimmed_bytes[..11], b"CREATE USER")
-        {
-            return Some(input);
-        }
-        if trimmed_bytes.len() >= 10
-            && bytes_eq_ignore_ascii_case(&trimmed_bytes[..10], b"REVOKE KEY")
-        {
-            return Some(input);
-        }
-        if trimmed_bytes.len() >= 10
-            && bytes_eq_ignore_ascii_case(&trimmed_bytes[..10], b"LIST USERS")
-        {
-            return Some(input);
-        }
+        // User management commands now require authentication
 
         // If auth manager is not configured, allow all commands
         let auth_mgr = match &self.auth_manager {
             Some(am) => am,
-            None => return Some(input),
+            None => return Some((input, Some("no-auth".to_string()))),
         };
 
         // Parse auth format: user_id:signature:command
@@ -75,7 +59,7 @@ where
             Ok((user_id, signature, command)) => {
                 // Verify signature
                 match auth_mgr.verify_signature(command, user_id, signature).await {
-                    Ok(_) => Some(command),
+                    Ok(_) => Some((command, Some(user_id.to_string()))),
                     Err(_) => None,
                 }
             }
@@ -115,8 +99,8 @@ where
             }
 
             // Check authentication before parsing
-            let command_to_parse = match self.check_auth(input).await {
-                Some(cmd) => cmd,
+            let (command_to_parse, authenticated_user_id) = match self.check_auth(input).await {
+                Some((cmd, uid)) => (cmd, uid),
                 None => {
                     let resp = Response::error(
                         StatusCode::BadRequest,
@@ -141,6 +125,7 @@ where
                         &self.shard_manager,
                         &self.registry,
                         self.auth_manager.as_ref(),
+                        authenticated_user_id.as_deref(),
                         self.renderer.as_ref(),
                     )
                     .await

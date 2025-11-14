@@ -39,9 +39,17 @@ async fn test_store_handle_valid_event_is_routed() {
     let (mut _reader, mut writer) = duplex(1024);
 
     // Call the handler
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
-        .await
-        .expect("handler should not fail");
+    handle(
+        &cmd,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut writer,
+        &JsonRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // Confirm message was routed to shard
     let shard = shard_manager.get_shard("ctx1");
@@ -108,9 +116,17 @@ async fn test_store_normalizes_datetime_rfc3339_to_epoch_seconds() {
         .create();
 
     let (mut _reader, mut writer) = duplex(1024);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
-        .await
-        .expect("handler should not fail");
+    handle(
+        &cmd,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut writer,
+        &JsonRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     let shard = shard_manager.get_shard("ctx-time-norm-1");
     let (tx, mut rx) = mpsc::channel(1);
@@ -165,9 +181,17 @@ async fn test_store_normalizes_datetime_integer_units() {
         .with_payload(serde_json::json!({ "id": 1, "created_at": 1_600_000_000 }))
         .create();
     let (mut _r1, mut w1) = duplex(1024);
-    handle(&cmd1, &shard_manager, &registry, &mut w1, &JsonRenderer)
-        .await
-        .unwrap();
+    handle(
+        &cmd1,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut w1,
+        &JsonRenderer,
+    )
+    .await
+    .unwrap();
 
     // milliseconds
     let cmd2 = CommandFactory::store()
@@ -176,9 +200,17 @@ async fn test_store_normalizes_datetime_integer_units() {
         .with_payload(serde_json::json!({ "id": 2, "created_at": 1_600_000_000_000u64 }))
         .create();
     let (mut _r2, mut w2) = duplex(1024);
-    handle(&cmd2, &shard_manager, &registry, &mut w2, &JsonRenderer)
-        .await
-        .unwrap();
+    handle(
+        &cmd2,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut w2,
+        &JsonRenderer,
+    )
+    .await
+    .unwrap();
 
     // microseconds
     let cmd3 = CommandFactory::store()
@@ -187,9 +219,17 @@ async fn test_store_normalizes_datetime_integer_units() {
         .with_payload(serde_json::json!({ "id": 3, "created_at": 1_600_000_000_000_000u64 }))
         .create();
     let (mut _r3, mut w3) = duplex(1024);
-    handle(&cmd3, &shard_manager, &registry, &mut w3, &JsonRenderer)
-        .await
-        .unwrap();
+    handle(
+        &cmd3,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut w3,
+        &JsonRenderer,
+    )
+    .await
+    .unwrap();
 
     // nanoseconds
     let cmd4 = CommandFactory::store()
@@ -198,9 +238,17 @@ async fn test_store_normalizes_datetime_integer_units() {
         .with_payload(serde_json::json!({ "id": 4, "created_at": 1_600_000_000_000_000_000u64 }))
         .create();
     let (mut _r4, mut w4) = duplex(1024);
-    handle(&cmd4, &shard_manager, &registry, &mut w4, &JsonRenderer)
-        .await
-        .unwrap();
+    handle(
+        &cmd4,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut w4,
+        &JsonRenderer,
+    )
+    .await
+    .unwrap();
 
     // float seconds (floor)
     let cmd5 = CommandFactory::store()
@@ -209,9 +257,17 @@ async fn test_store_normalizes_datetime_integer_units() {
         .with_payload(serde_json::json!({ "id": 5, "created_at": 1_600_000_000.9 }))
         .create();
     let (mut _r5, mut w5) = duplex(1024);
-    handle(&cmd5, &shard_manager, &registry, &mut w5, &JsonRenderer)
-        .await
-        .unwrap();
+    handle(
+        &cmd5,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut w5,
+        &JsonRenderer,
+    )
+    .await
+    .unwrap();
 
     // Query and verify normalization results
     for (ctx, expected) in [
@@ -283,9 +339,17 @@ async fn test_store_normalizes_date_string_to_midnight() {
         .create();
 
     let (mut _reader, mut writer) = duplex(1024);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
-        .await
-        .expect("handler should not fail");
+    handle(
+        &cmd,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut writer,
+        &JsonRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     let shard = shard_manager.get_shard("ctx-date-norm-1");
     let (tx, mut rx) = mpsc::channel(1);
@@ -343,9 +407,17 @@ async fn test_store_optional_datetime_null_passes() {
         .create();
 
     let (mut _reader, mut writer) = duplex(1024);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
-        .await
-        .expect("handler should not fail");
+    handle(
+        &cmd,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut writer,
+        &JsonRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     let shard = shard_manager.get_shard("ctx-optional-1");
     let (tx, mut rx) = mpsc::channel(1);
@@ -400,9 +472,17 @@ async fn test_store_rejects_invalid_time_string() {
         .create();
 
     let (mut reader, mut writer) = duplex(1024);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
-        .await
-        .unwrap();
+    handle(
+        &cmd,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut writer,
+        &JsonRenderer,
+    )
+    .await
+    .unwrap();
 
     let mut response = vec![0u8; 1024];
     let n = reader.read(&mut response).await.unwrap();
@@ -433,9 +513,17 @@ async fn test_store_handle_rejects_empty_event_type() {
 
     let (mut reader, mut writer) = duplex(1024);
 
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
-        .await
-        .unwrap();
+    handle(
+        &cmd,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut writer,
+        &JsonRenderer,
+    )
+    .await
+    .unwrap();
 
     let mut response = vec![0u8; 1024];
     let n = reader.read(&mut response).await.unwrap();
@@ -467,9 +555,17 @@ async fn test_store_handle_rejects_empty_context_id() {
 
     let (mut reader, mut writer) = duplex(1024);
 
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
-        .await
-        .unwrap();
+    handle(
+        &cmd,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut writer,
+        &JsonRenderer,
+    )
+    .await
+    .unwrap();
 
     let mut response = vec![0u8; 1024];
     let n = reader.read(&mut response).await.unwrap();
@@ -497,9 +593,17 @@ async fn test_store_handle_rejects_undefined_schema() {
 
     let (mut reader, mut writer) = duplex(1024);
 
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
-        .await
-        .unwrap();
+    handle(
+        &cmd,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut writer,
+        &JsonRenderer,
+    )
+    .await
+    .unwrap();
 
     let mut response = vec![0u8; 1024];
     let n = reader.read(&mut response).await.unwrap();
@@ -530,9 +634,17 @@ async fn test_store_handle_rejects_missing_field() {
 
     let (mut reader, mut writer) = duplex(1024);
 
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
-        .await
-        .unwrap();
+    handle(
+        &cmd,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut writer,
+        &JsonRenderer,
+    )
+    .await
+    .unwrap();
 
     let mut response = vec![0u8; 1024];
     let n = reader.read(&mut response).await.unwrap();
@@ -563,9 +675,17 @@ async fn test_store_handle_rejects_extra_fields_in_payload() {
 
     let (mut reader, mut writer) = duplex(1024);
 
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
-        .await
-        .unwrap();
+    handle(
+        &cmd,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut writer,
+        &JsonRenderer,
+    )
+    .await
+    .unwrap();
 
     let mut response = vec![0u8; 1024];
     let n = reader.read(&mut response).await.unwrap();
@@ -597,9 +717,17 @@ async fn test_store_handle_accepts_missing_optional_field() {
 
     let (mut reader, mut writer) = duplex(1024);
 
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
-        .await
-        .expect("handler should not fail");
+    handle(
+        &cmd,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut writer,
+        &JsonRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     let mut response = vec![0u8; 1024];
     let n = reader.read(&mut response).await.unwrap();
@@ -635,9 +763,17 @@ async fn test_store_handle_accepts_datetime_string_field() {
         .create();
 
     let (mut _reader, mut writer) = duplex(1024);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
-        .await
-        .expect("handler should not fail");
+    handle(
+        &cmd,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut writer,
+        &JsonRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // Query back and ensure the row exists and carries the field
     let shard = shard_manager.get_shard("ctx-time-1");
@@ -697,9 +833,17 @@ async fn test_store_handle_accepts_date_string_field() {
         .create();
 
     let (mut _reader, mut writer) = duplex(1024);
-    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
-        .await
-        .expect("handler should not fail");
+    handle(
+        &cmd,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut writer,
+        &JsonRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     let shard = shard_manager.get_shard("ctx-date-1");
     let (tx, mut rx) = mpsc::channel(1);
@@ -730,4 +874,141 @@ async fn test_store_handle_accepts_date_string_field() {
         }
         _ => panic!("Expected selection result, got {:?}", result),
     }
+}
+
+#[tokio::test]
+async fn test_store_handler_bypass_auth_allows_storage() {
+    use crate::logging::init_for_tests;
+    use crate::engine::auth::AuthManager;
+    use std::sync::Arc;
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("bypass_event", &[("id", "int")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+
+    let shard_manager = Arc::new(ShardManager::new(1, base_dir, wal_dir).await);
+    let auth_manager = Arc::new(AuthManager::new(Arc::clone(&shard_manager)));
+
+    let cmd = CommandFactory::store()
+        .with_event_type("bypass_event")
+        .with_payload(serde_json::json!({ "id": 999 }))
+        .create();
+
+    let (_reader, mut writer) = duplex(1024);
+
+    // Test with bypass user (should succeed even without write permission)
+    handle(
+        &cmd,
+        shard_manager.as_ref(),
+        &registry,
+        Some(&auth_manager),
+        Some("bypass"),
+        &mut writer,
+        &JsonRenderer,
+    )
+    .await
+    .expect("handler should not fail");
+
+    // Verify event was stored
+    let shard = shard_manager.get_shard("ctx1");
+    let (tx, mut rx) = mpsc::channel(1);
+    shard
+        .tx
+        .send(ShardMessage::Query {
+            command: CommandFactory::query()
+                .with_event_type("bypass_event")
+                .with_context_id("ctx1")
+                .create(),
+            metadata: None,
+            tx,
+            registry: registry.clone(),
+        })
+        .await
+        .unwrap();
+
+    let result = timeout(Duration::from_secs(1), rx.recv())
+        .await
+        .expect("timeout waiting for result")
+        .expect("no data");
+
+    match result {
+        QueryResult::Selection(selection) => {
+            assert_eq!(selection.rows[0][3].to_json()["id"], json!(999));
+        }
+        _ => panic!("Expected selection result, got {:?}", result),
+    }
+}
+
+#[tokio::test]
+async fn test_store_handler_bypass_auth_vs_regular_user() {
+    use crate::logging::init_for_tests;
+    use crate::engine::auth::AuthManager;
+    use std::sync::Arc;
+    use tokio::io::AsyncReadExt;
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("test_event", &[("id", "int")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+
+    let shard_manager = Arc::new(ShardManager::new(1, base_dir, wal_dir).await);
+    let auth_manager = Arc::new(AuthManager::new(Arc::clone(&shard_manager)));
+
+    // Create a regular user without write permission
+    auth_manager
+        .create_user("regular_user".to_string(), Some("secret".to_string()))
+        .await
+        .unwrap();
+
+    let cmd = CommandFactory::store()
+        .with_event_type("test_event")
+        .with_payload(serde_json::json!({ "id": 123 }))
+        .create();
+
+    // Test with regular user (should fail - no write permission)
+    let (mut reader1, mut writer1) = duplex(1024);
+    handle(
+        &cmd,
+        shard_manager.as_ref(),
+        &registry,
+        Some(&auth_manager),
+        Some("regular_user"),
+        &mut writer1,
+        &JsonRenderer,
+    )
+    .await
+    .unwrap();
+
+    let mut response = vec![0u8; 1024];
+    let n = reader1.read(&mut response).await.unwrap();
+    let msg = String::from_utf8_lossy(&response[..n]);
+    assert!(msg.contains("403") || msg.contains("Forbidden"));
+    assert!(msg.contains("Write permission denied"));
+
+    // Test with bypass user (should succeed)
+    let (_reader2, mut writer2) = duplex(1024);
+    handle(
+        &cmd,
+        shard_manager.as_ref(),
+        &registry,
+        Some(&auth_manager),
+        Some("bypass"),
+        &mut writer2,
+        &JsonRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 }

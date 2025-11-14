@@ -23,6 +23,10 @@ pub struct SchemaConfig {
 #[derive(Serialize, Deserialize)]
 pub struct AuthConfig {
     pub bypass_auth: bool,
+    #[serde(default)]
+    pub initial_admin_user: Option<String>,
+    #[serde(default)]
+    pub initial_admin_key: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -115,7 +119,11 @@ fn derive_paths(name: &str) -> TestPaths {
 /// Construct the default test configuration for a scenario, derived from its paths.
 fn default_test_config(paths: &TestPaths) -> TestConfig {
     TestConfig {
-        auth: AuthConfig { bypass_auth: true },
+        auth: AuthConfig {
+            bypass_auth: true,
+            initial_admin_user: None,
+            initial_admin_key: None,
+        },
         time: TimeConfig {
             timezone: "UTC".to_string(),
             week_start: "Mon".to_string(),

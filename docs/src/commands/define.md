@@ -10,6 +10,10 @@ Register the schema for an event type. `STORE` payloads must conform to this sch
 DEFINE <event_type:WORD> [ AS <version:NUMBER> ] FIELDS { "key_1": "type_1", ... }
 ```
 
+## Constraints
+
+- Requires authentication and admin role.
+
 ## Field pairs
 
 - Keys can be STRING or WORD. The parser will quote WORD keys when converting to JSON.
@@ -43,6 +47,11 @@ DEFINE subscription FIELDS { plan: ["pro", "basic"] }
 ```sneldb
 DEFINE product FIELDS { name: "string", created_at: "datetime", release_date: "date" }
 ```
+
+## Errors
+
+- `Authentication required`: No user ID provided or authentication failed.
+- `Only admin users can define schemas`: The authenticated user is not an admin.
 
 ## Typical validation errors raised during STORE
 

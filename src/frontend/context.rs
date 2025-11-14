@@ -46,6 +46,10 @@ impl FrontendContext {
             if let Err(e) = auth_mgr.load_from_db().await {
                 tracing::warn!("Failed to load users from DB: {}", e);
             }
+            // Bootstrap admin user if no users exist
+            if let Err(e) = auth_mgr.bootstrap_admin_user().await {
+                tracing::warn!("Failed to bootstrap admin user: {}", e);
+            }
         }
 
         Arc::new(Self {
@@ -72,6 +76,7 @@ impl FrontendContext {
         fields.insert("secret_key".to_string(), FieldType::String);
         fields.insert("active".to_string(), FieldType::Bool);
         fields.insert("created_at".to_string(), FieldType::U64);
+        fields.insert("roles".to_string(), FieldType::String); // JSON array stored as string
 
         let schema = MiniSchema { fields };
 

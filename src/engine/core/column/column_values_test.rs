@@ -452,7 +452,9 @@ fn get_i64_slice_with_validity_nulls_bitmap_multiple_bytes() {
     assert_eq!(result.0.len(), 10);
     assert_eq!(
         result.1,
-        vec![true, false, true, false, true, false, true, false, true, false]
+        vec![
+            true, false, true, false, true, false, true, false, true, false
+        ]
     );
 }
 

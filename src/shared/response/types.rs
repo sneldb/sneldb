@@ -5,6 +5,8 @@ use std::fmt;
 pub enum StatusCode {
     Ok,
     BadRequest,
+    Unauthorized,
+    Forbidden,
     NotFound,
     InternalError,
     ServiceUnavailable,
@@ -15,6 +17,8 @@ impl StatusCode {
         match self {
             StatusCode::Ok => 200,
             StatusCode::BadRequest => 400,
+            StatusCode::Unauthorized => 401,
+            StatusCode::Forbidden => 403,
             StatusCode::NotFound => 404,
             StatusCode::InternalError => 500,
             StatusCode::ServiceUnavailable => 503,
@@ -25,6 +29,8 @@ impl StatusCode {
         match self {
             StatusCode::Ok => "OK",
             StatusCode::BadRequest => "Bad Request",
+            StatusCode::Unauthorized => "Unauthorized",
+            StatusCode::Forbidden => "Forbidden",
             StatusCode::NotFound => "Not Found",
             StatusCode::InternalError => "Internal Error",
             StatusCode::ServiceUnavailable => "Service Unavailable",
@@ -45,8 +51,10 @@ impl From<hyper::StatusCode> for StatusCode {
             400 => StatusCode::BadRequest,
             404 => StatusCode::NotFound,
             503 => StatusCode::ServiceUnavailable,
-            401 | 403 | 405 => StatusCode::BadRequest, // Map unauthorized, forbidden, method not allowed to bad request
-            _ => StatusCode::InternalError,            // Default to internal error for other codes
+            401 => StatusCode::Unauthorized,
+            403 => StatusCode::Forbidden,
+            405 => StatusCode::BadRequest,  // Method not allowed
+            _ => StatusCode::InternalError, // Default to internal error for other codes
         }
     }
 }

@@ -2,6 +2,7 @@ pub mod batch;
 pub mod create_user;
 pub mod define;
 pub mod flush;
+pub mod grant_permission;
 pub mod list_users;
 pub mod ping;
 pub mod plotql;
@@ -9,7 +10,9 @@ pub mod query;
 pub mod remember;
 pub mod replay;
 pub mod revoke_key;
+pub mod revoke_permission;
 pub mod show;
+pub mod show_permissions;
 pub mod store;
 
 #[cfg(test)]
@@ -20,6 +23,8 @@ mod create_user_tests;
 mod define_tests;
 #[cfg(test)]
 mod flush_tests;
+#[cfg(test)]
+mod grant_permission_tests;
 #[cfg(test)]
 mod list_users_tests;
 #[cfg(test)]
@@ -32,6 +37,10 @@ mod remember_tests;
 mod replay_tests;
 #[cfg(test)]
 mod revoke_key_tests;
+#[cfg(test)]
+mod revoke_permission_tests;
+#[cfg(test)]
+mod show_permissions_tests;
 #[cfg(test)]
 mod show_tests;
 #[cfg(test)]

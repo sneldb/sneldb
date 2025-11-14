@@ -96,6 +96,11 @@ impl SchemaRegistry {
         self.schemas.get(event_type)
     }
 
+    /// Check if a schema exists for the given event_type
+    pub fn has_schema(&self, event_type: &str) -> bool {
+        self.schemas.contains_key(event_type)
+    }
+
     pub fn get_all(&self) -> &HashMap<String, MiniSchema> {
         &self.schemas
     }

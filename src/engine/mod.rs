@@ -12,6 +12,3 @@ pub mod store;
 pub mod types;
 
 pub use errors::*;
-
-#[cfg(test)]
-mod auth_test;

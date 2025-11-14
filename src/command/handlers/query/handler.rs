@@ -4,6 +4,7 @@ use std::sync::Arc;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 use crate::command::types::Command;
+use crate::engine::auth::AuthManager;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
 use crate::shared::response::render::Renderer;
@@ -20,6 +21,8 @@ pub struct QueryCommandHandler<'a, W: AsyncWrite + Unpin> {
     command: &'a Command,
     shard_manager: &'a ShardManager,
     registry: Arc<RwLock<SchemaRegistry>>,
+    auth_manager: Option<&'a Arc<AuthManager>>,
+    user_id: Option<&'a str>,
     writer: &'a mut W,
     renderer: &'a dyn Renderer,
 }
@@ -29,6 +32,8 @@ impl<'a, W: AsyncWrite + Unpin> QueryCommandHandler<'a, W> {
         command: &'a Command,
         shard_manager: &'a ShardManager,
         registry: Arc<RwLock<SchemaRegistry>>,
+        auth_manager: Option<&'a Arc<AuthManager>>,
+        user_id: Option<&'a str>,
         writer: &'a mut W,
         renderer: &'a dyn Renderer,
     ) -> Self {
@@ -36,6 +41,8 @@ impl<'a, W: AsyncWrite + Unpin> QueryCommandHandler<'a, W> {
             command,
             shard_manager,
             registry,
+            auth_manager,
+            user_id,
             writer,
             renderer,
         }
@@ -63,6 +70,34 @@ impl<'a, W: AsyncWrite + Unpin> QueryCommandHandler<'a, W> {
             return self
                 .write_error(StatusCode::BadRequest, "event_type cannot be empty")
                 .await;
+        }
+
+        // Check read permission if auth is enabled
+        // Skip permission check if user_id is "bypass" (bypass_auth mode)
+        if let Some(auth_mgr) = self.auth_manager {
+            if let Some(uid) = self.user_id {
+                // Skip permission checks for bypass user
+                if uid != "bypass" && !auth_mgr.can_read(uid, event_type).await {
+                    warn!(
+                        target: "sneldb::query",
+                        user_id = uid,
+                        event_type,
+                        "Read permission denied"
+                    );
+                    return self
+                        .write_error(
+                            StatusCode::Forbidden,
+                            &format!("Read permission denied for event type '{}'", event_type),
+                        )
+                        .await;
+                }
+            } else {
+                // Authentication required but no user_id provided
+                warn!(target: "sneldb::query", "Authentication required for QUERY command");
+                return self
+                    .write_error(StatusCode::Unauthorized, "Authentication required")
+                    .await;
+            }
         }
 
         if offset.is_some() && limit.is_none() {
