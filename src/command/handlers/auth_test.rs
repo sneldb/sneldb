@@ -18,6 +18,20 @@ async fn create_test_auth_manager() -> (Arc<AuthManager>, tempfile::TempDir) {
     (auth_manager, temp_dir)
 }
 
+/// Helper function to create an admin user for testing
+async fn create_admin_user(auth_manager: &Arc<AuthManager>) -> String {
+    let admin_id = "test_admin";
+    auth_manager
+        .create_user_with_roles(
+            admin_id.to_string(),
+            Some("admin_secret".to_string()),
+            vec!["admin".to_string()],
+        )
+        .await
+        .expect("Failed to create admin user");
+    admin_id.to_string()
+}
+
 #[tokio::test]
 async fn test_create_user_success_without_secret_key() {
     init_for_tests();
@@ -30,9 +44,16 @@ async fn test_create_user_success_without_secret_key() {
 
     let (mut reader, mut writer) = duplex(1024);
 
-    handle(&cmd, &auth_manager, &mut writer, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    let admin_id = create_admin_user(&auth_manager).await;
+    handle(
+        &cmd,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // Read response
     let mut response = vec![0u8; 1024];
@@ -44,11 +65,14 @@ async fn test_create_user_success_without_secret_key() {
     assert!(msg.contains("User 'test_user' created"));
     assert!(msg.contains("Secret key: "));
 
-    // Verify user was created in cache
+    // Verify user was created in cache (admin + test_user = 2 users)
     let users = auth_manager.list_users().await;
-    assert_eq!(users.len(), 1);
-    assert_eq!(users[0].user_id, "test_user");
-    assert!(users[0].active);
+    assert_eq!(users.len(), 2);
+    let test_user = users
+        .iter()
+        .find(|u| u.user_id == "test_user")
+        .expect("test_user should exist");
+    assert!(test_user.active);
 }
 
 #[tokio::test]
@@ -64,9 +88,16 @@ async fn test_create_user_success_with_secret_key() {
 
     let (mut reader, mut writer) = duplex(1024);
 
-    handle(&cmd, &auth_manager, &mut writer, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    let admin_id = create_admin_user(&auth_manager).await;
+    handle(
+        &cmd,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // Read response
     let mut response = vec![0u8; 1024];
@@ -78,12 +109,15 @@ async fn test_create_user_success_with_secret_key() {
     assert!(msg.contains("User 'test_user2' created"));
     assert!(msg.contains(&format!("Secret key: {}", provided_key)));
 
-    // Verify user was created with provided key
+    // Verify user was created with provided key (admin + test_user2 = 2 users)
     let users = auth_manager.list_users().await;
-    assert_eq!(users.len(), 1);
-    assert_eq!(users[0].user_id, "test_user2");
-    assert_eq!(users[0].secret_key, provided_key);
-    assert!(users[0].active);
+    assert_eq!(users.len(), 2);
+    let test_user2 = users
+        .iter()
+        .find(|u| u.user_id == "test_user2")
+        .expect("test_user2 should exist");
+    assert_eq!(test_user2.secret_key, provided_key);
+    assert!(test_user2.active);
 }
 
 #[tokio::test]
@@ -92,15 +126,24 @@ async fn test_create_user_error_user_exists() {
 
     let (auth_manager, _temp_dir) = create_test_auth_manager().await;
 
+    // Create admin user first
+    let admin_id = create_admin_user(&auth_manager).await;
+
     // Create first user
     let cmd1 = Command::CreateUser {
         user_id: "existing_user".to_string(),
         secret_key: None,
     };
     let (_reader1, mut writer1) = duplex(1024);
-    handle(&cmd1, &auth_manager, &mut writer1, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    handle(
+        &cmd1,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer1,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // Try to create same user again
     let cmd2 = Command::CreateUser {
@@ -109,9 +152,15 @@ async fn test_create_user_error_user_exists() {
     };
     let (mut reader2, mut writer2) = duplex(1024);
 
-    handle(&cmd2, &auth_manager, &mut writer2, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    handle(
+        &cmd2,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer2,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // Read response
     let mut response = vec![0u8; 1024];
@@ -122,9 +171,9 @@ async fn test_create_user_error_user_exists() {
     assert!(msg.contains("400"));
     assert!(msg.contains("User already exists: existing_user"));
 
-    // Verify only one user exists
+    // Verify only admin and existing_user exist (2 users)
     let users = auth_manager.list_users().await;
-    assert_eq!(users.len(), 1);
+    assert_eq!(users.len(), 2);
 }
 
 #[tokio::test]
@@ -140,9 +189,16 @@ async fn test_create_user_error_invalid_user_id() {
     };
     let (mut reader, mut writer) = duplex(1024);
 
-    handle(&cmd, &auth_manager, &mut writer, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    let admin_id = create_admin_user(&auth_manager).await;
+    handle(
+        &cmd,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // Read response
     let mut response = vec![0u8; 1024];
@@ -153,9 +209,9 @@ async fn test_create_user_error_invalid_user_id() {
     assert!(msg.contains("400"));
     assert!(msg.contains("Invalid user ID format"));
 
-    // Verify no users were created
+    // Verify no users were created (only admin user exists)
     let users = auth_manager.list_users().await;
-    assert_eq!(users.len(), 0);
+    assert_eq!(users.len(), 1); // Only admin user
 }
 
 #[tokio::test]
@@ -163,6 +219,7 @@ async fn test_create_user_valid_user_id_with_underscore_and_hyphen() {
     init_for_tests();
 
     let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+    let admin_id = create_admin_user(&auth_manager).await;
 
     // Test user IDs with underscore and hyphen (should be valid)
     let test_cases = vec!["user_123", "user-456", "user_123-456", "test-user_name"];
@@ -174,14 +231,20 @@ async fn test_create_user_valid_user_id_with_underscore_and_hyphen() {
         };
         let (_reader, mut writer) = duplex(1024);
 
-        handle(&cmd, &auth_manager, &mut writer, &UnixRenderer)
-            .await
-            .expect("handler should not fail");
+        handle(
+            &cmd,
+            &auth_manager,
+            Some(&admin_id),
+            &mut writer,
+            &UnixRenderer,
+        )
+        .await
+        .expect("handler should not fail");
     }
 
-    // Verify all users were created
+    // Verify all users were created (admin + test users)
     let users = auth_manager.list_users().await;
-    assert_eq!(users.len(), test_cases.len());
+    assert_eq!(users.len(), test_cases.len() + 1); // Admin user + test users
 }
 
 #[tokio::test]
@@ -196,14 +259,26 @@ async fn test_revoke_key_success() {
         secret_key: None,
     };
     let (_reader1, mut writer1) = duplex(1024);
-    handle(&create_cmd, &auth_manager, &mut writer1, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    let admin_id = create_admin_user(&auth_manager).await;
+    handle(
+        &create_cmd,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer1,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
-    // Verify user is active
+    // Verify user is active (admin + test user)
     let users_before = auth_manager.list_users().await;
-    assert_eq!(users_before.len(), 1);
-    assert!(users_before[0].active);
+    assert_eq!(users_before.len(), 2); // Admin + test user
+    // Find the test user (not admin)
+    let test_user = users_before
+        .iter()
+        .find(|u| u.user_id == "user_to_revoke")
+        .unwrap();
+    assert!(test_user.active);
 
     // Revoke the key
     let revoke_cmd = Command::RevokeKey {
@@ -211,9 +286,15 @@ async fn test_revoke_key_success() {
     };
     let (mut reader2, mut writer2) = duplex(1024);
 
-    handle(&revoke_cmd, &auth_manager, &mut writer2, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    handle(
+        &revoke_cmd,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer2,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // Read response
     let mut response = vec![0u8; 1024];
@@ -224,11 +305,15 @@ async fn test_revoke_key_success() {
     assert!(msg.contains("200 OK"));
     assert!(msg.contains("Key revoked for user 'user_to_revoke'"));
 
-    // Verify user is now inactive
+    // Verify user is now inactive (admin + revoked user)
     let users_after = auth_manager.list_users().await;
-    assert_eq!(users_after.len(), 1);
-    assert!(!users_after[0].active);
-    assert_eq!(users_after[0].user_id, "user_to_revoke");
+    assert_eq!(users_after.len(), 2); // Admin + revoked user
+    // Find the revoked user (not admin)
+    let revoked_user = users_after
+        .iter()
+        .find(|u| u.user_id == "user_to_revoke")
+        .unwrap();
+    assert!(!revoked_user.active);
 }
 
 #[tokio::test]
@@ -243,9 +328,16 @@ async fn test_revoke_key_error_user_not_found() {
     };
     let (mut reader, mut writer) = duplex(1024);
 
-    handle(&cmd, &auth_manager, &mut writer, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    let admin_id = create_admin_user(&auth_manager).await;
+    handle(
+        &cmd,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // Read response
     let mut response = vec![0u8; 1024];
@@ -266,18 +358,25 @@ async fn test_list_users_empty() {
     let cmd = Command::ListUsers;
     let (mut reader, mut writer) = duplex(1024);
 
-    handle(&cmd, &auth_manager, &mut writer, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    let admin_id = create_admin_user(&auth_manager).await;
+    handle(
+        &cmd,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // Read response
     let mut response = vec![0u8; 1024];
     let n = reader.read(&mut response).await.unwrap();
     let msg = String::from_utf8_lossy(&response[..n]);
 
-    // Verify response contains "No users found"
+    // Verify response contains admin user (since we created one)
     assert!(msg.contains("200 OK"));
-    assert!(msg.contains("No users found"));
+    assert!(msg.contains("test_admin")); // Admin user should be listed
 }
 
 #[tokio::test]
@@ -285,6 +384,7 @@ async fn test_list_users_with_multiple_users() {
     init_for_tests();
 
     let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+    let admin_id = create_admin_user(&auth_manager).await;
 
     // Create multiple users
     let users = vec!["user1", "user2", "user3"];
@@ -294,18 +394,30 @@ async fn test_list_users_with_multiple_users() {
             secret_key: None,
         };
         let (_reader, mut writer) = duplex(1024);
-        handle(&create_cmd, &auth_manager, &mut writer, &UnixRenderer)
-            .await
-            .expect("handler should not fail");
+        handle(
+            &create_cmd,
+            &auth_manager,
+            Some(&admin_id),
+            &mut writer,
+            &UnixRenderer,
+        )
+        .await
+        .expect("handler should not fail");
     }
 
     // List users
     let list_cmd = Command::ListUsers;
     let (mut reader, mut writer) = duplex(1024);
 
-    handle(&list_cmd, &auth_manager, &mut writer, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    handle(
+        &list_cmd,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // Read response
     let mut response = vec![0u8; 1024];
@@ -332,35 +444,61 @@ async fn test_list_users_shows_active_and_inactive() {
         secret_key: None,
     };
     let (_reader1, mut writer1) = duplex(1024);
-    handle(&create_cmd1, &auth_manager, &mut writer1, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    let admin_id = create_admin_user(&auth_manager).await;
+    handle(
+        &create_cmd1,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer1,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     let create_cmd2 = Command::CreateUser {
         user_id: "inactive_user".to_string(),
         secret_key: None,
     };
     let (_reader2, mut writer2) = duplex(1024);
-    handle(&create_cmd2, &auth_manager, &mut writer2, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    handle(
+        &create_cmd2,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer2,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // Revoke one user's key
     let revoke_cmd = Command::RevokeKey {
         user_id: "inactive_user".to_string(),
     };
     let (_reader3, mut writer3) = duplex(1024);
-    handle(&revoke_cmd, &auth_manager, &mut writer3, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    handle(
+        &revoke_cmd,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer3,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // List users
     let list_cmd = Command::ListUsers;
     let (mut reader, mut writer) = duplex(1024);
 
-    handle(&list_cmd, &auth_manager, &mut writer, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    // Use existing admin_id, don't create another one
+    handle(
+        &list_cmd,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // Read response
     let mut response = vec![0u8; 1024];
@@ -389,9 +527,16 @@ async fn test_invalid_command_variant() {
     };
     let (mut reader, mut writer) = duplex(1024);
 
-    handle(&cmd, &auth_manager, &mut writer, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    let admin_id = create_admin_user(&auth_manager).await;
+    handle(
+        &cmd,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // Read response
     let mut response = vec![0u8; 1024];
@@ -416,9 +561,16 @@ async fn test_response_formatting_unix_renderer() {
     };
     let (mut reader, mut writer) = duplex(1024);
 
-    handle(&cmd, &auth_manager, &mut writer, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    let admin_id = create_admin_user(&auth_manager).await;
+    handle(
+        &cmd,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // Read response
     let mut response = vec![0u8; 1024];
@@ -443,18 +595,31 @@ async fn test_create_user_then_revoke_then_create_again() {
         secret_key: None,
     };
     let (_reader1, mut writer1) = duplex(1024);
-    handle(&create_cmd1, &auth_manager, &mut writer1, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    let admin_id = create_admin_user(&auth_manager).await;
+    handle(
+        &create_cmd1,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer1,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // Revoke key
     let revoke_cmd = Command::RevokeKey {
         user_id: "recreate_user".to_string(),
     };
     let (_reader2, mut writer2) = duplex(1024);
-    handle(&revoke_cmd, &auth_manager, &mut writer2, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    handle(
+        &revoke_cmd,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer2,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // Try to create same user again (should fail - user still exists)
     let create_cmd2 = Command::CreateUser {
@@ -463,9 +628,15 @@ async fn test_create_user_then_revoke_then_create_again() {
     };
     let (mut reader3, mut writer3) = duplex(1024);
 
-    handle(&create_cmd2, &auth_manager, &mut writer3, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    handle(
+        &create_cmd2,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer3,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // Read response
     let mut response = vec![0u8; 1024];
@@ -490,9 +661,16 @@ async fn test_create_user_empty_user_id() {
     };
     let (mut reader, mut writer) = duplex(1024);
 
-    handle(&cmd, &auth_manager, &mut writer, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    let admin_id = create_admin_user(&auth_manager).await;
+    handle(
+        &cmd,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // Read response
     let mut response = vec![0u8; 1024];
@@ -516,9 +694,16 @@ async fn test_revoke_key_empty_user_id() {
     };
     let (mut reader, mut writer) = duplex(1024);
 
-    handle(&cmd, &auth_manager, &mut writer, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    let admin_id = create_admin_user(&auth_manager).await;
+    handle(
+        &cmd,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // Read response
     let mut response = vec![0u8; 1024];
@@ -542,9 +727,16 @@ async fn test_multiple_operations_sequence() {
         secret_key: Some("key1".to_string()),
     };
     let (_reader1, mut writer1) = duplex(1024);
-    handle(&cmd1, &auth_manager, &mut writer1, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    let admin_id = create_admin_user(&auth_manager).await;
+    handle(
+        &cmd1,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer1,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // Create user2
     let cmd2 = Command::CreateUser {
@@ -552,16 +744,28 @@ async fn test_multiple_operations_sequence() {
         secret_key: Some("key2".to_string()),
     };
     let (_reader2, mut writer2) = duplex(1024);
-    handle(&cmd2, &auth_manager, &mut writer2, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    handle(
+        &cmd2,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer2,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // List users (should show 2)
     let list_cmd = Command::ListUsers;
     let (mut reader3, mut writer3) = duplex(1024);
-    handle(&list_cmd, &auth_manager, &mut writer3, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    handle(
+        &list_cmd,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer3,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     let mut response = vec![0u8; 1024];
     let n = reader3.read(&mut response).await.unwrap();
@@ -574,16 +778,28 @@ async fn test_multiple_operations_sequence() {
         user_id: "user1".to_string(),
     };
     let (_reader4, mut writer4) = duplex(1024);
-    handle(&revoke_cmd, &auth_manager, &mut writer4, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    handle(
+        &revoke_cmd,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer4,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     // List users again (should still show 2, but user1 inactive)
     let list_cmd2 = Command::ListUsers;
     let (mut reader5, mut writer5) = duplex(1024);
-    handle(&list_cmd2, &auth_manager, &mut writer5, &UnixRenderer)
-        .await
-        .expect("handler should not fail");
+    handle(
+        &list_cmd2,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer5,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
 
     let mut response2 = vec![0u8; 1024];
     let n2 = reader5.read(&mut response2).await.unwrap();
@@ -592,4 +808,96 @@ async fn test_multiple_operations_sequence() {
     assert!(msg2.contains("user2"));
     assert!(msg2.contains("inactive"));
     assert!(msg2.contains("active"));
+}
+
+#[tokio::test]
+async fn test_auth_handler_bypass_auth_allows_user_management() {
+    init_for_tests();
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+
+    // Test that bypass user can create users (should succeed even without admin role)
+    let cmd = Command::CreateUser {
+        user_id: "bypass_created_user".to_string(),
+        secret_key: None,
+    };
+
+    let (mut reader, mut writer) = duplex(1024);
+
+    handle(
+        &cmd,
+        &auth_manager,
+        Some("bypass"),
+        &mut writer,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
+
+    // Read response
+    let mut response = vec![0u8; 1024];
+    let n = reader.read(&mut response).await.unwrap();
+    let msg = String::from_utf8_lossy(&response[..n]);
+
+    // Verify success response
+    assert!(msg.contains("200 OK"));
+    assert!(msg.contains("User 'bypass_created_user' created"));
+
+    // Verify user was created
+    let users = auth_manager.list_users().await;
+    assert!(users.iter().any(|u| u.user_id == "bypass_created_user"));
+}
+
+#[tokio::test]
+async fn test_auth_handler_bypass_auth_vs_regular_user() {
+    init_for_tests();
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+
+    // Create a regular (non-admin) user
+    auth_manager
+        .create_user("regular_user".to_string(), Some("secret".to_string()))
+        .await
+        .unwrap();
+
+    let cmd = Command::CreateUser {
+        user_id: "test_user".to_string(),
+        secret_key: None,
+    };
+
+    // Test with regular user (should fail - not admin)
+    let (mut reader1, mut writer1) = duplex(1024);
+    handle(
+        &cmd,
+        &auth_manager,
+        Some("regular_user"),
+        &mut writer1,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
+
+    let mut response = vec![0u8; 1024];
+    let n = reader1.read(&mut response).await.unwrap();
+    let msg = String::from_utf8_lossy(&response[..n]);
+    assert!(msg.contains("403") || msg.contains("Forbidden"));
+    assert!(msg.contains("Only admin users can manage users"));
+
+    // Test with bypass user (should succeed)
+    let (mut reader2, mut writer2) = duplex(1024);
+    handle(
+        &cmd,
+        &auth_manager,
+        Some("bypass"),
+        &mut writer2,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
+
+    let mut response2 = vec![0u8; 1024];
+    let n2 = reader2.read(&mut response2).await.unwrap();
+    let msg2 = String::from_utf8_lossy(&response2[..n2]);
+    assert!(msg2.contains("200 OK"));
+    assert!(msg2.contains("User 'test_user' created"));
 }

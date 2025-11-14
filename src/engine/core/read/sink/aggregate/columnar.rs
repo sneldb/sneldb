@@ -1,8 +1,8 @@
 use super::group_key::GroupKey;
+use crate::command::types::TimeGranularity;
 use crate::engine::core::column::column_values::ColumnValues;
 use crate::engine::core::read::aggregate::ops::AggregatorImpl;
 use crate::engine::core::read::aggregate::plan::AggregateOpSpec;
-use crate::command::types::TimeGranularity;
 use ahash::RandomState as AHashRandomState;
 use std::collections::HashMap;
 
@@ -64,7 +64,10 @@ impl ColumnarProcessor {
         };
 
         let entry = groups.entry(default_key).or_insert_with(|| {
-            specs.iter().map(|s| AggregatorImpl::from_spec(s)).collect::<Vec<_>>()
+            specs
+                .iter()
+                .map(|s| AggregatorImpl::from_spec(s))
+                .collect::<Vec<_>>()
         });
 
         for agg in entry.iter_mut() {
@@ -86,16 +89,15 @@ impl ColumnarProcessor {
         group_limit: Option<usize>,
     ) {
         // Step 1: Compute group keys and partition by prehash
-        let partitioned_groups =
-            Self::compute_and_partition_by_prehash(
-                time_bucket,
-                group_by,
-                time_field,
-                column_indices,
-                start,
-                end,
-                columns,
-            );
+        let partitioned_groups = Self::compute_and_partition_by_prehash(
+            time_bucket,
+            group_by,
+            time_field,
+            column_indices,
+            start,
+            end,
+            columns,
+        );
 
         // Step 2: Process each group's rows using columnar processing
         Self::process_groups_columnarly_by_prehash(
@@ -145,16 +147,19 @@ impl ColumnarProcessor {
                 })
                 .or_insert_with(|| {
                     // Only create GroupKey when we encounter a new unique prehash
-                    let key = prehash_to_key.entry(prehash).or_insert_with(|| {
-                        GroupKey::from_row_with_indices(
-                            time_bucket,
-                            group_by,
-                            time_field,
-                            columns,
-                            column_indices,
-                            row_idx,
-                        )
-                    }).clone();
+                    let key = prehash_to_key
+                        .entry(prehash)
+                        .or_insert_with(|| {
+                            GroupKey::from_row_with_indices(
+                                time_bucket,
+                                group_by,
+                                time_field,
+                                columns,
+                                column_indices,
+                                row_idx,
+                            )
+                        })
+                        .clone();
 
                     let mut row_indices = Vec::with_capacity(estimated_capacity);
                     row_indices.push(row_idx);
@@ -188,9 +193,9 @@ impl ColumnarProcessor {
                 }
             }
 
-            let entry = groups.entry(key).or_insert_with(|| {
-                specs.iter().map(|s| AggregatorImpl::from_spec(s)).collect()
-            });
+            let entry = groups
+                .entry(key)
+                .or_insert_with(|| specs.iter().map(|s| AggregatorImpl::from_spec(s)).collect());
 
             Self::process_contiguous_ranges(&row_indices, entry, columns);
         }
@@ -228,4 +233,3 @@ impl ColumnarProcessor {
         }
     }
 }
-

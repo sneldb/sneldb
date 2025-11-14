@@ -1,4 +1,5 @@
 use crate::command::types::Command;
+use crate::engine::auth::AuthManager;
 use crate::engine::core::{Event, EventId};
 use crate::engine::schema::FieldType;
 use crate::engine::schema::PayloadTimeNormalizer;
@@ -22,6 +23,8 @@ pub async fn handle<W: AsyncWrite + Unpin>(
     cmd: &Command,
     shard_manager: &ShardManager,
     registry: &Arc<RwLock<SchemaRegistry>>,
+    auth_manager: Option<&Arc<AuthManager>>,
+    user_id: Option<&str>,
     writer: &mut W,
     renderer: &dyn Renderer,
 ) -> std::io::Result<()> {
@@ -40,6 +43,39 @@ pub async fn handle<W: AsyncWrite + Unpin>(
         )
         .await;
     };
+
+    // Check write permission if auth is enabled
+    // Skip permission check if user_id is "bypass" (bypass_auth mode)
+    if let Some(auth_mgr) = auth_manager {
+        if let Some(uid) = user_id {
+            // Skip permission checks for bypass user
+            if uid != "bypass" && !auth_mgr.can_write(uid, event_type).await {
+                warn!(
+                    target: "sneldb::store",
+                    user_id = uid,
+                    event_type,
+                    "Write permission denied"
+                );
+                return write_error(
+                    writer,
+                    renderer,
+                    StatusCode::Forbidden,
+                    &format!("Write permission denied for event type '{}'", event_type),
+                )
+                .await;
+            }
+        } else {
+            // Authentication required but no user_id provided
+            warn!(target: "sneldb::store", "Authentication required for STORE command");
+            return write_error(
+                writer,
+                renderer,
+                StatusCode::Unauthorized,
+                "Authentication required",
+            )
+            .await;
+        }
+    }
 
     if event_type.trim().is_empty() {
         warn!(target: "sneldb::store", "Missing event_type");

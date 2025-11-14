@@ -4075,5 +4075,470 @@
       { "kind": "include_none", "value": ["ctx2"] },
       { "kind": "include", "value": "\"type\":\"end\"" }
     ]
+  },
+  {
+    "name": "permissions_grant_read_write_single_event_type",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
+      "CREATE USER testuser WITH KEY \"user-key-123\"",
+      "GRANT READ, WRITE ON orders TO testuser",
+      "SHOW PERMISSIONS FOR testuser"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "orders: read, write" }
+    ]
+  },
+  {
+    "name": "permissions_grant_read_only",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE products FIELDS { \"product_id\": \"int\", \"name\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE products FIELDS { \"product_id\": \"int\", \"name\": \"string\" })",
+      "CREATE USER readonly WITH KEY \"read-key-123\"",
+      "GRANT READ ON products TO readonly",
+      "SHOW PERMISSIONS FOR readonly"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "products: read" },
+      { "kind": "include_none", "value": ["write"] }
+    ]
+  },
+  {
+    "name": "permissions_grant_write_only",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE events FIELDS { \"event_id\": \"int\", \"type\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE events FIELDS { \"event_id\": \"int\", \"type\": \"string\" })",
+      "CREATE USER writeonly WITH KEY \"write-key-123\"",
+      "GRANT WRITE ON events TO writeonly",
+      "SHOW PERMISSIONS FOR writeonly"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "events: write" },
+      { "kind": "include_none", "value": ["read"] }
+    ]
+  },
+  {
+    "name": "permissions_grant_multiple_event_types",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
+      "DEFINE products FIELDS { \"product_id\": \"int\", \"name\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE products FIELDS { \"product_id\": \"int\", \"name\": \"string\" })",
+      "CREATE USER multiuser WITH KEY \"multi-key-123\"",
+      "GRANT READ, WRITE ON orders, products TO multiuser",
+      "SHOW PERMISSIONS FOR multiuser"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "orders: read, write" },
+      { "kind": "include", "value": "products: read, write" }
+    ]
+  },
+  {
+    "name": "permissions_grant_merges_with_existing",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
+      "CREATE USER mergeuser WITH KEY \"merge-key-123\"",
+      "GRANT READ ON orders TO mergeuser",
+      "GRANT WRITE ON orders TO mergeuser",
+      "SHOW PERMISSIONS FOR mergeuser"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "orders: read, write" }
+    ]
+  },
+  {
+    "name": "permissions_revoke_all_permissions",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
+      "CREATE USER revokeuser WITH KEY \"revoke-key-123\"",
+      "GRANT READ, WRITE ON orders TO revokeuser",
+      "REVOKE READ, WRITE ON orders FROM revokeuser",
+      "SHOW PERMISSIONS FOR revokeuser"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "has no permissions" }
+    ]
+  },
+  {
+    "name": "permissions_revoke_partial_read",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
+      "CREATE USER partialuser WITH KEY \"partial-key-123\"",
+      "GRANT READ, WRITE ON orders TO partialuser",
+      "REVOKE READ ON orders FROM partialuser",
+      "SHOW PERMISSIONS FOR partialuser"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "orders: write" },
+      { "kind": "include_none", "value": ["read"] }
+    ]
+  },
+  {
+    "name": "permissions_revoke_partial_write",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
+      "CREATE USER partialwrite WITH KEY \"partialwrite-key-123\"",
+      "GRANT READ, WRITE ON orders TO partialwrite",
+      "REVOKE WRITE ON orders FROM partialwrite",
+      "SHOW PERMISSIONS FOR partialwrite"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "orders: read" },
+      { "kind": "include_none", "value": ["orders: write"] }
+    ]
+  },
+  {
+    "name": "permissions_revoke_multiple_event_types",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
+      "DEFINE products FIELDS { \"product_id\": \"int\", \"name\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE products FIELDS { \"product_id\": \"int\", \"name\": \"string\" })",
+      "CREATE USER multirevoke WITH KEY \"multirevoke-key-123\"",
+      "GRANT READ, WRITE ON orders, products TO multirevoke",
+      "REVOKE READ, WRITE ON orders, products FROM multirevoke",
+      "SHOW PERMISSIONS FOR multirevoke"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "has no permissions" }
+    ]
+  },
+  {
+    "name": "permissions_show_empty_permissions",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "CREATE USER emptyuser WITH KEY \"empty-key-123\"",
+      "SHOW PERMISSIONS FOR emptyuser"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "has no permissions" }
+    ]
+  },
+  {
+    "name": "permissions_store_requires_write_permission",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" }",
+      "CREATE USER writer WITH KEY \"writer-key-123\"",
+      "GRANT WRITE ON orders TO writer",
+      "STORE orders FOR ctx1 PAYLOAD {\"order_id\":1,\"status\":\"pending\"} user_id=writer signature=HMAC_SHA256(writer-key-123, STORE orders FOR ctx1 PAYLOAD {\"order_id\":1,\"status\":\"pending\"})"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "OK" }
+    ]
+  },
+  {
+    "name": "permissions_store_denied_without_write",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" }",
+      "CREATE USER nowrite WITH KEY \"nowrite-key-123\"",
+      "GRANT READ ON orders TO nowrite",
+      "STORE orders FOR ctx1 PAYLOAD {\"order_id\":1,\"status\":\"pending\"} user_id=nowrite signature=HMAC_SHA256(nowrite-key-123, STORE orders FOR ctx1 PAYLOAD {\"order_id\":1,\"status\":\"pending\"})"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "403 Write permission denied for event type 'orders'"
+    }
+  },
+  {
+    "name": "permissions_query_requires_read_permission",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE products FIELDS { \"product_id\": \"int\", \"name\": \"string\" }",
+      "STORE products FOR ctx1 PAYLOAD {\"product_id\":1,\"name\":\"Widget\"} user_id=admin signature=HMAC_SHA256(admin-key-123, STORE products FOR ctx1 PAYLOAD {\"product_id\":1,\"name\":\"Widget\"})",
+      "CREATE USER reader WITH KEY \"reader-key-123\"",
+      "GRANT READ ON products TO reader",
+      "QUERY products WHERE product_id=1 user_id=reader signature=HMAC_SHA256(reader-key-123, QUERY products WHERE product_id=1)"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "\"name\":\"Widget\",\"product_id\":1" }
+    ]
+  },
+  {
+    "name": "permissions_query_denied_without_read",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE products FIELDS { \"product_id\": \"int\", \"name\": \"string\" }",
+      "STORE products FOR ctx1 PAYLOAD {\"product_id\":1,\"name\":\"Widget\"} user_id=admin signature=HMAC_SHA256(admin-key-123, STORE products FOR ctx1 PAYLOAD {\"product_id\":1,\"name\":\"Widget\"})",
+      "CREATE USER noread WITH KEY \"noread-key-123\"",
+      "GRANT WRITE ON products TO noread",
+      "QUERY products WHERE product_id=1 user_id=noread signature=HMAC_SHA256(noread-key-123, QUERY products WHERE product_id=1)"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "403 Read permission denied for event type 'products'"
+    }
+  },
+  {
+    "name": "permissions_admin_can_manage_permissions",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
+      "CREATE USER testuser WITH KEY \"test-key-123\"",
+      "GRANT READ, WRITE ON orders TO testuser user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT READ, WRITE ON orders TO testuser)",
+      "SHOW PERMISSIONS FOR testuser user_id=admin signature=HMAC_SHA256(admin-key-123, SHOW PERMISSIONS FOR testuser)"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "orders: read, write" }
+    ]
+  },
+  {
+    "name": "permissions_non_admin_cannot_grant",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
+      "CREATE USER regularuser WITH KEY \"regular-key-123\"",
+      "CREATE USER targetuser WITH KEY \"target-key-123\"",
+      "GRANT READ, WRITE ON orders TO targetuser user_id=regularuser signature=HMAC_SHA256(regular-key-123, GRANT READ, WRITE ON orders TO targetuser)"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "403 Only admin users can manage permissions"
+    }
+  },
+  {
+    "name": "permissions_non_admin_cannot_revoke",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
+      "CREATE USER regularuser WITH KEY \"regular-key-123\"",
+      "CREATE USER targetuser WITH KEY \"target-key-123\"",
+      "GRANT READ, WRITE ON orders TO targetuser user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT READ, WRITE ON orders TO targetuser)",
+      "REVOKE READ, WRITE ON orders FROM targetuser user_id=regularuser signature=HMAC_SHA256(regular-key-123, REVOKE READ, WRITE ON orders FROM targetuser)"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "403 Only admin users can manage permissions"
+    }
+  },
+  {
+    "name": "permissions_non_admin_cannot_show_permissions",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "CREATE USER regularuser WITH KEY \"regular-key-123\"",
+      "CREATE USER targetuser WITH KEY \"target-key-123\"",
+      "SHOW PERMISSIONS FOR targetuser user_id=regularuser signature=HMAC_SHA256(regular-key-123, SHOW PERMISSIONS FOR targetuser)"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "403 Only admin users can manage permissions"
+    }
+  },
+  {
+    "name": "permissions_define_requires_admin",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "CREATE USER regularuser WITH KEY \"regular-key-123\"",
+      "DEFINE test_schema FIELDS { \"id\": \"int\" } user_id=regularuser signature=HMAC_SHA256(regular-key-123, DEFINE test_schema FIELDS { \"id\": \"int\" })"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "403 Only admin users can define schemas"
+    }
+  },
+  {
+    "name": "permissions_admin_can_define_schema",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE test_schema FIELDS { \"id\": \"int\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE test_schema FIELDS { \"id\": \"int\" })"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "OK" }
+    ]
+  },
+  {
+    "name": "permissions_full_workflow_read_write",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
+      "CREATE USER workflowuser WITH KEY \"workflow-key-123\"",
+      "GRANT READ, WRITE ON orders TO workflowuser user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT READ, WRITE ON orders TO workflowuser)",
+      "STORE orders FOR ctx1 PAYLOAD {\"order_id\":1,\"status\":\"pending\"} user_id=workflowuser signature=HMAC_SHA256(workflow-key-123, STORE orders FOR ctx1 PAYLOAD {\"order_id\":1,\"status\":\"pending\"})",
+      "QUERY orders WHERE order_id=1 user_id=workflowuser signature=HMAC_SHA256(workflow-key-123, QUERY orders WHERE order_id=1)"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "pending" }
+    ]
+  },
+  {
+    "name": "permissions_grant_to_nonexistent_user_error",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
+      "GRANT READ, WRITE ON orders TO nonexistent user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT READ, WRITE ON orders TO nonexistent)"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "User not found"
+    }
+  },
+  {
+    "name": "permissions_revoke_from_nonexistent_user_error",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
+      "REVOKE READ, WRITE ON orders FROM nonexistent user_id=admin signature=HMAC_SHA256(admin-key-123, REVOKE READ, WRITE ON orders FROM nonexistent)"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "User not found"
+    }
+  },
+  {
+    "name": "permissions_show_nonexistent_user_error",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "SHOW PERMISSIONS FOR nonexistent user_id=admin signature=HMAC_SHA256(admin-key-123, SHOW PERMISSIONS FOR nonexistent)"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "User not found"
+    }
+  },
+  {
+    "name": "permissions_invalid_permission_name_error",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
+      "CREATE USER testuser WITH KEY \"test-key-123\"",
+      "GRANT EXECUTE ON orders TO testuser user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT EXECUTE ON orders TO testuser)"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "Invalid permission"
+    }
+  },
+  {
+    "name": "permissions_multiple_grants_same_event_type",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
+      "CREATE USER multiuser WITH KEY \"multi-key-123\"",
+      "GRANT READ ON orders TO multiuser user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT READ ON orders TO multiuser)",
+      "GRANT WRITE ON orders TO multiuser user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT WRITE ON orders TO multiuser)",
+      "GRANT READ ON orders TO multiuser user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT READ ON orders TO multiuser)",
+      "SHOW PERMISSIONS FOR multiuser user_id=admin signature=HMAC_SHA256(admin-key-123, SHOW PERMISSIONS FOR multiuser)"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "orders: read, write" }
+    ]
+  },
+  {
+    "name": "permissions_revoke_nonexistent_permission_no_error",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "CREATE USER testuser WITH KEY \"test-key-123\"",
+      "REVOKE READ, WRITE ON nonexistent_event FROM testuser user_id=admin signature=HMAC_SHA256(admin-key-123, REVOKE READ, WRITE ON nonexistent_event FROM testuser)",
+      "SHOW PERMISSIONS FOR testuser user_id=admin signature=HMAC_SHA256(admin-key-123, SHOW PERMISSIONS FOR testuser)"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "has no permissions" }
+    ]
+  },
+  {
+    "name": "permissions_grant_between_commands_takes_effect",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" }",
+      "CREATE USER dynamicuser WITH KEY \"dynamic-key-123\"",
+      "STORE orders FOR ctx1 PAYLOAD {\"order_id\":1,\"status\":\"pending\"} user_id=dynamicuser signature=HMAC_SHA256(dynamic-key-123, STORE orders FOR ctx1 PAYLOAD {\"order_id\":1,\"status\":\"pending\"})",
+      "GRANT WRITE ON orders TO dynamicuser",
+      "STORE orders FOR ctx1 PAYLOAD {\"order_id\":2,\"status\":\"confirmed\"} user_id=dynamicuser signature=HMAC_SHA256(dynamic-key-123, STORE orders FOR ctx1 PAYLOAD {\"order_id\":2,\"status\":\"confirmed\"})"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "403 Write permission denied for event type 'orders'" },
+      { "kind": "include", "value": "200 OK" }
+    ]
+  },
+  {
+    "name": "permissions_grant_read_between_queries_takes_effect",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "DEFINE products FIELDS { \"product_id\": \"int\", \"name\": \"string\" }",
+      "STORE products FOR ctx1 PAYLOAD {\"product_id\":1,\"name\":\"Widget\"} user_id=admin signature=HMAC_SHA256(admin-key-123, STORE products FOR ctx1 PAYLOAD {\"product_id\":1,\"name\":\"Widget\"})",
+      "CREATE USER queryuser WITH KEY \"query-key-123\"",
+      "QUERY products WHERE product_id=1 user_id=queryuser signature=HMAC_SHA256(query-key-123, QUERY products WHERE product_id=1)",
+      "GRANT READ ON products TO queryuser",
+      "QUERY products WHERE product_id=1 user_id=queryuser signature=HMAC_SHA256(query-key-123, QUERY products WHERE product_id=1)"
+    ],
+    "matchers": [
+      { "kind": "include", "value": "403 Read permission denied for event type 'products'" },
+      { "kind": "include", "value": "\"name\":\"Widget\",\"product_id\":1" }
+    ]
+  },
+  {
+    "name": "permissions_grant_to_nonexistent_event_type_error",
+    "config": {
+      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+    },
+    "input_commands": [
+      "CREATE USER testuser WITH KEY \"test-key-123\"",
+      "GRANT READ, WRITE ON nonexistent_event TO testuser user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT READ, WRITE ON nonexistent_event TO testuser)"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "No schema defined for event type 'nonexistent_event'"
+    }
   }
 ]

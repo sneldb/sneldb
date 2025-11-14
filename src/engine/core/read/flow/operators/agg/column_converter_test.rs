@@ -168,10 +168,7 @@ fn column_converter_converts_with_time_bucket() {
     };
     let sink = create_aggregate_sink(&plan);
 
-    let schema = create_batch_schema(vec![
-        ("timestamp", "Timestamp"),
-        ("value", "Integer"),
-    ]);
+    let schema = create_batch_schema(vec![("timestamp", "Timestamp"), ("value", "Integer")]);
     let batch = create_column_batch(
         schema.clone(),
         vec![vec![
@@ -201,10 +198,7 @@ fn column_converter_creates_typed_i64_column() {
     };
     let sink = create_aggregate_sink(&plan);
 
-    let schema = create_batch_schema(vec![
-        ("timestamp", "Timestamp"),
-        ("amount", "Integer"),
-    ]);
+    let schema = create_batch_schema(vec![("timestamp", "Timestamp"), ("amount", "Integer")]);
     let batch = create_column_batch(
         schema.clone(),
         vec![
@@ -245,17 +239,11 @@ fn column_converter_handles_null_in_typed_i64_column() {
     };
     let sink = create_aggregate_sink(&plan);
 
-    let schema = create_batch_schema(vec![
-        ("timestamp", "Timestamp"),
-        ("amount", "Integer"),
-    ]);
+    let schema = create_batch_schema(vec![("timestamp", "Timestamp"), ("amount", "Integer")]);
     let batch = create_column_batch(
         schema.clone(),
         vec![
-            vec![
-                ScalarValue::from(json!(1000_u64)),
-                ScalarValue::Null,
-            ],
+            vec![ScalarValue::from(json!(1000_u64)), ScalarValue::Null],
             vec![
                 ScalarValue::from(json!(2000_u64)),
                 ScalarValue::from(json!(20)),
@@ -286,10 +274,7 @@ fn column_converter_creates_string_column_for_non_i64() {
     };
     let sink = create_aggregate_sink(&plan);
 
-    let schema = create_batch_schema(vec![
-        ("timestamp", "Timestamp"),
-        ("name", "String"),
-    ]);
+    let schema = create_batch_schema(vec![("timestamp", "Timestamp"), ("name", "String")]);
     let batch = create_column_batch(
         schema.clone(),
         vec![
@@ -325,10 +310,7 @@ fn column_converter_creates_string_column_for_mixed_types() {
     };
     let sink = create_aggregate_sink(&plan);
 
-    let schema = create_batch_schema(vec![
-        ("timestamp", "Timestamp"),
-        ("value", "String"),
-    ]);
+    let schema = create_batch_schema(vec![("timestamp", "Timestamp"), ("value", "String")]);
     let batch = create_column_batch(
         schema.clone(),
         vec![
@@ -469,4 +451,3 @@ fn column_converter_converts_all_aggregate_types() {
     assert!(result.contains_key("score"));
     assert!(result.contains_key("name"));
 }
-

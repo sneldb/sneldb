@@ -1,7 +1,7 @@
 use crate::engine::core::read::aggregate::partial::{AggPartial, AggState, GroupKey as PartialKey};
 use crate::engine::core::read::aggregate::plan::AggregateOpSpec;
-use crate::engine::core::read::flow::{BatchSchema, FlowContext, FlowOperatorError};
 use crate::engine::core::read::flow::BatchSender;
+use crate::engine::core::read::flow::{BatchSchema, FlowContext, FlowOperatorError};
 use crate::engine::types::ScalarValue;
 use serde_json;
 use std::sync::Arc;
@@ -142,4 +142,3 @@ impl PartialConverter {
         }
     }
 }
-

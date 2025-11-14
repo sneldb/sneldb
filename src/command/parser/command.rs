@@ -30,9 +30,6 @@ pub fn parse_command(input: &str) -> Result<Command, ParseError> {
             commands::query::parse(input)
         }
         Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("FIND") => commands::query::parse(input),
-        Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("SHOW") => {
-            commands::show::parse(&tokens)
-        }
         Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("REPLAY") => {
             commands::replay::parse(&tokens)
         }
@@ -52,10 +49,40 @@ pub fn parse_command(input: &str) -> Result<Command, ParseError> {
             commands::create_user::parse(&tokens)
         }
         Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("REVOKE") => {
-            commands::revoke_key::parse(&tokens)
+            // Check if it's REVOKE KEY or REVOKE permission
+            if tokens.len() >= 2 {
+                if let Token::Word(word) = &tokens[1] {
+                    if word.eq_ignore_ascii_case("KEY") {
+                        return commands::revoke_key::parse(&tokens);
+                    }
+                }
+            }
+            // Try permission revoke parser
+            commands::revoke_permission::parse(&tokens)
         }
         Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("LIST") => {
             commands::list_users::parse(&tokens)
+        }
+        Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("GRANT") => {
+            commands::grant_permission::parse(&tokens)
+        }
+        Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("SHOW") => {
+            // Check if it's SHOW PERMISSIONS or SHOW MATERIALIZED
+            if tokens.len() >= 2 {
+                if let Token::Word(word) = &tokens[1] {
+                    if word.eq_ignore_ascii_case("PERMISSIONS") {
+                        if tracing::enabled!(tracing::Level::DEBUG) {
+                            debug!(target: "sneldb::parse", "Routing to SHOW PERMISSIONS parser");
+                        }
+                        return commands::show_permissions::parse(&tokens);
+                    }
+                }
+            }
+            // Fall back to show parser (for SHOW MATERIALIZED)
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                debug!(target: "sneldb::parse", "Routing to SHOW parser (not PERMISSIONS)");
+            }
+            commands::show::parse(&tokens)
         }
         _ => {
             warn!(target: "sneldb::parse", input, "Unknown command keyword");

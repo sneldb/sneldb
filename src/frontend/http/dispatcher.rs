@@ -83,39 +83,26 @@ fn extract_auth_from_headers(req: &Request<Incoming>) -> Option<(String, String)
 
 /// Check authentication before parsing command
 /// Supports both header-based (X-Auth-User, X-Auth-Signature) and inline format (user_id:signature:command)
-/// Returns command if authenticated, or None if auth check failed
+/// Returns (command, user_id) if authenticated, or None if auth check failed
 async fn check_auth_with_headers<'a>(
     input: &'a str,
     auth_from_headers: Option<(String, String)>,
     auth_manager: Option<&'a Arc<AuthManager>>,
-) -> Option<&'a str> {
+) -> Option<(&'a str, String)> {
     // Check if authentication is bypassed via config - do this first for performance
     if CONFIG.auth.as_ref().map(|a| a.bypass_auth).unwrap_or(false) {
-        return Some(input);
+        return Some((input, "bypass".to_string()));
     }
 
-    // Cache trimmed input and use case-insensitive byte checks
+    // Cache trimmed input
     let trimmed = input.trim();
-    let trimmed_bytes = trimmed.as_bytes();
 
-    // Auth commands don't require authentication (case-insensitive byte checks)
-    if trimmed_bytes.len() >= 11 && bytes_eq_ignore_ascii_case(&trimmed_bytes[..11], b"CREATE USER")
-    {
-        return Some(input);
-    }
-    if trimmed_bytes.len() >= 10 && bytes_eq_ignore_ascii_case(&trimmed_bytes[..10], b"REVOKE KEY")
-    {
-        return Some(input);
-    }
-    if trimmed_bytes.len() >= 10 && bytes_eq_ignore_ascii_case(&trimmed_bytes[..10], b"LIST USERS")
-    {
-        return Some(input);
-    }
+    // User management commands now require authentication
 
     // If auth manager is not configured, allow all commands
     let auth_mgr = match auth_manager {
         Some(am) => am,
-        None => return Some(input),
+        None => return Some((input, "no-auth".to_string())),
     };
 
     // Try header-based authentication first (for HTTP)
@@ -125,7 +112,7 @@ async fn check_auth_with_headers<'a>(
             .verify_signature(trimmed, &user_id, &signature)
             .await
         {
-            Ok(_) => return Some(input),
+            Ok(_) => return Some((input, user_id)),
             Err(_) => return None,
         }
     }
@@ -135,7 +122,7 @@ async fn check_auth_with_headers<'a>(
         Ok((user_id, signature, command)) => {
             // Verify signature
             match auth_mgr.verify_signature(command, user_id, signature).await {
-                Ok(_) => Some(command),
+                Ok(_) => Some((command, user_id.to_string())),
                 Err(_) => None,
             }
         }
@@ -176,9 +163,9 @@ pub async fn handle_line_command(
     }
 
     // Check authentication before parsing
-    let command_to_parse =
+    let (command_to_parse, authenticated_user_id) =
         match check_auth_with_headers(&input, auth_from_headers, auth_manager.as_ref()).await {
-            Some(cmd) => cmd,
+            Some((cmd, uid)) => (cmd, Some(uid)),
             None => {
                 return render_error("Authentication failed", StatusCode::UNAUTHORIZED, renderer);
             }
@@ -194,6 +181,7 @@ pub async fn handle_line_command(
                 registry,
                 shard_manager,
                 auth_manager.as_ref(),
+                authenticated_user_id.as_deref(),
                 renderer,
             )
             .await;
@@ -234,6 +222,9 @@ pub async fn handle_json_command(
         Ok(json_cmd) => {
             // Check if authentication is bypassed via config
             let bypass_auth = CONFIG.auth.as_ref().map(|a| a.bypass_auth).unwrap_or(false);
+
+            // Extract user_id before potential move
+            let authenticated_user_id = auth_from_headers.as_ref().map(|(uid, _)| uid.clone());
 
             if !bypass_auth {
                 // Check authentication for all commands
@@ -277,6 +268,7 @@ pub async fn handle_json_command(
                 registry,
                 shard_manager,
                 auth_manager.as_ref(),
+                authenticated_user_id.as_deref(),
                 renderer,
             )
             .await;
@@ -298,6 +290,7 @@ async fn dispatch_and_respond(
     registry: Arc<RwLock<SchemaRegistry>>,
     shard_manager: Arc<ShardManager>,
     auth_manager: Option<&Arc<AuthManager>>,
+    user_id: Option<&str>,
     renderer: Arc<dyn Renderer + Send + Sync>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
     let mut output = Vec::new();
@@ -307,6 +300,7 @@ async fn dispatch_and_respond(
         &shard_manager,
         &registry,
         auth_manager,
+        user_id,
         renderer.as_ref(),
     )
     .await;

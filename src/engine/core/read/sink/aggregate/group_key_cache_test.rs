@@ -101,7 +101,11 @@ fn group_key_cache_evicts_when_full() {
 #[test]
 fn group_key_cache_with_bucket_values() {
     let mut cache = GroupKeyCache::new(10);
-    let key = make_group_key(500, Some(86400), vec!["country".to_string(), "region".to_string()]);
+    let key = make_group_key(
+        500,
+        Some(86400),
+        vec!["country".to_string(), "region".to_string()],
+    );
 
     let result = cache.get_or_insert(500, || key.clone());
     assert_eq!(result.bucket, Some(86400));
@@ -152,4 +156,3 @@ fn group_key_cache_large_capacity() {
         assert_eq!(result_mut.groups_str()[0], format!("key_{}", i));
     }
 }
-

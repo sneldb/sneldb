@@ -105,9 +105,17 @@ async fn test_execute_streaming_single_query() {
         .with_payload(serde_json::json!({ "amount": 100 }))
         .create();
     let (mut _r, mut w) = tokio::io::duplex(1024);
-    store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
-        .await
-        .expect("store should succeed");
+    store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .expect("store should succeed");
 
     sleep(Duration::from_millis(200)).await;
 
@@ -155,9 +163,17 @@ async fn test_execute_streaming_two_queries() {
             .with_payload(serde_json::json!({ "amount": amount }))
             .create();
         let (mut _r, mut w) = tokio::io::duplex(1024);
-        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
-            .await
-            .expect("store should succeed");
+        store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            None,
+            None,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(200)).await;
@@ -229,9 +245,17 @@ async fn test_execute_streaming_three_queries() {
             .with_payload(serde_json::json!({ "amount": amount }))
             .create();
         let (mut _r, mut w) = tokio::io::duplex(1024);
-        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
-            .await
-            .expect("store should succeed");
+        store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            None,
+            None,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(200)).await;
@@ -291,9 +315,17 @@ async fn test_execute_streaming_with_breakdown() {
             }))
             .create();
         let (mut _r, mut w) = tokio::io::duplex(1024);
-        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
-            .await
-            .expect("store should succeed");
+        store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            None,
+            None,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(200)).await;
@@ -357,9 +389,17 @@ async fn test_execute_streaming_with_time_bucket() {
             }))
             .create();
         let (mut _r, mut w) = tokio::io::duplex(1024);
-        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
-            .await
-            .expect("store should succeed");
+        store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            None,
+            None,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(200)).await;
@@ -446,9 +486,17 @@ async fn test_execute_streaming_parses_plotql_query() {
             .with_payload(serde_json::json!({ "amount": amount }))
             .create();
         let (mut _r, mut w) = tokio::io::duplex(1024);
-        store::handle(&store_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
-            .await
-            .expect("store should succeed");
+        store::handle(
+            &store_cmd,
+            &shard_manager,
+            &registry,
+            None,
+            None,
+            &mut w,
+            &JsonRenderer,
+        )
+        .await
+        .expect("store should succeed");
     }
 
     sleep(Duration::from_millis(200)).await;

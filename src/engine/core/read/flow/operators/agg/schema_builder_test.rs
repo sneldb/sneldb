@@ -386,4 +386,3 @@ fn schema_builder_orders_columns_correctly() {
     assert_eq!(schema[2].name, "country");
     assert_eq!(schema[3].name, "count");
 }
-

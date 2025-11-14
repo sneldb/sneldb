@@ -4,9 +4,7 @@ use crate::command::types::TimeGranularity;
 use crate::engine::core::read::aggregate::ops::AggregatorImpl;
 use crate::engine::core::read::aggregate::plan::AggregateOpSpec;
 use crate::engine::core::{Event, QueryPlan};
-use crate::test_helpers::factories::{
-    CommandFactory, QueryPlanFactory, SchemaRegistryFactory,
-};
+use crate::test_helpers::factories::{CommandFactory, QueryPlanFactory, SchemaRegistryFactory};
 use ahash::RandomState as AHashRandomState;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -318,4 +316,3 @@ fn finalization_into_partial_converts_group_key_correctly() {
     assert_eq!(partial_key.bucket, Some(172800));
     assert_eq!(partial_key.groups, vec!["US".to_string(), "NY".to_string()]);
 }
-

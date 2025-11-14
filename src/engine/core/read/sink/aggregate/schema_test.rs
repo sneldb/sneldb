@@ -134,4 +134,3 @@ fn schema_cache_duplicate_column_names() {
     assert_eq!(indices.get("a"), Some(&1));
     assert_eq!(indices.get("b"), Some(&2));
 }
-

@@ -97,10 +97,7 @@ async fn test_flush_worker_skips_cleanup_for_empty_memtable() {
         .unwrap();
 
     // Create an empty memtable to flush
-    let empty_memtable = MemTableFactory::new()
-        .with_capacity(10)
-        .create()
-        .unwrap();
+    let empty_memtable = MemTableFactory::new().with_capacity(10).create().unwrap();
 
     assert!(
         empty_memtable.is_empty(),
@@ -214,13 +211,9 @@ async fn test_flush_worker_skips_cleanup_for_empty_memtable() {
     );
 
     // Verify the events are still present with the correct context_ids
-    let event_contexts: Vec<String> = pmem
-        .iter()
-        .map(|e| e.context_id.clone())
-        .collect();
+    let event_contexts: Vec<String> = pmem.iter().map(|e| e.context_id.clone()).collect();
     assert_eq!(
-        event_contexts,
-        expected_contexts,
+        event_contexts, expected_contexts,
         "Passive memtable should still contain its original events"
     );
 }

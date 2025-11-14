@@ -44,4 +44,3 @@ impl SchemaCache {
         self.column_indices.as_ref()
     }
 }
-

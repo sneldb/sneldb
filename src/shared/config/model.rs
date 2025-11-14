@@ -103,6 +103,11 @@ pub struct AuthConfig {
     /// If true, bypass authentication for all commands (useful for development/testing)
     #[serde(default = "default_bypass_auth")]
     pub bypass_auth: bool,
+    /// Initial admin user ID (only used if no users exist in database)
+    pub initial_admin_user: Option<String>,
+    /// Initial admin secret key (only used if no users exist in database)
+    /// Can use environment variable expansion: ${SNELDB_ADMIN_KEY}
+    pub initial_admin_key: Option<String>,
 }
 
 fn default_bypass_auth() -> bool {

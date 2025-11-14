@@ -30,7 +30,9 @@ fn columnar_can_use_columnar_processing_count_all() {
     let specs = vec![AggregateOpSpec::CountAll];
     let columns = HashMap::new();
 
-    assert!(ColumnarProcessor::can_use_columnar_processing(&specs, &columns));
+    assert!(ColumnarProcessor::can_use_columnar_processing(
+        &specs, &columns
+    ));
 }
 
 #[test]
@@ -41,7 +43,9 @@ fn columnar_can_use_columnar_processing_total_with_typed_i64() {
     let mut columns = HashMap::new();
     columns.insert("amount".to_string(), make_typed_i64_column(&[10, 20, 30]));
 
-    assert!(ColumnarProcessor::can_use_columnar_processing(&specs, &columns));
+    assert!(ColumnarProcessor::can_use_columnar_processing(
+        &specs, &columns
+    ));
 }
 
 #[test]
@@ -52,7 +56,9 @@ fn columnar_can_use_columnar_processing_avg_with_typed_i64() {
     let mut columns = HashMap::new();
     columns.insert("amount".to_string(), make_typed_i64_column(&[10, 20, 30]));
 
-    assert!(ColumnarProcessor::can_use_columnar_processing(&specs, &columns));
+    assert!(ColumnarProcessor::can_use_columnar_processing(
+        &specs, &columns
+    ));
 }
 
 #[test]
@@ -63,7 +69,9 @@ fn columnar_cannot_use_columnar_processing_total_with_string_column() {
     let mut columns = HashMap::new();
     columns.insert("amount".to_string(), make_string_column(&["10", "20"]));
 
-    assert!(!ColumnarProcessor::can_use_columnar_processing(&specs, &columns));
+    assert!(!ColumnarProcessor::can_use_columnar_processing(
+        &specs, &columns
+    ));
 }
 
 #[test]
@@ -73,7 +81,9 @@ fn columnar_cannot_use_columnar_processing_missing_column() {
     }];
     let columns = HashMap::new();
 
-    assert!(!ColumnarProcessor::can_use_columnar_processing(&specs, &columns));
+    assert!(!ColumnarProcessor::can_use_columnar_processing(
+        &specs, &columns
+    ));
 }
 
 #[test]
@@ -84,7 +94,9 @@ fn columnar_cannot_use_columnar_processing_count_unique() {
     let mut columns = HashMap::new();
     columns.insert("user".to_string(), make_string_column(&["u1", "u2"]));
 
-    assert!(!ColumnarProcessor::can_use_columnar_processing(&specs, &columns));
+    assert!(!ColumnarProcessor::can_use_columnar_processing(
+        &specs, &columns
+    ));
 }
 
 #[test]
@@ -95,7 +107,9 @@ fn columnar_cannot_use_columnar_processing_min_max() {
     let mut columns = HashMap::new();
     columns.insert("name".to_string(), make_string_column(&["a", "b"]));
 
-    assert!(!ColumnarProcessor::can_use_columnar_processing(&specs, &columns));
+    assert!(!ColumnarProcessor::can_use_columnar_processing(
+        &specs, &columns
+    ));
 }
 
 #[test]
@@ -112,7 +126,9 @@ fn columnar_can_use_columnar_processing_mixed_supported_ops() {
     let mut columns = HashMap::new();
     columns.insert("amount".to_string(), make_typed_i64_column(&[10, 20, 30]));
 
-    assert!(ColumnarProcessor::can_use_columnar_processing(&specs, &columns));
+    assert!(ColumnarProcessor::can_use_columnar_processing(
+        &specs, &columns
+    ));
 }
 
 #[test]
@@ -130,7 +146,9 @@ fn columnar_cannot_use_columnar_processing_mixed_unsupported_ops() {
     columns.insert("amount".to_string(), make_typed_i64_column(&[10, 20]));
     columns.insert("name".to_string(), make_string_column(&["a", "b"]));
 
-    assert!(!ColumnarProcessor::can_use_columnar_processing(&specs, &columns));
+    assert!(!ColumnarProcessor::can_use_columnar_processing(
+        &specs, &columns
+    ));
 }
 
 // process_columnar_slice tests (no grouping) ----------------------------------
@@ -177,7 +195,10 @@ fn columnar_process_columnar_slice_partial_range() {
     let mut groups: std::collections::HashMap<GroupKey, Vec<AggregatorImpl>, AHashRandomState> =
         std::collections::HashMap::with_hasher(AHashRandomState::new());
     let mut columns = HashMap::new();
-    columns.insert("dummy".to_string(), make_string_column(&["a", "b", "c", "d", "e"]));
+    columns.insert(
+        "dummy".to_string(),
+        make_string_column(&["a", "b", "c", "d", "e"]),
+    );
 
     ColumnarProcessor::process_columnar_slice(&mut groups, &specs, 1, 4, &columns);
 
@@ -192,7 +213,10 @@ fn columnar_process_columnar_slice_with_grouping_single_group() {
     let mut groups: std::collections::HashMap<GroupKey, Vec<AggregatorImpl>, AHashRandomState> =
         std::collections::HashMap::with_hasher(AHashRandomState::new());
     let mut columns = HashMap::new();
-    columns.insert("country".to_string(), make_string_column(&["US", "US", "US"]));
+    columns.insert(
+        "country".to_string(),
+        make_string_column(&["US", "US", "US"]),
+    );
 
     ColumnarProcessor::process_columnar_slice_with_grouping(
         &mut groups,
@@ -216,7 +240,10 @@ fn columnar_process_columnar_slice_with_grouping_multiple_groups() {
     let mut groups: std::collections::HashMap<GroupKey, Vec<AggregatorImpl>, AHashRandomState> =
         std::collections::HashMap::with_hasher(AHashRandomState::new());
     let mut columns = HashMap::new();
-    columns.insert("country".to_string(), make_string_column(&["US", "DE", "US"]));
+    columns.insert(
+        "country".to_string(),
+        make_string_column(&["US", "DE", "US"]),
+    );
 
     ColumnarProcessor::process_columnar_slice_with_grouping(
         &mut groups,
@@ -242,7 +269,10 @@ fn columnar_process_columnar_slice_with_grouping_and_time_bucket() {
     let mut columns = HashMap::new();
     let timestamps: Vec<i64> = vec![86400, 86401, 172800];
     columns.insert("timestamp".to_string(), make_typed_i64_column(&timestamps));
-    columns.insert("country".to_string(), make_string_column(&["US", "US", "DE"]));
+    columns.insert(
+        "country".to_string(),
+        make_string_column(&["US", "US", "DE"]),
+    );
 
     ColumnarProcessor::process_columnar_slice_with_grouping(
         &mut groups,
@@ -267,7 +297,10 @@ fn columnar_process_columnar_slice_with_grouping_respects_group_limit() {
     let mut groups: std::collections::HashMap<GroupKey, Vec<AggregatorImpl>, AHashRandomState> =
         std::collections::HashMap::with_hasher(AHashRandomState::new());
     let mut columns = HashMap::new();
-    columns.insert("country".to_string(), make_string_column(&["US", "DE", "FR", "IT"]));
+    columns.insert(
+        "country".to_string(),
+        make_string_column(&["US", "DE", "FR", "IT"]),
+    );
 
     ColumnarProcessor::process_columnar_slice_with_grouping(
         &mut groups,
@@ -343,8 +376,14 @@ fn columnar_process_columnar_slice_with_grouping_contiguous_rows_optimized() {
     let mut groups: std::collections::HashMap<GroupKey, Vec<AggregatorImpl>, AHashRandomState> =
         std::collections::HashMap::with_hasher(AHashRandomState::new());
     let mut columns = HashMap::new();
-    columns.insert("country".to_string(), make_string_column(&["US", "US", "US", "DE", "DE"]));
-    columns.insert("amount".to_string(), make_typed_i64_column(&[10, 20, 30, 40, 50]));
+    columns.insert(
+        "country".to_string(),
+        make_string_column(&["US", "US", "US", "DE", "DE"]),
+    );
+    columns.insert(
+        "amount".to_string(),
+        make_typed_i64_column(&[10, 20, 30, 40, 50]),
+    );
 
     ColumnarProcessor::process_columnar_slice_with_grouping(
         &mut groups,
@@ -361,4 +400,3 @@ fn columnar_process_columnar_slice_with_grouping_contiguous_rows_optimized() {
 
     assert_eq!(groups.len(), 2);
 }
-

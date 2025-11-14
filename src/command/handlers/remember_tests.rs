@@ -49,7 +49,7 @@ async fn execute_store<W: AsyncWrite + Unpin>(
     writer: &mut W,
     renderer: &dyn Renderer,
 ) -> std::io::Result<()> {
-    store::handle(cmd, shard_manager, registry, writer, renderer).await
+    store::handle(cmd, shard_manager, registry, None, None, writer, renderer).await
 }
 
 async fn execute_flush<W: AsyncWrite + Unpin>(

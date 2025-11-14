@@ -17,9 +17,11 @@ impl MemoryMonitor {
         let available_mb = available_memory / (1024 * 1024);
         let threshold_mb = CONFIG.engine.sys_memory_threshold_mb as u64;
 
-        info!("available_memory_mb: {}, threshold_mb: {}", available_mb, threshold_mb);
+        info!(
+            "available_memory_mb: {}, threshold_mb: {}",
+            available_mb, threshold_mb
+        );
 
         available_mb < threshold_mb
     }
 }
-

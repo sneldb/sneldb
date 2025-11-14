@@ -10,9 +10,30 @@ use tracing::{error, info};
 pub async fn handle<W: AsyncWrite + Unpin>(
     cmd: &Command,
     auth_manager: &Arc<AuthManager>,
+    user_id: Option<&str>,
     writer: &mut W,
     renderer: &dyn Renderer,
 ) -> std::io::Result<()> {
+    // User management commands require authentication and admin role
+    // Skip permission check if user_id is "bypass" (bypass_auth mode)
+    let authenticated_user_id = match user_id {
+        Some(uid) => uid,
+        None => {
+            let resp = Response::error(StatusCode::Unauthorized, "Authentication required");
+            writer.write_all(&renderer.render(&resp)).await?;
+            writer.flush().await?;
+            return Ok(());
+        }
+    };
+
+    // Skip permission checks for bypass user
+    if authenticated_user_id != "bypass" && !auth_manager.is_admin(authenticated_user_id).await {
+        let resp = Response::error(StatusCode::Forbidden, "Only admin users can manage users");
+        writer.write_all(&renderer.render(&resp)).await?;
+        writer.flush().await?;
+        return Ok(());
+    }
+
     match cmd {
         Command::CreateUser {
             user_id,
@@ -23,7 +44,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
                 .await
             {
                 Ok(key) => {
-                    info!(target: "sneldb::auth", user_id, "User created");
+                    info!(target: "sneldb::auth", user_id, admin_user = authenticated_user_id, "User created");
                     let resp = Response::ok_lines(vec![
                         format!("User '{}' created", user_id),
                         format!("Secret key: {}", key),
@@ -41,7 +62,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
         }
         Command::RevokeKey { user_id } => match auth_manager.revoke_key(user_id).await {
             Ok(_) => {
-                info!(target: "sneldb::auth", user_id, "User key revoked");
+                info!(target: "sneldb::auth", user_id, admin_user = authenticated_user_id, "User key revoked");
                 let resp = Response::ok_lines(vec![format!("Key revoked for user '{}'", user_id)]);
                 writer.write_all(&renderer.render(&resp)).await?;
                 writer.flush().await?;

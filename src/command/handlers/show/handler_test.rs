@@ -640,7 +640,7 @@ async fn execute_store<W: AsyncWrite + Unpin>(
     writer: &mut W,
     renderer: &dyn Renderer,
 ) -> std::io::Result<()> {
-    store::handle(cmd, shard_manager, registry, writer, renderer).await
+    store::handle(cmd, shard_manager, registry, None, None, writer, renderer).await
 }
 
 #[tokio::test]
@@ -822,6 +822,10 @@ async fn test_show_with_incremental_delta_e2e() {
     .expect("remember should succeed");
 
     sleep(Duration::from_millis(200)).await;
+
+    // CRITICAL: Wait at least 1 full second to ensure new events get a different timestamp.
+    // Events use SystemTime::now().as_secs() which has 1-second resolution.
+    sleep(Duration::from_secs(1)).await;
 
     // Store more events (deltas)
     let store3 = CommandFactory::store()
@@ -1291,6 +1295,11 @@ async fn test_show_multiple_times_e2e() {
         "First SHOW should contain m1"
     );
 
+    // CRITICAL: Wait at least 1 full second to ensure new events get a different timestamp.
+    // The first SHOW updates the high water mark, and events use SystemTime::now().as_secs()
+    // which has 1-second resolution.
+    sleep(Duration::from_secs(1)).await;
+
     // Store more events
     let store2 = CommandFactory::store()
         .with_event_type("multi_test")
@@ -1756,7 +1765,7 @@ async fn test_show_with_very_old_high_water_mark() {
             .expect(&format!("store {} should succeed", i));
     }
 
-    sleep(Duration::from_millis(100)).await;
+    sleep(Duration::from_millis(200)).await;
 
     let remember_cmd = remember::parse("REMEMBER QUERY old_hwm_test AS old_hwm_mat")
         .expect("parse REMEMBER command");
@@ -1772,7 +1781,13 @@ async fn test_show_with_very_old_high_water_mark() {
     .await
     .expect("remember should succeed");
 
-    sleep(Duration::from_millis(500)).await; // Wait to ensure REMEMBER completes and watermark is set
+    sleep(Duration::from_millis(600)).await; // Wait to ensure REMEMBER completes and watermark is set
+
+    // CRITICAL: Wait at least 1 full second to ensure new events get a different timestamp.
+    // Events use SystemTime::now().as_secs() which has 1-second resolution.
+    // Without this, o4-o6 might have the same timestamp as o1-o3 and be filtered out by the
+    // high water mark's strict > comparison.
+    sleep(Duration::from_secs(1)).await;
 
     // Store more events after materialization (these should have higher timestamps)
     for i in 4..=6 {
