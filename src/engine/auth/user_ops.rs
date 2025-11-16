@@ -1,16 +1,25 @@
 use super::db_ops::store_user_in_db;
-use super::types::{AuthError, AuthResult, PermissionCache, User, UserCache, UserKey};
-use crate::engine::shard::manager::ShardManager;
+use super::storage::AuthStorage;
+use super::types::{
+    AuthError, AuthResult, MAX_SECRET_KEY_LENGTH, MAX_USER_ID_LENGTH, PermissionCache, User,
+    UserCache, UserKey,
+};
 use crate::shared::config::CONFIG;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-/// Validates user_id format (alphanumeric, underscore, hyphen)
+/// Validates user_id: non-empty, alphanumeric/underscore/hyphen, max MAX_USER_ID_LENGTH.
 fn validate_user_id(user_id: &str) -> AuthResult<()> {
     if user_id.is_empty() {
         return Err(AuthError::InvalidUserId);
+    }
+
+    if user_id.len() > MAX_USER_ID_LENGTH {
+        return Err(AuthError::UserIdTooLong {
+            max: MAX_USER_ID_LENGTH,
+        });
     }
 
     if !user_id
@@ -23,7 +32,17 @@ fn validate_user_id(user_id: &str) -> AuthResult<()> {
     Ok(())
 }
 
-/// Generates a random secret key
+/// Validates secret key length (max MAX_SECRET_KEY_LENGTH).
+fn validate_secret_key(secret_key: &str) -> AuthResult<()> {
+    if secret_key.len() > MAX_SECRET_KEY_LENGTH {
+        return Err(AuthError::SecretKeyTooLong {
+            max: MAX_SECRET_KEY_LENGTH,
+        });
+    }
+    Ok(())
+}
+
+/// Generates a 64-char hex secret key (32 random bytes) for HMAC-SHA256.
 fn generate_secret_key() -> String {
     use rand::RngCore;
     let mut rng = rand::thread_rng();
@@ -32,78 +51,55 @@ fn generate_secret_key() -> String {
     hex::encode(bytes)
 }
 
-/// Creates a new user and stores in SnelDB
+/// Creates a new user (wrapper around `create_user_with_roles` with no roles).
 pub async fn create_user(
     cache: &Arc<RwLock<UserCache>>,
     permission_cache: &Arc<RwLock<PermissionCache>>,
-    shard_manager: &Arc<ShardManager>,
+    auth_storage: &Arc<dyn AuthStorage>,
     user_id: String,
     secret_key: Option<String>,
 ) -> AuthResult<String> {
+    create_user_with_roles(
+        cache,
+        permission_cache,
+        auth_storage,
+        user_id,
+        secret_key,
+        Vec::new(),
+    )
+    .await
+}
+
+/// Creates a user with roles. Returns secret key (generated or provided).
+pub async fn create_user_with_roles(
+    cache: &Arc<RwLock<UserCache>>,
+    permission_cache: &Arc<RwLock<PermissionCache>>,
+    auth_storage: &Arc<dyn AuthStorage>,
+    user_id: String,
+    secret_key: Option<String>,
+    roles: Vec<String>,
+) -> AuthResult<String> {
+    // Validate user_id
     validate_user_id(&user_id)?;
+
+    // Generate or validate secret key
+    let secret = match secret_key {
+        Some(key) => {
+            validate_secret_key(&key)?;
+            key
+        }
+        None => generate_secret_key(),
+    };
 
     // Check if user already exists
     {
         let cache_guard = cache.read().await;
         if cache_guard.get(&user_id).is_some() {
-            return Err(AuthError::UserExists(user_id));
+            // Don't leak user_id to prevent enumeration
+            debug!(target: "sneldb::auth", user_id, "User already exists");
+            return Err(AuthError::UserExists);
         }
-    }
-
-    let secret = secret_key.unwrap_or_else(generate_secret_key);
-
-    let created_at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-
-    let user = User {
-        user_id: user_id.clone(),
-        secret_key: secret.clone(),
-        active: true,
-        created_at,
-        roles: Vec::new(),
-        permissions: HashMap::new(),
-    };
-
-    store_user_in_db(shard_manager, &user).await?;
-
-    // Update caches
-    {
-        let user_key = UserKey::from(user);
-        let mut cache_guard = cache.write().await;
-        cache_guard.insert(user_key.clone());
-        drop(cache_guard);
-
-        let mut perm_cache_guard = permission_cache.write().await;
-        perm_cache_guard.update_user(&user_key);
-    }
-
-    if tracing::enabled!(tracing::Level::DEBUG) {
-        debug!(target: "sneldb::auth", user_id, "User created successfully");
-    }
-    Ok(secret)
-}
-
-/// Creates a user with specified roles
-pub async fn create_user_with_roles(
-    cache: &Arc<RwLock<UserCache>>,
-    permission_cache: &Arc<RwLock<PermissionCache>>,
-    shard_manager: &Arc<ShardManager>,
-    user_id: String,
-    secret_key: Option<String>,
-    roles: Vec<String>,
-) -> AuthResult<String> {
-    validate_user_id(&user_id)?;
-
-    {
-        let cache_guard = cache.read().await;
-        if cache_guard.get(&user_id).is_some() {
-            return Err(AuthError::UserExists(user_id));
-        }
-    }
-
-    let secret = secret_key.unwrap_or_else(generate_secret_key);
+    } // Drop read lock
 
     let created_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -119,18 +115,20 @@ pub async fn create_user_with_roles(
         permissions: HashMap::new(),
     };
 
-    store_user_in_db(shard_manager, &user).await?;
+    // Store in database first
+    store_user_in_db(auth_storage, &user).await?;
 
-    // Update caches
+    // Update caches (now acquire write locks)
+    let user_key = UserKey::from(user);
     {
-        let user_key = UserKey::from(user);
         let mut cache_guard = cache.write().await;
         cache_guard.insert(user_key.clone());
-        drop(cache_guard);
+    } // Drop write lock on user cache
 
+    {
         let mut perm_cache_guard = permission_cache.write().await;
         perm_cache_guard.update_user(&user_key);
-    }
+    } // Drop write lock on permission cache
 
     if tracing::enabled!(tracing::Level::DEBUG) {
         debug!(target: "sneldb::auth", user_id, "User created with roles");
@@ -138,42 +136,57 @@ pub async fn create_user_with_roles(
     Ok(secret)
 }
 
-/// Revokes a user's key (marks as inactive)
+/// Revokes a user's key (marks inactive). User record kept for audit.
 pub async fn revoke_key(
     cache: &Arc<RwLock<UserCache>>,
     permission_cache: &Arc<RwLock<PermissionCache>>,
-    shard_manager: &Arc<ShardManager>,
+    auth_storage: &Arc<dyn AuthStorage>,
     user_id: &str,
 ) -> AuthResult<()> {
-    let cache_guard = cache.write().await;
-    let user_key = cache_guard
-        .get(user_id)
-        .ok_or_else(|| AuthError::UserNotFound(user_id.to_string()))?
-        .clone();
+    // Use read lock first to get user data
+    let user_key = {
+        let cache_guard = cache.read().await;
+        cache_guard
+            .get(user_id)
+            .ok_or_else(|| {
+                debug!(target: "sneldb::auth", user_id, "User not found during revoke");
+                AuthError::UserNotFound(user_id.to_string())
+            })?
+            .clone()
+    }; // Drop read lock
 
     // Update user in DB
     let updated_user = User {
         user_id: user_id.to_string(),
         secret_key: user_key.secret_key.clone(),
         active: false,
-        created_at: 0, // Will be updated from DB
+        created_at: user_key.created_at, // Preserve timestamp
         roles: user_key.roles.clone(),
         permissions: user_key.permissions.clone(),
     };
 
-    drop(cache_guard);
-    store_user_in_db(shard_manager, &updated_user).await?;
+    store_user_in_db(auth_storage, &updated_user).await?;
 
-    // Update cache (preserve created_at)
-    let mut cache_guard = cache.write().await;
-    let mut updated_key = user_key.clone();
-    updated_key.active = false;
-    cache_guard.insert(updated_key.clone());
-    drop(cache_guard);
+    // Update user cache
+    let updated_key = UserKey {
+        user_id: user_id.to_string(),
+        secret_key: user_key.secret_key.clone(),
+        active: false,
+        created_at: user_key.created_at,
+        roles: user_key.roles.clone(),
+        permissions: user_key.permissions.clone(),
+    };
+
+    {
+        let mut cache_guard = cache.write().await;
+        cache_guard.insert(updated_key.clone());
+    } // Drop write lock on user cache
 
     // Update permission cache
-    let mut perm_cache_guard = permission_cache.write().await;
-    perm_cache_guard.update_user(&updated_key);
+    {
+        let mut perm_cache_guard = permission_cache.write().await;
+        perm_cache_guard.update_user(&updated_key);
+    } // Drop write lock on permission cache
 
     info!(target: "sneldb::auth", user_id, "User key revoked");
     Ok(())
@@ -185,11 +198,11 @@ pub async fn list_users(cache: &Arc<RwLock<UserCache>>) -> Vec<UserKey> {
     cache_guard.all_users().into_iter().cloned().collect()
 }
 
-/// Bootstraps admin user from configuration if no users exist
+/// Bootstraps admin user from config if no users exist.
 pub async fn bootstrap_admin_user(
     cache: &Arc<RwLock<UserCache>>,
     permission_cache: &Arc<RwLock<PermissionCache>>,
-    shard_manager: &Arc<ShardManager>,
+    auth_storage: &Arc<dyn AuthStorage>,
 ) -> AuthResult<()> {
     let user_count = {
         let cache_guard = cache.read().await;
@@ -229,7 +242,7 @@ pub async fn bootstrap_admin_user(
     create_user_with_roles(
         cache,
         permission_cache,
-        shard_manager,
+        auth_storage,
         admin_user.clone(),
         Some(admin_key.clone()),
         vec!["admin".to_string()],
@@ -239,4 +252,3 @@ pub async fn bootstrap_admin_user(
     info!(target: "sneldb::auth", user_id = admin_user, "Bootstrap admin user created");
     Ok(())
 }
-

@@ -1,47 +1,60 @@
-use super::types::{AuthError, AuthResult, UserCache};
+use super::types::{AuthError, AuthResult, MAX_SIGNATURE_LENGTH, MAX_USER_ID_LENGTH, UserCache};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use std::sync::Arc;
+use subtle::ConstantTimeEq;
 use tokio::sync::RwLock;
 use tracing::{debug, warn};
 
 type HmacSha256 = Hmac<Sha256>;
 
-/// Verifies HMAC signature for a message
-/// Format: user_id:signature:message
+/// Verifies HMAC signature. Uses constant-time comparison. Returns generic errors.
 pub async fn verify_signature(
     cache: &Arc<RwLock<UserCache>>,
     message: &str,
     user_id: &str,
     signature: &str,
 ) -> AuthResult<()> {
+    // Validate input lengths to prevent DoS
+    if signature.len() > MAX_SIGNATURE_LENGTH {
+        warn!(target: "sneldb::auth", signature_len = signature.len(), "Signature too long");
+        return Err(AuthError::AuthenticationFailed);
+    }
+
+    if user_id.len() > MAX_USER_ID_LENGTH {
+        warn!(target: "sneldb::auth", user_id_len = user_id.len(), "User ID too long");
+        return Err(AuthError::AuthenticationFailed);
+    }
+
     let cache_guard = cache.read().await;
     let user_key = cache_guard.get(user_id).ok_or_else(|| {
         debug!(target: "sneldb::auth", user_id, "User not found in cache");
-        AuthError::UserNotFound(user_id.to_string())
+        AuthError::AuthenticationFailed // Return generic error
     })?;
 
     if !user_key.active {
-        return Err(AuthError::UserInactive(user_id.to_string()));
+        debug!(target: "sneldb::auth", user_id, "User inactive");
+        return Err(AuthError::AuthenticationFailed); // Return generic error
     }
 
     // Compute expected HMAC
-    let mut mac = HmacSha256::new_from_slice(user_key.secret_key.as_bytes())
-        .map_err(|_| AuthError::InvalidSignature)?;
+    let mut mac = HmacSha256::new_from_slice(user_key.secret_key.as_bytes()).map_err(|_| {
+        warn!(target: "sneldb::auth", "Failed to create HMAC");
+        AuthError::AuthenticationFailed
+    })?;
     mac.update(message.as_bytes());
     let expected_signature = hex::encode(mac.finalize().into_bytes());
 
-    // Constant-time comparison to prevent timing attacks
+    // Constant-time comparison
     if constant_time_eq(signature.as_bytes(), expected_signature.as_bytes()) {
         Ok(())
     } else {
         warn!(target: "sneldb::auth", user_id, "Invalid signature");
-        Err(AuthError::InvalidSignature)
+        Err(AuthError::AuthenticationFailed) // Return generic error
     }
 }
 
-/// Parses authentication from request
-/// Expected format: "user_id:signature:command"
+/// Parses "user_id:signature:command" format. Validates lengths.
 pub fn parse_auth<'a>(input: &'a str) -> AuthResult<(&'a str, &'a str, &'a str)> {
     let bytes = input.as_bytes();
     let mut first_colon = None;
@@ -59,30 +72,29 @@ pub fn parse_auth<'a>(input: &'a str) -> AuthResult<(&'a str, &'a str, &'a str)>
         }
     }
 
-    let first_colon = first_colon.ok_or(AuthError::MissingSignature)?;
-    let second_colon = second_colon.ok_or(AuthError::MissingSignature)?;
+    let first_colon = first_colon.ok_or(AuthError::AuthenticationFailed)?;
+    let second_colon = second_colon.ok_or(AuthError::AuthenticationFailed)?;
 
     let user_id = &input[..first_colon];
     let signature = &input[first_colon + 1..second_colon];
     let command = &input[second_colon + 1..];
 
-    if user_id.is_empty() {
-        return Err(AuthError::MissingUserId);
+    // Validate lengths
+    if user_id.is_empty() || user_id.len() > MAX_USER_ID_LENGTH {
+        return Err(AuthError::AuthenticationFailed);
+    }
+
+    if signature.len() > MAX_SIGNATURE_LENGTH {
+        return Err(AuthError::AuthenticationFailed);
     }
 
     Ok((user_id, signature, command))
 }
 
-/// Constant-time comparison to prevent timing attacks
+/// Constant-time comparison to prevent timing attacks.
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
     }
-
-    a.iter()
-        .zip(b.iter())
-        .map(|(x, y)| x ^ y)
-        .fold(0u8, |acc, x| acc | x)
-        == 0
+    bool::from(a.ct_eq(b))
 }
-

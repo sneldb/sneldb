@@ -1,8 +1,19 @@
+use governor::{Quota, RateLimiter as GovernorRateLimiter};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::num::NonZeroU32;
 use thiserror::Error;
 
-/// Represents read and write permissions for a specific event type
+// Validation constants
+pub const MAX_USER_ID_LENGTH: usize = 64;
+pub const MAX_SECRET_KEY_LENGTH: usize = 512;
+pub const MAX_SIGNATURE_LENGTH: usize = 256;
+
+// Special user IDs for bypass modes
+pub const BYPASS_USER_ID: &str = "bypass";
+pub const NO_AUTH_USER_ID: &str = "no-auth";
+
+/// Read/write permissions for an event type.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PermissionSet {
     pub read: bool,
@@ -82,32 +93,40 @@ impl From<User> for UserKey {
 
 #[derive(Debug, Error)]
 pub enum AuthError {
+    // Generic error to prevent user enumeration
+    #[error("Authentication failed")]
+    AuthenticationFailed,
+    #[error("User already exists")]
+    UserExists,
+    #[error("Invalid user ID format")]
+    InvalidUserId,
+    #[error("User ID too long (max {max} characters)")]
+    UserIdTooLong { max: usize },
+    #[error("Secret key too long (max {max} characters)")]
+    SecretKeyTooLong { max: usize },
+    #[error("Signature too long (max {max} characters)")]
+    SignatureTooLong { max: usize },
+    #[error("Database operation failed: {0}")]
+    DatabaseError(String),
+    #[error("Rate limit exceeded")]
+    RateLimitExceeded,
+
+    // Internal errors (logging only)
     #[error("User not found: {0}")]
     UserNotFound(String),
     #[error("User inactive: {0}")]
     UserInactive(String),
-    #[error("Invalid signature")]
-    InvalidSignature,
-    #[error("Missing user ID")]
-    MissingUserId,
-    #[error("Missing signature")]
-    MissingSignature,
-    #[error("User already exists: {0}")]
-    UserExists(String),
-    #[error("Invalid user ID format")]
-    InvalidUserId,
 }
 
 pub type AuthResult<T> = Result<T, AuthError>;
 
-/// In-memory cache for user keys
+/// In-memory cache for user keys.
 #[derive(Debug, Clone)]
 pub struct UserCache {
     users: HashMap<String, UserKey>,
 }
 
-/// Fast permission cache for O(1) permission lookups
-/// Structure: user_id -> event_type -> PermissionSet
+/// O(1) permission cache: user_id -> event_type -> PermissionSet.
 #[derive(Debug, Clone)]
 pub struct PermissionCache {
     /// Map of user_id -> event_type -> PermissionSet
@@ -174,7 +193,6 @@ impl PermissionCache {
                 .insert(user.user_id.clone(), user.permissions.clone());
         }
     }
-
 }
 
 impl Default for PermissionCache {
@@ -215,4 +233,19 @@ impl Default for UserCache {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Per-IP rate limiter for auth attempts (token bucket). Default: 10/sec per IP.
+pub type AuthRateLimiter = GovernorRateLimiter<
+    String, // Key = IP address
+    dashmap::DashMap<String, governor::state::InMemoryState>,
+    governor::clock::DefaultClock,
+>;
+
+/// Creates a per-IP rate limiter. Panics if requests_per_second is 0.
+pub fn create_rate_limiter(requests_per_second: u32) -> AuthRateLimiter {
+    let quota = Quota::per_second(
+        NonZeroU32::new(requests_per_second).expect("rate_limit_per_second must be greater than 0"),
+    );
+    GovernorRateLimiter::dashmap(quota)
 }

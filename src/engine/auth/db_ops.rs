@@ -1,82 +1,58 @@
-use super::types::{AuthError, AuthResult, User};
-use crate::engine::core::{Event, EventId};
-use crate::engine::schema::SchemaRegistry;
-use crate::engine::shard::manager::ShardManager;
-use crate::engine::shard::message::ShardMessage;
-use std::collections::BTreeMap;
+use super::storage::{AuthStorage, StoredUser};
+use super::types::{AuthResult, PermissionCache, User, UserCache, UserKey};
+use std::collections::{HashMap, hash_map::Entry};
 use std::sync::Arc;
-use tracing::error;
+use tokio::sync::RwLock;
 
-/// Stores user in SnelDB via STORE command
-pub async fn store_user_in_db(
-    shard_manager: &Arc<ShardManager>,
-    user: &User,
+/// Persists a user to auth storage.
+pub async fn store_user_in_db(auth_storage: &Arc<dyn AuthStorage>, user: &User) -> AuthResult<()> {
+    auth_storage.persist_user(user)
+}
+
+fn dedupe_latest(records: Vec<StoredUser>) -> Vec<UserKey> {
+    let mut latest: HashMap<String, (u64, User)> = HashMap::new();
+    for record in records {
+        match latest.entry(record.user.user_id.clone()) {
+            Entry::Vacant(slot) => {
+                slot.insert((record.persisted_at, record.user));
+            }
+            Entry::Occupied(mut slot) => {
+                if record.persisted_at >= slot.get().0 {
+                    slot.insert((record.persisted_at, record.user));
+                }
+            }
+        }
+    }
+    latest
+        .into_values()
+        .map(|(_, user)| UserKey::from(user))
+        .collect()
+}
+
+/// Loads users from auth storage into caches (latest-wins).
+pub async fn load_from_db(
+    cache: &Arc<RwLock<UserCache>>,
+    permission_cache: &Arc<RwLock<PermissionCache>>,
+    auth_storage: &Arc<dyn AuthStorage>,
 ) -> AuthResult<()> {
-    let context_id = "__system_auth";
-    let shard = shard_manager.get_shard(context_id);
+    let users = auth_storage.load_users()?;
+    let loaded_keys = dedupe_latest(users);
 
-    let mut payload = BTreeMap::new();
-    payload.insert(
-        "user_id".to_string(),
-        serde_json::Value::String(user.user_id.clone()),
-    );
-    payload.insert(
-        "secret_key".to_string(),
-        serde_json::Value::String(user.secret_key.clone()),
-    );
-    payload.insert("active".to_string(), serde_json::Value::Bool(user.active));
-    payload.insert(
-        "created_at".to_string(),
-        serde_json::Value::Number(user.created_at.into()),
-    );
-    // Store roles as JSON string to match schema
-    let roles_json = serde_json::to_string(&user.roles).unwrap_or_else(|_| "[]".to_string());
-    payload.insert("roles".to_string(), serde_json::Value::String(roles_json));
+    {
+        let mut cache_guard = cache.write().await;
+        cache_guard.clear();
+        for key in &loaded_keys {
+            cache_guard.insert(key.clone());
+        }
+    }
 
-    // Store permissions as JSON object
-    let permissions_json =
-        serde_json::to_string(&user.permissions).unwrap_or_else(|_| "{}".to_string());
-    payload.insert(
-        "permissions".to_string(),
-        serde_json::Value::String(permissions_json),
-    );
-
-    let mut event = Event {
-        timestamp: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs(),
-        event_type: "__auth_user".to_string(),
-        context_id: context_id.to_string(),
-        id: EventId::default(),
-        payload: BTreeMap::new(),
-    };
-    event.set_payload_json(serde_json::to_value(payload).unwrap());
-
-    shard
-        .tx
-        .send(ShardMessage::Store(
-            event,
-            Arc::new(tokio::sync::RwLock::new(SchemaRegistry::new().unwrap())),
-        ))
-        .await
-        .map_err(|e| {
-            error!(target: "sneldb::auth", error = %e, "Failed to store user in DB");
-            AuthError::InvalidSignature // Reuse error type for now
-        })?;
+    {
+        let mut perm_cache_guard = permission_cache.write().await;
+        *perm_cache_guard = PermissionCache::new();
+        for key in &loaded_keys {
+            perm_cache_guard.update_user(key);
+        }
+    }
 
     Ok(())
 }
-
-/// Loads users from SnelDB
-/// This queries __auth_user events from the __system_auth context
-pub async fn load_from_db(_shard_manager: &Arc<ShardManager>) -> AuthResult<()> {
-    // TODO: Implement full query to load users from all shards
-    // For now, this is a placeholder - users will be loaded as they're created
-    // In production, you'd want to query across all shards for __auth_user events
-    // and populate the cache
-
-    tracing::info!(target: "sneldb::auth", "User loading from DB skipped - users will be loaded on-demand");
-    Ok(())
-}
-

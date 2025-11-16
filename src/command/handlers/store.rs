@@ -1,5 +1,5 @@
 use crate::command::types::Command;
-use crate::engine::auth::AuthManager;
+use crate::engine::auth::{AuthManager, BYPASS_USER_ID};
 use crate::engine::core::{Event, EventId};
 use crate::engine::schema::FieldType;
 use crate::engine::schema::PayloadTimeNormalizer;
@@ -49,7 +49,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
     if let Some(auth_mgr) = auth_manager {
         if let Some(uid) = user_id {
             // Skip permission checks for bypass user
-            if uid != "bypass" && !auth_mgr.can_write(uid, event_type).await {
+            if uid != BYPASS_USER_ID && !auth_mgr.can_write(uid, event_type).await {
                 warn!(
                     target: "sneldb::store",
                     user_id = uid,

@@ -1,6 +1,6 @@
 use crate::command::handlers::query::context::QueryContext;
-use crate::command::handlers::query::planner::full_scan::FullScanPlanner;
 use crate::command::handlers::query::planner::QueryPlanner;
+use crate::command::handlers::query::planner::full_scan::FullScanPlanner;
 use crate::command::types::Command;
 use crate::engine::shard::manager::ShardManager;
 use crate::test_helpers::factories::SchemaRegistryFactory;

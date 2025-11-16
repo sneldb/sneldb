@@ -10,9 +10,7 @@ use crate::engine::core::zone::selector::pruner::xor_pruner::XorPruner;
 use crate::engine::core::zone::zone_artifacts::ZoneArtifacts;
 use crate::engine::schema::FieldType;
 use crate::engine::types::ScalarValue;
-use crate::test_helpers::factories::{
-    EventFactory, MemTableFactory, SchemaRegistryFactory,
-};
+use crate::test_helpers::factories::{EventFactory, MemTableFactory, SchemaRegistryFactory};
 
 #[tokio::test]
 async fn skips_xor_for_payload_temporal_field() {

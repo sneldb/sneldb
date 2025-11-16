@@ -127,6 +127,7 @@ pub enum FileKind {
     MaterializationCatalogEntry,
     MaterializedManifest,
     MaterializedFrame,
+    AuthWal,
 }
 
 impl FileKind {
@@ -153,6 +154,7 @@ impl FileKind {
             FileKind::MaterializationCatalogEntry => *b"EVDBMCE\0",
             FileKind::MaterializedManifest => *b"EVDBMMF\0",
             FileKind::MaterializedFrame => *b"EVDBMFR\0",
+            FileKind::AuthWal => *b"EVDBAUT\0",
         }
     }
 }

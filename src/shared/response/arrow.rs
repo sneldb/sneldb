@@ -446,8 +446,8 @@ const CONTINUATION_MARKER: u32 = 0xFFFF_FFFF;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use arrow_ipc::reader::StreamReader;
     use crate::engine::core::read::result::ColumnSpec;
+    use arrow_ipc::reader::StreamReader;
     use serde_json::json;
     use std::io::Cursor;
 

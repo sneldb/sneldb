@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 use crate::command::types::Command;
-use crate::engine::auth::AuthManager;
+use crate::engine::auth::{AuthManager, BYPASS_USER_ID};
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
 use crate::shared::response::render::Renderer;
@@ -77,7 +77,7 @@ impl<'a, W: AsyncWrite + Unpin> QueryCommandHandler<'a, W> {
         if let Some(auth_mgr) = self.auth_manager {
             if let Some(uid) = self.user_id {
                 // Skip permission checks for bypass user
-                if uid != "bypass" && !auth_mgr.can_read(uid, event_type).await {
+                if uid != BYPASS_USER_ID && !auth_mgr.can_read(uid, event_type).await {
                     warn!(
                         target: "sneldb::query",
                         user_id = uid,

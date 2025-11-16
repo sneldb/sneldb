@@ -16,8 +16,8 @@ mod revoke_permission_tests {
         let input = "REVOKE READ ON order_created FROM user123";
         let tokens = tokenize(input);
 
-        let command = revoke_permission::parse(&tokens)
-            .expect("Failed to parse REVOKE READ permission");
+        let command =
+            revoke_permission::parse(&tokens).expect("Failed to parse REVOKE READ permission");
 
         assert_eq!(
             command,
@@ -34,8 +34,8 @@ mod revoke_permission_tests {
         let input = "REVOKE WRITE ON payment_succeeded FROM user456";
         let tokens = tokenize(input);
 
-        let command = revoke_permission::parse(&tokens)
-            .expect("Failed to parse REVOKE WRITE permission");
+        let command =
+            revoke_permission::parse(&tokens).expect("Failed to parse REVOKE WRITE permission");
 
         assert_eq!(
             command,
@@ -103,7 +103,8 @@ mod revoke_permission_tests {
 
     #[test]
     fn test_parse_revoke_permission_read_write_multiple_event_types() {
-        let input = "REVOKE READ,WRITE ON order_created,payment_succeeded,order_cancelled FROM user123";
+        let input =
+            "REVOKE READ,WRITE ON order_created,payment_succeeded,order_cancelled FROM user123";
         let tokens = tokenize(input);
 
         let command = revoke_permission::parse(&tokens)
@@ -128,8 +129,8 @@ mod revoke_permission_tests {
         let input = "revoke read on order_created from user123";
         let tokens = tokenize(input);
 
-        let command = revoke_permission::parse(&tokens)
-            .expect("Failed to parse lowercase REVOKE command");
+        let command =
+            revoke_permission::parse(&tokens).expect("Failed to parse lowercase REVOKE command");
 
         assert_eq!(
             command,
@@ -146,8 +147,8 @@ mod revoke_permission_tests {
         let input = "ReVoKe ReAd On order_created FrOm user123";
         let tokens = tokenize(input);
 
-        let command = revoke_permission::parse(&tokens)
-            .expect("Failed to parse mixed case REVOKE command");
+        let command =
+            revoke_permission::parse(&tokens).expect("Failed to parse mixed case REVOKE command");
 
         assert_eq!(
             command,
@@ -200,8 +201,8 @@ mod revoke_permission_tests {
         let input = r#"REVOKE READ ON "order-created" FROM "user-123""#;
         let tokens = tokenize(input);
 
-        let command = revoke_permission::parse(&tokens)
-            .expect("Failed to parse REVOKE with string literals");
+        let command =
+            revoke_permission::parse(&tokens).expect("Failed to parse REVOKE with string literals");
 
         assert_eq!(
             command,
@@ -278,7 +279,10 @@ mod revoke_permission_tests {
 
         let result = revoke_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to missing REVOKE keyword");
+        assert!(
+            result.is_err(),
+            "Expected failure due to missing REVOKE keyword"
+        );
         match result {
             Err(ParseError::UnexpectedToken(_)) => {}
             _ => panic!("Expected UnexpectedToken error"),
@@ -311,7 +315,10 @@ mod revoke_permission_tests {
 
         let result = revoke_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure - ON is treated as invalid permission");
+        assert!(
+            result.is_err(),
+            "Expected failure - ON is treated as invalid permission"
+        );
         match result {
             Err(ParseError::UnexpectedToken(msg)) => {
                 assert!(
@@ -332,7 +339,10 @@ mod revoke_permission_tests {
 
         let result = revoke_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to missing ON keyword");
+        assert!(
+            result.is_err(),
+            "Expected failure due to missing ON keyword"
+        );
         match result {
             Err(ParseError::ExpectedKeyword(expected, _)) => {
                 assert_eq!(expected, "ON");
@@ -349,7 +359,10 @@ mod revoke_permission_tests {
 
         let result = revoke_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to missing event types");
+        assert!(
+            result.is_err(),
+            "Expected failure due to missing event types"
+        );
         // The parser will consume "FROM" as an event_type, then fail when trying to match "FROM" keyword
         match result {
             Err(ParseError::ExpectedKeyword(expected, _)) => {
@@ -358,7 +371,10 @@ mod revoke_permission_tests {
             Err(ParseError::MissingArgument(arg)) => {
                 assert!(arg.contains("event_type"));
             }
-            Err(e) => panic!("Expected ExpectedKeyword or MissingArgument error, got: {:?}", e),
+            Err(e) => panic!(
+                "Expected ExpectedKeyword or MissingArgument error, got: {:?}",
+                e
+            ),
             _ => panic!("Expected error"),
         }
     }
@@ -370,7 +386,10 @@ mod revoke_permission_tests {
 
         let result = revoke_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to missing FROM keyword");
+        assert!(
+            result.is_err(),
+            "Expected failure due to missing FROM keyword"
+        );
         match result {
             Err(ParseError::ExpectedKeyword(expected, _)) => {
                 assert_eq!(expected, "FROM");
@@ -407,7 +426,10 @@ mod revoke_permission_tests {
 
         let result = revoke_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to invalid permission");
+        assert!(
+            result.is_err(),
+            "Expected failure due to invalid permission"
+        );
         match result {
             Err(ParseError::UnexpectedToken(msg)) => {
                 assert!(msg.contains("Invalid permission") || msg.contains("EXECUTE"));
@@ -423,7 +445,10 @@ mod revoke_permission_tests {
 
         let result = revoke_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to invalid permission in list");
+        assert!(
+            result.is_err(),
+            "Expected failure due to invalid permission in list"
+        );
         match result {
             Err(ParseError::UnexpectedToken(msg)) => {
                 assert!(msg.contains("Invalid permission") || msg.contains("EXECUTE"));
@@ -439,7 +464,10 @@ mod revoke_permission_tests {
 
         let result = revoke_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to wrong keyword after REVOKE");
+        assert!(
+            result.is_err(),
+            "Expected failure due to wrong keyword after REVOKE"
+        );
         match result {
             Err(ParseError::UnexpectedToken(_)) => {}
             Err(ParseError::ExpectedKeyword(_, _)) => {}
@@ -454,7 +482,10 @@ mod revoke_permission_tests {
 
         let result = revoke_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to wrong keyword instead of ON");
+        assert!(
+            result.is_err(),
+            "Expected failure due to wrong keyword instead of ON"
+        );
         match result {
             Err(ParseError::ExpectedKeyword(expected, _)) => {
                 assert_eq!(expected, "ON");
@@ -470,7 +501,10 @@ mod revoke_permission_tests {
 
         let result = revoke_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to wrong keyword instead of FROM");
+        assert!(
+            result.is_err(),
+            "Expected failure due to wrong keyword instead of FROM"
+        );
         match result {
             Err(ParseError::ExpectedKeyword(expected, _)) => {
                 assert_eq!(expected, "FROM");
@@ -486,7 +520,10 @@ mod revoke_permission_tests {
 
         let result = revoke_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to number as event_type");
+        assert!(
+            result.is_err(),
+            "Expected failure due to number as event_type"
+        );
         match result {
             Err(ParseError::UnexpectedToken(msg)) => {
                 assert!(msg.contains("event_type") || msg.contains("Expected"));
@@ -536,7 +573,10 @@ mod revoke_permission_tests {
 
         let result = revoke_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to multiple extra tokens");
+        assert!(
+            result.is_err(),
+            "Expected failure due to multiple extra tokens"
+        );
         match result {
             Err(ParseError::UnexpectedToken(msg)) => {
                 assert!(msg.contains("Extra tokens") || msg.contains("extra"));
@@ -592,7 +632,10 @@ mod revoke_permission_tests {
 
         let result = revoke_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to trailing comma in permissions");
+        assert!(
+            result.is_err(),
+            "Expected failure due to trailing comma in permissions"
+        );
     }
 
     #[test]
@@ -602,7 +645,10 @@ mod revoke_permission_tests {
 
         let result = revoke_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to trailing comma in event types");
+        assert!(
+            result.is_err(),
+            "Expected failure due to trailing comma in event types"
+        );
     }
 
     #[test]
@@ -634,8 +680,8 @@ mod revoke_permission_tests {
         let input = "REVOKE READ ON order_created FROM very_long_user_id_with_many_parts_12345";
         let tokens = tokenize(input);
 
-        let command = revoke_permission::parse(&tokens)
-            .expect("Failed to parse REVOKE with long user_id");
+        let command =
+            revoke_permission::parse(&tokens).expect("Failed to parse REVOKE with long user_id");
 
         assert_eq!(
             command,
@@ -647,4 +693,3 @@ mod revoke_permission_tests {
         );
     }
 }
-

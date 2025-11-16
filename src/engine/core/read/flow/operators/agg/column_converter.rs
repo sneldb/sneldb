@@ -1,8 +1,8 @@
 use crate::engine::core::column::column_values::ColumnValues;
 use crate::engine::core::read::aggregate::plan::AggregateOpSpec;
 use crate::engine::core::read::cache::DecompressedBlock;
-use crate::engine::core::read::flow::batch::ColumnBatch;
 use crate::engine::core::read::flow::FlowOperatorError;
+use crate::engine::core::read::flow::batch::ColumnBatch;
 use crate::engine::core::read::sink::AggregateSink;
 use crate::engine::types::ScalarValue;
 use std::collections::{HashMap, HashSet};

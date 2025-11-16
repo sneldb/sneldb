@@ -22,19 +22,25 @@ fn bytes_eq_ignore_ascii_case(a: &[u8], b: &[u8]) -> bool {
 struct TcpAuthState {
     user_id: Option<String>,
     auth_manager: Option<Arc<AuthManager>>,
+    client_ip: String,
 }
 
 impl TcpAuthState {
-    fn new(auth_manager: Option<Arc<AuthManager>>) -> Self {
+    fn new(auth_manager: Option<Arc<AuthManager>>, client_ip: String) -> Self {
         Self {
             user_id: None,
             auth_manager,
+            client_ip,
         }
     }
 
     /// Authenticate the connection using AUTH command
     /// Format: AUTH user_id:signature
     /// Signature should be computed as: HMAC-SHA256(secret_key, user_id)
+    ///
+    /// # Security
+    /// - Rate limiting is applied per IP address on initial authentication
+    /// - After successful auth, subsequent commands skip rate limiting for full throughput
     async fn authenticate(&mut self, input: &str) -> Result<(), String> {
         let parts: Vec<&str> = input.splitn(2, ' ').collect();
         if parts.len() != 2 {
@@ -55,8 +61,12 @@ impl TcpAuthState {
             None => return Err("Authentication not configured".to_string()),
         };
 
-        // Verify signature: HMAC(secret_key, user_id) == signature
-        match auth_mgr.verify_signature(user_id, user_id, signature).await {
+        // Verify signature with rate limiting (initial auth)
+        // Pass client IP to enable per-IP rate limiting for brute-force protection
+        match auth_mgr
+            .verify_signature(user_id, user_id, signature, Some(&self.client_ip))
+            .await
+        {
             Ok(_) => {
                 self.user_id = Some(user_id.to_string());
                 Ok(())
@@ -119,9 +129,10 @@ async fn check_auth<'a>(
             let command_part = &trimmed[colon_pos + 1..];
             let command_part_trimmed = command_part.trim();
 
-            // All commands require signature for authenticated connections
+            // For authenticated connections, skip rate limiting (allows full throughput)
+            // Connection is already authenticated via AUTH command (which was rate limited)
             match auth_mgr
-                .verify_signature(command_part_trimmed, user_id, potential_signature)
+                .verify_signature(command_part_trimmed, user_id, potential_signature, None)
                 .await
             {
                 Ok(_) => return Some((command_part_trimmed, true, Some(user_id.to_string()))),
@@ -136,11 +147,15 @@ async fn check_auth<'a>(
         }
     }
 
-    // Fall back to inline format: user_id:signature:command
+    // Fall back to inline format: user_id:signature:command (per-command auth)
+    // Apply rate limiting for inline auth as each command is an auth attempt
     match auth_mgr.parse_auth(trimmed) {
         Ok((user_id, signature, command)) => {
-            // Verify signature
-            match auth_mgr.verify_signature(command, user_id, signature).await {
+            // Verify signature with rate limiting (per-command auth)
+            match auth_mgr
+                .verify_signature(command, user_id, signature, Some(&auth_state.client_ip))
+                .await
+            {
                 Ok(_) => Some((command, true, Some(user_id.to_string()))),
                 Err(_) => None,
             }
@@ -183,7 +198,7 @@ pub async fn run_tcp_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
             }
         };
 
-        let (stream, _) = match accept_result {
+        let (stream, peer_addr) = match accept_result {
             Ok(stream) => stream,
             Err(e) => {
                 warn!("Failed to accept TCP connection: {}", e);
@@ -191,6 +206,7 @@ pub async fn run_tcp_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
             }
         };
 
+        let client_ip = peer_addr.ip().to_string();
         let shard_manager = ctx.shard_manager.clone();
         let registry = ctx.registry.clone();
         let server_state = ctx.server_state.clone();
@@ -199,7 +215,7 @@ pub async fn run_tcp_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
         tokio::spawn(async move {
             let mut reader = BufReader::new(stream);
             let mut line = String::new();
-            let mut auth_state = TcpAuthState::new(auth_manager.clone());
+            let mut auth_state = TcpAuthState::new(auth_manager.clone(), client_ip);
 
             loop {
                 line.clear();

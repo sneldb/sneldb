@@ -1,6 +1,6 @@
+use crate::engine::core::WriteJob;
 use crate::engine::core::column::format::{ColumnBlockHeader, PhysicalType};
 use crate::engine::core::write::column_group_builder::ColumnGroupBuilder;
-use crate::engine::core::WriteJob;
 use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::WriteJobFactory;
 use std::collections::HashMap;

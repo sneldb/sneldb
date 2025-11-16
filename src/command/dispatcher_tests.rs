@@ -324,9 +324,10 @@ async fn create_test_components() -> (
 ) {
     let base_dir = tempdir().unwrap().into_path();
     let wal_dir = tempdir().unwrap().into_path();
+    let schema_dir = tempdir().unwrap().into_path();
     let shard_manager = Arc::new(ShardManager::new(1, base_dir, wal_dir).await);
     let registry = Arc::new(RwLock::new(
-        SchemaRegistry::new().expect("Failed to initialize SchemaRegistry"),
+        SchemaRegistry::new_with_path(schema_dir).expect("Failed to initialize SchemaRegistry"),
     ));
     let auth_manager = Arc::new(AuthManager::new(Arc::clone(&shard_manager)));
     let temp_dir = tempdir().unwrap();
@@ -696,7 +697,8 @@ async fn test_dispatch_create_user_error_user_exists() {
 
     // Verify error response
     assert!(msg.contains("400"));
-    assert!(msg.contains("User already exists: existing_user"));
+    // Note: Error message doesn't include user_id to prevent user enumeration
+    assert!(msg.contains("User already exists"));
 }
 
 #[tokio::test]

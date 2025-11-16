@@ -68,8 +68,8 @@ async fn test_verify_signature_error_invalid_signature() {
 
     assert!(result.is_err());
     match result {
-        Err(AuthError::InvalidSignature) => {}
-        _ => panic!("Expected InvalidSignature error"),
+        Err(AuthError::AuthenticationFailed) => {}
+        _ => panic!("Expected AuthenticationFailed error"),
     }
 }
 
@@ -80,10 +80,13 @@ async fn test_verify_signature_error_user_not_found() {
     let cache = create_empty_cache();
     let result = verify_signature(&cache, "message", "non_existent_user", "signature").await;
 
+    // verify_signature returns generic AuthenticationFailed to prevent user enumeration
     assert!(result.is_err());
     match result {
-        Err(AuthError::UserNotFound(user_id)) => assert_eq!(user_id, "non_existent_user"),
-        _ => panic!("Expected UserNotFound error"),
+        Err(AuthError::AuthenticationFailed) => {
+            // Expected: generic error for security
+        }
+        _ => panic!("Expected AuthenticationFailed error"),
     }
 }
 
@@ -97,10 +100,13 @@ async fn test_verify_signature_error_user_inactive() {
 
     let result = verify_signature(&cache, message, "inactive_user", &signature).await;
 
+    // verify_signature returns generic AuthenticationFailed to prevent user enumeration
     assert!(result.is_err());
     match result {
-        Err(AuthError::UserInactive(user_id)) => assert_eq!(user_id, "inactive_user"),
-        _ => panic!("Expected UserInactive error"),
+        Err(AuthError::AuthenticationFailed) => {
+            // Expected: generic error for security
+        }
+        _ => panic!("Expected AuthenticationFailed error"),
     }
 }
 
@@ -118,8 +124,8 @@ async fn test_verify_signature_message_must_match() {
 
     assert!(result.is_err());
     match result {
-        Err(AuthError::InvalidSignature) => {}
-        _ => panic!("Expected InvalidSignature error"),
+        Err(AuthError::AuthenticationFailed) => {}
+        _ => panic!("Expected AuthenticationFailed error"),
     }
 }
 
@@ -216,16 +222,16 @@ async fn test_parse_auth_error_missing_signature() {
     let result = parse_auth("user123 STORE test_event");
     assert!(result.is_err());
     match result {
-        Err(AuthError::MissingSignature) => {}
-        _ => panic!("Expected MissingSignature error"),
+        Err(AuthError::AuthenticationFailed) => {}
+        _ => panic!("Expected AuthenticationFailed error"),
     }
 
     // Only one colon
     let result = parse_auth("user123:STORE test_event");
     assert!(result.is_err());
     match result {
-        Err(AuthError::MissingSignature) => {}
-        _ => panic!("Expected MissingSignature error"),
+        Err(AuthError::AuthenticationFailed) => {}
+        _ => panic!("Expected AuthenticationFailed error"),
     }
 }
 
@@ -237,8 +243,8 @@ async fn test_parse_auth_error_missing_user_id() {
     let result = parse_auth(":signature:STORE test_event");
     assert!(result.is_err());
     match result {
-        Err(AuthError::MissingUserId) => {}
-        _ => panic!("Expected MissingUserId error"),
+        Err(AuthError::AuthenticationFailed) => {}
+        _ => panic!("Expected AuthenticationFailed error"),
     }
 }
 

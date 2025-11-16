@@ -44,6 +44,14 @@ allow_unauthenticated = true
 
 [auth]
 bypass_auth = false
+# Rate limiting for FAILED authentication attempts (per second PER IP ADDRESS)
+# Key behavior: Only rate limits FAILED auth attempts, successful auths bypass rate limiting
+# - Legitimate clients with valid HMAC signatures: unlimited throughput (300K+ events/sec)
+# - Attackers trying to brute-force signatures: limited to N failed attempts/sec per IP
+# Applied to: initial AUTH commands, per-request HTTP auth, inline format auth
+rate_limit_per_second = 10
+# Enable rate limiting for failed authentication attempts
+rate_limit_enabled = true
 
 [logging]
 log_dir = "../data/logs"

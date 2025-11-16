@@ -78,8 +78,8 @@ Creates a user with a word-based secret key (no quotes needed for simple keys).
 
 - Validates the user ID format before creation.
 - Checks if the user already exists (returns error if duplicate).
-- Stores the user in SnelDB's internal `__auth_user` event type.
-- Caches the user credentials in memory for fast authentication lookups.
+- Stores the user in the protected auth store (backed by `__auth_user` in the `__system_auth` context).
+- Caches the user credentials in memory for fast authentication lookups (auth checks are O(1)).
 - Returns the secret key in the response (only shown once during creation).
 
 ### Response Format
@@ -165,6 +165,15 @@ LIST USERS
 - Does not return secret keys (for security reasons).
 - Results are returned from the in-memory cache for fast access.
 - Requires admin authentication.
+
+## Auth Storage and Durability
+
+- **Isolation:** User data lives in the `__system_auth` context and is not queryable through regular commands. The HTTP dispatcher rejects any `__system_*` context from user input.
+- **Hot path:** Authentication and authorization are served from in-memory caches (`UserCache`, `PermissionCache`) for O(1) checks.
+- **Durability:** Mutations (create/revoke/grant/revoke permissions) append to a dedicated secured WAL (`.swal`). Frames are binary, length-prefixed, CRC-checked, and versioned with the standard storage header. Corrupted frames are skipped during replay instead of failing startup.
+- **Replay:** On startup, the auth WAL is replayed with “latest timestamp wins” semantics to rebuild the caches. The WAL is small because auth mutations are rare compared to data events.
+- **Configurable fsync cadence:** The auth WAL flushes each write and fsyncs periodically; you can tune fsync frequency via the WAL settings (or override per storage instance) to balance throughput and durability.
+- **Encryption:** Auth WAL payloads are encrypted (AEAD). Provide a 32-byte master key via `SNELDB_AUTH_WAL_KEY` (64-char hex). If unset, a key is derived from the server `auth_token`.
 
 ### Response Format
 

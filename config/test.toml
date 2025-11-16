@@ -44,6 +44,10 @@ allow_unauthenticated = true
 
 [auth]
 bypass_auth = true
+# Disable rate limiting for tests to avoid flaky test failures
+# Rate limiting only applies to FAILED auth attempts in production
+rate_limit_enabled = false
+# Tests use bypass_auth=true, so rate limiting is not applied anyway
 
 [logging]
 log_dir = "../data/logs"
