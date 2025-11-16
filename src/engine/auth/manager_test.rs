@@ -1,3 +1,4 @@
+use crate::engine::auth::storage::AuthWalStorage;
 use crate::engine::auth::{AuthError, AuthManager};
 use crate::engine::shard::manager::ShardManager;
 use crate::logging::init_for_tests;
@@ -13,7 +14,10 @@ async fn create_test_auth_manager() -> (Arc<AuthManager>, tempfile::TempDir) {
     let base_dir = tempdir().unwrap().into_path();
     let wal_dir = tempdir().unwrap().into_path();
     let shard_manager = Arc::new(ShardManager::new(1, base_dir, wal_dir).await);
-    let auth_manager = Arc::new(AuthManager::new(shard_manager));
+    let auth_wal_dir = tempdir().unwrap().into_path().join("auth.swal");
+    let storage =
+        Arc::new(AuthWalStorage::new(auth_wal_dir).expect("create auth wal storage for tests"));
+    let auth_manager = Arc::new(AuthManager::with_storage(shard_manager, storage));
     let temp_dir = tempdir().unwrap();
     (auth_manager, temp_dir)
 }
@@ -32,7 +36,10 @@ async fn test_auth_manager_new() {
     let base_dir = tempdir().unwrap().into_path();
     let wal_dir = tempdir().unwrap().into_path();
     let shard_manager = Arc::new(ShardManager::new(1, base_dir, wal_dir).await);
-    let auth_manager = AuthManager::new(shard_manager);
+    let auth_wal_dir = tempdir().unwrap().into_path().join("auth.swal");
+    let storage =
+        Arc::new(AuthWalStorage::new(auth_wal_dir).expect("create auth wal storage for tests"));
+    let auth_manager = AuthManager::with_storage(shard_manager, storage);
 
     // Verify initial state - no users
     let users = auth_manager.list_users().await;

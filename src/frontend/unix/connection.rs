@@ -11,7 +11,6 @@ use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, BufReader};
 
-
 pub struct Connection<R, W> {
     pub pid: u32,
     pub reader: BufReader<R>,
@@ -50,7 +49,10 @@ where
         match auth_mgr.parse_auth(trimmed) {
             Ok((user_id, signature, command)) => {
                 // Verify signature (UNIX sockets: no rate limiting - local only)
-                match auth_mgr.verify_signature(command, user_id, signature, None).await {
+                match auth_mgr
+                    .verify_signature(command, user_id, signature, None)
+                    .await
+                {
                     Ok(_) => Some((command, Some(user_id.to_string()))),
                     Err(_) => None,
                 }

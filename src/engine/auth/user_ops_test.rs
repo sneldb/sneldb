@@ -1,6 +1,6 @@
+use super::storage::AuthWalStorage;
 use super::types::{AuthError, PermissionCache, UserCache};
 use super::user_ops::{create_user, create_user_with_roles, list_users, revoke_key};
-use crate::engine::shard::manager::ShardManager;
 use crate::logging::init_for_tests;
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -10,23 +10,31 @@ use tokio::sync::RwLock;
 async fn create_test_deps() -> (
     Arc<RwLock<UserCache>>,
     Arc<RwLock<PermissionCache>>,
-    Arc<ShardManager>,
+    Arc<dyn crate::engine::auth::storage::AuthStorage>,
 ) {
-    let base_dir = tempdir().unwrap().into_path();
     let wal_dir = tempdir().unwrap().into_path();
-    let shard_manager = Arc::new(ShardManager::new(1, base_dir, wal_dir).await);
+    let wal_path = wal_dir.join("auth.swal");
+    let storage: Arc<dyn crate::engine::auth::storage::AuthStorage> =
+        Arc::new(AuthWalStorage::new(wal_path).expect("create auth wal storage"));
     let cache = Arc::new(RwLock::new(UserCache::new()));
     let permission_cache = Arc::new(RwLock::new(PermissionCache::new()));
-    (cache, permission_cache, shard_manager)
+    (cache, permission_cache, storage)
 }
 
 #[tokio::test]
 async fn test_create_user_success_without_secret_key() {
     init_for_tests();
 
-    let (cache, permission_cache, shard_manager) = create_test_deps().await;
+    let (cache, permission_cache, auth_storage) = create_test_deps().await;
 
-    let result = create_user(&cache, &permission_cache, &shard_manager, "test_user".to_string(), None).await;
+    let result = create_user(
+        &cache,
+        &permission_cache,
+        &auth_storage,
+        "test_user".to_string(),
+        None,
+    )
+    .await;
 
     assert!(result.is_ok());
     let secret_key = result.unwrap();
@@ -47,13 +55,13 @@ async fn test_create_user_success_without_secret_key() {
 async fn test_create_user_success_with_secret_key() {
     init_for_tests();
 
-    let (cache, permission_cache, shard_manager) = create_test_deps().await;
+    let (cache, permission_cache, auth_storage) = create_test_deps().await;
     let provided_key = "my_custom_secret_key_12345";
 
     let result = create_user(
         &cache,
         &permission_cache,
-        &shard_manager,
+        &auth_storage,
         "test_user2".to_string(),
         Some(provided_key.to_string()),
     )
@@ -75,13 +83,13 @@ async fn test_create_user_success_with_secret_key() {
 async fn test_create_user_error_user_exists() {
     init_for_tests();
 
-    let (cache, permission_cache, shard_manager) = create_test_deps().await;
+    let (cache, permission_cache, auth_storage) = create_test_deps().await;
 
     // Create first user
     create_user(
         &cache,
         &permission_cache,
-        &shard_manager,
+        &auth_storage,
         "existing_user".to_string(),
         None,
     )
@@ -92,7 +100,7 @@ async fn test_create_user_error_user_exists() {
     let result = create_user(
         &cache,
         &permission_cache,
-        &shard_manager,
+        &auth_storage,
         "existing_user".to_string(),
         None,
     )
@@ -100,7 +108,7 @@ async fn test_create_user_error_user_exists() {
 
     assert!(result.is_err());
     match result {
-        Err(AuthError::UserExists) => {},
+        Err(AuthError::UserExists) => {}
         _ => panic!("Expected UserExists error"),
     }
 
@@ -113,7 +121,7 @@ async fn test_create_user_error_user_exists() {
 async fn test_create_user_error_invalid_user_id() {
     init_for_tests();
 
-    let (cache, permission_cache, shard_manager) = create_test_deps().await;
+    let (cache, permission_cache, auth_storage) = create_test_deps().await;
 
     // Test various invalid user IDs
     let invalid_ids = vec!["user@domain", "user#123", "user space", "user.dot", ""];
@@ -122,7 +130,7 @@ async fn test_create_user_error_invalid_user_id() {
         let result = create_user(
             &cache,
             &permission_cache,
-            &shard_manager,
+            &auth_storage,
             invalid_id.to_string(),
             None,
         )
@@ -146,7 +154,7 @@ async fn test_create_user_error_invalid_user_id() {
 async fn test_create_user_valid_user_id_formats() {
     init_for_tests();
 
-    let (cache, permission_cache, shard_manager) = create_test_deps().await;
+    let (cache, permission_cache, auth_storage) = create_test_deps().await;
 
     // Test valid user ID formats
     let valid_ids = vec![
@@ -161,7 +169,7 @@ async fn test_create_user_valid_user_id_formats() {
         let result = create_user(
             &cache,
             &permission_cache,
-            &shard_manager,
+            &auth_storage,
             valid_id.to_string(),
             None,
         )
@@ -178,7 +186,7 @@ async fn test_create_user_valid_user_id_formats() {
 async fn test_create_user_generates_unique_keys() {
     init_for_tests();
 
-    let (cache, permission_cache, shard_manager) = create_test_deps().await;
+    let (cache, permission_cache, auth_storage) = create_test_deps().await;
 
     // Create multiple users without providing keys
     let mut keys = Vec::new();
@@ -186,7 +194,7 @@ async fn test_create_user_generates_unique_keys() {
         let key = create_user(
             &cache,
             &permission_cache,
-            &shard_manager,
+            &auth_storage,
             format!("user{}", i),
             None,
         )
@@ -209,12 +217,12 @@ async fn test_create_user_generates_unique_keys() {
 async fn test_create_user_defaults_to_empty_roles() {
     init_for_tests();
 
-    let (cache, permission_cache, shard_manager) = create_test_deps().await;
+    let (cache, permission_cache, auth_storage) = create_test_deps().await;
 
     create_user(
         &cache,
         &permission_cache,
-        &shard_manager,
+        &auth_storage,
         "regular_user".to_string(),
         Some("secret".to_string()),
     )
@@ -230,13 +238,13 @@ async fn test_create_user_defaults_to_empty_roles() {
 async fn test_create_user_with_roles() {
     init_for_tests();
 
-    let (cache, permission_cache, shard_manager) = create_test_deps().await;
+    let (cache, permission_cache, auth_storage) = create_test_deps().await;
 
     let roles = vec!["admin".to_string(), "read-only".to_string()];
     let result = create_user_with_roles(
         &cache,
         &permission_cache,
-        &shard_manager,
+        &auth_storage,
         "admin_user".to_string(),
         Some("secret".to_string()),
         roles.clone(),
@@ -255,13 +263,13 @@ async fn test_create_user_with_roles() {
 async fn test_create_user_with_roles_error_user_exists() {
     init_for_tests();
 
-    let (cache, permission_cache, shard_manager) = create_test_deps().await;
+    let (cache, permission_cache, auth_storage) = create_test_deps().await;
 
     // Create user first
     create_user(
         &cache,
         &permission_cache,
-        &shard_manager,
+        &auth_storage,
         "existing_user".to_string(),
         None,
     )
@@ -272,7 +280,7 @@ async fn test_create_user_with_roles_error_user_exists() {
     let result = create_user_with_roles(
         &cache,
         &permission_cache,
-        &shard_manager,
+        &auth_storage,
         "existing_user".to_string(),
         Some("secret".to_string()),
         vec!["admin".to_string()],
@@ -281,7 +289,7 @@ async fn test_create_user_with_roles_error_user_exists() {
 
     assert!(result.is_err());
     match result {
-        Err(AuthError::UserExists) => {},
+        Err(AuthError::UserExists) => {}
         _ => panic!("Expected UserExists error"),
     }
 }
@@ -290,12 +298,12 @@ async fn test_create_user_with_roles_error_user_exists() {
 async fn test_create_user_with_roles_error_invalid_user_id() {
     init_for_tests();
 
-    let (cache, permission_cache, shard_manager) = create_test_deps().await;
+    let (cache, permission_cache, auth_storage) = create_test_deps().await;
 
     let result = create_user_with_roles(
         &cache,
         &permission_cache,
-        &shard_manager,
+        &auth_storage,
         "user@invalid".to_string(),
         Some("secret".to_string()),
         vec!["admin".to_string()],
@@ -313,13 +321,13 @@ async fn test_create_user_with_roles_error_invalid_user_id() {
 async fn test_revoke_key_success() {
     init_for_tests();
 
-    let (cache, permission_cache, shard_manager) = create_test_deps().await;
+    let (cache, permission_cache, auth_storage) = create_test_deps().await;
 
     // Create a user first
     create_user(
         &cache,
         &permission_cache,
-        &shard_manager,
+        &auth_storage,
         "user_to_revoke".to_string(),
         None,
     )
@@ -332,7 +340,7 @@ async fn test_revoke_key_success() {
     assert!(users_before[0].active);
 
     // Revoke the key
-    let result = revoke_key(&cache, &permission_cache, &shard_manager, "user_to_revoke").await;
+    let result = revoke_key(&cache, &permission_cache, &auth_storage, "user_to_revoke").await;
     assert!(result.is_ok());
 
     // Verify user is now inactive
@@ -346,9 +354,15 @@ async fn test_revoke_key_success() {
 async fn test_revoke_key_error_user_not_found() {
     init_for_tests();
 
-    let (cache, permission_cache, shard_manager) = create_test_deps().await;
+    let (cache, permission_cache, auth_storage) = create_test_deps().await;
 
-    let result = revoke_key(&cache, &permission_cache, &shard_manager, "non_existent_user").await;
+    let result = revoke_key(
+        &cache,
+        &permission_cache,
+        &auth_storage,
+        "non_existent_user",
+    )
+    .await;
 
     assert!(result.is_err());
     match result {
@@ -361,14 +375,14 @@ async fn test_revoke_key_error_user_not_found() {
 async fn test_revoke_key_preserves_secret_key() {
     init_for_tests();
 
-    let (cache, permission_cache, shard_manager) = create_test_deps().await;
+    let (cache, permission_cache, auth_storage) = create_test_deps().await;
 
     // Create a user
     let original_secret = "my_secret_key_12345";
     create_user(
         &cache,
         &permission_cache,
-        &shard_manager,
+        &auth_storage,
         "test_user".to_string(),
         Some(original_secret.to_string()),
     )
@@ -376,7 +390,7 @@ async fn test_revoke_key_preserves_secret_key() {
     .expect("User creation should succeed");
 
     // Revoke key
-    revoke_key(&cache, &permission_cache, &shard_manager, "test_user")
+    revoke_key(&cache, &permission_cache, &auth_storage, "test_user")
         .await
         .expect("Revoke should succeed");
 
@@ -401,7 +415,7 @@ async fn test_list_users_empty() {
 async fn test_list_users_with_multiple_users() {
     init_for_tests();
 
-    let (cache, permission_cache, shard_manager) = create_test_deps().await;
+    let (cache, permission_cache, auth_storage) = create_test_deps().await;
 
     // Create multiple users
     let user_ids = vec!["user1", "user2", "user3"];
@@ -409,7 +423,7 @@ async fn test_list_users_with_multiple_users() {
         create_user(
             &cache,
             &permission_cache,
-            &shard_manager,
+            &auth_storage,
             user_id.to_string(),
             None,
         )
@@ -432,13 +446,13 @@ async fn test_list_users_with_multiple_users() {
 async fn test_list_users_shows_active_and_inactive() {
     init_for_tests();
 
-    let (cache, permission_cache, shard_manager) = create_test_deps().await;
+    let (cache, permission_cache, auth_storage) = create_test_deps().await;
 
     // Create two users
     create_user(
         &cache,
         &permission_cache,
-        &shard_manager,
+        &auth_storage,
         "active_user".to_string(),
         None,
     )
@@ -447,7 +461,7 @@ async fn test_list_users_shows_active_and_inactive() {
     create_user(
         &cache,
         &permission_cache,
-        &shard_manager,
+        &auth_storage,
         "inactive_user".to_string(),
         None,
     )
@@ -455,7 +469,7 @@ async fn test_list_users_shows_active_and_inactive() {
     .expect("User creation should succeed");
 
     // Revoke one user's key
-    revoke_key(&cache, &permission_cache, &shard_manager, "inactive_user")
+    revoke_key(&cache, &permission_cache, &auth_storage, "inactive_user")
         .await
         .expect("Revoke should succeed");
 
@@ -474,13 +488,13 @@ async fn test_list_users_shows_active_and_inactive() {
 async fn test_create_user_then_revoke_then_create_again_fails() {
     init_for_tests();
 
-    let (cache, permission_cache, shard_manager) = create_test_deps().await;
+    let (cache, permission_cache, auth_storage) = create_test_deps().await;
 
     // Create user
     create_user(
         &cache,
         &permission_cache,
-        &shard_manager,
+        &auth_storage,
         "recreate_user".to_string(),
         None,
     )
@@ -488,7 +502,7 @@ async fn test_create_user_then_revoke_then_create_again_fails() {
     .expect("User creation should succeed");
 
     // Revoke key
-    revoke_key(&cache, &permission_cache, &shard_manager, "recreate_user")
+    revoke_key(&cache, &permission_cache, &auth_storage, "recreate_user")
         .await
         .expect("Revoke should succeed");
 
@@ -496,7 +510,7 @@ async fn test_create_user_then_revoke_then_create_again_fails() {
     let result = create_user(
         &cache,
         &permission_cache,
-        &shard_manager,
+        &auth_storage,
         "recreate_user".to_string(),
         None,
     )
@@ -504,7 +518,7 @@ async fn test_create_user_then_revoke_then_create_again_fails() {
 
     assert!(result.is_err());
     match result {
-        Err(AuthError::UserExists) => {},
+        Err(AuthError::UserExists) => {}
         _ => panic!("Expected UserExists error"),
     }
 }
@@ -513,13 +527,13 @@ async fn test_create_user_then_revoke_then_create_again_fails() {
 async fn test_bootstrap_admin_user_skips_when_users_exist() {
     init_for_tests();
 
-    let (cache, permission_cache, shard_manager) = create_test_deps().await;
+    let (cache, permission_cache, auth_storage) = create_test_deps().await;
 
     // Create a user first
     create_user(
         &cache,
         &permission_cache,
-        &shard_manager,
+        &auth_storage,
         "existing_user".to_string(),
         Some("secret".to_string()),
     )
@@ -537,12 +551,12 @@ async fn test_bootstrap_admin_user_skips_when_users_exist() {
 async fn test_create_user_with_empty_roles() {
     init_for_tests();
 
-    let (cache, permission_cache, shard_manager) = create_test_deps().await;
+    let (cache, permission_cache, auth_storage) = create_test_deps().await;
 
     let result = create_user_with_roles(
         &cache,
         &permission_cache,
-        &shard_manager,
+        &auth_storage,
         "user_no_roles".to_string(),
         Some("secret".to_string()),
         Vec::new(),
@@ -560,7 +574,7 @@ async fn test_create_user_with_empty_roles() {
 async fn test_create_user_with_multiple_roles() {
     init_for_tests();
 
-    let (cache, permission_cache, shard_manager) = create_test_deps().await;
+    let (cache, permission_cache, auth_storage) = create_test_deps().await;
 
     let roles = vec![
         "admin".to_string(),
@@ -570,7 +584,7 @@ async fn test_create_user_with_multiple_roles() {
     let result = create_user_with_roles(
         &cache,
         &permission_cache,
-        &shard_manager,
+        &auth_storage,
         "multi_role_user".to_string(),
         Some("secret".to_string()),
         roles.clone(),
@@ -583,4 +597,3 @@ async fn test_create_user_with_multiple_roles() {
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].roles, roles);
 }
-

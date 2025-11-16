@@ -16,8 +16,8 @@ mod show_permissions_tests {
         let input = "SHOW PERMISSIONS FOR user123";
         let tokens = tokenize(input);
 
-        let command = show_permissions::parse(&tokens)
-            .expect("Failed to parse SHOW PERMISSIONS command");
+        let command =
+            show_permissions::parse(&tokens).expect("Failed to parse SHOW PERMISSIONS command");
 
         assert_eq!(
             command,
@@ -166,7 +166,10 @@ mod show_permissions_tests {
 
         let result = show_permissions::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to missing SHOW keyword");
+        assert!(
+            result.is_err(),
+            "Expected failure due to missing SHOW keyword"
+        );
         match result {
             Err(ParseError::UnexpectedToken(_)) => {}
             _ => panic!("Expected UnexpectedToken error"),
@@ -196,7 +199,10 @@ mod show_permissions_tests {
 
         let result = show_permissions::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to missing PERMISSIONS keyword");
+        assert!(
+            result.is_err(),
+            "Expected failure due to missing PERMISSIONS keyword"
+        );
         match result {
             Err(ParseError::ExpectedKeyword(expected, _)) => {
                 assert_eq!(expected, "PERMISSIONS");
@@ -212,7 +218,10 @@ mod show_permissions_tests {
 
         let result = show_permissions::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to missing FOR keyword");
+        assert!(
+            result.is_err(),
+            "Expected failure due to missing FOR keyword"
+        );
         match result {
             Err(ParseError::ExpectedKeyword(expected, _)) => {
                 assert_eq!(expected, "FOR");
@@ -261,7 +270,10 @@ mod show_permissions_tests {
 
         let result = show_permissions::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to missing FOR keyword");
+        assert!(
+            result.is_err(),
+            "Expected failure due to missing FOR keyword"
+        );
         match result {
             Err(ParseError::ExpectedKeyword(expected, _)) => {
                 assert_eq!(expected, "FOR");
@@ -282,7 +294,10 @@ mod show_permissions_tests {
 
         let result = show_permissions::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to wrong keyword after SHOW");
+        assert!(
+            result.is_err(),
+            "Expected failure due to wrong keyword after SHOW"
+        );
         match result {
             Err(ParseError::ExpectedKeyword(expected, _)) => {
                 assert_eq!(expected, "PERMISSIONS");
@@ -298,7 +313,10 @@ mod show_permissions_tests {
 
         let result = show_permissions::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to wrong keyword instead of FOR");
+        assert!(
+            result.is_err(),
+            "Expected failure due to wrong keyword instead of FOR"
+        );
         match result {
             Err(ParseError::ExpectedKeyword(expected, _)) => {
                 assert_eq!(expected, "FOR");
@@ -362,7 +380,10 @@ mod show_permissions_tests {
 
         let result = show_permissions::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to multiple extra tokens");
+        assert!(
+            result.is_err(),
+            "Expected failure due to multiple extra tokens"
+        );
         match result {
             Err(ParseError::UnexpectedToken(msg)) => {
                 assert!(msg.contains("Extra tokens") || msg.contains("extra"));
@@ -378,7 +399,10 @@ mod show_permissions_tests {
 
         let result = show_permissions::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to extra tokens with keywords");
+        assert!(
+            result.is_err(),
+            "Expected failure due to extra tokens with keywords"
+        );
         match result {
             Err(ParseError::UnexpectedToken(msg)) => {
                 assert!(msg.contains("Extra tokens") || msg.contains("ON"));
@@ -466,8 +490,8 @@ mod show_permissions_tests {
 
         for input in inputs {
             let tokens = tokenize(input);
-            let command = show_permissions::parse(&tokens)
-                .expect(&format!("Failed to parse: {}", input));
+            let command =
+                show_permissions::parse(&tokens).expect(&format!("Failed to parse: {}", input));
 
             assert_eq!(
                 command,
@@ -478,6 +502,3 @@ mod show_permissions_tests {
         }
     }
 }
-
-
-

@@ -1,7 +1,20 @@
+use crate::command::types::Command;
+use crate::engine::schema::SchemaRegistry;
+use crate::engine::shard::manager::ShardManager;
+use crate::frontend::http::dispatcher::{
+    command_targets_protected_context, dispatch_and_respond, extract_client_ip_from_header_map,
+};
 use crate::logging::init_for_tests;
+use crate::shared::response::{JsonRenderer, render::Renderer};
+use hyper::StatusCode;
 use hyper::http::{HeaderMap, HeaderValue};
+use std::sync::Arc;
+use tempfile::tempdir;
+use tokio::sync::RwLock;
 
-use super::dispatcher::extract_client_ip_from_header_map;
+fn test_renderer() -> Arc<dyn Renderer + Send + Sync> {
+    Arc::new(JsonRenderer)
+}
 
 /// Helper function to create test headers
 fn create_test_headers(headers: Vec<(&'static str, &'static str)>) -> HeaderMap {
@@ -135,4 +148,43 @@ async fn test_extract_client_ip_with_proxy_chain() {
 
     // Should extract the first IP (original client)
     assert_eq!(client_ip, Some("192.168.1.100".to_string()));
+}
+
+#[tokio::test]
+async fn test_protected_context_rejected() {
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+    let shard_manager = Arc::new(ShardManager::new(1, base_dir, wal_dir).await);
+    let registry = Arc::new(RwLock::new(
+        SchemaRegistry::new().expect("schema registry should initialize"),
+    ));
+
+    let cmd = Command::Query {
+        event_type: "__auth_user".to_string(),
+        context_id: Some("__system_auth".to_string()),
+        since: None,
+        time_field: None,
+        sequence_time_field: None,
+        where_clause: None,
+        limit: None,
+        offset: None,
+        order_by: None,
+        picked_zones: None,
+        return_fields: None,
+        link_field: None,
+        aggs: None,
+        time_bucket: None,
+        group_by: None,
+        event_sequence: None,
+    };
+
+    assert!(command_targets_protected_context(&cmd));
+
+    let response = dispatch_and_respond(cmd, registry, shard_manager, None, None, test_renderer())
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }

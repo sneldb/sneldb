@@ -1,21 +1,14 @@
 use super::db_ops::store_user_in_db;
+use super::storage::AuthStorage;
 use super::types::{
     AuthError, AuthResult, PermissionCache, PermissionSet, User, UserCache, UserKey,
 };
-use crate::engine::shard::manager::ShardManager;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::debug;
 
-/// Updates user caches after permission changes.
-///
-/// Acquires write locks sequentially to update both caches.
-///
-/// # Arguments
-/// * `cache` - User cache to update
-/// * `permission_cache` - Permission cache to update
-/// * `updated_key` - The updated user key with new permissions
+/// Updates user and permission caches after permission changes.
 async fn update_caches(
     cache: &Arc<RwLock<UserCache>>,
     permission_cache: &Arc<RwLock<PermissionCache>>,
@@ -32,26 +25,11 @@ async fn update_caches(
     } // Drop write lock on permission cache
 }
 
-/// Grants permissions to a user for specific event types.
-///
-/// # Arguments
-/// * `cache` - User cache for authentication lookups
-/// * `permission_cache` - Permission cache for authorization checks
-/// * `shard_manager` - Shard manager for database operations
-/// * `user_id` - The user ID to grant permissions to
-/// * `event_type` - The event type to grant permissions for
-/// * `permission_set` - The permissions to grant (read/write)
-///
-/// # Returns
-/// `Ok(())` on success
-///
-/// # Errors
-/// - `UserNotFound` if user doesn't exist
-/// - `DatabaseError` if database operation fails
+/// Grants permissions to a user for an event type.
 pub async fn grant_permission(
     cache: &Arc<RwLock<UserCache>>,
     permission_cache: &Arc<RwLock<PermissionCache>>,
-    shard_manager: &Arc<ShardManager>,
+    auth_storage: &Arc<dyn AuthStorage>,
     user_id: &str,
     event_type: &str,
     permission_set: PermissionSet,
@@ -72,7 +50,7 @@ pub async fn grant_permission(
     let mut updated_permissions = user_key.permissions.clone();
     updated_permissions.insert(event_type.to_string(), permission_set);
 
-    // Create updated user (preserve all existing fields)
+    // Create updated user
     let updated_user = User {
         user_id: user_id.to_string(),
         secret_key: user_key.secret_key.clone(),
@@ -82,7 +60,7 @@ pub async fn grant_permission(
         permissions: updated_permissions.clone(),
     };
 
-    store_user_in_db(shard_manager, &updated_user).await?;
+    store_user_in_db(auth_storage, &updated_user).await?;
 
     // Update caches
     let updated_key = UserKey {
@@ -106,25 +84,11 @@ pub async fn grant_permission(
     Ok(())
 }
 
-/// Revokes permissions from a user for specific event types.
-///
-/// # Arguments
-/// * `cache` - User cache for authentication lookups
-/// * `permission_cache` - Permission cache for authorization checks
-/// * `shard_manager` - Shard manager for database operations
-/// * `user_id` - The user ID to revoke permissions from
-/// * `event_type` - The event type to revoke permissions for
-///
-/// # Returns
-/// `Ok(())` on success
-///
-/// # Errors
-/// - `UserNotFound` if user doesn't exist
-/// - `DatabaseError` if database operation fails
+/// Revokes permissions from a user for an event type.
 pub async fn revoke_permission(
     cache: &Arc<RwLock<UserCache>>,
     permission_cache: &Arc<RwLock<PermissionCache>>,
-    shard_manager: &Arc<ShardManager>,
+    auth_storage: &Arc<dyn AuthStorage>,
     user_id: &str,
     event_type: &str,
 ) -> AuthResult<()> {
@@ -144,7 +108,7 @@ pub async fn revoke_permission(
     let mut updated_permissions = user_key.permissions.clone();
     updated_permissions.remove(event_type);
 
-    // Create updated user (preserve all existing fields)
+    // Create updated user
     let updated_user = User {
         user_id: user_id.to_string(),
         secret_key: user_key.secret_key.clone(),
@@ -154,7 +118,7 @@ pub async fn revoke_permission(
         permissions: updated_permissions.clone(),
     };
 
-    store_user_in_db(shard_manager, &updated_user).await?;
+    store_user_in_db(auth_storage, &updated_user).await?;
 
     // Update caches
     let updated_key = UserKey {

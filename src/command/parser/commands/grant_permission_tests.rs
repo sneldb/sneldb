@@ -16,8 +16,8 @@ mod grant_permission_tests {
         let input = "GRANT READ ON order_created TO user123";
         let tokens = tokenize(input);
 
-        let command = grant_permission::parse(&tokens)
-            .expect("Failed to parse GRANT READ permission");
+        let command =
+            grant_permission::parse(&tokens).expect("Failed to parse GRANT READ permission");
 
         assert_eq!(
             command,
@@ -34,8 +34,8 @@ mod grant_permission_tests {
         let input = "GRANT WRITE ON payment_succeeded TO user456";
         let tokens = tokenize(input);
 
-        let command = grant_permission::parse(&tokens)
-            .expect("Failed to parse GRANT WRITE permission");
+        let command =
+            grant_permission::parse(&tokens).expect("Failed to parse GRANT WRITE permission");
 
         assert_eq!(
             command,
@@ -52,8 +52,8 @@ mod grant_permission_tests {
         let input = "GRANT READ,WRITE ON order_created TO user789";
         let tokens = tokenize(input);
 
-        let command = grant_permission::parse(&tokens)
-            .expect("Failed to parse GRANT READ,WRITE permission");
+        let command =
+            grant_permission::parse(&tokens).expect("Failed to parse GRANT READ,WRITE permission");
 
         assert_eq!(
             command,
@@ -70,8 +70,8 @@ mod grant_permission_tests {
         let input = "GRANT WRITE,READ ON order_created TO user789";
         let tokens = tokenize(input);
 
-        let command = grant_permission::parse(&tokens)
-            .expect("Failed to parse GRANT WRITE,READ permission");
+        let command =
+            grant_permission::parse(&tokens).expect("Failed to parse GRANT WRITE,READ permission");
 
         assert_eq!(
             command,
@@ -103,7 +103,8 @@ mod grant_permission_tests {
 
     #[test]
     fn test_parse_grant_permission_read_write_multiple_event_types() {
-        let input = "GRANT READ,WRITE ON order_created,payment_succeeded,order_cancelled TO user123";
+        let input =
+            "GRANT READ,WRITE ON order_created,payment_succeeded,order_cancelled TO user123";
         let tokens = tokenize(input);
 
         let command = grant_permission::parse(&tokens)
@@ -128,8 +129,8 @@ mod grant_permission_tests {
         let input = "grant read on order_created to user123";
         let tokens = tokenize(input);
 
-        let command = grant_permission::parse(&tokens)
-            .expect("Failed to parse lowercase GRANT command");
+        let command =
+            grant_permission::parse(&tokens).expect("Failed to parse lowercase GRANT command");
 
         assert_eq!(
             command,
@@ -146,8 +147,8 @@ mod grant_permission_tests {
         let input = "GrAnT ReAd On order_created To user123";
         let tokens = tokenize(input);
 
-        let command = grant_permission::parse(&tokens)
-            .expect("Failed to parse mixed case GRANT command");
+        let command =
+            grant_permission::parse(&tokens).expect("Failed to parse mixed case GRANT command");
 
         assert_eq!(
             command,
@@ -200,8 +201,8 @@ mod grant_permission_tests {
         let input = r#"GRANT READ ON "order-created" TO "user-123""#;
         let tokens = tokenize(input);
 
-        let command = grant_permission::parse(&tokens)
-            .expect("Failed to parse GRANT with string literals");
+        let command =
+            grant_permission::parse(&tokens).expect("Failed to parse GRANT with string literals");
 
         assert_eq!(
             command,
@@ -236,8 +237,8 @@ mod grant_permission_tests {
         let input = "GRANT READ ON order_created TO user-456";
         let tokens = tokenize(input);
 
-        let command = grant_permission::parse(&tokens)
-            .expect("Failed to parse GRANT with hyphen in user_id");
+        let command =
+            grant_permission::parse(&tokens).expect("Failed to parse GRANT with hyphen in user_id");
 
         assert_eq!(
             command,
@@ -278,7 +279,10 @@ mod grant_permission_tests {
 
         let result = grant_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to missing GRANT keyword");
+        assert!(
+            result.is_err(),
+            "Expected failure due to missing GRANT keyword"
+        );
         match result {
             Err(ParseError::UnexpectedToken(_)) => {}
             _ => panic!("Expected UnexpectedToken error"),
@@ -308,7 +312,10 @@ mod grant_permission_tests {
 
         let result = grant_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to missing permissions");
+        assert!(
+            result.is_err(),
+            "Expected failure due to missing permissions"
+        );
         // The parser sees "ON" and treats it as an invalid permission name
         match result {
             Err(ParseError::UnexpectedToken(msg)) => {
@@ -330,7 +337,10 @@ mod grant_permission_tests {
 
         let result = grant_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to missing ON keyword");
+        assert!(
+            result.is_err(),
+            "Expected failure due to missing ON keyword"
+        );
         match result {
             Err(ParseError::ExpectedKeyword(expected, _)) => {
                 assert_eq!(expected, "ON");
@@ -347,7 +357,10 @@ mod grant_permission_tests {
 
         let result = grant_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to missing event types");
+        assert!(
+            result.is_err(),
+            "Expected failure due to missing event types"
+        );
         // The parser will consume "TO" as an event_type, then fail when trying to match "TO" keyword
         match result {
             Err(ParseError::ExpectedKeyword(expected, _)) => {
@@ -356,7 +369,10 @@ mod grant_permission_tests {
             Err(ParseError::MissingArgument(arg)) => {
                 assert!(arg.contains("event_type"));
             }
-            Err(e) => panic!("Expected ExpectedKeyword or MissingArgument error, got: {:?}", e),
+            Err(e) => panic!(
+                "Expected ExpectedKeyword or MissingArgument error, got: {:?}",
+                e
+            ),
             _ => panic!("Expected error"),
         }
     }
@@ -368,7 +384,10 @@ mod grant_permission_tests {
 
         let result = grant_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to missing TO keyword");
+        assert!(
+            result.is_err(),
+            "Expected failure due to missing TO keyword"
+        );
         match result {
             Err(ParseError::ExpectedKeyword(expected, _)) => {
                 assert_eq!(expected, "TO");
@@ -405,7 +424,10 @@ mod grant_permission_tests {
 
         let result = grant_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to invalid permission");
+        assert!(
+            result.is_err(),
+            "Expected failure due to invalid permission"
+        );
         match result {
             Err(ParseError::UnexpectedToken(msg)) => {
                 assert!(msg.contains("Invalid permission") || msg.contains("EXECUTE"));
@@ -421,7 +443,10 @@ mod grant_permission_tests {
 
         let result = grant_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to invalid permission in list");
+        assert!(
+            result.is_err(),
+            "Expected failure due to invalid permission in list"
+        );
         match result {
             Err(ParseError::UnexpectedToken(msg)) => {
                 assert!(msg.contains("Invalid permission") || msg.contains("EXECUTE"));
@@ -437,7 +462,10 @@ mod grant_permission_tests {
 
         let result = grant_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to wrong keyword after GRANT");
+        assert!(
+            result.is_err(),
+            "Expected failure due to wrong keyword after GRANT"
+        );
         match result {
             Err(ParseError::UnexpectedToken(_)) => {}
             Err(ParseError::ExpectedKeyword(_, _)) => {}
@@ -452,7 +480,10 @@ mod grant_permission_tests {
 
         let result = grant_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to wrong keyword instead of ON");
+        assert!(
+            result.is_err(),
+            "Expected failure due to wrong keyword instead of ON"
+        );
         match result {
             Err(ParseError::ExpectedKeyword(expected, _)) => {
                 assert_eq!(expected, "ON");
@@ -468,7 +499,10 @@ mod grant_permission_tests {
 
         let result = grant_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to wrong keyword instead of TO");
+        assert!(
+            result.is_err(),
+            "Expected failure due to wrong keyword instead of TO"
+        );
         match result {
             Err(ParseError::ExpectedKeyword(expected, _)) => {
                 assert_eq!(expected, "TO");
@@ -484,7 +518,10 @@ mod grant_permission_tests {
 
         let result = grant_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to number as event_type");
+        assert!(
+            result.is_err(),
+            "Expected failure due to number as event_type"
+        );
         match result {
             Err(ParseError::UnexpectedToken(msg)) => {
                 assert!(msg.contains("event_type") || msg.contains("Expected"));
@@ -534,7 +571,10 @@ mod grant_permission_tests {
 
         let result = grant_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to multiple extra tokens");
+        assert!(
+            result.is_err(),
+            "Expected failure due to multiple extra tokens"
+        );
         match result {
             Err(ParseError::UnexpectedToken(msg)) => {
                 assert!(msg.contains("Extra tokens") || msg.contains("extra"));
@@ -590,7 +630,10 @@ mod grant_permission_tests {
 
         let result = grant_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to trailing comma in permissions");
+        assert!(
+            result.is_err(),
+            "Expected failure due to trailing comma in permissions"
+        );
     }
 
     #[test]
@@ -600,7 +643,10 @@ mod grant_permission_tests {
 
         let result = grant_permission::parse(&tokens);
 
-        assert!(result.is_err(), "Expected failure due to trailing comma in event types");
+        assert!(
+            result.is_err(),
+            "Expected failure due to trailing comma in event types"
+        );
     }
 
     #[test]
@@ -608,8 +654,8 @@ mod grant_permission_tests {
         let input = "GRANT READ ON e1,e2,e3,e4,e5 TO user123";
         let tokens = tokenize(input);
 
-        let command = grant_permission::parse(&tokens)
-            .expect("Failed to parse GRANT with many event types");
+        let command =
+            grant_permission::parse(&tokens).expect("Failed to parse GRANT with many event types");
 
         assert_eq!(
             command,
@@ -632,8 +678,8 @@ mod grant_permission_tests {
         let input = "GRANT READ ON order_created TO very_long_user_id_with_many_parts_12345";
         let tokens = tokenize(input);
 
-        let command = grant_permission::parse(&tokens)
-            .expect("Failed to parse GRANT with long user_id");
+        let command =
+            grant_permission::parse(&tokens).expect("Failed to parse GRANT with long user_id");
 
         assert_eq!(
             command,
@@ -645,4 +691,3 @@ mod grant_permission_tests {
         );
     }
 }
-

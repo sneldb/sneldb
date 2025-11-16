@@ -182,7 +182,6 @@ impl ColumnReader {
         Ok(snapshot.into_strings())
     }
 
-
     /// Zero-copy load that returns a ColumnValues view, using the pooled buffer underneath.
     #[inline]
     fn load_zone_compressed_zero_copy(

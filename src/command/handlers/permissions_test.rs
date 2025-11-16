@@ -2,7 +2,7 @@ use crate::command::handlers::permissions::handle;
 use crate::command::types::Command;
 use crate::engine::auth::{AuthManager, PermissionSet};
 use crate::engine::schema::registry::MiniSchema;
-use crate::engine::schema::{types::FieldType, SchemaRegistry};
+use crate::engine::schema::{SchemaRegistry, types::FieldType};
 use crate::engine::shard::manager::ShardManager;
 use crate::logging::init_for_tests;
 use crate::shared::response::JsonRenderer;

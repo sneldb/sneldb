@@ -1,4 +1,3 @@
-
 use tokio::io::{AsyncReadExt, duplex};
 
 use crate::command::handlers::query::response::QueryResponseFormatter;

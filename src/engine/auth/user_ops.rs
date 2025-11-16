@@ -1,27 +1,16 @@
 use super::db_ops::store_user_in_db;
+use super::storage::AuthStorage;
 use super::types::{
-    AuthError, AuthResult, PermissionCache, User, UserCache, UserKey, MAX_SECRET_KEY_LENGTH,
-    MAX_USER_ID_LENGTH,
+    AuthError, AuthResult, MAX_SECRET_KEY_LENGTH, MAX_USER_ID_LENGTH, PermissionCache, User,
+    UserCache, UserKey,
 };
-use crate::engine::shard::manager::ShardManager;
 use crate::shared::config::CONFIG;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-/// Validates user_id format and length.
-///
-/// # Rules
-/// - Must not be empty
-/// - Must not exceed MAX_USER_ID_LENGTH characters
-/// - Must contain only alphanumeric characters, underscores, or hyphens
-///
-/// # Arguments
-/// * `user_id` - The user ID to validate
-///
-/// # Returns
-/// `Ok(())` if valid, appropriate `AuthError` if invalid
+/// Validates user_id: non-empty, alphanumeric/underscore/hyphen, max MAX_USER_ID_LENGTH.
 fn validate_user_id(user_id: &str) -> AuthResult<()> {
     if user_id.is_empty() {
         return Err(AuthError::InvalidUserId);
@@ -43,13 +32,7 @@ fn validate_user_id(user_id: &str) -> AuthResult<()> {
     Ok(())
 }
 
-/// Validates secret key length.
-///
-/// # Arguments
-/// * `secret_key` - The secret key to validate
-///
-/// # Returns
-/// `Ok(())` if valid, appropriate `AuthError` if invalid
+/// Validates secret key length (max MAX_SECRET_KEY_LENGTH).
 fn validate_secret_key(secret_key: &str) -> AuthResult<()> {
     if secret_key.len() > MAX_SECRET_KEY_LENGTH {
         return Err(AuthError::SecretKeyTooLong {
@@ -59,13 +42,7 @@ fn validate_secret_key(secret_key: &str) -> AuthResult<()> {
     Ok(())
 }
 
-/// Generates a cryptographically secure random secret key.
-///
-/// Returns a 64-character hexadecimal string (32 bytes of randomness).
-/// Uses the system's CSPRNG via `rand::thread_rng()`.
-///
-/// # Returns
-/// A hex-encoded random secret key suitable for HMAC-SHA256
+/// Generates a 64-char hex secret key (32 random bytes) for HMAC-SHA256.
 fn generate_secret_key() -> String {
     use rand::RngCore;
     let mut rng = rand::thread_rng();
@@ -74,52 +51,30 @@ fn generate_secret_key() -> String {
     hex::encode(bytes)
 }
 
-/// Creates a new user and stores in SnelDB.
-///
-/// This is a convenience wrapper around `create_user_with_roles` with no roles.
-///
-/// # Arguments
-/// * `cache` - User cache for authentication lookups
-/// * `permission_cache` - Permission cache for authorization checks
-/// * `shard_manager` - Shard manager for database operations
-/// * `user_id` - The unique user identifier
-/// * `secret_key` - Optional secret key (generated if not provided)
-///
-/// # Returns
-/// The secret key (generated or provided) on success
+/// Creates a new user (wrapper around `create_user_with_roles` with no roles).
 pub async fn create_user(
     cache: &Arc<RwLock<UserCache>>,
     permission_cache: &Arc<RwLock<PermissionCache>>,
-    shard_manager: &Arc<ShardManager>,
+    auth_storage: &Arc<dyn AuthStorage>,
     user_id: String,
     secret_key: Option<String>,
 ) -> AuthResult<String> {
-    create_user_with_roles(cache, permission_cache, shard_manager, user_id, secret_key, Vec::new()).await
+    create_user_with_roles(
+        cache,
+        permission_cache,
+        auth_storage,
+        user_id,
+        secret_key,
+        Vec::new(),
+    )
+    .await
 }
 
-/// Creates a user with specified roles and stores in SnelDB.
-///
-/// # Arguments
-/// * `cache` - User cache for authentication lookups
-/// * `permission_cache` - Permission cache for authorization checks
-/// * `shard_manager` - Shard manager for database operations
-/// * `user_id` - The unique user identifier
-/// * `secret_key` - Optional secret key (generated if not provided)
-/// * `roles` - List of roles to assign to the user (e.g., ["admin"])
-///
-/// # Returns
-/// The secret key (generated or provided) on success
-///
-/// # Errors
-/// - `InvalidUserId` if user_id format is invalid
-/// - `UserIdTooLong` if user_id exceeds maximum length
-/// - `SecretKeyTooLong` if provided secret_key exceeds maximum length
-/// - `UserExists` if user already exists (doesn't leak user_id in error)
-/// - `DatabaseError` if database operation fails
+/// Creates a user with roles. Returns secret key (generated or provided).
 pub async fn create_user_with_roles(
     cache: &Arc<RwLock<UserCache>>,
     permission_cache: &Arc<RwLock<PermissionCache>>,
-    shard_manager: &Arc<ShardManager>,
+    auth_storage: &Arc<dyn AuthStorage>,
     user_id: String,
     secret_key: Option<String>,
     roles: Vec<String>,
@@ -136,11 +91,11 @@ pub async fn create_user_with_roles(
         None => generate_secret_key(),
     };
 
-    // Check if user already exists (use read lock)
+    // Check if user already exists
     {
         let cache_guard = cache.read().await;
         if cache_guard.get(&user_id).is_some() {
-            // Don't leak user_id in error message to prevent enumeration
+            // Don't leak user_id to prevent enumeration
             debug!(target: "sneldb::auth", user_id, "User already exists");
             return Err(AuthError::UserExists);
         }
@@ -161,7 +116,7 @@ pub async fn create_user_with_roles(
     };
 
     // Store in database first
-    store_user_in_db(shard_manager, &user).await?;
+    store_user_in_db(auth_storage, &user).await?;
 
     // Update caches (now acquire write locks)
     let user_key = UserKey::from(user);
@@ -181,26 +136,11 @@ pub async fn create_user_with_roles(
     Ok(secret)
 }
 
-/// Revokes a user's key by marking it as inactive.
-///
-/// The user record remains in the system for audit purposes but can no longer authenticate.
-///
-/// # Arguments
-/// * `cache` - User cache for authentication lookups
-/// * `permission_cache` - Permission cache for authorization checks
-/// * `shard_manager` - Shard manager for database operations
-/// * `user_id` - The user ID whose key should be revoked
-///
-/// # Returns
-/// `Ok(())` on success
-///
-/// # Errors
-/// - Returns generic `AuthenticationFailed` if user not found (to prevent enumeration)
-/// - `DatabaseError` if database operation fails
+/// Revokes a user's key (marks inactive). User record kept for audit.
 pub async fn revoke_key(
     cache: &Arc<RwLock<UserCache>>,
     permission_cache: &Arc<RwLock<PermissionCache>>,
-    shard_manager: &Arc<ShardManager>,
+    auth_storage: &Arc<dyn AuthStorage>,
     user_id: &str,
 ) -> AuthResult<()> {
     // Use read lock first to get user data
@@ -220,14 +160,14 @@ pub async fn revoke_key(
         user_id: user_id.to_string(),
         secret_key: user_key.secret_key.clone(),
         active: false,
-        created_at: user_key.created_at, // Preserve actual timestamp
+        created_at: user_key.created_at, // Preserve timestamp
         roles: user_key.roles.clone(),
         permissions: user_key.permissions.clone(),
     };
 
-    store_user_in_db(shard_manager, &updated_user).await?;
+    store_user_in_db(auth_storage, &updated_user).await?;
 
-    // Update user cache (acquire write lock)
+    // Update user cache
     let updated_key = UserKey {
         user_id: user_id.to_string(),
         secret_key: user_key.secret_key.clone(),
@@ -258,11 +198,11 @@ pub async fn list_users(cache: &Arc<RwLock<UserCache>>) -> Vec<UserKey> {
     cache_guard.all_users().into_iter().cloned().collect()
 }
 
-/// Bootstraps admin user from configuration if no users exist
+/// Bootstraps admin user from config if no users exist.
 pub async fn bootstrap_admin_user(
     cache: &Arc<RwLock<UserCache>>,
     permission_cache: &Arc<RwLock<PermissionCache>>,
-    shard_manager: &Arc<ShardManager>,
+    auth_storage: &Arc<dyn AuthStorage>,
 ) -> AuthResult<()> {
     let user_count = {
         let cache_guard = cache.read().await;
@@ -302,7 +242,7 @@ pub async fn bootstrap_admin_user(
     create_user_with_roles(
         cache,
         permission_cache,
-        shard_manager,
+        auth_storage,
         admin_user.clone(),
         Some(admin_key.clone()),
         vec!["admin".to_string()],
@@ -312,4 +252,3 @@ pub async fn bootstrap_admin_user(
     info!(target: "sneldb::auth", user_id = admin_user, "Bootstrap admin user created");
     Ok(())
 }
-

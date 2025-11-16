@@ -1,6 +1,4 @@
-use super::types::{
-    AuthError, AuthResult, UserCache, MAX_SIGNATURE_LENGTH, MAX_USER_ID_LENGTH,
-};
+use super::types::{AuthError, AuthResult, MAX_SIGNATURE_LENGTH, MAX_USER_ID_LENGTH, UserCache};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use std::sync::Arc;
@@ -10,21 +8,7 @@ use tracing::{debug, warn};
 
 type HmacSha256 = Hmac<Sha256>;
 
-/// Verifies HMAC signature for a message.
-///
-/// Returns a generic error to prevent user enumeration attacks.
-/// Internal errors (user not found, inactive user) are logged but not exposed.
-///
-/// # Arguments
-/// * `cache` - User cache containing authentication credentials
-/// * `message` - The message that was signed
-/// * `user_id` - The user ID claiming to have signed the message
-/// * `signature` - The signature to verify
-///
-/// # Security
-/// - Uses constant-time comparison to prevent timing attacks
-/// - Returns generic error to prevent user enumeration
-/// - Logs specific failures for debugging/auditing
+/// Verifies HMAC signature. Uses constant-time comparison. Returns generic errors.
 pub async fn verify_signature(
     cache: &Arc<RwLock<UserCache>>,
     message: &str,
@@ -54,15 +38,14 @@ pub async fn verify_signature(
     }
 
     // Compute expected HMAC
-    let mut mac = HmacSha256::new_from_slice(user_key.secret_key.as_bytes())
-        .map_err(|_| {
-            warn!(target: "sneldb::auth", "Failed to create HMAC");
-            AuthError::AuthenticationFailed
-        })?;
+    let mut mac = HmacSha256::new_from_slice(user_key.secret_key.as_bytes()).map_err(|_| {
+        warn!(target: "sneldb::auth", "Failed to create HMAC");
+        AuthError::AuthenticationFailed
+    })?;
     mac.update(message.as_bytes());
     let expected_signature = hex::encode(mac.finalize().into_bytes());
 
-    // Constant-time comparison to prevent timing attacks
+    // Constant-time comparison
     if constant_time_eq(signature.as_bytes(), expected_signature.as_bytes()) {
         Ok(())
     } else {
@@ -71,19 +54,7 @@ pub async fn verify_signature(
     }
 }
 
-/// Parses authentication from request.
-///
-/// Expected format: "user_id:signature:command"
-///
-/// # Arguments
-/// * `input` - The input string to parse
-///
-/// # Returns
-/// A tuple of (user_id, signature, command) if parsing succeeds
-///
-/// # Security
-/// - Validates input lengths to prevent DoS attacks
-/// - Returns generic errors for authentication failures
+/// Parses "user_id:signature:command" format. Validates lengths.
 pub fn parse_auth<'a>(input: &'a str) -> AuthResult<(&'a str, &'a str, &'a str)> {
     let bytes = input.as_bytes();
     let mut first_colon = None;
@@ -121,21 +92,9 @@ pub fn parse_auth<'a>(input: &'a str) -> AuthResult<(&'a str, &'a str, &'a str)>
 }
 
 /// Constant-time comparison to prevent timing attacks.
-///
-/// Uses the `subtle` crate to ensure comparison happens in constant time,
-/// preventing timing side-channel attacks that could leak information about
-/// the expected signature.
-///
-/// # Arguments
-/// * `a` - First byte slice to compare
-/// * `b` - Second byte slice to compare
-///
-/// # Returns
-/// `true` if the slices are equal, `false` otherwise (including length mismatch)
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
     }
     bool::from(a.ct_eq(b))
 }
-

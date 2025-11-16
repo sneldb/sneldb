@@ -14,8 +14,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
     writer: &mut W,
     renderer: &dyn Renderer,
 ) -> std::io::Result<()> {
-    // User management commands require authentication and admin role
-    // Skip permission check if user_id is "bypass" (bypass_auth mode)
+    // Requires auth and admin role (skip if bypass)
     let authenticated_user_id = match user_id {
         Some(uid) => uid,
         None => {
@@ -27,7 +26,9 @@ pub async fn handle<W: AsyncWrite + Unpin>(
     };
 
     // Skip permission checks for bypass user
-    if authenticated_user_id != BYPASS_USER_ID && !auth_manager.is_admin(authenticated_user_id).await {
+    if authenticated_user_id != BYPASS_USER_ID
+        && !auth_manager.is_admin(authenticated_user_id).await
+    {
         let resp = Response::error(StatusCode::Forbidden, "Only admin users can manage users");
         writer.write_all(&renderer.render(&resp)).await?;
         writer.flush().await?;

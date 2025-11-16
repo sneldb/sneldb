@@ -24,6 +24,8 @@ mod flush_tests;
 #[cfg(test)]
 mod kway_merger_test;
 #[cfg(test)]
+mod permissions_test;
+#[cfg(test)]
 mod query_batch_stream_test;
 #[cfg(test)]
 mod query_tests;
@@ -41,5 +43,3 @@ mod segment_discovery_test;
 mod shard_command_builder_test;
 #[cfg(test)]
 mod store_tests;
-#[cfg(test)]
-mod permissions_test;

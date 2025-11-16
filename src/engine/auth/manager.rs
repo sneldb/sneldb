@@ -1,6 +1,7 @@
 use crate::engine::auth::db_ops::load_from_db;
 use crate::engine::auth::permission_ops::{get_permissions, grant_permission, revoke_permission};
 use crate::engine::auth::signature::{parse_auth, verify_signature};
+use crate::engine::auth::storage::{AuthStorage, AuthWalStorage};
 use crate::engine::auth::types::{
     AuthRateLimiter, AuthResult, PermissionCache, PermissionSet, UserCache, UserKey,
     create_rate_limiter,
@@ -14,40 +15,26 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
-/// Manages user authentication and authorization.
-///
-/// The AuthManager provides:
-/// - User authentication via HMAC-SHA256 signatures
-/// - Authorization with fine-grained permissions per event type
-/// - Role-based access control (RBAC) with admin role
-/// - Configurable rate limiting to prevent brute-force attacks
-/// - In-memory caching for O(1) authentication and authorization
-///
-/// # Architecture
-/// - `UserCache`: Fast lookup of user credentials
-/// - `PermissionCache`: O(1) permission checks with separate admin tracking
-/// - `AuthRateLimiter`: Token bucket rate limiting for auth attempts (optional)
-/// - Persistence via SnelDB's internal `__auth_user` events
+/// Manages authentication (HMAC-SHA256) and authorization (per-event permissions, RBAC).
+/// Uses in-memory caches for O(1) lookups and optional rate limiting.
 pub struct AuthManager {
     cache: Arc<RwLock<UserCache>>,
     permission_cache: Arc<RwLock<PermissionCache>>,
-    shard_manager: Arc<ShardManager>,
+    _shard_manager: Arc<ShardManager>,
+    storage: Arc<dyn AuthStorage>,
     rate_limiter: Option<Arc<Mutex<AuthRateLimiter>>>,
 }
 
 impl AuthManager {
-    /// Creates a new AuthManager.
-    ///
-    /// Rate limiting configuration is read from `CONFIG.auth`:
-    /// - `rate_limit_enabled`: Enable/disable rate limiting (default: true)
-    /// - `rate_limit_per_second`: Max auth attempts per second (default: 10)
-    ///
-    /// # Arguments
-    /// * `shard_manager` - The shard manager for database operations
-    ///
-    /// # Returns
-    /// A new AuthManager with empty caches and configured rate limiting
+    /// Creates a new AuthManager with rate limiting from CONFIG.auth.
     pub fn new(shard_manager: Arc<ShardManager>) -> Self {
+        let storage =
+            Arc::new(AuthWalStorage::new_default().expect("Failed to initialize auth storage"));
+        Self::with_storage(shard_manager, storage)
+    }
+
+    /// Creates a new AuthManager with a provided auth storage (useful for tests).
+    pub fn with_storage(shard_manager: Arc<ShardManager>, storage: Arc<dyn AuthStorage>) -> Self {
         // Read rate limiting config
         let rate_limiter = CONFIG.auth.as_ref().and_then(|auth_cfg| {
             if auth_cfg.rate_limit_enabled {
@@ -62,40 +49,13 @@ impl AuthManager {
         Self {
             cache: Arc::new(RwLock::new(UserCache::new())),
             permission_cache: Arc::new(RwLock::new(PermissionCache::new())),
-            shard_manager,
+            _shard_manager: shard_manager,
+            storage,
             rate_limiter,
         }
     }
 
-    /// Verifies HMAC signature for a message with optional per-IP rate limiting.
-    ///
-    /// # Arguments
-    /// * `message` - The message that was signed
-    /// * `user_id` - The user ID claiming to have signed the message
-    /// * `signature` - The HMAC signature to verify
-    /// * `client_ip` - Optional client IP address for rate limiting (None = skip rate limit)
-    ///
-    /// # Returns
-    /// `Ok(())` if signature is valid, appropriate error otherwise
-    ///
-    /// # Security
-    /// - Applies per-IP rate limiting ONLY on **failed** authentication attempts
-    /// - Successful authentications bypass rate limiting entirely
-    /// - When `client_ip` is None, rate limiting is skipped (for connection-based auth)
-    /// - Uses constant-time comparison in signature verification
-    /// - Returns generic errors to prevent user enumeration
-    ///
-    /// # Performance
-    /// Legitimate clients with valid HMAC signatures get **unlimited throughput**.
-    /// Only attackers attempting to brute-force signatures are rate limited.
-    ///
-    /// # Configuration
-    /// Rate limiting is controlled by `auth.rate_limit_enabled` in config.
-    /// When disabled or `client_ip` is None, no rate limiting is applied.
-    ///
-    /// # Errors
-    /// - `RateLimitExceeded` if too many **failed** attempts from this IP
-    /// - `AuthenticationFailed` for any authentication failure
+    /// Verifies HMAC signature. Rate limits only failed attempts per IP.
     pub async fn verify_signature(
         &self,
         message: &str,
@@ -106,8 +66,7 @@ impl AuthManager {
         // Verify signature FIRST
         let result = verify_signature(&self.cache, message, user_id, signature).await;
 
-        // Only apply rate limiting on FAILED authentication attempts
-        // Successful authentications bypass the rate limiter entirely
+        // Rate limit only failed attempts; successful auths bypass
         if result.is_err() {
             if let (Some(ip), Some(rate_limiter)) = (client_ip, &self.rate_limiter) {
                 let limiter = rate_limiter.lock().await;
@@ -126,13 +85,12 @@ impl AuthManager {
         result
     }
 
-    /// Parses authentication from request
-    /// Expected format: "user_id:signature:command"
+    /// Parses auth from "user_id:signature:command" format.
     pub fn parse_auth<'a>(&self, input: &'a str) -> AuthResult<(&'a str, &'a str, &'a str)> {
         parse_auth(input)
     }
 
-    /// Creates a new user and stores in SnelDB
+    /// Creates a new user.
     pub async fn create_user(
         &self,
         user_id: String,
@@ -141,22 +99,16 @@ impl AuthManager {
         create_user(
             &self.cache,
             &self.permission_cache,
-            &self.shard_manager,
+            &self.storage,
             user_id,
             secret_key,
         )
         .await
     }
 
-    /// Revokes a user's key (marks as inactive)
+    /// Revokes a user's key.
     pub async fn revoke_key(&self, user_id: &str) -> AuthResult<()> {
-        revoke_key(
-            &self.cache,
-            &self.permission_cache,
-            &self.shard_manager,
-            user_id,
-        )
-        .await
+        revoke_key(&self.cache, &self.permission_cache, &self.storage, user_id).await
     }
 
     /// Lists all users
@@ -164,25 +116,25 @@ impl AuthManager {
         list_users(&self.cache).await
     }
 
-    /// Checks if user has admin role
+    /// Checks if user is admin.
     pub async fn is_admin(&self, user_id: &str) -> bool {
         let perm_cache = self.permission_cache.read().await;
         perm_cache.is_admin(user_id)
     }
 
-    /// Checks if user can read from event_type
+    /// Checks if user can read event_type.
     pub async fn can_read(&self, user_id: &str, event_type: &str) -> bool {
         let perm_cache = self.permission_cache.read().await;
         perm_cache.can_read(user_id, event_type)
     }
 
-    /// Checks if user can write to event_type
+    /// Checks if user can write event_type.
     pub async fn can_write(&self, user_id: &str, event_type: &str) -> bool {
         let perm_cache = self.permission_cache.read().await;
         perm_cache.can_write(user_id, event_type)
     }
 
-    /// Grants permissions to a user for specific event types
+    /// Grants permissions to a user for an event type.
     pub async fn grant_permission(
         &self,
         user_id: &str,
@@ -192,7 +144,7 @@ impl AuthManager {
         grant_permission(
             &self.cache,
             &self.permission_cache,
-            &self.shard_manager,
+            &self.storage,
             user_id,
             event_type,
             permission_set,
@@ -200,12 +152,12 @@ impl AuthManager {
         .await
     }
 
-    /// Revokes permissions from a user for specific event types
+    /// Revokes permissions from a user for an event type.
     pub async fn revoke_permission(&self, user_id: &str, event_type: &str) -> AuthResult<()> {
         revoke_permission(
             &self.cache,
             &self.permission_cache,
-            &self.shard_manager,
+            &self.storage,
             user_id,
             event_type,
         )
@@ -220,7 +172,7 @@ impl AuthManager {
         get_permissions(&self.cache, user_id).await
     }
 
-    /// Creates a user with specified roles
+    /// Creates a user with roles.
     pub async fn create_user_with_roles(
         &self,
         user_id: String,
@@ -230,7 +182,7 @@ impl AuthManager {
         create_user_with_roles(
             &self.cache,
             &self.permission_cache,
-            &self.shard_manager,
+            &self.storage,
             user_id,
             secret_key,
             roles,
@@ -238,25 +190,13 @@ impl AuthManager {
         .await
     }
 
-    /// Bootstraps admin user from configuration if no users exist
+    /// Bootstraps admin user from config if no users exist.
     pub async fn bootstrap_admin_user(&self) -> AuthResult<()> {
-        bootstrap_admin_user(&self.cache, &self.permission_cache, &self.shard_manager).await
+        bootstrap_admin_user(&self.cache, &self.permission_cache, &self.storage).await
     }
 
-    /// Loads users from SnelDB.
-    ///
-    /// This queries __auth_user events from the __system_auth context
-    /// and populates both the user cache and permission cache.
-    ///
-    /// # Important
-    /// Currently NOT IMPLEMENTED. See `db_ops::load_from_db` for details.
-    ///
-    /// # Returns
-    /// `Ok(())` on success (or when skipped)
-    ///
-    /// # Errors
-    /// `DatabaseError` if query fails (once implemented)
+    /// Loads users from storage into caches.
     pub async fn load_from_db(&self) -> AuthResult<()> {
-        load_from_db(&self.cache, &self.permission_cache, &self.shard_manager).await
+        load_from_db(&self.cache, &self.permission_cache, &self.storage).await
     }
 }

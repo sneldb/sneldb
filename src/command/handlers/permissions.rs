@@ -1,5 +1,5 @@
 use crate::command::types::Command;
-use crate::engine::auth::{AuthManager, PermissionSet, BYPASS_USER_ID};
+use crate::engine::auth::{AuthManager, BYPASS_USER_ID, PermissionSet};
 use crate::engine::schema::SchemaRegistry;
 use crate::shared::response::render::Renderer;
 use crate::shared::response::{Response, StatusCode};
@@ -17,8 +17,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
     writer: &mut W,
     renderer: &dyn Renderer,
 ) -> std::io::Result<()> {
-    // Verify admin
-    // Skip permission check if user_id is "bypass" (bypass_auth mode)
+    // Verify admin (skip if bypass)
     let admin_id = match admin_user_id {
         Some(uid) => uid,
         None => {
@@ -64,8 +63,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
                 }
             }
 
-            // Grant permissions for each event type
-            // Note: This will merge with existing permissions (grant adds to existing)
+            // Grant permissions (merges with existing)
             for event_type in event_types {
                 // Validate that event_type exists in schema registry
                 let schema_registry = registry.read().await;
@@ -80,7 +78,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
                 }
                 drop(schema_registry);
 
-                // Get existing permissions for this event type
+                // Get existing permissions
                 let existing_perms = auth_manager
                     .get_permissions(user_id)
                     .await
@@ -88,7 +86,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
                     .and_then(|perms| perms.get(event_type).cloned())
                     .unwrap_or_else(PermissionSet::none);
 
-                // Merge: grant adds permissions, doesn't remove existing ones
+                // Merge: grant adds, doesn't remove
                 let merged_perms = PermissionSet {
                     read: existing_perms.read || perm_set.read,
                     write: existing_perms.write || perm_set.write,
@@ -138,7 +136,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
             event_types,
             user_id,
         } => {
-            // If permissions are specified, revoke only those; otherwise revoke all
+            // Revoke specified permissions, or all if none specified
             let revoke_read = permissions.is_empty() || permissions.iter().any(|p| p == "read");
             let revoke_write = permissions.is_empty() || permissions.iter().any(|p| p == "write");
 
@@ -158,7 +156,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
                     write: existing_perms.write && !revoke_write,
                 };
 
-                // Update permissions (grant with new set, or revoke if empty)
+                // Update permissions (grant new set, or revoke if empty)
                 let result = if !new_perms.read && !new_perms.write {
                     // Remove permission entirely
                     auth_manager.revoke_permission(user_id, event_type).await

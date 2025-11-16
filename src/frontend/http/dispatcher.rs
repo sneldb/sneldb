@@ -19,6 +19,31 @@ use std::{convert::Infallible, sync::Arc, time::Instant};
 use tokio::sync::RwLock;
 use tracing::info;
 
+pub(crate) fn is_protected_context(context_id: &str) -> bool {
+    context_id.starts_with("__system_")
+}
+
+pub(crate) fn command_targets_protected_context(cmd: &Command) -> bool {
+    use Command::*;
+    match cmd {
+        Store { context_id, .. } => is_protected_context(context_id),
+        Query { context_id, .. } => context_id
+            .as_deref()
+            .map(is_protected_context)
+            .unwrap_or(false),
+        Replay { context_id, .. } => is_protected_context(context_id),
+        RememberQuery { spec } => command_targets_protected_context(&spec.query),
+        Compare { queries } => queries.iter().any(|q| {
+            q.context_id
+                .as_deref()
+                .map(is_protected_context)
+                .unwrap_or(false)
+        }),
+        Batch(cmds) => cmds.iter().any(command_targets_protected_context),
+        _ => false,
+    }
+}
+
 fn is_authorized(req: &Request<Incoming>) -> bool {
     // Allow unauthenticated on loopback if playground says so
     if CONFIG.playground.allow_unauthenticated {
@@ -344,7 +369,7 @@ pub async fn handle_json_command(
     }
 }
 
-async fn dispatch_and_respond(
+pub(crate) async fn dispatch_and_respond(
     cmd: Command,
     registry: Arc<RwLock<SchemaRegistry>>,
     shard_manager: Arc<ShardManager>,
@@ -352,6 +377,18 @@ async fn dispatch_and_respond(
     user_id: Option<&str>,
     renderer: Arc<dyn Renderer + Send + Sync>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
+    if command_targets_protected_context(&cmd) {
+        let resp = ResponseType::error(
+            ResponseStatusCode::Forbidden,
+            "System contexts are restricted".to_string(),
+        );
+        return Ok(Response::builder()
+            .status(StatusCode::FORBIDDEN)
+            .header(hyper::header::CONTENT_TYPE, "application/json")
+            .body(full_body(renderer.render(&resp)))
+            .unwrap());
+    }
+
     let mut output = Vec::new();
     let result = dispatch_command(
         &cmd,

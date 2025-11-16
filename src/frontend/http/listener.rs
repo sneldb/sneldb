@@ -32,13 +32,10 @@ pub async fn run_http_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
         .ok()
         .and_then(|s| {
             let val: usize = s.parse().ok()?;
-            if val == 0 {
-                None
-            } else {
-                Some(val)
-            }
+            if val == 0 { None } else { Some(val) }
         });
-    let connection_semaphore = max_connections.map(|max| Arc::new(tokio::sync::Semaphore::new(max)));
+    let connection_semaphore =
+        max_connections.map(|max| Arc::new(tokio::sync::Semaphore::new(max)));
 
     loop {
         // Check shutdown before accepting new connections
@@ -118,7 +115,8 @@ pub async fn run_http_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
                 // Only log non-connection-closed errors to reduce noise
                 if !err.to_string().contains("connection closed")
                     && !err.to_string().contains("broken pipe")
-                    && !err.to_string().contains("Connection reset") {
+                    && !err.to_string().contains("Connection reset")
+                {
                     eprintln!("Error serving connection: {:?}", err);
                 }
             }

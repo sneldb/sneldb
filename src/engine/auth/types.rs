@@ -13,7 +13,7 @@ pub const MAX_SIGNATURE_LENGTH: usize = 256;
 pub const BYPASS_USER_ID: &str = "bypass";
 pub const NO_AUTH_USER_ID: &str = "no-auth";
 
-/// Represents read and write permissions for a specific event type
+/// Read/write permissions for an event type.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PermissionSet {
     pub read: bool,
@@ -93,7 +93,7 @@ impl From<User> for UserKey {
 
 #[derive(Debug, Error)]
 pub enum AuthError {
-    // Generic error for authentication failures to prevent user enumeration
+    // Generic error to prevent user enumeration
     #[error("Authentication failed")]
     AuthenticationFailed,
     #[error("User already exists")]
@@ -111,7 +111,7 @@ pub enum AuthError {
     #[error("Rate limit exceeded")]
     RateLimitExceeded,
 
-    // Internal errors (not exposed to users, used for logging only)
+    // Internal errors (logging only)
     #[error("User not found: {0}")]
     UserNotFound(String),
     #[error("User inactive: {0}")]
@@ -120,14 +120,13 @@ pub enum AuthError {
 
 pub type AuthResult<T> = Result<T, AuthError>;
 
-/// In-memory cache for user keys
+/// In-memory cache for user keys.
 #[derive(Debug, Clone)]
 pub struct UserCache {
     users: HashMap<String, UserKey>,
 }
 
-/// Fast permission cache for O(1) permission lookups
-/// Structure: user_id -> event_type -> PermissionSet
+/// O(1) permission cache: user_id -> event_type -> PermissionSet.
 #[derive(Debug, Clone)]
 pub struct PermissionCache {
     /// Map of user_id -> event_type -> PermissionSet
@@ -194,7 +193,6 @@ impl PermissionCache {
                 .insert(user.user_id.clone(), user.permissions.clone());
         }
     }
-
 }
 
 impl Default for PermissionCache {
@@ -237,41 +235,17 @@ impl Default for UserCache {
     }
 }
 
-/// Rate limiter for authentication attempts (per-IP).
-///
-/// Uses the `governor` crate to implement per-IP token bucket rate limiting.
-/// Prevents brute-force attacks on authentication by limiting the number
-/// of authentication attempts per IP address per time period.
-///
-/// # Configuration
-/// - Default: 10 auth attempts per second per IP address
-/// - Can be adjusted based on deployment requirements
-///
-/// # Note
-/// This rate limiter is ONLY applied to initial authentication attempts,
-/// NOT to authenticated operations. This allows authenticated clients to
-/// send commands at full speed (300K+ events/sec) while still protecting
-/// against brute-force authentication attacks.
+/// Per-IP rate limiter for auth attempts (token bucket). Default: 10/sec per IP.
 pub type AuthRateLimiter = GovernorRateLimiter<
     String, // Key = IP address
     dashmap::DashMap<String, governor::state::InMemoryState>,
     governor::clock::DefaultClock,
 >;
 
-/// Creates a new per-IP rate limiter with configured settings.
-///
-/// # Arguments
-/// * `requests_per_second` - Maximum number of authentication attempts per second per IP
-///
-/// # Returns
-/// A configured rate limiter that tracks limits per IP address
-///
-/// # Panics
-/// Panics if `requests_per_second` is 0
+/// Creates a per-IP rate limiter. Panics if requests_per_second is 0.
 pub fn create_rate_limiter(requests_per_second: u32) -> AuthRateLimiter {
     let quota = Quota::per_second(
-        NonZeroU32::new(requests_per_second)
-            .expect("rate_limit_per_second must be greater than 0"),
+        NonZeroU32::new(requests_per_second).expect("rate_limit_per_second must be greater than 0"),
     );
     GovernorRateLimiter::dashmap(quota)
 }

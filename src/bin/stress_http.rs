@@ -8,11 +8,11 @@ use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::rt::TokioExecutor;
 use rand::Rng;
 use rand::distributions::{Alphanumeric, DistString};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::Sha256;
 use snel_db::shared::config::CONFIG;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use sysinfo::System;
 use tokio::sync::mpsc;
@@ -102,16 +102,17 @@ async fn main() -> Result<()> {
         Client::builder(TokioExecutor::new()).build_http();
 
     // Get or create user for authentication
-    let (user_id, secret_key) = if let Ok(provided_secret) = std::env::var("SNEL_STRESS_SECRET_KEY") {
+    let (user_id, secret_key) = if let Ok(provided_secret) = std::env::var("SNEL_STRESS_SECRET_KEY")
+    {
         // Use provided user and secret key
-        let provided_user = std::env::var("SNEL_STRESS_USER_ID")
-            .unwrap_or_else(|_| "stress_user".to_string());
+        let provided_user =
+            std::env::var("SNEL_STRESS_USER_ID").unwrap_or_else(|_| "stress_user".to_string());
         println!("Using provided user '{}' with secret key", provided_user);
         (provided_user, provided_secret)
     } else {
         // Try to create user or use existing
-        let user_id = std::env::var("SNEL_STRESS_USER_ID")
-            .unwrap_or_else(|_| "stress_user".to_string());
+        let user_id =
+            std::env::var("SNEL_STRESS_USER_ID").unwrap_or_else(|_| "stress_user".to_string());
         println!("Creating user '{}'...", user_id);
         let create_user_cmd = format!("CREATE USER {}\n", user_id);
         match create_user_via_http(&client, &base_url, &create_user_cmd).await {
@@ -363,7 +364,13 @@ async fn main() -> Result<()> {
         let user_id_val = rng.gen_range(0..context_pool);
 
         let cmd = if use_json {
-            let payload = random_event_payload_json(i as u64, ts_start, ts_end, user_id_val as u64, &link_field);
+            let payload = random_event_payload_json(
+                i as u64,
+                ts_start,
+                ts_end,
+                user_id_val as u64,
+                &link_field,
+            );
             json!({
                 "type": "Store",
                 "eventType": event_type,
@@ -372,7 +379,8 @@ async fn main() -> Result<()> {
             })
             .to_string()
         } else {
-            let evt = random_event_payload(i as u64, ts_start, ts_end, user_id_val as u64, &link_field);
+            let evt =
+                random_event_payload(i as u64, ts_start, ts_end, user_id_val as u64, &link_field);
             format!("STORE {} FOR {} PAYLOAD {}\n", event_type, ctx_id, evt)
         };
 
@@ -673,4 +681,3 @@ async fn send_authenticated_request(
 
     Ok(status)
 }
-

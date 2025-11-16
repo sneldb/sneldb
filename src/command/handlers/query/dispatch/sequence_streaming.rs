@@ -297,8 +297,6 @@ impl SequenceStreamingDispatcher {
             handles_by_type.insert(event_type.clone(), type_handles);
         }
 
-        Ok(SequenceHandles {
-            handles_by_type,
-        })
+        Ok(SequenceHandles { handles_by_type })
     }
 }

@@ -8,9 +8,7 @@ use crate::engine::core::FieldXorFilter;
 use crate::engine::core::ZoneIndex;
 use crate::engine::core::ZoneMeta;
 use crate::engine::core::column::compression::compressed_column_index::CompressedColumnIndex;
-use crate::engine::core::column::compression::compression_codec::{
-    CompressionCodec, Lz4Codec,
-};
+use crate::engine::core::column::compression::compression_codec::{CompressionCodec, Lz4Codec};
 use crate::engine::core::zone::enum_bitmap_index::EnumBitmapIndex;
 use crate::engine::schema::registry::{MiniSchema, SchemaRecord, SchemaRegistry};
 use crate::shared::storage_header::{BinaryHeader, FileKind};
