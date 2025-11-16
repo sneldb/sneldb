@@ -13,6 +13,7 @@ use crate::shared::response::{
 };
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
+use hyper::http::HeaderMap;
 use hyper::{Request, Response, StatusCode, body::Incoming, header};
 use std::{convert::Infallible, sync::Arc, time::Instant};
 use tokio::sync::RwLock;
@@ -50,6 +51,50 @@ fn is_authorized(req: &Request<Incoming>) -> bool {
         )
 }
 
+/// Extract client IP from HTTP headers
+/// Checks X-Forwarded-For header first (for proxy/load balancer scenarios),
+/// falls back to X-Real-IP, or returns None if not available
+#[cfg(test)]
+pub(crate) fn extract_client_ip_from_header_map(headers: &HeaderMap) -> Option<String> {
+    extract_client_ip_from_headers_impl(headers)
+}
+
+#[cfg(not(test))]
+fn extract_client_ip_from_header_map(headers: &HeaderMap) -> Option<String> {
+    extract_client_ip_from_headers_impl(headers)
+}
+
+fn extract_client_ip_from_headers_impl(headers: &HeaderMap) -> Option<String> {
+    // Check X-Forwarded-For first (standard for proxied requests)
+    if let Some(forwarded) = headers.get("X-Forwarded-For").and_then(|h| h.to_str().ok()) {
+        // X-Forwarded-For can be a comma-separated list, take the first (original client)
+        if let Some(ip) = forwarded.split(',').next() {
+            let trimmed = ip.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+
+    // Fall back to X-Real-IP
+    if let Some(real_ip) = headers.get("X-Real-IP").and_then(|h| h.to_str().ok()) {
+        let trimmed = real_ip.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+
+    // No IP available (direct connection without proxy headers)
+    None
+}
+
+/// Extract client IP from HTTP request
+/// Checks X-Forwarded-For header first (for proxy/load balancer scenarios),
+/// falls back to X-Real-IP, or returns None if not available
+fn extract_client_ip(req: &Request<Incoming>) -> Option<String> {
+    extract_client_ip_from_header_map(req.headers())
+}
+
 /// Extract authentication from HTTP headers
 /// Returns (user_id, signature) if found in headers, None otherwise
 fn extract_auth_from_headers(req: &Request<Incoming>) -> Option<(String, String)> {
@@ -79,6 +124,7 @@ async fn check_auth_with_headers<'a>(
     input: &'a str,
     auth_from_headers: Option<(String, String)>,
     auth_manager: Option<&'a Arc<AuthManager>>,
+    client_ip: Option<&str>,
 ) -> Option<(&'a str, String)> {
     // Check if authentication is bypassed via config - do this first for performance
     if CONFIG.auth.as_ref().map(|a| a.bypass_auth).unwrap_or(false) {
@@ -98,9 +144,9 @@ async fn check_auth_with_headers<'a>(
 
     // Try header-based authentication first (for HTTP)
     if let Some((user_id, signature)) = auth_from_headers {
-        // Verify signature against the command body
+        // Verify signature with per-IP rate limiting (HTTP requests)
         match auth_mgr
-            .verify_signature(trimmed, &user_id, &signature)
+            .verify_signature(trimmed, &user_id, &signature, client_ip)
             .await
         {
             Ok(_) => return Some((input, user_id)),
@@ -111,8 +157,11 @@ async fn check_auth_with_headers<'a>(
     // Fall back to inline format: user_id:signature:command (for backward compatibility)
     match auth_mgr.parse_auth(trimmed) {
         Ok((user_id, signature, command)) => {
-            // Verify signature
-            match auth_mgr.verify_signature(command, user_id, signature).await {
+            // Verify signature with per-IP rate limiting
+            match auth_mgr
+                .verify_signature(command, user_id, signature, client_ip)
+                .await
+            {
                 Ok(_) => Some((command, user_id.to_string())),
                 Err(_) => None,
             }
@@ -138,6 +187,9 @@ pub async fn handle_line_command(
         return unauthorized();
     }
 
+    // Extract client IP for rate limiting (on failed auth attempts)
+    let client_ip = extract_client_ip(&req);
+
     // Extract auth headers before consuming the request body
     let auth_from_headers = extract_auth_from_headers(&req);
 
@@ -154,13 +206,20 @@ pub async fn handle_line_command(
     }
 
     // Check authentication before parsing
-    let (command_to_parse, authenticated_user_id) =
-        match check_auth_with_headers(&input, auth_from_headers, auth_manager.as_ref()).await {
-            Some((cmd, uid)) => (cmd, Some(uid)),
-            None => {
-                return render_error("Authentication failed", StatusCode::UNAUTHORIZED, renderer);
-            }
-        };
+    // Pass client IP for per-IP rate limiting on failed auth attempts
+    let (command_to_parse, authenticated_user_id) = match check_auth_with_headers(
+        &input,
+        auth_from_headers,
+        auth_manager.as_ref(),
+        client_ip.as_deref(),
+    )
+    .await
+    {
+        Some((cmd, uid)) => (cmd, Some(uid)),
+        None => {
+            return render_error("Authentication failed", StatusCode::UNAUTHORIZED, renderer);
+        }
+    };
 
     match parse_command(command_to_parse) {
         Ok(cmd) => {
@@ -199,6 +258,9 @@ pub async fn handle_json_command(
         return unauthorized();
     }
 
+    // Extract client IP for rate limiting (on failed auth attempts)
+    let client_ip = extract_client_ip(&req);
+
     // Extract auth headers before consuming the request body
     let auth_from_headers = extract_auth_from_headers(&req);
 
@@ -223,8 +285,14 @@ pub async fn handle_json_command(
                 if let Some((user_id, signature)) = auth_from_headers {
                     // Use the raw body string for signature verification (what client signed)
                     if let Some(auth_mgr) = auth_manager.as_ref() {
+                        // Pass client IP for per-IP rate limiting on failed auth attempts
                         match auth_mgr
-                            .verify_signature(body_str.trim(), &user_id, &signature)
+                            .verify_signature(
+                                body_str.trim(),
+                                &user_id,
+                                &signature,
+                                client_ip.as_deref(),
+                            )
                             .await
                         {
                             Ok(_) => {

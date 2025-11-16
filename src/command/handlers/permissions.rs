@@ -1,5 +1,5 @@
 use crate::command::types::Command;
-use crate::engine::auth::{AuthManager, PermissionSet};
+use crate::engine::auth::{AuthManager, PermissionSet, BYPASS_USER_ID};
 use crate::engine::schema::SchemaRegistry;
 use crate::shared::response::render::Renderer;
 use crate::shared::response::{Response, StatusCode};
@@ -30,7 +30,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
     };
 
     // Skip permission checks for bypass user
-    if admin_id != "bypass" && !auth_manager.is_admin(admin_id).await {
+    if admin_id != BYPASS_USER_ID && !auth_manager.is_admin(admin_id).await {
         let resp = Response::error(
             StatusCode::Forbidden,
             "Only admin users can manage permissions",

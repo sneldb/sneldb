@@ -168,8 +168,9 @@ async fn test_create_user_error_user_exists() {
     let msg = String::from_utf8_lossy(&response[..n]);
 
     // Verify error response
+    // Note: Error message doesn't include user_id to prevent user enumeration
     assert!(msg.contains("400"));
-    assert!(msg.contains("User already exists: existing_user"));
+    assert!(msg.contains("User already exists"));
 
     // Verify only admin and existing_user exist (2 users)
     let users = auth_manager.list_users().await;
@@ -644,8 +645,9 @@ async fn test_create_user_then_revoke_then_create_again() {
     let msg = String::from_utf8_lossy(&response[..n]);
 
     // Verify error - user still exists (revoking doesn't delete)
+    // Note: Error message doesn't include user_id to prevent user enumeration
     assert!(msg.contains("400"));
-    assert!(msg.contains("User already exists: recreate_user"));
+    assert!(msg.contains("User already exists"));
 }
 
 #[tokio::test]

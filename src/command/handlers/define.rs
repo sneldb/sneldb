@@ -1,5 +1,5 @@
 use crate::command::types::Command;
-use crate::engine::auth::AuthManager;
+use crate::engine::auth::{AuthManager, BYPASS_USER_ID};
 use crate::engine::define::run as engine_define;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
@@ -36,7 +36,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
     if let Some(auth_mgr) = auth_manager {
         if let Some(uid) = user_id {
             // Skip permission checks for bypass user
-            if uid != "bypass" && !auth_mgr.is_admin(uid).await {
+            if uid != BYPASS_USER_ID && !auth_mgr.is_admin(uid).await {
                 warn!(
                     target: "sneldb::define",
                     user_id = uid,

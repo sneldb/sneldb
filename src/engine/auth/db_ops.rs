@@ -1,17 +1,15 @@
-use super::types::{AuthError, AuthResult, User};
+use super::types::{AuthError, AuthResult, PermissionCache, User, UserCache};
 use crate::engine::core::{Event, EventId};
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
 use crate::engine::shard::message::ShardMessage;
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::error;
 
 /// Stores user in SnelDB via STORE command
-pub async fn store_user_in_db(
-    shard_manager: &Arc<ShardManager>,
-    user: &User,
-) -> AuthResult<()> {
+pub async fn store_user_in_db(shard_manager: &Arc<ShardManager>, user: &User) -> AuthResult<()> {
     let context_id = "__system_auth";
     let shard = shard_manager.get_shard(context_id);
 
@@ -62,21 +60,54 @@ pub async fn store_user_in_db(
         .await
         .map_err(|e| {
             error!(target: "sneldb::auth", error = %e, "Failed to store user in DB");
-            AuthError::InvalidSignature // Reuse error type for now
+            AuthError::DatabaseError(format!("Failed to store user: {}", e))
         })?;
 
     Ok(())
 }
 
-/// Loads users from SnelDB
-/// This queries __auth_user events from the __system_auth context
-pub async fn load_from_db(_shard_manager: &Arc<ShardManager>) -> AuthResult<()> {
-    // TODO: Implement full query to load users from all shards
-    // For now, this is a placeholder - users will be loaded as they're created
-    // In production, you'd want to query across all shards for __auth_user events
-    // and populate the cache
-
-    tracing::info!(target: "sneldb::auth", "User loading from DB skipped - users will be loaded on-demand");
+/// Loads users from SnelDB by querying __auth_user events.
+///
+/// # Implementation Notes
+///
+/// This function needs to:
+/// 1. Query __auth_user events from the __system_auth context across all shards
+/// 2. Parse each event payload to reconstruct User objects
+/// 3. Populate both UserCache and PermissionCache
+/// 4. Handle edge cases:
+///    - Missing or corrupted user data
+///    - Schema version changes
+///    - Conflicting user records (use latest by timestamp)
+///
+/// # Current Status
+///
+/// **NOT IMPLEMENTED** - This is a critical TODO for production use.
+/// Without this, all users are lost from cache on server restart,
+/// requiring them to be recreated from scratch.
+///
+/// # Implementation Example
+///
+/// ```ignore
+/// // Pseudo-code for implementation:
+/// // 1. Create a Query command for __auth_user events
+/// // 2. Execute query across all shards
+/// // 3. For each event, deserialize user data
+/// // 4. Populate caches
+/// ```
+///
+/// # Errors
+///
+/// Currently returns Ok(()) but should return DatabaseError if query fails.
+pub async fn load_from_db(
+    _cache: &Arc<RwLock<UserCache>>,
+    _permission_cache: &Arc<RwLock<PermissionCache>>,
+    _shard_manager: &Arc<ShardManager>,
+) -> AuthResult<()> {
+    tracing::warn!(
+        target: "sneldb::auth",
+        "load_from_db NOT IMPLEMENTED - users will not persist across restarts"
+    );
+    // TODO: Implement user loading from database
+    // See function documentation for implementation details
     Ok(())
 }
-

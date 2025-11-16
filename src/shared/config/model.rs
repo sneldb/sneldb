@@ -108,10 +108,35 @@ pub struct AuthConfig {
     /// Initial admin secret key (only used if no users exist in database)
     /// Can use environment variable expansion: ${SNELDB_ADMIN_KEY}
     pub initial_admin_key: Option<String>,
+    /// Rate limit for authentication attempts (requests per second per IP address)
+    ///
+    /// IMPORTANT: This rate limit is ONLY applied to:
+    /// - Initial authentication (AUTH command)
+    /// - Per-request authentication (inline user_id:signature:command format)
+    ///
+    /// It is NOT applied to authenticated operations after connection-based auth.
+    /// This allows authenticated TCP clients to send commands at full speed (300K+ events/sec)
+    /// while still protecting against brute-force authentication attacks.
+    ///
+    /// Default: 10 auth attempts/second per IP address
+    #[serde(default = "default_rate_limit_per_second")]
+    pub rate_limit_per_second: u32,
+    /// Enable per-IP rate limiting for authentication attempts
+    /// Default: true (enabled for security)
+    #[serde(default = "default_rate_limit_enabled")]
+    pub rate_limit_enabled: bool,
 }
 
 fn default_bypass_auth() -> bool {
     false // Default to requiring authentication
+}
+
+fn default_rate_limit_per_second() -> u32 {
+    10 // Default to 10 authentication attempts per second
+}
+
+fn default_rate_limit_enabled() -> bool {
+    true // Default to rate limiting enabled
 }
 
 fn default_memory_threshold_mb() -> usize {

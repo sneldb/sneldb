@@ -1,6 +1,17 @@
+use governor::{Quota, RateLimiter as GovernorRateLimiter};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::num::NonZeroU32;
 use thiserror::Error;
+
+// Validation constants
+pub const MAX_USER_ID_LENGTH: usize = 64;
+pub const MAX_SECRET_KEY_LENGTH: usize = 512;
+pub const MAX_SIGNATURE_LENGTH: usize = 256;
+
+// Special user IDs for bypass modes
+pub const BYPASS_USER_ID: &str = "bypass";
+pub const NO_AUTH_USER_ID: &str = "no-auth";
 
 /// Represents read and write permissions for a specific event type
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -82,20 +93,29 @@ impl From<User> for UserKey {
 
 #[derive(Debug, Error)]
 pub enum AuthError {
+    // Generic error for authentication failures to prevent user enumeration
+    #[error("Authentication failed")]
+    AuthenticationFailed,
+    #[error("User already exists")]
+    UserExists,
+    #[error("Invalid user ID format")]
+    InvalidUserId,
+    #[error("User ID too long (max {max} characters)")]
+    UserIdTooLong { max: usize },
+    #[error("Secret key too long (max {max} characters)")]
+    SecretKeyTooLong { max: usize },
+    #[error("Signature too long (max {max} characters)")]
+    SignatureTooLong { max: usize },
+    #[error("Database operation failed: {0}")]
+    DatabaseError(String),
+    #[error("Rate limit exceeded")]
+    RateLimitExceeded,
+
+    // Internal errors (not exposed to users, used for logging only)
     #[error("User not found: {0}")]
     UserNotFound(String),
     #[error("User inactive: {0}")]
     UserInactive(String),
-    #[error("Invalid signature")]
-    InvalidSignature,
-    #[error("Missing user ID")]
-    MissingUserId,
-    #[error("Missing signature")]
-    MissingSignature,
-    #[error("User already exists: {0}")]
-    UserExists(String),
-    #[error("Invalid user ID format")]
-    InvalidUserId,
 }
 
 pub type AuthResult<T> = Result<T, AuthError>;
@@ -215,4 +235,43 @@ impl Default for UserCache {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Rate limiter for authentication attempts (per-IP).
+///
+/// Uses the `governor` crate to implement per-IP token bucket rate limiting.
+/// Prevents brute-force attacks on authentication by limiting the number
+/// of authentication attempts per IP address per time period.
+///
+/// # Configuration
+/// - Default: 10 auth attempts per second per IP address
+/// - Can be adjusted based on deployment requirements
+///
+/// # Note
+/// This rate limiter is ONLY applied to initial authentication attempts,
+/// NOT to authenticated operations. This allows authenticated clients to
+/// send commands at full speed (300K+ events/sec) while still protecting
+/// against brute-force authentication attacks.
+pub type AuthRateLimiter = GovernorRateLimiter<
+    String, // Key = IP address
+    dashmap::DashMap<String, governor::state::InMemoryState>,
+    governor::clock::DefaultClock,
+>;
+
+/// Creates a new per-IP rate limiter with configured settings.
+///
+/// # Arguments
+/// * `requests_per_second` - Maximum number of authentication attempts per second per IP
+///
+/// # Returns
+/// A configured rate limiter that tracks limits per IP address
+///
+/// # Panics
+/// Panics if `requests_per_second` is 0
+pub fn create_rate_limiter(requests_per_second: u32) -> AuthRateLimiter {
+    let quota = Quota::per_second(
+        NonZeroU32::new(requests_per_second)
+            .expect("rate_limit_per_second must be greater than 0"),
+    );
+    GovernorRateLimiter::dashmap(quota)
 }

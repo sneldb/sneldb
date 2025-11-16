@@ -100,7 +100,7 @@ async fn test_create_user_error_user_exists() {
 
     assert!(result.is_err());
     match result {
-        Err(AuthError::UserExists(user_id)) => assert_eq!(user_id, "existing_user"),
+        Err(AuthError::UserExists) => {},
         _ => panic!("Expected UserExists error"),
     }
 
@@ -281,7 +281,7 @@ async fn test_create_user_with_roles_error_user_exists() {
 
     assert!(result.is_err());
     match result {
-        Err(AuthError::UserExists(user_id)) => assert_eq!(user_id, "existing_user"),
+        Err(AuthError::UserExists) => {},
         _ => panic!("Expected UserExists error"),
     }
 }
@@ -504,7 +504,7 @@ async fn test_create_user_then_revoke_then_create_again_fails() {
 
     assert!(result.is_err());
     match result {
-        Err(AuthError::UserExists(user_id)) => assert_eq!(user_id, "recreate_user"),
+        Err(AuthError::UserExists) => {},
         _ => panic!("Expected UserExists error"),
     }
 }

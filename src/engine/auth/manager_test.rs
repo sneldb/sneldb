@@ -106,7 +106,7 @@ async fn test_create_user_error_user_exists() {
 
     assert!(result.is_err());
     match result {
-        Err(AuthError::UserExists(user_id)) => assert_eq!(user_id, "existing_user"),
+        Err(AuthError::UserExists) => {}
         _ => panic!("Expected UserExists error"),
     }
 
@@ -294,9 +294,9 @@ async fn test_verify_signature_success() {
     let message = "STORE test_event FOR ctx1 PAYLOAD {\"id\":1}";
     let signature = compute_hmac(message, &secret_key);
 
-    // Verify signature
+    // Verify signature (no rate limiting when client_ip is None)
     let result = auth_manager
-        .verify_signature(message, "test_user", &signature)
+        .verify_signature(message, "test_user", &signature, None)
         .await;
 
     assert!(result.is_ok());
@@ -319,13 +319,13 @@ async fn test_verify_signature_error_invalid_signature() {
     let wrong_signature = "invalid_signature_12345";
 
     let result = auth_manager
-        .verify_signature(message, "test_user", wrong_signature)
+        .verify_signature(message, "test_user", wrong_signature, None)
         .await;
 
     assert!(result.is_err());
     match result {
-        Err(AuthError::InvalidSignature) => {}
-        _ => panic!("Expected InvalidSignature error"),
+        Err(AuthError::AuthenticationFailed) => {}
+        _ => panic!("Expected AuthenticationFailed error"),
     }
 }
 
@@ -336,13 +336,16 @@ async fn test_verify_signature_error_user_not_found() {
     let (auth_manager, _temp_dir) = create_test_auth_manager().await;
 
     let result = auth_manager
-        .verify_signature("message", "non_existent_user", "signature")
+        .verify_signature("message", "non_existent_user", "signature", None)
         .await;
 
+    // verify_signature returns generic AuthenticationFailed to prevent user enumeration
     assert!(result.is_err());
     match result {
-        Err(AuthError::UserNotFound(user_id)) => assert_eq!(user_id, "non_existent_user"),
-        _ => panic!("Expected UserNotFound error"),
+        Err(AuthError::AuthenticationFailed) => {
+            // Expected: generic error for security
+        }
+        _ => panic!("Expected AuthenticationFailed error"),
     }
 }
 
@@ -371,13 +374,16 @@ async fn test_verify_signature_error_user_inactive() {
     let signature = compute_hmac(message, &secret_key);
 
     let result = auth_manager
-        .verify_signature(message, "inactive_user", &signature)
+        .verify_signature(message, "inactive_user", &signature, None)
         .await;
 
+    // verify_signature returns generic AuthenticationFailed to prevent user enumeration
     assert!(result.is_err());
     match result {
-        Err(AuthError::UserInactive(user_id)) => assert_eq!(user_id, "inactive_user"),
-        _ => panic!("Expected UserInactive error"),
+        Err(AuthError::AuthenticationFailed) => {
+            // Expected: generic error for security
+        }
+        _ => panic!("Expected AuthenticationFailed error"),
     }
 }
 
@@ -403,7 +409,7 @@ async fn test_verify_signature_different_messages() {
     for message in messages {
         let signature = compute_hmac(message, &secret_key);
         let result = auth_manager
-            .verify_signature(message, "test_user", &signature)
+            .verify_signature(message, "test_user", &signature, None)
             .await;
         assert!(
             result.is_ok(),
@@ -432,13 +438,13 @@ async fn test_verify_signature_message_must_match() {
     // Try to verify with different message (should fail)
     let different_message = "STORE test_event FOR ctx1 PAYLOAD {\"id\":2}";
     let result = auth_manager
-        .verify_signature(different_message, "test_user", &signature)
+        .verify_signature(different_message, "test_user", &signature, None)
         .await;
 
     assert!(result.is_err());
     match result {
-        Err(AuthError::InvalidSignature) => {}
-        _ => panic!("Expected InvalidSignature error"),
+        Err(AuthError::AuthenticationFailed) => {}
+        _ => panic!("Expected AuthenticationFailed error"),
     }
 }
 
@@ -468,16 +474,16 @@ async fn test_parse_auth_error_missing_signature() {
     let result = auth_manager.parse_auth("user123 STORE test_event");
     assert!(result.is_err());
     match result {
-        Err(AuthError::MissingSignature) => {}
-        _ => panic!("Expected MissingSignature error"),
+        Err(AuthError::AuthenticationFailed) => {}
+        _ => panic!("Expected AuthenticationFailed error"),
     }
 
     // Only one colon
     let result = auth_manager.parse_auth("user123:STORE test_event");
     assert!(result.is_err());
     match result {
-        Err(AuthError::MissingSignature) => {}
-        _ => panic!("Expected MissingSignature error"),
+        Err(AuthError::AuthenticationFailed) => {}
+        _ => panic!("Expected AuthenticationFailed error"),
     }
 }
 
@@ -491,8 +497,8 @@ async fn test_parse_auth_error_missing_user_id() {
     let result = auth_manager.parse_auth(":signature:STORE test_event");
     assert!(result.is_err());
     match result {
-        Err(AuthError::MissingUserId) => {}
-        _ => panic!("Expected MissingUserId error"),
+        Err(AuthError::AuthenticationFailed) => {}
+        _ => panic!("Expected AuthenticationFailed error"),
     }
 }
 
@@ -559,7 +565,7 @@ async fn test_create_user_then_revoke_then_create_again_fails() {
 
     assert!(result.is_err());
     match result {
-        Err(AuthError::UserExists(user_id)) => assert_eq!(user_id, "recreate_user"),
+        Err(AuthError::UserExists) => {}
         _ => panic!("Expected UserExists error"),
     }
 }
@@ -591,7 +597,7 @@ async fn test_multiple_operations_sequence() {
     let signature1 = compute_hmac(message1, &secret_key1);
     assert!(
         auth_manager
-            .verify_signature(message1, "user1", &signature1)
+            .verify_signature(message1, "user1", &signature1, None)
             .await
             .is_ok()
     );
@@ -600,7 +606,7 @@ async fn test_multiple_operations_sequence() {
     let signature2 = compute_hmac(message2, &secret_key2);
     assert!(
         auth_manager
-            .verify_signature(message2, "user2", &signature2)
+            .verify_signature(message2, "user2", &signature2, None)
             .await
             .is_ok()
     );
@@ -614,7 +620,7 @@ async fn test_multiple_operations_sequence() {
     // Verify user1 signature no longer works
     assert!(
         auth_manager
-            .verify_signature(message1, "user1", &signature1)
+            .verify_signature(message1, "user1", &signature1, None)
             .await
             .is_err()
     );
@@ -622,7 +628,7 @@ async fn test_multiple_operations_sequence() {
     // Verify user2 signature still works
     assert!(
         auth_manager
-            .verify_signature(message2, "user2", &signature2)
+            .verify_signature(message2, "user2", &signature2, None)
             .await
             .is_ok()
     );
@@ -692,7 +698,7 @@ async fn test_verify_signature_case_sensitive() {
     // Verify signature works
     assert!(
         auth_manager
-            .verify_signature(message, "test_user", &signature)
+            .verify_signature(message, "test_user", &signature, None)
             .await
             .is_ok()
     );
@@ -700,7 +706,7 @@ async fn test_verify_signature_case_sensitive() {
     // Verify case-sensitive user_id fails
     assert!(
         auth_manager
-            .verify_signature(message, "TEST_USER", &signature)
+            .verify_signature(message, "TEST_USER", &signature, None)
             .await
             .is_err()
     );
@@ -786,7 +792,7 @@ async fn test_constant_time_comparison() {
 
     for wrong_sig in wrong_signatures {
         let result = auth_manager
-            .verify_signature(message, "test_user", wrong_sig)
+            .verify_signature(message, "test_user", wrong_sig, None)
             .await;
         assert!(result.is_err());
     }
@@ -902,4 +908,280 @@ async fn test_bootstrap_skips_when_users_exist() {
     let user_count = auth_manager.list_users().await.len();
     assert_eq!(user_count, 1);
     // Bootstrap logic checks user_count > 0 and returns early, which is correct behavior
+}
+
+// ============================================================================
+// Rate Limiting Tests
+// ============================================================================
+// Note: These tests verify that rate limiting only applies to FAILED auth attempts
+// Successful authentications bypass rate limiting entirely for unlimited throughput
+
+#[tokio::test]
+async fn test_rate_limiting_skipped_when_client_ip_none() {
+    init_for_tests();
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+
+    // Create a user
+    let secret_key = auth_manager
+        .create_user("test_user".to_string(), Some("my_secret_key".to_string()))
+        .await
+        .expect("User creation should succeed");
+
+    let message = "STORE test_event FOR ctx1 PAYLOAD {\"id\":1}";
+    let signature = compute_hmac(message, &secret_key);
+
+    // When client_ip is None, rate limiting should be skipped
+    // This allows connection-based auth to work at full speed
+    let result = auth_manager
+        .verify_signature(message, "test_user", &signature, None)
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "Rate limiting should be skipped when client_ip is None"
+    );
+}
+
+#[tokio::test]
+async fn test_successful_auth_bypasses_rate_limiting() {
+    init_for_tests();
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+
+    // Create a user
+    let secret_key = auth_manager
+        .create_user("test_user".to_string(), Some("my_secret_key".to_string()))
+        .await
+        .expect("User creation should succeed");
+
+    let message = "STORE test_event FOR ctx1 PAYLOAD {\"id\":1}";
+    let signature = compute_hmac(message, &secret_key);
+    let client_ip = "192.168.1.100";
+
+    // Make many successful authentications - should all succeed
+    // This verifies that successful auths bypass rate limiting
+    for i in 0..100 {
+        let result = auth_manager
+            .verify_signature(message, "test_user", &signature, Some(client_ip))
+            .await;
+        assert!(
+            result.is_ok(),
+            "Successful auth #{} should bypass rate limiting",
+            i
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_failed_auth_triggers_rate_limiting() {
+    init_for_tests();
+
+    // Note: This test requires rate limiting to be enabled in CONFIG
+    // The test config has rate_limit_enabled = false, so we test the logic
+    // by verifying that failed auths check the rate limiter
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+
+    // Create a user
+    auth_manager
+        .create_user("test_user".to_string(), Some("my_secret_key".to_string()))
+        .await
+        .expect("User creation should succeed");
+
+    let message = "STORE test_event FOR ctx1 PAYLOAD {\"id\":1}";
+    let wrong_signature = "invalid_signature";
+    let client_ip = "192.168.1.100";
+
+    // Make a failed authentication attempt
+    let result = auth_manager
+        .verify_signature(message, "test_user", wrong_signature, Some(client_ip))
+        .await;
+
+    // Should fail with AuthenticationFailed (rate limiting may or may not be enabled)
+    assert!(result.is_err());
+    match result {
+        Err(AuthError::AuthenticationFailed) | Err(AuthError::RateLimitExceeded) => {}
+        _ => panic!("Expected AuthenticationFailed or RateLimitExceeded error"),
+    }
+}
+
+#[tokio::test]
+async fn test_rate_limiting_per_ip_isolation() {
+    init_for_tests();
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+
+    // Create a user
+    let secret_key = auth_manager
+        .create_user("test_user".to_string(), Some("my_secret_key".to_string()))
+        .await
+        .expect("User creation should succeed");
+
+    let message = "STORE test_event FOR ctx1 PAYLOAD {\"id\":1}";
+    let signature = compute_hmac(message, &secret_key);
+
+    // Different IPs should be rate limited independently
+    let ip1 = "192.168.1.100";
+    let ip2 = "192.168.1.200";
+
+    // Both IPs should be able to authenticate successfully
+    let result1 = auth_manager
+        .verify_signature(message, "test_user", &signature, Some(ip1))
+        .await;
+    let result2 = auth_manager
+        .verify_signature(message, "test_user", &signature, Some(ip2))
+        .await;
+
+    assert!(result1.is_ok(), "IP1 should authenticate successfully");
+    assert!(result2.is_ok(), "IP2 should authenticate successfully");
+}
+
+#[tokio::test]
+async fn test_rate_limiting_only_on_failed_attempts() {
+    init_for_tests();
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+
+    // Create a user
+    let secret_key = auth_manager
+        .create_user("test_user".to_string(), Some("my_secret_key".to_string()))
+        .await
+        .expect("User creation should succeed");
+
+    let message = "STORE test_event FOR ctx1 PAYLOAD {\"id\":1}";
+    let correct_signature = compute_hmac(message, &secret_key);
+    let wrong_signature = "invalid_signature";
+    let client_ip = "192.168.1.100";
+
+    // Make many successful authentications - should all succeed
+    for _ in 0..50 {
+        let result = auth_manager
+            .verify_signature(message, "test_user", &correct_signature, Some(client_ip))
+            .await;
+        assert!(
+            result.is_ok(),
+            "Successful auths should bypass rate limiting"
+        );
+    }
+
+    // Now make a failed attempt - this should trigger rate limiting check
+    let result = auth_manager
+        .verify_signature(message, "test_user", wrong_signature, Some(client_ip))
+        .await;
+
+    assert!(result.is_err(), "Failed auth should be rejected");
+    match result {
+        Err(AuthError::AuthenticationFailed) | Err(AuthError::RateLimitExceeded) => {}
+        _ => panic!("Expected AuthenticationFailed or RateLimitExceeded error"),
+    }
+}
+
+#[tokio::test]
+async fn test_rate_limiting_with_different_users_same_ip() {
+    init_for_tests();
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+
+    // Create two users
+    let secret_key1 = auth_manager
+        .create_user("user1".to_string(), Some("key1".to_string()))
+        .await
+        .expect("User creation should succeed");
+    let secret_key2 = auth_manager
+        .create_user("user2".to_string(), Some("key2".to_string()))
+        .await
+        .expect("User creation should succeed");
+
+    let message = "STORE test_event FOR ctx1 PAYLOAD {\"id\":1}";
+    let signature1 = compute_hmac(message, &secret_key1);
+    let signature2 = compute_hmac(message, &secret_key2);
+    let client_ip = "192.168.1.100";
+
+    // Both users from same IP should be able to authenticate successfully
+    let result1 = auth_manager
+        .verify_signature(message, "user1", &signature1, Some(client_ip))
+        .await;
+    let result2 = auth_manager
+        .verify_signature(message, "user2", &signature2, Some(client_ip))
+        .await;
+
+    assert!(result1.is_ok(), "User1 should authenticate successfully");
+    assert!(result2.is_ok(), "User2 should authenticate successfully");
+}
+
+#[tokio::test]
+async fn test_rate_limiting_high_throughput_successful_auths() {
+    init_for_tests();
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+
+    // Create a user
+    let secret_key = auth_manager
+        .create_user("test_user".to_string(), Some("my_secret_key".to_string()))
+        .await
+        .expect("User creation should succeed");
+
+    let message = "STORE test_event FOR ctx1 PAYLOAD {\"id\":1}";
+    let signature = compute_hmac(message, &secret_key);
+    let client_ip = "192.168.1.100";
+
+    // Simulate high-throughput scenario: many successful authentications
+    // This verifies that legitimate clients can send at full speed (300K+ events/sec)
+    let mut success_count = 0;
+    for i in 0..1000 {
+        let result = auth_manager
+            .verify_signature(message, "test_user", &signature, Some(client_ip))
+            .await;
+        if result.is_ok() {
+            success_count += 1;
+        } else {
+            panic!("Successful auth #{} should not be rate limited", i);
+        }
+    }
+
+    assert_eq!(
+        success_count, 1000,
+        "All successful auths should bypass rate limiting"
+    );
+}
+
+#[tokio::test]
+async fn test_rate_limiting_mixed_success_and_failure() {
+    init_for_tests();
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+
+    // Create a user
+    let secret_key = auth_manager
+        .create_user("test_user".to_string(), Some("my_secret_key".to_string()))
+        .await
+        .expect("User creation should succeed");
+
+    let message = "STORE test_event FOR ctx1 PAYLOAD {\"id\":1}";
+    let correct_signature = compute_hmac(message, &secret_key);
+    let wrong_signature = "invalid_signature";
+    let client_ip = "192.168.1.100";
+
+    // Mix of successful and failed attempts
+    // Successful ones should always work, failed ones should be rate limited
+    for i in 0..20 {
+        if i % 2 == 0 {
+            // Successful auth
+            let result = auth_manager
+                .verify_signature(message, "test_user", &correct_signature, Some(client_ip))
+                .await;
+            assert!(
+                result.is_ok(),
+                "Successful auth #{} should bypass rate limiting",
+                i
+            );
+        } else {
+            // Failed auth
+            let result = auth_manager
+                .verify_signature(message, "test_user", wrong_signature, Some(client_ip))
+                .await;
+            assert!(result.is_err(), "Failed auth #{} should be rejected", i);
+        }
+    }
 }

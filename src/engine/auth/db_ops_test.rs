@@ -1,10 +1,11 @@
 use super::db_ops::{load_from_db, store_user_in_db};
-use super::types::{PermissionSet, User};
+use super::types::{PermissionCache, PermissionSet, User, UserCache};
 use crate::engine::shard::manager::ShardManager;
 use crate::logging::init_for_tests;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tempfile::tempdir;
+use tokio::sync::RwLock;
 
 /// Helper function to create a test ShardManager
 async fn create_test_shard_manager() -> Arc<ShardManager> {
@@ -149,7 +150,10 @@ async fn test_store_user_in_db_with_special_characters() {
         secret_key: "secret_key_with_special_chars!@#$%".to_string(),
         active: true,
         created_at: 1000,
-        roles: vec!["role-with-dash".to_string(), "role_with_underscore".to_string()],
+        roles: vec![
+            "role-with-dash".to_string(),
+            "role_with_underscore".to_string(),
+        ],
         permissions: HashMap::new(),
     };
 
@@ -186,10 +190,7 @@ async fn test_store_user_in_db_large_permissions_map() {
 
     let mut permissions = HashMap::new();
     for i in 1..=100 {
-        permissions.insert(
-            format!("event_type{}", i),
-            PermissionSet::read_write(),
-        );
+        permissions.insert(format!("event_type{}", i), PermissionSet::read_write());
     }
 
     let user = User {
@@ -248,9 +249,11 @@ async fn test_load_from_db_success() {
     init_for_tests();
 
     let shard_manager = create_test_shard_manager().await;
+    let cache = Arc::new(RwLock::new(UserCache::new()));
+    let permission_cache = Arc::new(RwLock::new(PermissionCache::new()));
 
     // load_from_db is currently a placeholder that always succeeds
-    let result = load_from_db(&shard_manager).await;
+    let result = load_from_db(&cache, &permission_cache, &shard_manager).await;
     assert!(result.is_ok());
 }
 
@@ -259,10 +262,12 @@ async fn test_load_from_db_multiple_calls() {
     init_for_tests();
 
     let shard_manager = create_test_shard_manager().await;
+    let cache = Arc::new(RwLock::new(UserCache::new()));
+    let permission_cache = Arc::new(RwLock::new(PermissionCache::new()));
 
     // Call multiple times (should all succeed)
     for _ in 0..5 {
-        let result = load_from_db(&shard_manager).await;
+        let result = load_from_db(&cache, &permission_cache, &shard_manager).await;
         assert!(result.is_ok());
     }
 }
@@ -324,4 +329,3 @@ async fn test_store_user_in_db_all_permission_types() {
     let result = store_user_in_db(&shard_manager, &user).await;
     assert!(result.is_ok());
 }
-

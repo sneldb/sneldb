@@ -49,8 +49,8 @@ where
         // Parse auth format: user_id:signature:command
         match auth_mgr.parse_auth(trimmed) {
             Ok((user_id, signature, command)) => {
-                // Verify signature
-                match auth_mgr.verify_signature(command, user_id, signature).await {
+                // Verify signature (UNIX sockets: no rate limiting - local only)
+                match auth_mgr.verify_signature(command, user_id, signature, None).await {
                     Ok(_) => Some((command, Some(user_id.to_string()))),
                     Err(_) => None,
                 }
