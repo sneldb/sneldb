@@ -230,6 +230,28 @@ async fn main() -> Result<()> {
         .await?;
     }
 
+    // Grant write permissions to stress_user for all event types
+    // This is required because newly created users don't have permissions by default
+    println!(
+        "Granting write permissions to user '{}' for {} event type(s)...",
+        user_id,
+        event_types.len()
+    );
+    let event_types_list = event_types.join(",");
+    let grant_cmd = format!("GRANT WRITE ON {} TO {}\n", event_types_list, user_id);
+    // Sign the GRANT command with admin key (control connection is authenticated as admin)
+    let cmd_trimmed = grant_cmd.trim();
+    let signature = compute_hmac(&admin_key, cmd_trimmed);
+    let authenticated_cmd = format!("{}:{}\n", signature, cmd_trimmed);
+    send_and_drain(
+        &mut control_reader,
+        &mut control_writer,
+        &authenticated_cmd,
+        wait_dur,
+    )
+    .await?;
+    println!("Write permissions granted successfully");
+
     // Pre-generate contexts
     let contexts: Vec<String> = (0..context_pool).map(|i| format!("ctx-{}", i)).collect();
 
