@@ -3,6 +3,8 @@ require "uri"
 require "json"
 require "openssl"
 require_relative "errors"
+require_relative "tcp_transport"
+require_relative "http_transport"
 
 # Optional Arrow support - only load if available
 begin
@@ -14,19 +16,35 @@ end
 
 module SnelDB
   class Client
-    attr_reader :base_url, :user_id, :secret_key, :output_format
+    attr_reader :user_id, :secret_key, :output_format, :protocol, :address
 
     # Initialize a new SnelDB client
     #
-    # @param base_url [String] The base URL of the SnelDB server (e.g., "http://localhost:8085")
+    # @param address [String] Server address. For TCP: "localhost:8086" or "host:port". For HTTP: "http://localhost:8085" or "https://host:port"
+    # @param protocol [String] Protocol to use: "tcp" (default) or "http"
     # @param user_id [String, nil] Optional user ID for authentication
     # @param secret_key [String, nil] Optional secret key for authentication
     # @param output_format [String] Response format: "text", "json", or "arrow" (default: "text")
-    def initialize(base_url:, user_id: nil, secret_key: nil, output_format: "text")
-      @base_url = base_url.chomp("/")
+    def initialize(address:, protocol: nil, user_id: nil, secret_key: nil, output_format: "text")
+      @address = address
+
+      # Auto-detect protocol from address if not specified
+      if protocol.nil?
+        if address.start_with?("http://") || address.start_with?("https://")
+          @protocol = "http"
+        else
+          @protocol = "tcp"
+        end
+      else
+        @protocol = protocol.downcase
+      end
+
       @user_id = user_id
       @secret_key = secret_key
       @output_format = output_format
+
+      # Initialize transport based on protocol
+      @transport = create_transport
     end
 
     # Execute a raw command string (non-raising version)
@@ -58,76 +76,21 @@ module SnelDB
     # @raise [SnelDB::ParseError] if response parsing fails
     # @raise [SnelDB::Error] for other errors
     def execute!(command)
+      # Execute command using the appropriate transport
+      response_body = @transport.execute(command)
+
+      # Parse response and normalize to array of hashes
       begin
-        uri = URI("#{@base_url}/command")
-      rescue URI::InvalidURIError => e
-        raise ConnectionError, "Invalid server URL: #{@base_url} - #{e.message}"
-      end
-
-      begin
-        http = Net::HTTP.new(uri.host, uri.port)
-        http.use_ssl = uri.scheme == "https"
-        http.read_timeout = 60
-
-        request = Net::HTTP::Post.new(uri.path)
-        request.body = command
-        request["Content-Type"] = "text/plain"
-
-        # Add authentication headers if credentials are provided
-        if @user_id && @secret_key
-          # Compute signature on trimmed command (server trims before verifying)
-          signature = compute_signature(command)
-          request["X-Auth-User"] = @user_id
-          request["X-Auth-Signature"] = signature
-        end
-
-        response = http.request(request)
-      rescue Errno::ECONNREFUSED, Errno::EHOSTUNREACH, Errno::ETIMEDOUT => e
-        raise ConnectionError, "Cannot connect to server at #{@base_url}: #{e.message}"
-      rescue SocketError => e
-        raise ConnectionError, "Network error: #{e.message}"
-      rescue OpenSSL::SSL::SSLError => e
-        raise ConnectionError, "SSL error: #{e.message}"
-      rescue Net::ReadTimeout => e
-        raise ConnectionError, "Request timeout: #{e.message}"
-      rescue Net::OpenTimeout => e
-        raise ConnectionError, "Connection timeout: #{e.message}"
-      rescue => e
-        # Catch any other network/HTTP errors
-        raise ConnectionError, "Network error: #{e.class} - #{e.message}"
-      end
-
-      # Handle HTTP status codes
-      case response.code.to_i
-      when 200
-        # Parse response and normalize to array of hashes
-        begin
-          parse_and_normalize_response(response)
+        parse_and_normalize_response(response_body)
         rescue => e
           raise ParseError, "Failed to parse response: #{e.message}"
         end
-      when 400, 405  # 405 Method Not Allowed is treated as BadRequest
-        # Try to extract the error message from JSON response
-        error_message = extract_error_message(response.body)
-        raise CommandError, error_message
-      when 401
-        error_message = extract_error_message(response.body)
-        raise AuthenticationError, error_message
-      when 403
-        error_message = extract_error_message(response.body)
-        raise AuthorizationError, error_message
-      when 404
-        error_message = extract_error_message(response.body)
-        raise NotFoundError, error_message
-      when 500
-        error_message = extract_error_message(response.body)
-        raise ServerError, error_message
-      when 503
-        error_message = extract_error_message(response.body)
-        raise ConnectionError, error_message
-      else
-        # For other status codes, raise generic error with status code
-        raise Error, "HTTP #{response.code}: #{response.body}"
+    end
+
+    # Close the connection (for TCP transport)
+    def close
+      if @transport.respond_to?(:close)
+        @transport.close
       end
     end
 
@@ -137,8 +100,9 @@ module SnelDB
     # @param event_type [String] The event type name
     # @param fields [Hash] Field definitions (e.g., { "id" => "int", "name" => "string", "plan" => ["pro", "basic"] })
     # @param version [Integer, nil] Optional schema version
+    # @param auto_grant [Boolean] Automatically grant read/write permissions to current user (default: true)
     # @return [Hash] Result hash with :success, :data, :error
-    def define(event_type:, fields:, version: nil)
+    def define(event_type:, fields:, version: nil, auto_grant: true)
       schema = build_fields_json(fields)
 
       command = if version
@@ -147,7 +111,22 @@ module SnelDB
         "DEFINE #{event_type} FIELDS #{schema}"
       end
 
-      execute(command)
+      result = execute(command)
+
+      # Automatically grant permissions if define was successful and user is authenticated
+      if result[:success] && auto_grant && @user_id
+        grant_result = grant_permission(
+          permissions: ["read", "write"],
+          event_types: [event_type],
+          user_id: @user_id
+        )
+        # Log warning if grant fails, but don't fail the define operation
+        if !grant_result[:success]
+          # Silently ignore - permissions might already be granted or user might not have admin rights
+        end
+      end
+
+      result
     end
 
     # Define a schema for an event type (raising)
@@ -155,9 +134,10 @@ module SnelDB
     # @param event_type [String] The event type name
     # @param fields [Hash] Field definitions (e.g., { "id" => "int", "name" => "string", "plan" => ["pro", "basic"] })
     # @param version [Integer, nil] Optional schema version
+    # @param auto_grant [Boolean] Automatically grant read/write permissions to current user (default: true)
     # @return [Array<Hash>] The response as an array of hashes
     # @raise [SnelDB::Error] (see #execute! for error types)
-    def define!(event_type:, fields:, version: nil)
+    def define!(event_type:, fields:, version: nil, auto_grant: true)
       schema = build_fields_json(fields)
 
       command = if version
@@ -166,7 +146,23 @@ module SnelDB
         "DEFINE #{event_type} FIELDS #{schema}"
       end
 
-      execute!(command)
+      result = execute!(command)
+
+      # Automatically grant permissions if user is authenticated
+      if auto_grant && @user_id
+        begin
+          grant_permission!(
+            permissions: ["read", "write"],
+            event_types: [event_type],
+            user_id: @user_id
+          )
+        rescue Error => e
+          # Silently ignore - permissions might already be granted or user might not have admin rights
+          # The define operation succeeded, which is what matters
+        end
+      end
+
+      result
     end
 
     # Store an event (non-raising)
@@ -331,20 +327,6 @@ module SnelDB
       execute!("FLUSH")
     end
 
-    # Ping the server (non-raising)
-    #
-    # @return [Hash] Result hash with :success, :data, :error
-    def ping
-      execute("PING")
-    end
-
-    # Ping the server (raising)
-    #
-    # @return [Array<Hash>] The response as an array of hashes
-    # @raise [SnelDB::Error] (see #execute! for error types)
-    def ping!
-      execute!("PING")
-    end
 
     # Create a user (non-raising)
     #
@@ -353,9 +335,11 @@ module SnelDB
     # @return [Hash] Result hash with :success, :data, :error
     def create_user(user_id:, secret_key: nil)
       command = if secret_key
-        "CREATE USER #{user_id} WITH KEY #{secret_key}"
+        # Quote secret key if it contains special characters
+        key_str = quote_if_needed(secret_key)
+        "CREATE USER #{quote_if_needed(user_id)} WITH KEY #{key_str}"
       else
-        "CREATE USER #{user_id}"
+        "CREATE USER #{quote_if_needed(user_id)}"
       end
       execute(command)
     end
@@ -368,9 +352,11 @@ module SnelDB
     # @raise [SnelDB::Error] (see #execute! for error types)
     def create_user!(user_id:, secret_key: nil)
       command = if secret_key
-        "CREATE USER #{user_id} WITH KEY #{secret_key}"
+        # Quote secret key if it contains special characters
+        key_str = quote_if_needed(secret_key)
+        "CREATE USER #{quote_if_needed(user_id)} WITH KEY #{key_str}"
       else
-        "CREATE USER #{user_id}"
+        "CREATE USER #{quote_if_needed(user_id)}"
       end
       execute!(command)
     end
@@ -395,7 +381,7 @@ module SnelDB
     # @param user_id [String] The user ID
     # @return [Hash] Result hash with :success, :data, :error
     def revoke_key(user_id:)
-      execute("REVOKE KEY #{user_id}")
+      execute("REVOKE KEY #{quote_if_needed(user_id)}")
     end
 
     # Revoke a user's key (raising)
@@ -404,7 +390,96 @@ module SnelDB
     # @return [Array<Hash>] The response as an array of hashes
     # @raise [SnelDB::Error] (see #execute! for error types)
     def revoke_key!(user_id:)
-      execute!("REVOKE KEY #{user_id}")
+      execute!("REVOKE KEY #{quote_if_needed(user_id)}")
+    end
+
+    # Grant permissions to a user for event types (non-raising)
+    #
+    # @param permissions [Array<String>] Array of permissions: ["read"], ["write"], or ["read", "write"]
+    # @param event_types [Array<String>] Array of event type names
+    # @param user_id [String] The user ID to grant permissions to
+    # @return [Hash] Result hash with :success, :data, :error
+    def grant_permission(permissions:, event_types:, user_id:)
+      perms_str = permissions.map(&:upcase).join(",")
+      event_types_str = event_types.map { |et| quote_if_needed(et) }.join(",")
+      command = "GRANT #{perms_str} ON #{event_types_str} TO #{quote_if_needed(user_id)}"
+      execute(command)
+    end
+
+    # Grant permissions to a user for event types (raising)
+    #
+    # @param permissions [Array<String>] Array of permissions: ["read"], ["write"], or ["read", "write"]
+    # @param event_types [Array<String>] Array of event type names
+    # @param user_id [String] The user ID to grant permissions to
+    # @return [Array<Hash>] The response as an array of hashes
+    # @raise [SnelDB::Error] (see #execute! for error types)
+    def grant_permission!(permissions:, event_types:, user_id:)
+      perms_str = permissions.map(&:upcase).join(",")
+      event_types_str = event_types.map { |et| quote_if_needed(et) }.join(",")
+      command = "GRANT #{perms_str} ON #{event_types_str} TO #{quote_if_needed(user_id)}"
+      execute!(command)
+    end
+
+    # Revoke permissions from a user for event types (non-raising)
+    #
+    # @param event_types [Array<String>] Array of event type names
+    # @param user_id [String] The user ID to revoke permissions from
+    # @param permissions [Array<String>, nil] Optional array of permissions to revoke. If nil, revokes all permissions.
+    # @return [Hash] Result hash with :success, :data, :error
+    def revoke_permission(event_types:, user_id:, permissions: nil)
+      perms_str = if permissions && !permissions.empty?
+        permissions.map(&:upcase).join(",")
+      else
+        ""
+      end
+      event_types_str = event_types.map { |et| quote_if_needed(et) }.join(",")
+      command = if perms_str.empty?
+        "REVOKE ON #{event_types_str} FROM #{quote_if_needed(user_id)}"
+      else
+        "REVOKE #{perms_str} ON #{event_types_str} FROM #{quote_if_needed(user_id)}"
+      end
+      execute(command)
+    end
+
+    # Revoke permissions from a user for event types (raising)
+    #
+    # @param event_types [Array<String>] Array of event type names
+    # @param user_id [String] The user ID to revoke permissions from
+    # @param permissions [Array<String>, nil] Optional array of permissions to revoke. If nil, revokes all permissions.
+    # @return [Array<Hash>] The response as an array of hashes
+    # @raise [SnelDB::Error] (see #execute! for error types)
+    def revoke_permission!(event_types:, user_id:, permissions: nil)
+      perms_str = if permissions && !permissions.empty?
+        permissions.map(&:upcase).join(",")
+      else
+        ""
+      end
+      event_types_str = event_types.map { |et| quote_if_needed(et) }.join(",")
+      command = if perms_str.empty?
+        "REVOKE ON #{event_types_str} FROM #{quote_if_needed(user_id)}"
+      else
+        "REVOKE #{perms_str} ON #{event_types_str} FROM #{quote_if_needed(user_id)}"
+      end
+      execute!(command)
+    end
+
+    # Show permissions for a user (non-raising)
+    #
+    # @param user_id [String] The user ID
+    # @return [Hash] Result hash with :success, :data, :error
+    def show_permissions(user_id:)
+      command = "SHOW PERMISSIONS FOR #{quote_if_needed(user_id)}"
+      execute(command)
+    end
+
+    # Show permissions for a user (raising)
+    #
+    # @param user_id [String] The user ID
+    # @return [Array<Hash>] The response as an array of hashes
+    # @raise [SnelDB::Error] (see #execute! for error types)
+    def show_permissions!(user_id:)
+      command = "SHOW PERMISSIONS FOR #{quote_if_needed(user_id)}"
+      execute!(command)
     end
 
     private
@@ -446,9 +521,17 @@ module SnelDB
     end
 
     # Parse and normalize response to always return array of hashes
+    # @param response [String, Net::HTTPResponse] Response body (String for TCP) or HTTP response object
     def parse_and_normalize_response(response)
+      # Handle both String (TCP) and HTTP response objects
+      if response.is_a?(Net::HTTPResponse)
       content_type = response["Content-Type"] || ""
       body = response.body
+      else
+        # TCP response is just a string
+        content_type = ""
+        body = response
+      end
 
       # If content type is explicitly JSON, don't try Arrow parsing
       if content_type.include?("application/json")
@@ -667,21 +750,47 @@ module SnelDB
       end
     end
 
-    # Compute HMAC signature for authentication
-    # The message should be trimmed to match server expectations
-    def compute_signature(message)
-      digest = OpenSSL::Digest.new("sha256")
-      # Server trims the command before verifying, so we should too
-      trimmed_message = message.strip
-      OpenSSL::HMAC.hexdigest(digest, @secret_key, trimmed_message)
+    # Create transport based on protocol
+    def create_transport
+      case @protocol
+      when "tcp"
+        # Parse host:port format
+        host, port = parse_tcp_address(@address)
+        TcpTransport.new(host: host, port: port, user_id: @user_id, secret_key: @secret_key)
+      when "http", "https"
+        HttpTransport.new(base_url: @address, user_id: @user_id, secret_key: @secret_key)
+      else
+        raise ArgumentError, "Unsupported protocol: #{@protocol}. Use 'tcp' or 'http'"
+      end
+    end
+
+    # Parse TCP address (host:port format)
+    def parse_tcp_address(address)
+      if address.include?(":")
+        parts = address.split(":", 2)
+        host = parts[0]
+        port = parts[1].to_i
+        if port == 0
+          raise ArgumentError, "Invalid TCP address format: #{address}. Expected 'host:port'"
+        end
+        [host, port]
+      else
+        raise ArgumentError, "Invalid TCP address format: #{address}. Expected 'host:port'"
+      end
     end
 
     # Quote a value if it contains special characters or spaces
     def quote_if_needed(value)
       case value
       when String
-        # If it's already quoted or is a simple word, return as-is
-        if value.match?(/^"[^"]*"$/) || value.match?(/^[a-zA-Z0-9_-]+$/)
+        # If it's already quoted, return as-is
+        if value.match?(/^"[^"]*"$/)
+          value
+        # If it starts with a digit, always quote (could be parsed as number)
+        elsif value.match?(/^\d/)
+          "\"#{value}\""
+        # If it's a simple word (letters, numbers, underscore, hyphen), return as-is
+        elsif value.match?(/^[a-zA-Z0-9_-]+$/)
           value
         else
           "\"#{value}\""

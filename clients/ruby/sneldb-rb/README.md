@@ -1,6 +1,6 @@
 # SnelDB Ruby Client
 
-A Ruby gem for interacting with [SnelDB](https://sneldb.com) event database via HTTP using the standard command format.
+A Ruby gem for interacting with [SnelDB](https://sneldb.com) event database via TCP (default) or HTTP using the standard command format.
 
 ## Installation
 
@@ -26,15 +26,59 @@ $ gem install sneldb
 
 ### Basic Setup
 
+The client supports both TCP (default) and HTTP protocols. TCP is recommended for better performance.
+
+#### TCP Connection (Default)
+
 ```ruby
 require 'sneldb'
 
-# Create a client
+# Create a TCP client (default protocol)
 client = SnelDB::Client.new(
-  base_url: "http://localhost:8085",
-  user_id: "your_user_id",      # Optional
-  secret_key: "your_secret_key" # Optional
+  address: "localhost:8086",     # TCP address format: host:port
+  user_id: "your_user_id",       # Optional
+  secret_key: "your_secret_key"   # Optional
 )
+
+# Or explicitly specify protocol
+client = SnelDB::Client.new(
+  address: "localhost:8086",
+  protocol: "tcp",
+  user_id: "your_user_id",
+  secret_key: "your_secret_key"
+)
+```
+
+#### HTTP Connection
+
+```ruby
+require 'sneldb'
+
+# Create an HTTP client
+client = SnelDB::Client.new(
+  address: "http://localhost:8085",  # HTTP URL format
+  protocol: "http",
+  user_id: "your_user_id",           # Optional
+  secret_key: "your_secret_key"       # Optional
+)
+
+```
+
+#### Protocol Selection
+
+The protocol is automatically detected from the address format:
+
+- `host:port` → TCP (e.g., `"localhost:8086"`)
+- `http://host:port` or `https://host:port` → HTTP (e.g., `"http://localhost:8085"`)
+
+You can also explicitly specify the protocol:
+
+```ruby
+# TCP (default)
+client = SnelDB::Client.new(address: "localhost:8086", protocol: "tcp")
+
+# HTTP
+client = SnelDB::Client.new(address: "localhost:8085", protocol: "http")
 ```
 
 ### Define a Schema
@@ -124,7 +168,8 @@ response = client.replay(
 ```ruby
 # Execute any command string directly
 response = client.execute("QUERY order_created WHERE amount > 100 LIMIT 10")
-response = client.execute("PING")
+# Note: PING command is not available - use query to verify connectivity
+response = client.query(event_type: "your_event_type", limit: 1)
 response = client.execute("FLUSH")
 ```
 
@@ -142,6 +187,37 @@ client.list_users
 
 # Revoke a user's key
 client.revoke_key(user_id: "new_user")
+
+# Grant permissions to a user
+client.grant_permission(
+  permissions: ["read", "write"],
+  event_types: ["order_created", "payment_succeeded"],
+  user_id: "api_client"
+)
+
+# Grant read-only permission
+client.grant_permission(
+  permissions: ["read"],
+  event_types: ["order_created"],
+  user_id: "readonly_client"
+)
+
+# Revoke specific permissions
+client.revoke_permission(
+  event_types: ["order_created"],
+  user_id: "api_client",
+  permissions: ["write"]  # Only revoke write, keep read
+)
+
+# Revoke all permissions for event types
+client.revoke_permission(
+  event_types: ["order_created", "payment_succeeded"],
+  user_id: "api_client"
+  # permissions: nil means revoke all
+)
+
+# Show permissions for a user
+client.show_permissions(user_id: "api_client")
 ```
 
 ### Error Handling
@@ -166,15 +242,57 @@ end
 
 ## Authentication
 
-The client supports authentication via headers (`X-Auth-User` and `X-Auth-Signature`). The signature is computed using HMAC-SHA256 of the command body with your secret key.
+The client supports authentication for both TCP and HTTP protocols. The signature is computed using HMAC-SHA256 of the command body with your secret key.
+
+#### TCP Authentication
+
+TCP supports multiple authentication methods:
+
+1. **Connection-scoped authentication** (recommended): Authenticate once with `AUTH` command, then use session tokens for subsequent commands
+2. **Per-command authentication**: Include signature with each command
+
+The client automatically uses connection-scoped authentication when credentials are provided:
 
 ```ruby
+# TCP with authentication (uses connection-scoped auth automatically)
 client = SnelDB::Client.new(
-  base_url: "http://localhost:8085",
+  address: "localhost:8086",
+  protocol: "tcp",
   user_id: "my_user",
   secret_key: "my_secret_key"
 )
 ```
+
+#### HTTP Authentication
+
+HTTP uses headers (`X-Auth-User` and `X-Auth-Signature`) for authentication:
+
+```ruby
+client = SnelDB::Client.new(
+  address: "http://localhost:8085",
+  protocol: "http",
+  user_id: "my_user",
+  secret_key: "my_secret_key"
+)
+```
+
+### Connection Management
+
+#### TCP Connections
+
+TCP connections are persistent and automatically managed. The connection is established on first use and reused for subsequent commands. You can manually close the connection:
+
+```ruby
+client = SnelDB::Client.new(address: "localhost:8086")
+# ... use client ...
+client.close  # Close TCP connection
+```
+
+TCP connections support session tokens for high-performance authentication. After initial authentication, the client automatically uses session tokens to avoid computing HMAC signatures for each command.
+
+#### HTTP Connections
+
+HTTP connections are stateless - each command creates a new HTTP request. No connection management is needed.
 
 ## Response Format
 
@@ -182,7 +300,7 @@ By default, responses are returned as text. You can configure the output format:
 
 ```ruby
 client = SnelDB::Client.new(
-  base_url: "http://localhost:8085",
+  address: "http://localhost:8085",
   output_format: "json" # or "text" (default) or "arrow"
 )
 ```
@@ -322,10 +440,12 @@ The client supports all SnelDB commands:
 - `QUERY` - Query events with filters
 - `REPLAY` - Replay events for a context
 - `FLUSH` - Flush memtable to disk
-- `PING` - Health check
 - `CREATE USER` - Create authentication users
 - `LIST USERS` - List all users
 - `REVOKE KEY` - Revoke a user's key
+- `GRANT` - Grant permissions to users for event types
+- `REVOKE` - Revoke permissions from users for event types
+- `SHOW PERMISSIONS` - Show permissions for a user
 
 For detailed command syntax, see the [SnelDB documentation](https://sneldb.com/commands.html).
 
@@ -345,4 +465,3 @@ Bug reports and pull requests are welcome on GitHub.
 ## License
 
 The gem is available as open source under the terms of the [MIT License](LICENSE).
-

@@ -7,9 +7,10 @@ module SnelDB
       attr_accessor :client
 
       # Configure the SnelDB client for Rails
-      def configure(base_url:, user_id: nil, secret_key: nil, output_format: "text")
+      def configure(address:, protocol: nil, user_id: nil, secret_key: nil, output_format: "text")
         @client = Client.new(
-          base_url: base_url,
+          address: address,
+          protocol: protocol,
           user_id: user_id,
           secret_key: secret_key,
           output_format: output_format
@@ -22,7 +23,8 @@ module SnelDB
           if defined?(::Rails) && ::Rails.application.config.sneldb
             config = ::Rails.application.config.sneldb
             Client.new(
-              base_url: config[:base_url] || "http://localhost:8085",
+              address: config[:address] || "http://localhost:8085",
+              protocol: config[:protocol],
               user_id: config[:user_id],
               secret_key: config[:secret_key],
               output_format: config[:output_format] || "text"
@@ -52,7 +54,8 @@ module SnelDB
             client.define!(
               event_type: defn[:event_type],
               fields: defn[:fields],
-              version: defn[:version]
+              version: defn[:version],
+              auto_grant: true  # Automatically grant permissions when defining
             )
             puts "✓ Defined event: #{defn[:event_type]}"
           rescue Error => e

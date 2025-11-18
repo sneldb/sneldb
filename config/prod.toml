@@ -58,7 +58,7 @@ initial_admin_key = "admin-key-123"
 
 [logging]
 log_dir = "../data/logs"
-stdout_level = "error"
+stdout_level = "debug"
 file_level = "error"
 
 [query]
