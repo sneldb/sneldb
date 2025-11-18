@@ -146,17 +146,25 @@ impl<'a, W: AsyncWrite + Unpin> QueryCommandHandler<'a, W> {
                 Ok(Some(stream)) => {
                     // For sequence queries, the limit is already applied at the sequence matcher level
                     // (limiting sequences, not events). We should not apply it again here to events.
-                    let response_limit = if pipeline.is_sequence_query() {
-                        None
+                    // For ordered queries, limit and offset are already applied in the flow merger (OrderedStreamMerger),
+                    // so we should not apply them again in QueryResponseWriter to avoid double-application.
+                    // For unordered queries, limit and offset need to be applied in QueryResponseWriter.
+                    let (response_limit, response_offset) = if pipeline.is_sequence_query() {
+                        (None, None) // Sequence queries handle limits at matcher level
+                    } else if let Command::Query {
+                        order_by: Some(_), ..
+                    } = self.command
+                    {
+                        (None, None) // Offset and limit already applied in flow merger for ordered queries
                     } else {
-                        limit_value
+                        (limit_value, offset_value) // Apply limit and offset in response writer for unordered queries
                     };
                     let response_writer = QueryResponseWriter::new(
                         self.writer,
                         self.renderer,
                         stream.schema(),
                         response_limit,
-                        offset_value,
+                        response_offset,
                     );
                     return response_writer.write(stream).await;
                 }

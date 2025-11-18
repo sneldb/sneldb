@@ -75,6 +75,7 @@ pub struct ServerConfig {
     pub output_format: String,
     pub tcp_addr: String,
     pub http_addr: String,
+    pub ws_addr: String,
     pub auth_token: String,
     /// Backpressure threshold: percentage of shard channel capacity before rejecting requests (0-100)
     #[serde(default = "default_backpressure_threshold")]
@@ -125,6 +126,14 @@ pub struct AuthConfig {
     /// Default: true (enabled for security)
     #[serde(default = "default_rate_limit_enabled")]
     pub rate_limit_enabled: bool,
+    /// Session token expiration time in seconds
+    /// Default: 300 seconds (5 minutes)
+    #[serde(default = "default_session_token_expiry")]
+    pub session_token_expiry_seconds: u64,
+}
+
+fn default_session_token_expiry() -> u64 {
+    300 // Default to 5 minutes
 }
 
 fn default_bypass_auth() -> bool {

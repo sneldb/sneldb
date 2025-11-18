@@ -7,7 +7,7 @@
 
 ## The big picture
 
-- Commands enter via frontends (TCP/UNIX/HTTP) and are parsed, validated, and dispatched.
+- Commands enter via frontends (TCP/UNIX/HTTP/WebSocket) and are parsed, validated, and dispatched.
 - Writes go through a WAL for durability, land in an in-memory table, and get flushed into immutable segments on disk.
 - Reads (query/replay) scan the in-memory table and segments, skipping as much as possible using zone metadata and filters.
 - Background compaction keeps segments tidy so read performance stays predictable.

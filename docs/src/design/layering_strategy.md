@@ -4,7 +4,7 @@ This page gives a high-level view of how SnelDB is structured. It focuses on wha
 
 ## Layer 1: `frontend` — Transport and Connections
 
-- Listens for client connections (e.g., Unix/TCP/HTTP).
+- Listens for client connections (e.g., Unix/TCP/HTTP/WebSocket).
 - Reads requests and writes responses.
 - Hands off parsing and execution to the `command` and `engine` layers.
 

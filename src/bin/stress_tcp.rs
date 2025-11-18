@@ -119,11 +119,11 @@ async fn main() -> Result<()> {
         .or_else(|| std::env::var("SNELDB_ADMIN_KEY").ok())
         .unwrap_or_else(|| "admin-key-123".to_string());
 
-    // Authenticate as admin first
+    // Authenticate as admin first and get session token
     println!("Authenticating as admin user '{}'...", admin_user);
     let admin_auth_signature = compute_hmac(&admin_key, &admin_user);
     let admin_auth_cmd = format!("AUTH {}:{}\n", admin_user, admin_auth_signature);
-    match send_and_check_ok(
+    let admin_token = match send_and_extract_token(
         &mut control_reader,
         &mut control_writer,
         &admin_auth_cmd,
@@ -131,7 +131,10 @@ async fn main() -> Result<()> {
     )
     .await
     {
-        Ok(_) => println!("Admin authentication successful"),
+        Ok(token) => {
+            println!("Admin authentication successful, token received");
+            token
+        }
         Err(e) => {
             eprintln!(
                 "Failed to authenticate as admin: {}. Make sure admin user exists in config.",
@@ -139,7 +142,7 @@ async fn main() -> Result<()> {
             );
             return Err(e);
         }
-    }
+    };
 
     // Create a user for stress testing (requires admin auth)
     // Try base username first, then use timestamped if it already exists
@@ -147,10 +150,14 @@ async fn main() -> Result<()> {
     let (user_id, secret_key) = {
         println!("Creating user '{}'...", base_user_id);
         let create_user_cmd = format!("CREATE USER {}\n", base_user_id);
-        // Sign the CREATE USER command with admin key
+        // Use token if available, otherwise use HMAC
         let cmd_trimmed = create_user_cmd.trim();
-        let create_signature = compute_hmac(&admin_key, cmd_trimmed);
-        let authenticated_create_cmd = format!("{}:{}\n", create_signature, cmd_trimmed);
+        let authenticated_create_cmd = if let Some(ref token) = admin_token {
+            format!("{} TOKEN {}\n", cmd_trimmed, token)
+        } else {
+            let create_signature = compute_hmac(&admin_key, cmd_trimmed);
+            format!("{}:{}\n", create_signature, cmd_trimmed)
+        };
         match send_and_extract_secret_key(
             &mut control_reader,
             &mut control_writer,
@@ -177,9 +184,12 @@ async fn main() -> Result<()> {
                     );
                     let create_user_cmd = format!("CREATE USER {}\n", user_id);
                     let cmd_trimmed = create_user_cmd.trim();
-                    let create_signature = compute_hmac(&admin_key, cmd_trimmed);
-                    let authenticated_create_cmd =
-                        format!("{}:{}\n", create_signature, cmd_trimmed);
+                    let authenticated_create_cmd = if let Some(ref token) = admin_token {
+                        format!("{} TOKEN {}\n", cmd_trimmed, token)
+                    } else {
+                        let create_signature = compute_hmac(&admin_key, cmd_trimmed);
+                        format!("{}:{}\n", create_signature, cmd_trimmed)
+                    };
                     match send_and_extract_secret_key(
                         &mut control_reader,
                         &mut control_writer,
@@ -217,10 +227,13 @@ async fn main() -> Result<()> {
             "DEFINE {} FIELDS {{ id: \"u64\", v: \"string\", flag: \"bool\", created_at: \"datetime\", {}: \"u64\", plan: [\"type01\", \"type02\", \"type03\", \"type04\", \"type05\", \"type06\", \"type07\", \"type08\", \"type09\", \"type10\", \"type11\", \"type12\", \"type13\", \"type14\", \"type15\", \"type16\", \"type17\", \"type18\", \"type19\", \"type20\"] }}\n",
             event_type, link_field
         );
-        // Sign the DEFINE command with admin key (control connection is authenticated as admin)
         let cmd_trimmed = schema_cmd.trim();
-        let signature = compute_hmac(&admin_key, cmd_trimmed);
-        let authenticated_cmd = format!("{}:{}\n", signature, cmd_trimmed);
+        let authenticated_cmd = if let Some(ref token) = admin_token {
+            format!("{} TOKEN {}\n", cmd_trimmed, token)
+        } else {
+            let signature = compute_hmac(&admin_key, cmd_trimmed);
+            format!("{}:{}\n", signature, cmd_trimmed)
+        };
         send_and_drain(
             &mut control_reader,
             &mut control_writer,
@@ -239,10 +252,13 @@ async fn main() -> Result<()> {
     );
     let event_types_list = event_types.join(",");
     let grant_cmd = format!("GRANT WRITE ON {} TO {}\n", event_types_list, user_id);
-    // Sign the GRANT command with admin key (control connection is authenticated as admin)
     let cmd_trimmed = grant_cmd.trim();
-    let signature = compute_hmac(&admin_key, cmd_trimmed);
-    let authenticated_cmd = format!("{}:{}\n", signature, cmd_trimmed);
+    let authenticated_cmd = if let Some(ref token) = admin_token {
+        format!("{} TOKEN {}\n", cmd_trimmed, token)
+    } else {
+        let signature = compute_hmac(&admin_key, cmd_trimmed);
+        format!("{}:{}\n", signature, cmd_trimmed)
+    };
     send_and_drain(
         &mut control_reader,
         &mut control_writer,
@@ -344,7 +360,7 @@ async fn main() -> Result<()> {
             let mut reader = BufReader::new(reader_half);
             let mut writer = writer_half;
 
-            // Authenticate this connection
+            // Authenticate this connection and get session token
             let auth_signature = compute_hmac(&secret_key_clone, &user_id_clone);
             let auth_cmd = format!("AUTH {}:{}\n", user_id_clone, auth_signature);
             if let Err(_) = writer.write_all(auth_cmd.as_bytes()).await {
@@ -353,14 +369,25 @@ async fn main() -> Result<()> {
             if let Err(_) = writer.flush().await {
                 return;
             }
-            // Read OK response
+            // Read OK response and extract token
             let mut response = String::new();
             if let Err(_) = read_line_with_timeout(&mut reader, &mut response, None).await {
                 return; // Failed to read response
             }
-            if !response.trim().starts_with("OK") {
+            let trimmed = response.trim();
+            let mut session_token = if trimmed.starts_with("OK TOKEN ") {
+                Some(
+                    trimmed
+                        .strip_prefix("OK TOKEN ")
+                        .unwrap()
+                        .trim()
+                        .to_string(),
+                )
+            } else if trimmed.starts_with("OK") {
+                None // No token, fall back to HMAC
+            } else {
                 return; // Authentication failed
-            }
+            };
 
             // Spawn background task to drain responses (abortable)
             let response_drainer = tokio::spawn(async move {
@@ -395,11 +422,17 @@ async fn main() -> Result<()> {
             let drainer_abort = response_drainer.abort_handle();
 
             // Main writer loop - pipeline requests without waiting
+            // Use session token for fast path (no HMAC per command)
             while let Some(cmd) = rx_local.recv().await {
-                // Compute signature for the command (without newline)
                 let cmd_trimmed = cmd.trim();
-                let signature = compute_hmac(&secret_key_clone, cmd_trimmed);
-                let authenticated_cmd = format!("{}:{}\n", signature, cmd_trimmed);
+                let authenticated_cmd = if let Some(ref token) = session_token {
+                    // Fast path: use session token (no HMAC per command)
+                    format!("{} TOKEN {}\n", cmd_trimmed, token)
+                } else {
+                    // Fallback: use HMAC (slower)
+                    let signature = compute_hmac(&secret_key_clone, cmd_trimmed);
+                    format!("{}:{}\n", signature, cmd_trimmed)
+                };
 
                 match writer.write_all(authenticated_cmd.as_bytes()).await {
                     Ok(_) => {
@@ -412,7 +445,7 @@ async fn main() -> Result<()> {
                             let (new_reader_half, mut new_writer_half) = fresh.into_split();
                             let mut new_reader = BufReader::new(new_reader_half);
 
-                            // Re-authenticate
+                            // Re-authenticate and get new token
                             let auth_signature = compute_hmac(&secret_key_clone, &user_id_clone);
                             let auth_cmd = format!("AUTH {}:{}\n", user_id_clone, auth_signature);
                             if let Err(_) = new_writer_half.write_all(auth_cmd.as_bytes()).await {
@@ -427,13 +460,28 @@ async fn main() -> Result<()> {
                             {
                                 break;
                             }
-                            if !response.trim().starts_with("OK") {
-                                break;
-                            }
+                            let trimmed = response.trim();
+                            session_token = if trimmed.starts_with("OK TOKEN ") {
+                                Some(
+                                    trimmed
+                                        .strip_prefix("OK TOKEN ")
+                                        .unwrap()
+                                        .trim()
+                                        .to_string(),
+                                )
+                            } else if trimmed.starts_with("OK") {
+                                None
+                            } else {
+                                break; // Auth failed
+                            };
 
                             writer = new_writer_half;
-                            let signature = compute_hmac(&secret_key_clone, cmd_trimmed);
-                            let authenticated_cmd = format!("{}:{}\n", signature, cmd_trimmed);
+                            let authenticated_cmd = if let Some(ref token) = session_token {
+                                format!("{} TOKEN {}\n", cmd_trimmed, token)
+                            } else {
+                                let signature = compute_hmac(&secret_key_clone, cmd_trimmed);
+                                format!("{}:{}\n", signature, cmd_trimmed)
+                            };
                             let _ = writer.write_all(authenticated_cmd.as_bytes()).await;
                             sent_inner.fetch_add(1, Ordering::Relaxed);
                         }
@@ -492,10 +540,13 @@ async fn main() -> Result<()> {
     if let Some(first_event_type) = event_types.first() {
         if let Ok(replay_result) = timeout(Duration::from_secs(2), async {
             let replay_cmd = format!("REPLAY {} FOR {}\n", first_event_type, sample_ctx);
-            // Sign the REPLAY command with admin key (control connection is authenticated as admin)
             let cmd_trimmed = replay_cmd.trim();
-            let signature = compute_hmac(&admin_key, cmd_trimmed);
-            let authenticated_cmd = format!("{}:{}\n", signature, cmd_trimmed);
+            let authenticated_cmd = if let Some(ref token) = admin_token {
+                format!("{} TOKEN {}\n", cmd_trimmed, token)
+            } else {
+                let signature = compute_hmac(&admin_key, cmd_trimmed);
+                format!("{}:{}\n", signature, cmd_trimmed)
+            };
             let t0 = Instant::now();
             send_and_collect_json_with_timeout(
                 &mut control_reader,
@@ -529,10 +580,13 @@ async fn main() -> Result<()> {
                 "QUERY {} SINCE {} USING created_at WHERE id < 100\n",
                 first_event_type, since_secs
             );
-            // Sign the QUERY command with admin key (control connection is authenticated as admin)
             let cmd_trimmed = query_cmd.trim();
-            let signature = compute_hmac(&admin_key, cmd_trimmed);
-            let authenticated_cmd = format!("{}:{}\n", signature, cmd_trimmed);
+            let authenticated_cmd = if let Some(ref token) = admin_token {
+                format!("{} TOKEN {}\n", cmd_trimmed, token)
+            } else {
+                let signature = compute_hmac(&admin_key, cmd_trimmed);
+                format!("{}:{}\n", signature, cmd_trimmed)
+            };
             let t1 = Instant::now();
             send_and_collect_json_with_timeout(
                 &mut control_reader,
@@ -757,19 +811,28 @@ async fn send_and_extract_secret_key<R: AsyncRead + Unpin, W: AsyncWriteExt + Un
     }
 }
 
-/// Send command and check for OK response
-async fn send_and_check_ok<R: AsyncRead + Unpin, W: AsyncWriteExt + Unpin>(
+/// Send command and extract session token from response
+async fn send_and_extract_token<R: AsyncRead + Unpin, W: AsyncWriteExt + Unpin>(
     reader: &mut BufReader<R>,
     writer: &mut W,
     cmd: &str,
     wait: Option<Duration>,
-) -> Result<()> {
+) -> Result<Option<String>> {
     write_all_with_timeout_stream(writer, cmd.as_bytes(), wait).await?;
     let mut response = String::new();
     read_line_with_timeout(reader, &mut response, wait).await?;
-    if response.trim().starts_with("OK") {
-        Ok(())
+    let trimmed = response.trim();
+    if trimmed.starts_with("OK TOKEN ") {
+        Ok(Some(
+            trimmed
+                .strip_prefix("OK TOKEN ")
+                .unwrap()
+                .trim()
+                .to_string(),
+        ))
+    } else if trimmed.starts_with("OK") {
+        Ok(None) // No token, fall back to HMAC
     } else {
-        Err(anyhow::anyhow!("Expected OK, got: {}", response.trim()))
+        Err(anyhow::anyhow!("Expected OK, got: {}", trimmed))
     }
 }

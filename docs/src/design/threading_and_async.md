@@ -8,7 +8,7 @@
 
 ## Core pieces
 
-- Frontends — Unix/TCP/HTTP listeners accept connections and spawn a task per client.
+- Frontends — Unix/TCP/HTTP/WebSocket listeners accept connections and spawn a task per client.
 - Connection — reads lines, parses commands, and dispatches them for execution.
 - Shard Manager — owns shards and routes work by hashing `context_id`.
 - Shard (worker) — long‑lived task that owns WAL, MemTables, flush queue, and segment list; handles Store, Query, Replay, Flush.
