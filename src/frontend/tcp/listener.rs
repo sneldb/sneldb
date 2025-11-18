@@ -11,7 +11,7 @@ use tracing::{info, warn};
 
 /// Case-insensitive byte comparison helper
 #[inline]
-fn bytes_eq_ignore_ascii_case(a: &[u8], b: &[u8]) -> bool {
+pub(crate) fn bytes_eq_ignore_ascii_case(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len()
         && a.iter()
             .zip(b.iter())
@@ -19,14 +19,14 @@ fn bytes_eq_ignore_ascii_case(a: &[u8], b: &[u8]) -> bool {
 }
 
 /// Connection-scoped authentication state
-struct TcpAuthState {
+pub(crate) struct TcpAuthState {
     user_id: Option<String>,
     auth_manager: Option<Arc<AuthManager>>,
     client_ip: String,
 }
 
 impl TcpAuthState {
-    fn new(auth_manager: Option<Arc<AuthManager>>, client_ip: String) -> Self {
+    pub(crate) fn new(auth_manager: Option<Arc<AuthManager>>, client_ip: String) -> Self {
         Self {
             user_id: None,
             auth_manager,
@@ -41,7 +41,8 @@ impl TcpAuthState {
     /// # Security
     /// - Rate limiting is applied per IP address on initial authentication
     /// - After successful auth, subsequent commands skip rate limiting for full throughput
-    async fn authenticate(&mut self, input: &str) -> Result<(), String> {
+    /// - Returns a session token for high-throughput WebSocket authentication
+    async fn authenticate(&mut self, input: &str) -> Result<String, String> {
         let parts: Vec<&str> = input.splitn(2, ' ').collect();
         if parts.len() != 2 {
             return Err("Invalid AUTH format. Use: AUTH user_id:signature".to_string());
@@ -69,7 +70,9 @@ impl TcpAuthState {
         {
             Ok(_) => {
                 self.user_id = Some(user_id.to_string());
-                Ok(())
+                // Generate session token for high-throughput authentication
+                let token = auth_mgr.generate_session_token(user_id).await;
+                Ok(token)
             }
             Err(e) => Err(format!("Authentication failed: {}", e)),
         }
@@ -83,17 +86,19 @@ impl TcpAuthState {
 
 /// Check authentication before parsing command
 /// Supports:
-/// 1. AUTH command to authenticate the connection
-/// 2. Inline format: user_id:signature:command (per-command auth)
-/// 3. Connection-scoped auth (after AUTH command)
-/// Returns (command, should_continue, user_id) if authenticated, or None if auth check failed
-async fn check_auth<'a>(
+/// 1. AUTH command to authenticate the connection (returns token)
+/// 2. TOKEN format: STORE ... TOKEN <token> (session token auth)
+/// 3. Inline format: user_id:signature:command (per-command auth)
+/// 4. Connection-scoped auth (after AUTH command): signature:command
+/// Returns (command, should_continue, user_id, token) if authenticated, or None if auth check failed
+/// For AUTH command, returns ("OK", true, user_id, Some(token))
+pub(crate) async fn check_auth<'a>(
     input: &'a str,
     auth_state: &mut TcpAuthState,
-) -> Option<(&'a str, bool, Option<String>)> {
+) -> Option<(&'a str, bool, Option<String>, Option<String>)> {
     // Check if authentication is bypassed via config - do this first for performance
     if CONFIG.auth.as_ref().map(|a| a.bypass_auth).unwrap_or(false) {
-        return Some((input.trim(), true, Some("bypass".to_string())));
+        return Some((input.trim(), true, Some("bypass".to_string()), None));
     }
 
     // Cache trimmed input to avoid multiple trim() calls
@@ -102,11 +107,27 @@ async fn check_auth<'a>(
 
     // Handle AUTH command (case-insensitive byte check - only when needed)
     if trimmed_bytes.len() >= 5 && bytes_eq_ignore_ascii_case(&trimmed_bytes[..5], b"AUTH ") {
+        tracing::warn!(
+            target: "sneldb::auth",
+            "Received AUTH command"
+        );
         match auth_state.authenticate(trimmed).await {
-            Ok(_) => {
-                return Some(("OK", true, auth_state.user_id().map(|s| s.to_string()))); // Return OK response and continue
+            Ok(token) => {
+                let user_id = auth_state.user_id().map(|s| s.to_string());
+                tracing::warn!(
+                    target: "sneldb::auth",
+                    user_id = user_id.as_deref().unwrap_or("unknown"),
+                    token_len = token.len(),
+                    "AUTH succeeded, token generated"
+                );
+                return Some(("OK", true, user_id, Some(token))); // Return OK response with token
             }
-            Err(_) => {
+            Err(e) => {
+                tracing::warn!(
+                    target: "sneldb::auth",
+                    error = e,
+                    "AUTH failed"
+                );
                 return None; // Will send error response
             }
         }
@@ -117,8 +138,52 @@ async fn check_auth<'a>(
     // If auth manager is not configured, allow all commands
     let auth_mgr = match &auth_state.auth_manager {
         Some(am) => am,
-        None => return Some((trimmed, true, Some("no-auth".to_string()))),
+        None => return Some((trimmed, true, Some("no-auth".to_string()), None)),
     };
+
+    // Check for TOKEN format: STORE ... TOKEN <token>
+    // This is the high-throughput authentication method for WebSocket
+    // Token must be at the end of the command (after " TOKEN ")
+    // Use rfind to find the last occurrence (in case "TOKEN" appears in payload JSON)
+    if let Some(token_pos) = trimmed.rfind(" TOKEN ") {
+        let (command_without_token, token_part) = trimmed.split_at(token_pos);
+        let token = token_part.strip_prefix(" TOKEN ")?.trim();
+
+        tracing::warn!(
+            target: "sneldb::auth",
+            command_preview = &command_without_token[..command_without_token.len().min(50)],
+            token_len = token.len(),
+            "Detected TOKEN format in command"
+        );
+
+        // Basic validation: token should be hex string (64 chars for 32 bytes)
+        // Allow any length hex string for flexibility, but validate it's not empty
+        if !token.is_empty() && token.len() <= 128 {
+            let command_trimmed = command_without_token.trim();
+
+            // Validate token (fast O(1) hash lookup)
+            if let Some(user_id) = auth_mgr.validate_session_token(token).await {
+                tracing::warn!(
+                    target: "sneldb::auth",
+                    user_id = user_id,
+                    "TOKEN auth succeeded"
+                );
+                return Some((command_trimmed, true, Some(user_id), None));
+            }
+            // Token invalid or expired - fall through to other auth methods
+            tracing::warn!(
+                target: "sneldb::auth",
+                "TOKEN auth failed, falling back to other methods"
+            );
+        } else {
+            tracing::warn!(
+                target: "sneldb::auth",
+                token_len = token.len(),
+                "Invalid token format (empty or too long)"
+            );
+        }
+        // If token format is invalid, fall through to other auth methods
+    }
 
     // Try connection-scoped authentication first
     if let Some(user_id) = auth_state.user_id() {
@@ -135,7 +200,9 @@ async fn check_auth<'a>(
                 .verify_signature(command_part_trimmed, user_id, potential_signature, None)
                 .await
             {
-                Ok(_) => return Some((command_part_trimmed, true, Some(user_id.to_string()))),
+                Ok(_) => {
+                    return Some((command_part_trimmed, true, Some(user_id.to_string()), None));
+                }
                 Err(_) => {
                     // Early return on auth failure - don't try inline format for authenticated connections
                     return None;
@@ -156,7 +223,7 @@ async fn check_auth<'a>(
                 .verify_signature(command, user_id, signature, Some(&auth_state.client_ip))
                 .await
             {
-                Ok(_) => Some((command, true, Some(user_id.to_string()))),
+                Ok(_) => Some((command, true, Some(user_id.to_string()), None)),
                 Err(_) => None,
             }
         }
@@ -245,14 +312,23 @@ pub async fn run_tcp_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
 
                 // Check authentication before parsing
                 match check_auth(trimmed, &mut auth_state).await {
-                    Some(("OK", _, _)) => {
-                        // AUTH command succeeded
+                    Some(("OK", _, _, Some(token))) => {
+                        // AUTH command succeeded - return token
+                        let writer = reader.get_mut();
+                        let _ = writer
+                            .write_all(format!("OK TOKEN {}\n", token).as_bytes())
+                            .await;
+                        let _ = writer.flush().await;
+                        continue;
+                    }
+                    Some(("OK", _, _, None)) => {
+                        // AUTH command succeeded (no token - should not happen)
                         let writer = reader.get_mut();
                         let _ = writer.write_all(b"OK\n").await;
                         let _ = writer.flush().await;
                         continue;
                     }
-                    Some((command_to_parse, _, authenticated_user_id)) => {
+                    Some((command_to_parse, _, authenticated_user_id, _)) => {
                         match parse_command(command_to_parse) {
                             Ok(cmd) => {
                                 // Increment pending operations before dispatch

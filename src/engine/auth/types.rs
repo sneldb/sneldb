@@ -2,6 +2,7 @@ use governor::{Quota, RateLimiter as GovernorRateLimiter};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::num::NonZeroU32;
+use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
 // Validation constants
@@ -250,4 +251,68 @@ pub fn create_rate_limiter(requests_per_second: u32) -> AuthRateLimiter {
         NonZeroU32::new(requests_per_second).expect("rate_limit_per_second must be greater than 0"),
     );
     GovernorRateLimiter::dashmap(quota)
+}
+
+/// Session token information
+#[derive(Debug, Clone)]
+pub struct SessionToken {
+    pub user_id: String,
+    pub expires_at: u64, // Unix timestamp in seconds
+}
+
+/// In-memory session token store
+#[derive(Debug, Clone)]
+pub struct SessionStore {
+    sessions: HashMap<String, SessionToken>,
+}
+
+impl SessionStore {
+    pub fn new() -> Self {
+        Self {
+            sessions: HashMap::new(),
+        }
+    }
+
+    pub fn insert(&mut self, token: String, session: SessionToken) {
+        self.sessions.insert(token, session);
+    }
+
+    pub fn get(&self, token: &str) -> Option<&SessionToken> {
+        self.sessions.get(token)
+    }
+
+    pub fn remove(&mut self, token: &str) -> bool {
+        self.sessions.remove(token).is_some()
+    }
+
+    /// Remove expired sessions. Returns number of sessions removed.
+    pub fn cleanup_expired(&mut self) -> usize {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let expired: Vec<String> = self
+            .sessions
+            .iter()
+            .filter(|(_, session)| session.expires_at < now)
+            .map(|(token, _)| token.clone())
+            .collect();
+
+        let count = expired.len();
+        for token in expired {
+            self.sessions.remove(&token);
+        }
+        count
+    }
+
+    pub fn len(&self) -> usize {
+        self.sessions.len()
+    }
+}
+
+impl Default for SessionStore {
+    fn default() -> Self {
+        Self::new()
+    }
 }

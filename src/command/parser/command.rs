@@ -21,7 +21,8 @@ pub fn parse_command(input: &str) -> Result<Command, ParseError> {
             commands::define::parse(&tokens)
         }
         Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("STORE") => {
-            commands::store::parse(&tokens)
+            // Use fast PEG parser (extracts JSON directly, no tokenization)
+            commands::store::parse_peg(input)
         }
         Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("REMEMBER") => {
             commands::remember::parse(input)

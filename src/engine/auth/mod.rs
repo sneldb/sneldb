@@ -9,8 +9,8 @@ mod user_ops;
 pub use manager::AuthManager;
 pub use types::{
     AuthError, AuthRateLimiter, AuthResult, BYPASS_USER_ID, MAX_SECRET_KEY_LENGTH,
-    MAX_SIGNATURE_LENGTH, MAX_USER_ID_LENGTH, NO_AUTH_USER_ID, PermissionSet, User, UserCache,
-    UserKey, create_rate_limiter,
+    MAX_SIGNATURE_LENGTH, MAX_USER_ID_LENGTH, NO_AUTH_USER_ID, PermissionSet, SessionStore,
+    SessionToken, User, UserCache, UserKey, create_rate_limiter,
 };
 
 #[cfg(test)]

@@ -2,6 +2,7 @@ pub mod context;
 pub mod http;
 pub mod server_state;
 pub mod tcp;
+pub mod ws;
 pub mod unix;
 
 #[cfg(test)]
@@ -84,6 +85,7 @@ pub async fn start_all() -> anyhow::Result<()> {
     let servers_result = tokio::try_join!(
         tcp::listener::run_tcp_server(Arc::clone(&ctx)),
         http::listener::run_http_server(Arc::clone(&ctx)),
+        ws::listener::run_ws_server(Arc::clone(&ctx)),
     );
 
     if ctx.server_state.is_shutting_down() {

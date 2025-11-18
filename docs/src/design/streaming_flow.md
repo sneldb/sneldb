@@ -9,7 +9,7 @@
 
 - Plain `QUERY` commands including aggregations, grouping, and time buckets (aggregate queries always use streaming).
 - Sequence queries use a specialized streaming path.
-- Triggered by the HTTP/TCP `QUERY` handler when the caller asks for streaming (e.g. client-side backpressure, large scans where batching the whole result is impractical).
+- Triggered by the HTTP/TCP/WebSocket `QUERY` handler when the caller asks for streaming (e.g. client-side backpressure, large scans where batching the whole result is impractical).
 - Falls back to the existing batch pipeline only for non-aggregate selection queries when streaming is disabled or unavailable.
 
 ## Pipeline overview

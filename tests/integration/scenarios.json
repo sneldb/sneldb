@@ -9,9 +9,26 @@
       "REPLAY product FOR user-1 RETURN [name]"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["Desk", "Chair"] },
-      { "kind": "include_none", "value": ["\"color\"", "\"price\""] }
-    ]
+      {
+        "kind": "include_all",
+        "value": [
+          "Desk",
+          "Chair"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "\"color\"",
+          "\"price\""
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
   },
   {
     "name": "store_without_definition",
@@ -21,6 +38,11 @@
     "matcher": {
       "kind": "include",
       "value": "No schema defined"
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
   },
   {
@@ -44,7 +66,12 @@
           "\"color\""
         ]
       }
-    ]
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
   },
   {
     "name": "store_and_query_enum_eq",
@@ -67,7 +94,12 @@
           "user-2"
         ]
       }
-    ]
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
   },
   {
     "name": "store_and_query_enum_neq",
@@ -90,7 +122,12 @@
           "user-4"
         ]
       }
-    ]
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
   },
   {
     "name": "store_with_invalid_enum_value",
@@ -101,6 +138,11 @@
     "matcher": {
       "kind": "include",
       "value": "does not match expected type"
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
   },
   {
@@ -112,6 +154,11 @@
     "matcher": {
       "kind": "include",
       "value": "Field 'order_id' does not match expected type"
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
   },
   {
@@ -123,6 +170,11 @@
     "matcher": {
       "kind": "include",
       "value": "Missing field 'status' in payload"
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
   },
   {
@@ -134,6 +186,11 @@
     "matcher": {
       "kind": "include",
       "value": "Payload contains fields not defined in schema: invalid_field"
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
   },
   {
@@ -150,6 +207,11 @@
         "123",
         "124"
       ]
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
   },
   {
@@ -170,26 +232,31 @@
     ],
     "matchers": [
       {
-      "kind": "include_all",
-      "value": [
-        "order-123",
-        "order-126",
-        "order-128",
-        "order-130",
-        "order-131"
-      ]
-    },
-    {
-      "kind": "include_none",
-      "value": [
-        "order-124",
-        "order-125",
-        "order-127",
-        "order-129",
-        "order-132"
-      ]
+        "kind": "include_all",
+        "value": [
+          "order-123",
+          "order-126",
+          "order-128",
+          "order-130",
+          "order-131"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "order-124",
+          "order-125",
+          "order-127",
+          "order-129",
+          "order-132"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
-    ]
   },
   {
     "name": "simple_query_status_confirmed",
@@ -202,9 +269,13 @@
     "matcher": {
       "kind": "include_all",
       "value": [
-        "\"order_id\":1",
-        "\"status\":\"confirmed\""
+        "\"confirmed\",1]"
       ]
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
   },
   {
@@ -220,12 +291,22 @@
       "value": [
         "123"
       ]
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
   },
   {
     "name": "segment_memory_hybrid_query",
     "config": {
-      "engine": { "fill_factor": 1 }
+      "engine": {
+        "fill_factor": 1
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"status\": \"string\" }",
@@ -267,6 +348,11 @@
         "user-2",
         "user-4"
       ]
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
   },
   {
@@ -282,20 +368,25 @@
     ],
     "matchers": [
       {
-      "kind": "include_all",
-      "value": [
-        "\"order_id\":999",
-        "\"order_id\":1000",
-        "\"order_id\":1001"
-      ]
-    },
-    {
-      "kind": "include_none",
-      "value": [
-        "1002"
-      ]
+        "kind": "include_all",
+        "value": [
+          "\"order_id\":999",
+          "\"order_id\":1000",
+          "\"order_id\":1001"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "1002"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
-    ]
   },
   {
     "name": "replay_mixed_context",
@@ -308,19 +399,24 @@
     ],
     "matchers": [
       {
-      "kind": "include_all",
-      "value": [
-        "android",
-        "web"
-      ]
-    },
-    {
-      "kind": "include_none",
-      "value": [
-        "bob"
-      ]
+        "kind": "include_all",
+        "value": [
+          "android",
+          "web"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "bob"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
-    ]
   },
   {
     "name": "query_on_boolean_flag",
@@ -343,7 +439,12 @@
           "u2"
         ]
       }
-    ]
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
   },
   {
     "name": "query_in_memory_only",
@@ -359,7 +460,12 @@
           "ABC123"
         ]
       }
-    ]
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
   },
   {
     "name": "replay_nonexistent_context",
@@ -369,6 +475,11 @@
     "matcher": {
       "kind": "include",
       "value": "No matching events found"
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
   },
   {
@@ -390,6 +501,11 @@
         "993",
         "994"
       ]
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
   },
   {
@@ -399,7 +515,12 @@
     ],
     "matcher": {
       "kind": "include",
-      "value": "No matching events found"
+      "value": "\"row_count\":0"
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
   },
   {
@@ -415,6 +536,11 @@
       "value": [
         "user-1"
       ]
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
   },
   {
@@ -427,7 +553,12 @@
     ],
     "matcher": {
       "kind": "include",
-      "value": "No matching events found"
+      "value": "\"row_count\":0"
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
   },
   {
@@ -444,6 +575,11 @@
         "user-3",
         "user-4"
       ]
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
   },
   {
@@ -462,6 +598,11 @@
         "user-7",
         "user-9"
       ]
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
   },
   {
@@ -475,19 +616,24 @@
     ],
     "matchers": [
       {
-      "kind": "include_all",
-      "value": [
-        "user-12"
-      ]
-    },
-    {
-      "kind": "include_none",
-      "value": [
-        "user-10",
-        "user-11"
-      ]
+        "kind": "include_all",
+        "value": [
+          "user-12"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "user-10",
+          "user-11"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
-    ]
   },
   {
     "name": "query_after_multiple_flushes",
@@ -512,7 +658,12 @@
           "user-12"
         ]
       }
-    ]
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
   },
   {
     "name": "query_with_inequality",
@@ -535,7 +686,12 @@
           "user-13"
         ]
       }
-    ]
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
   },
   {
     "name": "query_with_not",
@@ -558,7 +714,12 @@
           "user-13"
         ]
       }
-    ]
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
   },
   {
     "name": "query_with_or",
@@ -583,7 +744,12 @@
           "user-15"
         ]
       }
-    ]
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
   },
   {
     "name": "query_with_greater_than_or_equal",
@@ -608,7 +774,12 @@
           "user-13"
         ]
       }
-    ]
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
   },
   {
     "name": "query_with_less_than_or_equal",
@@ -633,7 +804,12 @@
           "user-15"
         ]
       }
-    ]
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
   },
   {
     "name": "query_with_logical_operators",
@@ -652,9 +828,13 @@
           "user-14"
         ]
       }
-    ]
-  }
-  ,
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_limit_zero_no_results",
     "input_commands": [
@@ -663,12 +843,26 @@
       "STORE limit_zero FOR b PAYLOAD {\"status\":\"ok\"}",
       "QUERY limit_zero WHERE status=\"ok\" LIMIT 0"
     ],
-    "matcher": { "kind": "include", "value": "No matching events found" }
-  }
-  ,
+    "matcher": {
+      "kind": "include",
+      "value": "\"row_count\":0"
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_limit_memtable_only_two",
-    "config": { "engine": { "fill_factor": 100 } },
+    "config": {
+      "engine": {
+        "fill_factor": 100
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE limit_mem_only FIELDS { \"status\": \"string\" }",
       "STORE limit_mem_only FOR u1 PAYLOAD {\"status\":\"ok\"}",
@@ -677,14 +871,24 @@
       "QUERY limit_mem_only WHERE status=\"ok\" LIMIT 2"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["u2","u3"] },
-      { "kind": "include_none", "value": ["u1"] }
+      {
+        "kind": "include_all",
+        "value": [
+          "\"row_count\":2"
+        ]
+      }
     ]
-  }
-  ,
+  },
   {
     "name": "query_limit_memtable_only_two_same_shard",
-    "config": { "engine": { "fill_factor": 100 } },
+    "config": {
+      "engine": {
+        "fill_factor": 100
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE limit_mem_only FIELDS { \"status\": \"int\" }",
       "STORE limit_mem_only FOR u1 PAYLOAD {\"status\":400}",
@@ -693,11 +897,21 @@
       "QUERY limit_mem_only LIMIT 2"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["\"status\":400","\"status\":500"] },
-      { "kind": "include_none", "value": ["\"status\":200"] }
+      {
+        "kind": "include_all",
+        "value": [
+          ",400]",
+          ",500]"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "\"status\":200"
+        ]
+      }
     ]
-  }
-  ,
+  },
   {
     "name": "query_limit_combines_memtable_and_segment",
     "input_commands": [
@@ -708,13 +922,30 @@
       "QUERY limit_mix WHERE status=\"ok\" LIMIT 2"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["seg-ctx","mem-ctx"] }
-    ]
-  }
-  ,
+      {
+        "kind": "include_all",
+        "value": [
+          "seg-ctx",
+          "mem-ctx"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_limit_equal_to_total",
-    "config": { "engine": { "fill_factor": 100 } },
+    "config": {
+      "engine": {
+        "fill_factor": 100
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE limit_eq_total FIELDS { \"status\": \"string\" }",
       "STORE limit_eq_total FOR c1 PAYLOAD {\"status\":\"ok\"}",
@@ -723,13 +954,26 @@
       "QUERY limit_eq_total WHERE status=\"ok\" LIMIT 3"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["c1","c2","c3"] }
+      {
+        "kind": "include_all",
+        "value": [
+          "c1",
+          "c2",
+          "c3"
+        ]
+      }
     ]
-  }
-  ,
+  },
   {
     "name": "query_limit_greater_than_total",
-    "config": { "engine": { "fill_factor": 100 } },
+    "config": {
+      "engine": {
+        "fill_factor": 100
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE limit_gt_total FIELDS { \"status\": \"string\" }",
       "STORE limit_gt_total FOR d1 PAYLOAD {\"status\":\"ok\"}",
@@ -737,10 +981,15 @@
       "QUERY limit_gt_total WHERE status=\"ok\" LIMIT 10"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["d1","d2"] }
+      {
+        "kind": "include_all",
+        "value": [
+          "d1",
+          "d2"
+        ]
+      }
     ]
-  }
-  ,
+  },
   {
     "name": "replay_since_using_created_at_iso8601",
     "input_commands": [
@@ -751,11 +1000,23 @@
       "REPLAY evt_rp1 FOR rctx SINCE \"2025-01-01T00:00:01Z\" USING created_at"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"id\":2" },
-      { "kind": "include_none", "value": ["\"id\":1"] }
-    ]
-  }
-  ,
+      {
+        "kind": "include",
+        "value": "\"id\":2"
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "\"id\":1"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "replay_since_using_created_at_ms",
     "input_commands": [
@@ -765,9 +1026,19 @@
       "FLUSH",
       "REPLAY evt_rp2 FOR rctx2 SINCE \"1735689600000\" USING created_at"
     ],
-    "matcher": { "kind": "include_all", "value": ["\"id\":1","\"id\":2"] }
-  }
-  ,
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "\"id\":1",
+        "\"id\":2"
+      ]
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "replay_since_using_date_field_midnight",
     "input_commands": [
@@ -777,9 +1048,16 @@
       "FLUSH",
       "REPLAY evt_rp3 FOR rctx3 SINCE \"2025-01-02T00:00:00Z\" USING on"
     ],
-    "matcher": { "kind": "include", "value": "\"id\":2" }
-  }
-  ,
+    "matcher": {
+      "kind": "include",
+      "value": "\"id\":2"
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "replay_since_unparsable_ignored",
     "input_commands": [
@@ -789,11 +1067,26 @@
       "FLUSH",
       "REPLAY evt_rp4 FOR rctx4 SINCE \"bogus\" USING created_at"
     ],
-    "matcher": { "kind": "include_all", "value": ["\"id\":1","\"id\":2"] }
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "\"id\":1",
+        "\"id\":2"
+      ]
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
   },
   {
     "name": "bucket_month_using_created_at_boundary",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE orders_time FIELDS { \"id\": \"int\", \"created_at\": \"datetime\", \"amount\": \"int\" }",
       "STORE orders_time FOR b1 PAYLOAD {\"id\":1,\"created_at\":1736639999,\"amount\":10}",
@@ -802,15 +1095,32 @@
       "QUERY orders_time TOTAL amount PER month USING created_at"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"bucket\"" },
-      { "kind": "include_all", "value": ["1735689600","1735689600"] },
-      { "kind": "include_all", "value": ["30"] }
+      {
+        "kind": "include",
+        "value": "\"bucket\""
+      },
+      {
+        "kind": "include_all",
+        "value": [
+          "1735689600",
+          "1735689600"
+        ]
+      },
+      {
+        "kind": "include_all",
+        "value": [
+          "30"
+        ]
+      }
     ]
-  }
-  ,
+  },
   {
     "name": "bucket_week_using_created_at_negative_offset_cross_week",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE sessions FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
       "STORE sessions FOR s1 PAYLOAD {\"id\":1,\"created_at\":1735171199}",
@@ -819,13 +1129,21 @@
       "QUERY sessions COUNT PER week USING created_at"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["[1734912000,2]"] }
+      {
+        "kind": "include_all",
+        "value": [
+          "[1734912000,2]"
+        ]
+      }
     ]
-  }
-  ,
+  },
   {
     "name": "bucket_day_using_date_field_midnight_normalization",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE birthdays FIELDS { \"id\": \"int\", \"birthdate\": \"date\" }",
       "STORE birthdays FOR bd1 PAYLOAD {\"id\":1,\"birthdate\":\"2025-09-06\"}",
@@ -835,15 +1153,27 @@
       "QUERY birthdays COUNT PER day USING birthdate"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"count\"" },
-      { "kind": "include", "value": "2" },
-      { "kind": "include", "value": "1" }
+      {
+        "kind": "include",
+        "value": "\"count\""
+      },
+      {
+        "kind": "include",
+        "value": "2"
+      },
+      {
+        "kind": "include",
+        "value": "1"
+      }
     ]
-  }
-  ,
+  },
   {
     "name": "bucket_hour_using_created_at_ms_payload",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE clicks FIELDS { \"id\": \"int\", \"created_at\": \"datetime\" }",
       "STORE clicks FOR c1 PAYLOAD {\"id\":1,\"created_at\":1735689600000}",
@@ -853,9 +1183,18 @@
       "QUERY clicks COUNT PER hour USING created_at"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"count\"" },
-      { "kind": "include", "value": "2" },
-      { "kind": "include", "value": "1" }
+      {
+        "kind": "include",
+        "value": "\"count\""
+      },
+      {
+        "kind": "include",
+        "value": "2"
+      },
+      {
+        "kind": "include",
+        "value": "1"
+      }
     ]
   },
   {
@@ -868,11 +1207,23 @@
       "QUERY evt_eq FOR ctxEq SINCE \"2025-01-01T00:00:00Z\" USING created_at"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"id\":2" },
-      { "kind": "include_none", "value": ["\"id\":1"] }
-    ]
-  }
-  ,
+      {
+        "kind": "include",
+        "value": ",2]"
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          ",1]"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "since_using_created_at_ms_input",
     "input_commands": [
@@ -883,10 +1234,20 @@
       "QUERY evt_ms FOR ctxMs SINCE \"1735689600000\" USING created_at"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["\"id\":1","\"id\":2"] }
-    ]
-  }
-  ,
+      {
+        "kind": "include_all",
+        "value": [
+          ",1]",
+          ",2]"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "since_using_created_at_ns_input_excludes_first",
     "input_commands": [
@@ -897,11 +1258,23 @@
       "QUERY evt_ns FOR ctxNs SINCE \"1735689601000000000\" USING created_at"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"id\":2" },
-      { "kind": "include_none", "value": ["\"id\":1"] }
-    ]
-  }
-  ,
+      {
+        "kind": "include",
+        "value": ",2]"
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          ",1]"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "since_using_created_at_minus_offset_boundary",
     "input_commands": [
@@ -912,11 +1285,23 @@
       "QUERY evt_neg_off FOR ctxNo SINCE \"2025-01-01T00:00:00Z\" USING created_at"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"id\":2" },
-      { "kind": "include_none", "value": ["\"id\":1"] }
-    ]
-  }
-  ,
+      {
+        "kind": "include",
+        "value": ",2]"
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          ",1]"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "store_created_at_ms_number_normalized",
     "input_commands": [
@@ -927,8 +1312,19 @@
       "QUERY evt_store_ms FOR ctxSm SINCE \"2025-01-01T00:00:00Z\" USING created_at"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["\"id\":1","\"id\":2"] }
-    ]
+      {
+        "kind": "include_all",
+        "value": [
+          ",1]",
+          ",2]"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
   },
   {
     "name": "since_using_created_at_with_offset",
@@ -940,11 +1336,23 @@
       "QUERY evt_off FOR ctxO SINCE \"2025-01-01T00:00:00Z\" USING created_at"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"id\":2" },
-      { "kind": "include_none", "value": ["\"id\":1"] }
-    ]
-  }
-  ,
+      {
+        "kind": "include",
+        "value": ",2]"
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          ",1]"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "since_using_date_field",
     "input_commands": [
@@ -955,20 +1363,39 @@
       "QUERY people FOR pctx SINCE \"2025-09-07T00:00:00Z\" USING birthdate"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"id\":2" },
-      { "kind": "include_none", "value": ["\"id\":1"] }
-    ]
-  }
-  ,
+      {
+        "kind": "include",
+        "value": ",2]"
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          ",1]"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "store_invalid_time_string_rejected",
     "input_commands": [
       "DEFINE evt_bad_time FIELDS { \"created_at\": \"datetime\" }",
       "STORE evt_bad_time FOR ctxBad PAYLOAD {\"created_at\":\"not-a-time\"}"
     ],
-    "matcher": { "kind": "include", "value": "Invalid time string" }
-  }
-  ,
+    "matcher": {
+      "kind": "include",
+      "value": "Invalid time string"
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "since_unparsable_ignored_includes_all",
     "input_commands": [
@@ -979,10 +1406,20 @@
       "QUERY evt_bogus FOR ctxBog SINCE \"bogus\" USING created_at"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["\"id\":1","\"id\":2"] }
-    ]
-  }
-  ,
+      {
+        "kind": "include_all",
+        "value": [
+          ",1]",
+          ",2]"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "since_using_optional_datetime_skips_nulls",
     "input_commands": [
@@ -993,9 +1430,22 @@
       "QUERY evt_opt_time FOR ctxOpt SINCE \"2025-01-01T00:00:00Z\" USING created_at"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"id\":2" },
-      { "kind": "include_none", "value": ["\"id\":1"] }
-    ]
+      {
+        "kind": "include",
+        "value": ",2]"
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          ",1]"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
   },
   {
     "name": "since_using_created_at_iso8601_selection",
@@ -1007,11 +1457,23 @@
       "QUERY evt_time_sel1 FOR ctxA SINCE \"2025-01-01T00:00:00Z\" USING created_at"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"id\":2" },
-      { "kind": "include_none", "value": ["\"id\":1"] }
-    ]
-  }
-  ,
+      {
+        "kind": "include",
+        "value": ",2]"
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          ",1]"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "since_using_created_at_numeric_units_selection",
     "input_commands": [
@@ -1022,13 +1484,27 @@
       "QUERY evt_time_sel2 FOR ctxB SINCE \"1600000000\" USING created_at"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["\"id\":1","\"id\":2"] }
-    ]
-  }
-  ,
+      {
+        "kind": "include_all",
+        "value": [
+          ",1]",
+          ",2]"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "agg_count_per_day_by_country_and_plan",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE orders FIELDS { \"amount\": \"int\", \"country\": \"string\", \"plan\": \"string\" }",
       "STORE orders FOR c1 PAYLOAD {\"amount\":10,\"country\":\"NL\",\"plan\":\"pro\"}",
@@ -1040,15 +1516,27 @@
       "QUERY orders COUNT PER day BY country, plan"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"NL\",\"basic\",2" },
-      { "kind": "include", "value": "\"NL\",\"pro\",2" },
-      { "kind": "include", "value": "\"DE\",\"pro\",1" }
+      {
+        "kind": "include",
+        "value": "\"NL\",\"basic\",2"
+      },
+      {
+        "kind": "include",
+        "value": "\"NL\",\"pro\",2"
+      },
+      {
+        "kind": "include",
+        "value": "\"DE\",\"pro\",1"
+      }
     ]
-  }
-  ,
+  },
   {
     "name": "agg_count_unique_user_by_country_per_week",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE login FIELDS { \"user_id\": \"string\", \"country\": \"string\" }",
       "STORE login FOR u1 PAYLOAD {\"user_id\":\"A\",\"country\":\"NL\"}",
@@ -1058,15 +1546,27 @@
       "QUERY login COUNT UNIQUE user_id PER week BY country"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"count_unique_user_id\"" },
-      { "kind": "include", "value": "\"NL\",1" },
-      { "kind": "include", "value": "\"DE\",1" }
+      {
+        "kind": "include",
+        "value": "\"count_unique_user_id\""
+      },
+      {
+        "kind": "include",
+        "value": "\"NL\",1"
+      },
+      {
+        "kind": "include",
+        "value": "\"DE\",1"
+      }
     ]
-  }
-  ,
+  },
   {
     "name": "agg_avg_min_max_with_filter_by_country",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE orders FIELDS { \"amount\": \"int\", \"country\": \"string\", \"status\": \"string\" }",
       "STORE orders FOR c1 PAYLOAD {\"amount\":10,\"country\":\"NL\",\"status\":\"ok\"}",
@@ -1076,19 +1576,43 @@
       "QUERY orders WHERE status=\"ok\" AVG amount, MIN amount, MAX amount BY country"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"avg_amount\"" },
-      { "kind": "include", "value": "\"min_amount\"" },
-      { "kind": "include", "value": "\"max_amount\"" },
-      { "kind": "include", "value": "\"NL\"" },
-      { "kind": "include", "value": "20.0" },
-      { "kind": "include", "value": "10" },
-      { "kind": "include", "value": "30" }
+      {
+        "kind": "include",
+        "value": "\"avg_amount\""
+      },
+      {
+        "kind": "include",
+        "value": "\"min_amount\""
+      },
+      {
+        "kind": "include",
+        "value": "\"max_amount\""
+      },
+      {
+        "kind": "include",
+        "value": "\"NL\""
+      },
+      {
+        "kind": "include",
+        "value": "20.0"
+      },
+      {
+        "kind": "include",
+        "value": "10"
+      },
+      {
+        "kind": "include",
+        "value": "30"
+      }
     ]
-  }
-  ,
+  },
   {
     "name": "agg_total_amount_group_by_two_fields_no_bucket",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE orders FIELDS { \"amount\": \"int\", \"region\": \"string\", \"channel\": \"string\" }",
       "STORE orders FOR r1 PAYLOAD {\"amount\":5,\"region\":\"EU\",\"channel\":\"web\"}",
@@ -1098,15 +1622,27 @@
       "QUERY orders TOTAL amount BY region, channel"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"EU\",\"web\",5" },
-      { "kind": "include", "value": "\"EU\",\"store\",7" },
-      { "kind": "include", "value": "\"US\",\"web\",9" }
+      {
+        "kind": "include",
+        "value": "\"EU\",\"web\",5"
+      },
+      {
+        "kind": "include",
+        "value": "\"EU\",\"store\",7"
+      },
+      {
+        "kind": "include",
+        "value": "\"US\",\"web\",9"
+      }
     ]
-  }
-  ,
+  },
   {
     "name": "agg_count_and_avg_per_hour_by_region",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE metrics FIELDS { \"value\": \"int\", \"region\": \"string\" }",
       "STORE metrics FOR m1 PAYLOAD {\"value\":1,\"region\":\"EU\"}",
@@ -1116,14 +1652,23 @@
       "QUERY metrics COUNT, AVG value PER hour BY region"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"EU\",2,2.0" },
-      { "kind": "include", "value": "\"US\",1,2.0" }
+      {
+        "kind": "include",
+        "value": "\"EU\",2,2.0"
+      },
+      {
+        "kind": "include",
+        "value": "\"US\",1,2.0"
+      }
     ]
-  }
-  ,
+  },
   {
     "name": "agg_count_and_count_unique_by_country",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE login FIELDS { \"user_id\": \"string\", \"country\": \"string\" }",
       "STORE login FOR a PAYLOAD {\"user_id\":\"X\",\"country\":\"NL\"}",
@@ -1133,14 +1678,27 @@
       "QUERY login COUNT, COUNT UNIQUE user_id BY country"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"count\"" },
-      { "kind": "include", "value": "\"count_unique_user_id\"" },
-      { "kind": "include", "value": "\"NL\",3,2" }
+      {
+        "kind": "include",
+        "value": "\"count\""
+      },
+      {
+        "kind": "include",
+        "value": "\"count_unique_user_id\""
+      },
+      {
+        "kind": "include",
+        "value": "\"NL\",3,2"
+      }
     ]
   },
   {
     "name": "agg_count_all_simple",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE evt FIELDS { \"v\": \"int\" }",
       "STORE evt FOR a PAYLOAD {\"v\":1}",
@@ -1148,12 +1706,18 @@
       "FLUSH",
       "QUERY evt COUNT"
     ],
-    "matcher": { "kind": "include", "value": "\"rows\":[[2]]" }
-  }
-  ,
+    "matcher": {
+      "kind": "include",
+      "value": "\"rows\":[[2]]"
+    }
+  },
   {
     "name": "agg_count_unique_by_country",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE login FIELDS { \"user_id\": \"string\", \"country\": \"string\" }",
       "STORE login FOR u1 PAYLOAD {\"user_id\":\"A\",\"country\":\"NL\"}",
@@ -1163,15 +1727,27 @@
       "QUERY login COUNT UNIQUE user_id BY country"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"count_unique_user_id\"" },
-      { "kind": "include", "value": "\"NL\",1" },
-      { "kind": "include", "value": "\"DE\",1" }
+      {
+        "kind": "include",
+        "value": "\"count_unique_user_id\""
+      },
+      {
+        "kind": "include",
+        "value": "\"NL\",1"
+      },
+      {
+        "kind": "include",
+        "value": "\"DE\",1"
+      }
     ]
-  }
-  ,
+  },
   {
     "name": "agg_count_by_country",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE login FIELDS { \"user_id\": \"string\", \"country\": \"string\" }",
       "STORE login FOR u1 PAYLOAD {\"user_id\":\"A\",\"country\":\"NL\"}",
@@ -1181,15 +1757,27 @@
       "QUERY login COUNT user_id BY country"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"count_user_id\"" },
-      { "kind": "include", "value": "\"NL\",2" },
-      { "kind": "include", "value": "\"DE\",1" }
+      {
+        "kind": "include",
+        "value": "\"count_user_id\""
+      },
+      {
+        "kind": "include",
+        "value": "\"NL\",2"
+      },
+      {
+        "kind": "include",
+        "value": "\"DE\",1"
+      }
     ]
-  }
-  ,
+  },
   {
     "name": "agg_avg_total_min_max_per_month_by_country",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE orders FIELDS { \"amount\": \"int\", \"country\": \"string\" }",
       "STORE orders FOR c1 PAYLOAD {\"amount\":10,\"country\":\"NL\"}",
@@ -1199,14 +1787,23 @@
       "QUERY orders AVG amount, TOTAL amount, MIN amount, MAX amount PER month BY country"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"DE\",15.0,15,15,15" },
-      { "kind": "include", "value": "\"NL\",15.0,30,10,20" }
+      {
+        "kind": "include",
+        "value": "\"DE\",15.0,15,15,15"
+      },
+      {
+        "kind": "include",
+        "value": "\"NL\",15.0,30,10,20"
+      }
     ]
-  }
-  ,
+  },
   {
     "name": "agg_multiple_ops_no_group",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE evt FIELDS { \"x\": \"int\", \"y\": \"int\" }",
       "STORE evt FOR a PAYLOAD {\"x\":1,\"y\":2}",
@@ -1215,13 +1812,19 @@
       "QUERY evt AVG x, MIN y, MAX y, TOTAL x"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"rows\":[[2.0,2,4,4]]" }
+      {
+        "kind": "include",
+        "value": "\"rows\":[[2.0,2,4,4]]"
+      }
     ]
-  }
-  ,
+  },
   {
     "name": "agg_count_only_with_filter",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE evt FIELDS { \"kind\": \"string\" }",
       "STORE evt FOR k1 PAYLOAD {\"kind\":\"a\"}",
@@ -1230,11 +1833,18 @@
       "FLUSH",
       "QUERY evt WHERE kind=\"a\" COUNT"
     ],
-    "matcher": { "kind": "include", "value": "\"rows\":[[2]]" }
+    "matcher": {
+      "kind": "include",
+      "value": "\"rows\":[[2]]"
+    }
   },
   {
     "name": "agg_scalar_avg_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE orders FIELDS { \"amount\": \"int\" }",
       "STORE orders FOR c1 PAYLOAD {\"amount\":10}",
@@ -1243,11 +1853,18 @@
       "FLUSH",
       "QUERY orders AVG amount"
     ],
-    "matcher": { "kind": "include", "value": "[[20.0]]" }
+    "matcher": {
+      "kind": "include",
+      "value": "[[20.0]]"
+    }
   },
   {
     "name": "agg_scalar_total_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE orders FIELDS { \"amount\": \"int\" }",
       "STORE orders FOR c1 PAYLOAD {\"amount\":10}",
@@ -1256,11 +1873,18 @@
       "FLUSH",
       "QUERY orders TOTAL amount"
     ],
-    "matcher": { "kind": "include", "value": "[[60]]" }
+    "matcher": {
+      "kind": "include",
+      "value": "[[60]]"
+    }
   },
   {
     "name": "agg_scalar_min_max_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE orders FIELDS { \"amount\": \"int\" }",
       "STORE orders FOR c1 PAYLOAD {\"amount\":10}",
@@ -1270,12 +1894,19 @@
       "QUERY orders MIN amount, MAX amount"
     ],
     "matchers": [
-      { "kind": "include", "value": "[10,30]" }
+      {
+        "kind": "include",
+        "value": "[10,30]"
+      }
     ]
   },
   {
     "name": "agg_count_with_limit_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE orders FIELDS { \"amount\": \"int\", \"country\": \"string\" }",
       "STORE orders FOR c1 PAYLOAD {\"amount\":10,\"country\":\"NL\"}",
@@ -1286,12 +1917,22 @@
       "QUERY orders COUNT BY country ORDER BY country DESC LIMIT 2"
     ],
     "matchers": [
-      { "kind": "include", "value": "[\"NL\",1],[\"IT\",1]" }
+      {
+        "kind": "include",
+        "value": "[\"NL\",1],[\"IT\",1]"
+      }
     ]
   },
   {
     "name": "agg_avg_merging_accuracy_streaming",
-    "config": { "query": { "streaming_enabled": true }, "engine": { "shard_count": 2 } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      },
+      "engine": {
+        "shard_count": 2
+      }
+    },
     "input_commands": [
       "DEFINE orders FIELDS { \"amount\": \"int\", \"category\": \"string\" }",
       "STORE orders FOR shard1-c1 PAYLOAD {\"amount\":10,\"category\":\"A\"}",
@@ -1302,12 +1943,22 @@
       "QUERY orders AVG amount BY category"
     ],
     "matchers": [
-      { "kind": "include", "value": "[[\"A\",20.0]]" }
+      {
+        "kind": "include",
+        "value": "[[\"A\",20.0]]"
+      }
     ]
   },
   {
     "name": "agg_count_unique_merging_accuracy_streaming",
-    "config": { "query": { "streaming_enabled": true }, "engine": { "shard_count": 2 } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      },
+      "engine": {
+        "shard_count": 2
+      }
+    },
     "input_commands": [
       "DEFINE login FIELDS { \"user_id\": \"string\", \"region\": \"string\" }",
       "STORE login FOR shard1-r1 PAYLOAD {\"user_id\":\"user1\",\"region\":\"EU\"}",
@@ -1319,12 +1970,19 @@
       "QUERY login COUNT UNIQUE user_id BY region"
     ],
     "matchers": [
-      { "kind": "include", "value": "[[\"EU\",3]]" }
+      {
+        "kind": "include",
+        "value": "[[\"EU\",3]]"
+      }
     ]
   },
   {
     "name": "agg_scalar_count_unique_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE login FIELDS { \"user_id\": \"string\" }",
       "STORE login FOR u1 PAYLOAD {\"user_id\":\"A\"}",
@@ -1333,11 +1991,18 @@
       "FLUSH",
       "QUERY login COUNT UNIQUE user_id"
     ],
-    "matcher": { "kind": "include", "value": "[[2]]" }
+    "matcher": {
+      "kind": "include",
+      "value": "[[2]]"
+    }
   },
   {
     "name": "agg_multiple_ops_with_limit_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE orders FIELDS { \"amount\": \"int\", \"country\": \"string\" }",
       "STORE orders FOR c1 PAYLOAD {\"amount\":10,\"country\":\"NL\"}",
@@ -1348,12 +2013,19 @@
       "QUERY orders AVG amount, TOTAL amount BY country ORDER BY country DESC LIMIT 2"
     ],
     "matchers": [
-      { "kind": "include", "value": "[[\"NL\",10.0,10],[\"IT\",20.0,40]]" }
+      {
+        "kind": "include",
+        "value": "[[\"NL\",10.0,10],[\"IT\",20.0,40]]"
+      }
     ]
   },
   {
     "name": "agg_empty_groups_filtered_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE orders FIELDS { \"amount\": \"int\", \"country\": \"string\" }",
       "STORE orders FOR c1 PAYLOAD {\"amount\":10,\"country\":\"NL\"}",
@@ -1362,13 +2034,23 @@
       "QUERY orders COUNT BY country"
     ],
     "matchers": [
-      { "kind": "include", "value": "[\"NL\",1]" },
-      { "kind": "include", "value": "[\"DE\",1]" }
+      {
+        "kind": "include",
+        "value": "[\"NL\",1]"
+      },
+      {
+        "kind": "include",
+        "value": "[\"DE\",1]"
+      }
     ]
   },
   {
     "name": "agg_count_field_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE orders FIELDS { \"order_id\": \"int | null\", \"country\": \"string\" }",
       "STORE orders FOR c1 PAYLOAD {\"order_id\":1,\"country\":\"NL\"}",
@@ -1378,12 +2060,19 @@
       "QUERY orders COUNT order_id BY country"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"NL\",2" }
+      {
+        "kind": "include",
+        "value": "\"NL\",2"
+      }
     ]
   },
   {
     "name": "agg_all_operations_comprehensive_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE metrics FIELDS { \"value\": \"int\", \"user_id\": \"string\", \"category\": \"string\" }",
       "STORE metrics FOR m1 PAYLOAD {\"value\":10,\"user_id\":\"A\",\"category\":\"X\"}",
@@ -1394,7 +2083,10 @@
       "QUERY metrics COUNT, COUNT UNIQUE user_id, AVG value, TOTAL value, MIN value, MAX value BY category"
     ],
     "matchers": [
-      { "kind": "include", "value": "[[\"X\",3,3,18.333333333333332,55,10,25],[\"Y\",1,1,15.0,15,15,15]]" }
+      {
+        "kind": "include",
+        "value": "[[\"X\",3,3,18.333333333333332,55,10,25],[\"Y\",1,1,15.0,15,15,15]]"
+      }
     ]
   },
   {
@@ -1406,6 +2098,11 @@
     "matcher": {
       "kind": "include",
       "value": "does not match expected type"
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
   },
   {
@@ -1418,7 +2115,12 @@
     ],
     "matcher": {
       "kind": "include",
-      "value": "No matching events found"
+      "value": "\"row_count\":0"
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
   },
   {
@@ -1447,7 +2149,12 @@
           "ctx4"
         ]
       }
-    ]
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
   },
   {
     "name": "ebm_neq_logs_pruning",
@@ -1475,7 +2182,12 @@
           "ctx2"
         ]
       }
-    ]
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
   },
   {
     "name": "ebm_unknown_variant_no_results",
@@ -1488,7 +2200,12 @@
     ],
     "matcher": {
       "kind": "include",
-      "value": "No matching events found"
+      "value": "\"row_count\":0"
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
   },
   {
@@ -1527,13 +2244,22 @@
           "ctx8"
         ]
       }
-    ]
-  }
-  ,
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_hits_memtable_only",
     "config": {
-      "engine": { "fill_factor": 100 }
+      "engine": {
+        "fill_factor": 100
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE hot_path FIELDS { \"device\": \"string\" }",
@@ -1557,12 +2283,16 @@
         ]
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_hits_passive_memtable",
     "config": {
-      "engine": { "fill_factor": 1 }
+      "engine": {
+        "fill_factor": 1
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE warm_path FIELDS { \"device\": \"string\" }",
@@ -1578,7 +2308,17 @@
   },
   {
     "name": "wal_reload_after_restart",
-  "config": { "engine": { "fill_factor": 100 }, "wal": { "enabled": true } },
+    "config": {
+      "engine": {
+        "fill_factor": 100
+      },
+      "wal": {
+        "enabled": true
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE login FIELDS { \"device\": \"string\" }",
       "STORE login FOR u1 PAYLOAD {\"device\":\"android\"}",
@@ -1587,12 +2327,26 @@
       "SLEEP 100",
       "QUERY login WHERE device=\"android\""
     ],
-    "matcher": { "kind": "include_all", "value": ["u1"] }
-  }
-  ,
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "u1"
+      ]
+    }
+  },
   {
     "name": "wal_recover_no_flush",
-  "config": { "engine": { "fill_factor": 100 }, "wal": { "enabled": true } },
+    "config": {
+      "engine": {
+        "fill_factor": 100
+      },
+      "wal": {
+        "enabled": true
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE login FIELDS { \"device\": \"string\" }",
       "STORE login FOR u1 PAYLOAD {\"device\":\"android\"}",
@@ -1601,12 +2355,26 @@
       "SLEEP 100",
       "QUERY login WHERE device=\"android\""
     ],
-    "matcher": { "kind": "include_all", "value": ["u1"] }
-  }
-  ,
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "u1"
+      ]
+    }
+  },
   {
     "name": "wal_disabled_no_recovery",
-  "config": { "engine": { "fill_factor": 100 }, "wal": { "enabled": false} },
+    "config": {
+      "engine": {
+        "fill_factor": 100
+      },
+      "wal": {
+        "enabled": false
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE login FIELDS { \"device\": \"string\" }",
       "STORE login FOR u1 PAYLOAD {\"device\":\"android\"}",
@@ -1615,12 +2383,24 @@
       "SLEEP 100",
       "QUERY login WHERE device=\"android\""
     ],
-    "matcher": { "kind": "include", "value": "No matching events found" }
-  }
-  ,
+    "matcher": {
+      "kind": "include",
+      "value": "\"row_count\":0"
+    }
+  },
   {
     "name": "wal_multi_log_recovery",
-  "config": { "engine": { "fill_factor": 2 }, "wal": { "enabled": true } },
+    "config": {
+      "engine": {
+        "fill_factor": 2
+      },
+      "wal": {
+        "enabled": true
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE evt FIELDS { \"v\": \"int\" }",
       "STORE evt FOR a PAYLOAD {\"v\":1}",
@@ -1631,12 +2411,28 @@
       "SLEEP 100",
       "QUERY evt WHERE v>=1"
     ],
-    "matcher": { "kind": "include_all", "value": ["a","b","c"] }
-  }
-  ,
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "a",
+        "b",
+        "c"
+      ]
+    }
+  },
   {
     "name": "wal_recover_during_pending_flush",
-  "config": { "engine": { "fill_factor": 1 }, "wal": { "enabled": true } },
+    "config": {
+      "engine": {
+        "fill_factor": 1
+      },
+      "wal": {
+        "enabled": true
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE evt FIELDS { \"v\": \"int\" }",
       "STORE evt FOR a PAYLOAD {\"v\":1}",
@@ -1645,12 +2441,26 @@
       "SLEEP 100",
       "QUERY evt WHERE v=1"
     ],
-    "matcher": { "kind": "include_all", "value": ["a"] }
-  }
-  ,
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "a"
+      ]
+    }
+  },
   {
     "name": "wal_flush_then_restart_segment_only",
-  "config": { "engine": { "fill_factor": 2 }, "wal": { "enabled": true } },
+    "config": {
+      "engine": {
+        "fill_factor": 2
+      },
+      "wal": {
+        "enabled": true
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE order FIELDS { \"id\": \"int\" }",
       "STORE order FOR c1 PAYLOAD {\"id\":1}",
@@ -1660,12 +2470,28 @@
       "SLEEP 200",
       "QUERY order WHERE id>=1"
     ],
-    "matcher": { "kind": "include_all", "value": ["c1","c2"] }
-  }
-  ,
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "c1",
+        "c2"
+      ]
+    }
+  },
   {
     "name": "wal_recover_multi_shard",
-  "config": { "engine": { "fill_factor": 100, "shard_count": 2 }, "wal": { "enabled": true } },
+    "config": {
+      "engine": {
+        "fill_factor": 100,
+        "shard_count": 2
+      },
+      "wal": {
+        "enabled": true
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE ping FIELDS { \"x\": \"int\" }",
       "STORE ping FOR shard-a PAYLOAD {\"x\":1}",
@@ -1675,14 +2501,29 @@
       "SLEEP 100",
       "QUERY ping WHERE x>=1"
     ],
-    "matcher": { "kind": "include_all", "value": ["shard-a","shard-b"] }
-  }
-  ,
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "shard-a",
+        "shard-b"
+      ]
+    }
+  },
   {
     "name": "wal_durable_flush_each_write",
     "config": {
-      "engine": { "fill_factor": 100 },
-      "wal": { "enabled": true, "buffered": true, "flush_each_write": true, "fsync": false }
+      "engine": {
+        "fill_factor": 100
+      },
+      "wal": {
+        "enabled": true,
+        "buffered": true,
+        "flush_each_write": true,
+        "fsync": false
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE login FIELDS { \"device\": \"string\" }",
@@ -1692,14 +2533,29 @@
       "SLEEP 10",
       "QUERY login WHERE device=\"android\""
     ],
-    "matcher": { "kind": "include_all", "value": ["u1"] }
-  }
-  ,
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "u1"
+      ]
+    }
+  },
   {
     "name": "wal_fsync_every_n_without_flush_each_write",
     "config": {
-      "engine": { "fill_factor": 100 },
-      "wal": { "enabled": true, "buffered": true, "flush_each_write": false, "fsync": true, "fsync_every_n": 1 }
+      "engine": {
+        "fill_factor": 100
+      },
+      "wal": {
+        "enabled": true,
+        "buffered": true,
+        "flush_each_write": false,
+        "fsync": true,
+        "fsync_every_n": 1
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE evt FIELDS { \"v\": \"int\" }",
@@ -1709,9 +2565,11 @@
       "SLEEP 10",
       "QUERY evt WHERE v=1"
     ],
-    "matcher": { "kind": "include", "value": "No matching events found" }
-  }
-  ,
+    "matcher": {
+      "kind": "include",
+      "value": "\"row_count\":0"
+    }
+  },
   {
     "name": "order_by_with_lt_small_limit",
     "input_commands": [
@@ -1723,9 +2581,25 @@
       "QUERY small_lt WHERE id < 10 ORDER BY id ASC LIMIT 2"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["\"id\":0", "\"id\":1"] },
-      { "kind": "include_none", "value": ["\"id\":2"] }
-    ]
+      {
+        "kind": "include_all",
+        "value": [
+          ",1]",
+          ",0]"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          ",2]"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
   },
   {
     "name": "order_by_desc_with_gt_bound",
@@ -1738,9 +2612,25 @@
       "QUERY big_gt WHERE v > 150 ORDER BY v DESC LIMIT 2"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["\"v\":300", "\"v\":200"] },
-      { "kind": "include_none", "value": ["\"v\":100"] }
-    ]
+      {
+        "kind": "include_all",
+        "value": [
+          ",300]",
+          ",200]"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          ",100]"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
   },
   {
     "name": "order_by_asc_frontier_min",
@@ -1752,7 +2642,15 @@
       "FLUSH",
       "QUERY frontier ORDER BY score ASC LIMIT 1"
     ],
-    "matcher": { "kind": "include", "value": "\"score\":100000" }
+    "matcher": {
+      "kind": "include",
+      "value": "\"x1\","
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
   },
   {
     "name": "query_order_by_asc_with_limit",
@@ -1767,11 +2665,28 @@
       "QUERY score ORDER BY val ASC LIMIT 3"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["\"val\":10", "\"val\":30", "\"val\":50"] },
-      { "kind": "include_none", "value": ["\"val\":70", "\"val\":90"] }
-    ]
-  }
-  ,
+      {
+        "kind": "include_all",
+        "value": [
+          ",10]",
+          ",30]",
+          ",50]"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          ",70]",
+          ",90]"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_order_by_desc_with_limit",
     "input_commands": [
@@ -1785,11 +2700,28 @@
       "QUERY score ORDER BY val DESC LIMIT 2"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["\"val\":90", "\"val\":70"] },
-      { "kind": "include_none", "value": ["\"val\":50", "\"val\":30", "\"val\":10"] }
-    ]
-  }
-  ,
+      {
+        "kind": "include_all",
+        "value": [
+          ",90]",
+          ",70]"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          ",50]",
+          ",30]",
+          ",10]"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_created_at_eq_iso8601",
     "input_commands": [
@@ -1800,9 +2732,18 @@
       "SLEEP 500",
       "QUERY evt_q1 WHERE created_at=\"2025-01-01T00:00:01Z\""
     ],
-    "matcher": { "kind": "include_all", "value": ["ctx2"] }
-  }
-  ,
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "ctx2"
+      ]
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_created_at_gt_seconds",
     "input_commands": [
@@ -1812,9 +2753,18 @@
       "FLUSH",
       "QUERY evt_q2 WHERE created_at > 1735689600"
     ],
-    "matcher": { "kind": "include_all", "value": ["ctb"] }
-  }
-  ,
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "ctb"
+      ]
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_created_at_invalid_string_no_results",
     "input_commands": [
@@ -1823,9 +2773,16 @@
       "FLUSH",
       "QUERY evt_q3 WHERE created_at=\"not-a-time\""
     ],
-    "matcher": { "kind": "include", "value": "No matching events found" }
-  }
-  ,
+    "matcher": {
+      "kind": "include",
+      "value": "\"row_count\":0"
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_date_field_eq_midnight",
     "input_commands": [
@@ -1835,9 +2792,18 @@
       "FLUSH",
       "QUERY people_q WHERE on=\"2025-09-06T00:00:00Z\""
     ],
-    "matcher": { "kind": "include_all", "value": ["pqa"] }
-  }
-  ,
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "pqa"
+      ]
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_order_by_with_offset_and_limit",
     "input_commands": [
@@ -1851,11 +2817,28 @@
       "QUERY price ORDER BY val ASC OFFSET 1 LIMIT 3"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["\"val\":200", "\"val\":300", "\"val\":400"] },
-      { "kind": "include_none", "value": ["\"val\":100", "\"val\":500"] }
-    ]
-  }
-  ,
+      {
+        "kind": "include_all",
+        "value": [
+          ",200]",
+          ",300]",
+          ",400]"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          ",100]",
+          ",500]"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_order_by_desc_with_offset",
     "input_commands": [
@@ -1869,11 +2852,28 @@
       "QUERY rating ORDER BY val DESC OFFSET 2 LIMIT 2"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["\"val\":15", "\"val\":10"] },
-      { "kind": "include_none", "value": ["\"val\":25", "\"val\":20", "\"val\":5"] }
-    ]
-  }
-  ,
+      {
+        "kind": "include_all",
+        "value": [
+          ",15]",
+          ",10]"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          ",25]",
+          ",20]",
+          ",5]"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_offset_without_limit_rejected",
     "input_commands": [
@@ -1883,9 +2883,16 @@
       "FLUSH",
       "QUERY evt ORDER BY val ASC OFFSET 1"
     ],
-    "matcher": { "kind": "include", "value": "OFFSET requires LIMIT" }
-  }
-  ,
+    "matcher": {
+      "kind": "include",
+      "value": "OFFSET requires LIMIT"
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_order_by_string_field_asc",
     "input_commands": [
@@ -1897,11 +2904,26 @@
       "QUERY user ORDER BY name ASC LIMIT 2"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["alice", "bob"] },
-      { "kind": "include_none", "value": ["charlie"] }
-    ]
-  }
-  ,
+      {
+        "kind": "include_all",
+        "value": [
+          "alice",
+          "bob"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "charlie"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_order_by_with_filter",
     "input_commands": [
@@ -1915,11 +2937,27 @@
       "QUERY item WHERE category=\"A\" ORDER BY price ASC LIMIT 2"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["\"price\":50", "\"price\":100"] },
-      { "kind": "include_none", "value": ["\"price\":200", "\"price\":150"] }
-    ]
-  }
-  ,
+      {
+        "kind": "include_all",
+        "value": [
+          ",50]",
+          ",100]"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          ",200]",
+          ",150]"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_order_by_offset_boundary",
     "input_commands": [
@@ -1931,11 +2969,24 @@
       "QUERY num ORDER BY val ASC OFFSET 2 LIMIT 5"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"val\":3" },
-      { "kind": "include_none", "value": ["\"val\":1", "\"val\":2"] }
-    ]
-  }
-  ,
+      {
+        "kind": "include",
+        "value": ",3]"
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          ",1]",
+          ",2]"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_order_by_memtable_and_segment",
     "input_commands": [
@@ -1948,15 +2999,37 @@
       "QUERY mixed ORDER BY val ASC LIMIT 3"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["\"val\":5", "\"val\":10", "\"val\":15"] },
-      { "kind": "include_none", "value": ["\"val\":20"] }
-    ]
-  }
-  ,
-
+      {
+        "kind": "include_all",
+        "value": [
+          ",5]",
+          ",10]",
+          ",15]"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          ",20]"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_order_by_large_offset",
-    "config": { "engine": { "fill_factor": 3 } },
+    "config": {
+      "engine": {
+        "fill_factor": 3
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE large FIELDS { \"val\": \"int\" }",
       "STORE large FOR l1 PAYLOAD {\"val\":1}",
@@ -1970,11 +3043,24 @@
       "QUERY large ORDER BY val ASC OFFSET 4 LIMIT 2"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["\"val\":5", "\"val\":6"] },
-      { "kind": "include_none", "value": ["\"val\":1", "\"val\":2", "\"val\":3", "\"val\":4"] }
+      {
+        "kind": "include_all",
+        "value": [
+          ",5]",
+          ",6]"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          ",1]",
+          ",2]",
+          ",3]",
+          ",4]"
+        ]
+      }
     ]
-  }
-  ,
+  },
   {
     "name": "created_at_between_inclusive_and_exclusive",
     "input_commands": [
@@ -1986,11 +3072,25 @@
       "QUERY evt_between_1 WHERE created_at > \"2025-01-01T00:00:00Z\" AND created_at <= \"2025-01-01T00:00:01Z\""
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["ba"] },
-      { "kind": "include_all", "value": ["bb"] }
-    ]
-  }
-  ,
+      {
+        "kind": "include_all",
+        "value": [
+          "ba"
+        ]
+      },
+      {
+        "kind": "include_all",
+        "value": [
+          "bb"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "created_at_seconds_range",
     "input_commands": [
@@ -2000,9 +3100,18 @@
       "FLUSH",
       "QUERY evt_frac WHERE created_at >= \"2025-01-01T00:00:01Z\" AND created_at < \"2025-01-01T00:00:02Z\""
     ],
-    "matcher": { "kind": "include_all", "value": ["f2"] }
-  }
-  ,
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "f2"
+      ]
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "created_at_tz_plus00_equivalent_to_z",
     "input_commands": [
@@ -2011,9 +3120,18 @@
       "FLUSH",
       "QUERY evt_tz_eq WHERE created_at=\"2025-01-01T00:00:00Z\""
     ],
-    "matcher": { "kind": "include_all", "value": ["tzZ"] }
-  }
-  ,
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "tzZ"
+      ]
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "date_field_leap_day_eq",
     "input_commands": [
@@ -2022,9 +3140,18 @@
       "FLUSH",
       "QUERY birthdays_lp WHERE on=\"2024-02-29T00:00:00Z\""
     ],
-    "matcher": { "kind": "include_all", "value": ["lp1"] }
-  }
-  ,
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "lp1"
+      ]
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "since_using_created_at_us_input_inclusive",
     "input_commands": [
@@ -2035,11 +3162,23 @@
       "QUERY evt_us FOR us1 SINCE \"1735689600000000\" USING created_at"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"id\":1" },
-      { "kind": "include_none", "value": ["\"id\":2"] }
-    ]
-  }
-  ,
+      {
+        "kind": "include",
+        "value": ",1]"
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          ",2]"
+        ]
+      }
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "created_at_less_than_boundary_excludes_equal",
     "input_commands": [
@@ -2049,9 +3188,18 @@
       "FLUSH",
       "QUERY evt_lt WHERE created_at < \"2025-01-01T00:00:01Z\""
     ],
-    "matcher": { "kind": "include_all", "value": ["l1"] }
-  }
-  ,
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "l1"
+      ]
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "created_at_or_two_values",
     "input_commands": [
@@ -2061,9 +3209,19 @@
       "FLUSH",
       "QUERY evt_or WHERE created_at=\"2025-01-01T00:00:00Z\" OR created_at=\"2025-01-01T00:00:01Z\""
     ],
-    "matcher": { "kind": "include_all", "value": ["o1","o2"] }
-  }
-  ,
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "o1",
+        "o2"
+      ]
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "since_on_date_field_and_where_on_datetime",
     "input_commands": [
@@ -2073,12 +3231,25 @@
       "FLUSH",
       "QUERY evt_mixed_time SINCE \"2025-01-02T00:00:00Z\" USING on WHERE created_at=\"2025-01-02T00:00:01Z\""
     ],
-    "matcher": { "kind": "include_all", "value": ["mx2"] }
-  }
-  ,
+    "matcher": {
+      "kind": "include_all",
+      "value": [
+        "mx2"
+      ]
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "streaming_memtable_basic",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE streaming_basic FIELDS { \"value\": \"int\" }",
       "STORE streaming_basic FOR mem-1 PAYLOAD {\"value\":1}",
@@ -2086,15 +3257,26 @@
       "QUERY streaming_basic WHERE value >= 0"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"type\":\"schema\"" },
-      { "kind": "include_all", "value": ["mem-1", "mem-2"] },
-      { "kind": "include", "value": "\"type\":\"end\"" }
+      {
+        "kind": "include_all",
+        "value": [
+          "mem-1",
+          "mem-2"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
     ]
-  }
-  ,
+  },
   {
     "name": "streaming_segment_and_memtable",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE streaming_mix FIELDS { \"value\": \"int\" }",
       "STORE streaming_mix FOR seg-ctx PAYLOAD {\"value\":1}",
@@ -2104,15 +3286,23 @@
       "QUERY streaming_mix WHERE value >= 0"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["seg-ctx", "seg-ctx2", "mem-ctx"] },
-      { "kind": "include", "value": "\"type\":\"schema\"" },
-      { "kind": "include", "value": "\"type\":\"end\"" }
+      {
+        "kind": "include_all",
+        "value": [
+          "seg-ctx",
+          "seg-ctx2",
+          "mem-ctx"
+        ]
+      }
     ]
-  }
-  ,
+  },
   {
     "name": "streaming_limit_offset",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE streaming_limit FIELDS { \"value\": \"int\" }",
       "STORE streaming_limit FOR ctx-1 PAYLOAD {\"value\":10}",
@@ -2122,15 +3312,33 @@
       "QUERY streaming_limit WHERE value >= 0 OFFSET 1 LIMIT 2"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["ctx-2", "ctx-3"] },
-      { "kind": "include_none", "value": ["ctx-1", "ctx-4"] },
-      { "kind": "include", "value": "\"row_count\":2" }
+      {
+        "kind": "include_all",
+        "value": [
+          "ctx-2",
+          "ctx-3"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "ctx-1",
+          "ctx-4"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"row_count\":2"
+      }
     ]
-  }
-  ,
+  },
   {
     "name": "streaming_order_by_limit",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE streaming_order FIELDS { \"value\": \"int\" }",
       "STORE streaming_order FOR seg-1 PAYLOAD {\"value\":30}",
@@ -2141,14 +3349,19 @@
       "QUERY streaming_order ORDER BY value ASC LIMIT 3"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"type\":\"schema\"" },
-      { "kind": "regex", "value": "seg-2(?s).*mem-1(?s).*seg-1" },
-      { "kind": "include", "value": "\"type\":\"end\"" }
+      {
+        "kind": "regex",
+        "value": "seg-2(?s).*mem-1(?s).*seg-1"
+      }
     ]
   },
   {
     "name": "sequence_followed_by_basic",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"status\": \"string\" }",
@@ -2162,12 +3375,22 @@
       "QUERY page_view FOLLOWED BY order_created LINKED BY user_id"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["u1", "u2"] }
+      {
+        "kind": "include_all",
+        "value": [
+          "u1",
+          "u2"
+        ]
+      }
     ]
   },
   {
     "name": "sequence_followed_by_with_where_clause",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"status\": \"string\" }",
@@ -2181,13 +3404,27 @@
       "QUERY page_view FOLLOWED BY order_created LINKED BY user_id WHERE page_view.page=\"/checkout\""
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["u1"] },
-      { "kind": "include_none", "value": ["u2"] }
+      {
+        "kind": "include_all",
+        "value": [
+          "u1"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "u2"
+        ]
+      }
     ]
   },
   {
     "name": "sequence_preceded_by_basic",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE payment_failed FIELDS { \"user_id\": \"string\", \"amount\": \"int\" }",
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"status\": \"string\" }",
@@ -2199,13 +3436,27 @@
       "QUERY order_created PRECEDED BY payment_failed LINKED BY user_id"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["u1"] },
-      { "kind": "include_none", "value": ["u2"] }
+      {
+        "kind": "include_all",
+        "value": [
+          "u1"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "u2"
+        ]
+      }
     ]
   },
   {
     "name": "sequence_preceded_by_with_where_clause",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE payment_failed FIELDS { \"user_id\": \"string\", \"amount\": \"int\" }",
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"status\": \"string\" }",
@@ -2219,13 +3470,27 @@
       "QUERY order_created PRECEDED BY payment_failed LINKED BY user_id WHERE order_created.status=\"done\""
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["u1"] },
-      { "kind": "include_none", "value": ["u2"] }
+      {
+        "kind": "include_all",
+        "value": [
+          "u1"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "u2"
+        ]
+      }
     ]
   },
   {
     "name": "sequence_followed_by_no_match",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\" }",
@@ -2241,7 +3506,11 @@
   },
   {
     "name": "sequence_followed_by_out_of_order",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\" }",
@@ -2258,7 +3527,11 @@
   },
   {
     "name": "sequence_followed_by_multiple_users",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\" }",
@@ -2275,12 +3548,23 @@
       "QUERY page_view FOLLOWED BY order_created LINKED BY user_id WHERE page_view.page=\"checkout\""
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["u1", "u2", "u3"] }
+      {
+        "kind": "include_all",
+        "value": [
+          "u1",
+          "u2",
+          "u3"
+        ]
+      }
     ]
   },
   {
     "name": "sequence_linked_by_order_id",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\" }",
       "DEFINE order_cancelled FIELDS { \"order_id\": \"int\", \"reason\": \"string\" }",
@@ -2292,13 +3576,27 @@
       "QUERY order_created FOLLOWED BY order_cancelled LINKED BY order_id"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["1,\"u1\""] },
-      { "kind": "include_none", "value": ["2,\"u2\""] }
+      {
+        "kind": "include_all",
+        "value": [
+          "1,\"u1\""
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "2,\"u2\""
+        ]
+      }
     ]
   },
   {
     "name": "sequence_followed_by_with_common_where",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\", \"timestamp\": \"int\" }",
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"timestamp\": \"int\" }",
@@ -2312,12 +3610,22 @@
       "QUERY page_view FOLLOWED BY order_created LINKED BY user_id WHERE timestamp > 500"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["u1", "u2"] }
+      {
+        "kind": "include_all",
+        "value": [
+          "u1",
+          "u2"
+        ]
+      }
     ]
   },
   {
     "name": "sequence_followed_by_with_and_where",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"status\": \"string\" }",
@@ -2331,13 +3639,27 @@
       "QUERY page_view FOLLOWED BY order_created LINKED BY user_id WHERE page_view.page=\"/checkout\" AND order_created.status=\"done\""
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["u1"] },
-      { "kind": "include_none", "value": ["u2"] }
+      {
+        "kind": "include_all",
+        "value": [
+          "u1"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "u2"
+        ]
+      }
     ]
   },
   {
     "name": "sequence_preceded_by_multiple_events",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE payment_failed FIELDS { \"user_id\": \"string\", \"attempt\": \"int\" }",
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\" }",
@@ -2351,13 +3673,27 @@
       "QUERY order_created PRECEDED BY payment_failed LINKED BY user_id"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["u1"] },
-      { "kind": "include_none", "value": ["u2"] }
+      {
+        "kind": "include_all",
+        "value": [
+          "u1"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "u2"
+        ]
+      }
     ]
   },
   {
     "name": "sequence_followed_by_limit",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\" }",
@@ -2374,14 +3710,29 @@
       "QUERY page_view FOLLOWED BY order_created LINKED BY user_id WHERE page_view.page=\"/checkout\" LIMIT 2"
     ],
     "matchers": [
-      { "kind": "include", "value": "u1" },
-      { "kind": "include", "value": "u2" },
-      { "kind": "include_none", "value": ["u3"] }
+      {
+        "kind": "include",
+        "value": "u1"
+      },
+      {
+        "kind": "include",
+        "value": "u2"
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "u3"
+        ]
+      }
     ]
   },
   {
     "name": "sequence_followed_by_same_timestamp",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\", \"created_at\": \"datetime\" }",
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"created_at\": \"datetime\" }",
@@ -2391,14 +3742,27 @@
       "QUERY page_view FOLLOWED BY order_created LINKED BY user_id USING TIME created_at"
     ],
     "matchers": [
-      { "kind": "include", "value": "u1" },
-      { "kind": "include", "value": "page_view" },
-      { "kind": "include", "value": "order_created" }
+      {
+        "kind": "include",
+        "value": "u1"
+      },
+      {
+        "kind": "include",
+        "value": "page_view"
+      },
+      {
+        "kind": "include",
+        "value": "order_created"
+      }
     ]
   },
   {
     "name": "sequence_followed_by_different_link_values",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\" }",
@@ -2415,7 +3779,11 @@
   },
   {
     "name": "sequence_followed_by_with_numeric_link_field",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"customer_id\": \"int\" }",
       "DEFINE order_shipped FIELDS { \"order_id\": \"int\", \"customer_id\": \"int\" }",
@@ -2427,13 +3795,27 @@
       "QUERY order_created FOLLOWED BY order_shipped LINKED BY customer_id"
     ],
     "matchers": [
-      { "kind": "include_all", "value": [",100,1"] },
-      { "kind": "include_none", "value": [",200,1"] }
+      {
+        "kind": "include_all",
+        "value": [
+          ",100,1"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          ",200,1"
+        ]
+      }
     ]
   },
   {
     "name": "sequence_followed_by_with_time_field",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\", \"viewed_at\": \"datetime\" }",
       "DEFINE purchase FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"viewed_at\": \"datetime\" }",
@@ -2445,12 +3827,22 @@
       "QUERY page_view FOLLOWED BY purchase LINKED BY user_id USING TIME viewed_at"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["u1", "u2"] }
+      {
+        "kind": "include_all",
+        "value": [
+          "u1",
+          "u2"
+        ]
+      }
     ]
   },
   {
     "name": "sequence_followed_by_with_time_field_and_where",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\", \"viewed_at\": \"datetime\" }",
       "DEFINE purchase FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"viewed_at\": \"datetime\", \"amount\": \"int\" }",
@@ -2462,13 +3854,27 @@
       "QUERY page_view FOLLOWED BY purchase LINKED BY user_id USING TIME viewed_at WHERE purchase.amount > 75"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["u1"] },
-      { "kind": "include_none", "value": ["u2"] }
+      {
+        "kind": "include_all",
+        "value": [
+          "u1"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "u2"
+        ]
+      }
     ]
   },
   {
     "name": "sequence_followed_by_with_time_field_and_limit",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\", \"viewed_at\": \"datetime\" }",
       "DEFINE purchase FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"viewed_at\": \"datetime\" }",
@@ -2482,14 +3888,29 @@
       "QUERY page_view FOLLOWED BY purchase LINKED BY user_id USING TIME viewed_at LIMIT 2"
     ],
     "matchers": [
-      { "kind": "include", "value": "u1" },
-      { "kind": "include", "value": "u2" },
-      { "kind": "include_none", "value": ["u3"] }
+      {
+        "kind": "include",
+        "value": "u1"
+      },
+      {
+        "kind": "include",
+        "value": "u2"
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "u3"
+        ]
+      }
     ]
   },
   {
     "name": "sequence_preceded_by_with_time_field",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE payment_failed FIELDS { \"user_id\": \"string\", \"failed_at\": \"datetime\" }",
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"created_at\": \"datetime\" }",
@@ -2500,13 +3921,27 @@
       "QUERY order_created PRECEDED BY payment_failed LINKED BY user_id USING TIME created_at"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["u1"] },
-      { "kind": "include_none", "value": ["u2"] }
+      {
+        "kind": "include_all",
+        "value": [
+          "u1"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "u2"
+        ]
+      }
     ]
   },
   {
     "name": "sequence_with_time_field_numeric_timestamp",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\", \"ts\": \"int\" }",
       "DEFINE purchase FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"ts\": \"int\" }",
@@ -2518,12 +3953,22 @@
       "QUERY page_view FOLLOWED BY purchase LINKED BY user_id USING TIME ts"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["u1", "u2"] }
+      {
+        "kind": "include_all",
+        "value": [
+          "u1",
+          "u2"
+        ]
+      }
     ]
   },
   {
     "name": "sequence_with_different_time_fields",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\", \"viewed_at\": \"datetime\" }",
       "DEFINE purchase FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"viewed_at\": \"datetime\", \"purchased_at\": \"datetime\" }",
@@ -2533,10 +3978,14 @@
       "QUERY page_view FOLLOWED BY purchase LINKED BY user_id USING TIME viewed_at"
     ],
     "matchers": [
-      { "kind": "include_all", "value": ["u1"] }
+      {
+        "kind": "include_all",
+        "value": [
+          "u1"
+        ]
+      }
     ]
-  }
-  ,
+  },
   {
     "name": "query_in_operator_numeric_basic",
     "input_commands": [
@@ -2565,9 +4014,13 @@
           "ctx5"
         ]
       }
-    ]
-  }
-  ,
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_in_operator_string_basic",
     "input_commands": [
@@ -2594,9 +4047,13 @@
           "s4"
         ]
       }
-    ]
-  }
-  ,
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_in_operator_single_value",
     "input_commands": [
@@ -2621,9 +4078,13 @@
           "v3"
         ]
       }
-    ]
-  }
-  ,
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_in_operator_no_matches",
     "input_commands": [
@@ -2636,10 +4097,14 @@
     ],
     "matcher": {
       "kind": "include",
-      "value": "No matching events found"
+      "value": "\"row_count\":0"
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
-  }
-  ,
+  },
   {
     "name": "query_in_operator_with_and",
     "input_commands": [
@@ -2666,9 +4131,13 @@
           "a3"
         ]
       }
-    ]
-  }
-  ,
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_in_operator_with_or",
     "input_commands": [
@@ -2692,9 +4161,13 @@
           "o5"
         ]
       }
-    ]
-  }
-  ,
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_in_operator_with_not",
     "input_commands": [
@@ -2723,9 +4196,13 @@
           "n4"
         ]
       }
-    ]
-  }
-  ,
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_in_operator_with_order_by_limit",
     "input_commands": [
@@ -2742,24 +4219,32 @@
       {
         "kind": "include_all",
         "value": [
-          "\"score\":90",
-          "\"score\":80",
-          "\"score\":50"
+          ",90]",
+          ",80]",
+          ",50]"
         ]
       },
       {
         "kind": "include_none",
         "value": [
-          "\"score\":20",
-          "\"score\":10"
+          ",20]",
+          ",10]"
         ]
       }
-    ]
-  }
-  ,
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_in_operator_with_aggregation",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE in_agg FIELDS { \"region\": \"string\", \"amount\": \"int\" }",
       "STORE in_agg FOR agg1 PAYLOAD {\"region\":\"US\",\"amount\":10}",
@@ -2786,8 +4271,7 @@
         ]
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_in_operator_negative_numbers",
     "input_commands": [
@@ -2816,13 +4300,22 @@
           "neg1"
         ]
       }
-    ]
-  }
-  ,
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_in_operator_memtable_only",
     "config": {
-      "engine": { "fill_factor": 100 }
+      "engine": {
+        "fill_factor": 100
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE in_mem FIELDS { \"id\": \"int\" }",
@@ -2848,11 +4341,14 @@
         ]
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_in_operator_numeric_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE in_stream_num FIELDS { \"id\": \"int\", \"value\": \"int\" }",
       "STORE in_stream_num FOR s1 PAYLOAD {\"id\":1,\"value\":10}",
@@ -2888,11 +4384,14 @@
         "value": "\"type\":\"end\""
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_in_operator_string_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE in_stream_str FIELDS { \"status\": \"string\", \"priority\": \"int\" }",
       "STORE in_stream_str FOR str1 PAYLOAD {\"status\":\"pending\",\"priority\":1}",
@@ -2926,11 +4425,14 @@
         "value": "\"type\":\"end\""
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_in_operator_with_and_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE in_and_stream FIELDS { \"id\": \"int\", \"status\": \"string\" }",
       "STORE in_and_stream FOR as1 PAYLOAD {\"id\":1,\"status\":\"active\"}",
@@ -2964,11 +4466,14 @@
         "value": "\"type\":\"end\""
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_in_operator_with_not_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE in_not_stream FIELDS { \"id\": \"int\" }",
       "STORE in_not_stream FOR ns1 PAYLOAD {\"id\":1}",
@@ -3004,11 +4509,14 @@
         "value": "\"type\":\"end\""
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_in_operator_with_order_by_limit_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE in_order_stream FIELDS { \"id\": \"int\", \"score\": \"int\" }",
       "STORE in_order_stream FOR os1 PAYLOAD {\"id\":2,\"score\":20}",
@@ -3044,11 +4552,14 @@
         "value": "\"type\":\"end\""
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_in_operator_memtable_and_segment_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE in_mix_stream FIELDS { \"id\": \"int\" }",
       "STORE in_mix_stream FOR seg1 PAYLOAD {\"id\":1}",
@@ -3082,11 +4593,14 @@
         "value": "\"type\":\"end\""
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_in_operator_with_or_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE in_or_stream FIELDS { \"id\": \"int\", \"category\": \"string\" }",
       "STORE in_or_stream FOR ors1 PAYLOAD {\"id\":1,\"category\":\"A\"}",
@@ -3117,11 +4631,14 @@
         "value": "\"type\":\"end\""
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_in_operator_sequence_followed_by_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"status\": \"string\" }",
@@ -3152,11 +4669,14 @@
         ]
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_in_operator_sequence_with_event_specific_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\" }",
@@ -3187,11 +4707,14 @@
         ]
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_in_operator_multiple_in_clauses_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE multi_in FIELDS { \"id\": \"int\", \"status\": \"string\", \"region\": \"string\" }",
       "STORE multi_in FOR mi1 PAYLOAD {\"id\":1,\"status\":\"active\",\"region\":\"US\"}",
@@ -3227,11 +4750,14 @@
         "value": "\"type\":\"end\""
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_in_operator_with_temporal_field_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE in_temporal FIELDS { \"id\": \"int\", \"created_at\": \"datetime\", \"status\": \"string\" }",
       "STORE in_temporal FOR t1 PAYLOAD {\"id\":1,\"created_at\":\"2025-01-01T00:00:00Z\",\"status\":\"active\"}",
@@ -3265,11 +4791,14 @@
         "value": "\"type\":\"end\""
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_in_operator_complex_and_or_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE complex_in FIELDS { \"id\": \"int\", \"category\": \"string\", \"priority\": \"int\" }",
       "STORE complex_in FOR c1 PAYLOAD {\"id\":1,\"category\":\"A\",\"priority\":1}",
@@ -3305,11 +4834,14 @@
         "value": "\"type\":\"end\""
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_in_operator_with_aggregation_group_by_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE in_agg_group FIELDS { \"region\": \"string\", \"amount\": \"int\", \"status\": \"string\" }",
       "STORE in_agg_group FOR ag1 PAYLOAD {\"region\":\"US\",\"amount\":10,\"status\":\"active\"}",
@@ -3342,11 +4874,14 @@
         "value": "\"type\":\"end\""
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_in_operator_sequence_with_in_and_not_streaming",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE page_view FIELDS { \"page\": \"string\", \"user_id\": \"string\" }",
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\", \"status\": \"string\" }",
@@ -3377,11 +4912,14 @@
         ]
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_parentheses_with_or_and_and",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE paren_or_and FIELDS { \"id\": \"int\", \"status\": \"string\", \"priority\": \"int\" }",
       "STORE paren_or_and FOR ctx1 PAYLOAD {\"id\":1,\"status\":\"active\",\"priority\":3}",
@@ -3417,11 +4955,14 @@
         "value": "\"type\":\"end\""
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_parentheses_nested_or_and",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE nested_paren FIELDS { \"id\": \"int\", \"status\": \"string\", \"priority\": \"int\" }",
       "STORE nested_paren FOR n1 PAYLOAD {\"id\":1,\"status\":\"active\",\"priority\":3}",
@@ -3457,11 +4998,14 @@
         "value": "\"type\":\"end\""
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_parentheses_or_different_fields",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE diff_fields FIELDS { \"id\": \"int\", \"status\": \"string\", \"category\": \"string\" }",
       "STORE diff_fields FOR d1 PAYLOAD {\"id\":1,\"status\":\"active\",\"category\":\"A\"}",
@@ -3495,11 +5039,14 @@
         "value": "\"type\":\"end\""
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_parentheses_triple_nested",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE triple_nest FIELDS { \"id\": \"int\", \"status\": \"string\", \"priority\": \"int\", \"category\": \"string\" }",
       "STORE triple_nest FOR t1 PAYLOAD {\"id\":1,\"status\":\"active\",\"priority\":3,\"category\":\"A\"}",
@@ -3533,11 +5080,14 @@
         "value": "\"type\":\"end\""
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_parentheses_with_in_operator",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE paren_in FIELDS { \"id\": \"int\", \"status\": \"string\", \"priority\": \"int\" }",
       "STORE paren_in FOR pi1 PAYLOAD {\"id\":1,\"status\":\"active\",\"priority\":3}",
@@ -3571,11 +5121,14 @@
         "value": "\"type\":\"end\""
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_parentheses_multiple_and_or",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE multi_and_or FIELDS { \"id\": \"int\", \"status\": \"string\", \"priority\": \"int\", \"category\": \"string\" }",
       "STORE multi_and_or FOR m1 PAYLOAD {\"id\":1,\"status\":\"active\",\"priority\":3,\"category\":\"A\"}",
@@ -3611,11 +5164,14 @@
         "value": "\"type\":\"end\""
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_parentheses_with_not_and_or",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE not_paren FIELDS { \"id\": \"int\", \"status\": \"string\", \"priority\": \"int\" }",
       "STORE not_paren FOR np1 PAYLOAD {\"id\":1,\"status\":\"active\",\"priority\":3}",
@@ -3649,8 +5205,7 @@
         "value": "\"type\":\"end\""
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_not_with_and_de_morgan",
     "input_commands": [
@@ -3677,9 +5232,13 @@
           "na2"
         ]
       }
-    ]
-  }
-  ,
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_double_negation",
     "input_commands": [
@@ -3704,9 +5263,13 @@
           "dn3"
         ]
       }
-    ]
-  }
-  ,
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_parentheses_with_not_and_or_non_streaming",
     "input_commands": [
@@ -3733,12 +5296,20 @@
           "np3"
         ]
       }
-    ]
-  }
-  ,
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
+  },
   {
     "name": "query_parentheses_deeply_nested",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE deep_nest FIELDS { \"id\": \"int\", \"status\": \"string\", \"priority\": \"int\" }",
       "STORE deep_nest FOR dn1 PAYLOAD {\"id\":1,\"status\":\"active\",\"priority\":3}",
@@ -3772,11 +5343,14 @@
         "value": "\"type\":\"end\""
       }
     ]
-  }
-  ,
+  },
   {
     "name": "query_parentheses_or_same_field_multiple_values",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE multi_or FIELDS { \"id\": \"int\", \"status\": \"string\" }",
       "STORE multi_or FOR mo1 PAYLOAD {\"id\":1,\"status\":\"active\"}",
@@ -3832,12 +5406,22 @@
         "kind": "include",
         "value": "testuser: active"
       }
-    ]
+    ],
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    }
   },
   {
     "name": "auth_bypass_enabled_allows_unauthenticated_commands",
     "config": {
-      "auth": { "bypass_auth": true }
+      "auth": {
+        "bypass_auth": true
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE auth_test FIELDS { \"value\": \"int\" }",
@@ -3847,14 +5431,22 @@
     "matchers": [
       {
         "kind": "include_all",
-        "value": ["ctx1", "42"]
+        "value": [
+          "ctx1",
+          "42"
+        ]
       }
     ]
   },
   {
     "name": "auth_bypass_disabled_requires_authentication",
     "config": {
-      "auth": { "bypass_auth": false }
+      "auth": {
+        "bypass_auth": false
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE auth_required FIELDS { \"value\": \"int\" }",
@@ -3867,7 +5459,11 @@
   },
   {
     "name": "remember_basic_query",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\", \"amount\": \"int\" }",
       "STORE orders FOR c1 PAYLOAD {\"order_id\":1,\"status\":\"confirmed\",\"amount\":100}",
@@ -3877,13 +5473,23 @@
       "REMEMBER QUERY orders AS recent_orders"
     ],
     "matchers": [
-      { "kind": "include", "value": "remembered query 'recent_orders'" },
-      { "kind": "include", "value": "rows stored: 3" }
+      {
+        "kind": "include",
+        "value": "remembered query 'recent_orders'"
+      },
+      {
+        "kind": "include",
+        "value": "rows stored: 3"
+      }
     ]
   },
   {
     "name": "remember_query_with_where_clause",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE products FIELDS { \"product_id\": \"int\", \"category\": \"string\", \"price\": \"int\" }",
       "STORE products FOR p1 PAYLOAD {\"product_id\":1,\"category\":\"electronics\",\"price\":500}",
@@ -3893,13 +5499,23 @@
       "REMEMBER QUERY products WHERE category=\"electronics\" AS electronics_only"
     ],
     "matchers": [
-      { "kind": "include", "value": "remembered query 'electronics_only'" },
-      { "kind": "include", "value": "rows stored: 2" }
+      {
+        "kind": "include",
+        "value": "remembered query 'electronics_only'"
+      },
+      {
+        "kind": "include",
+        "value": "rows stored: 2"
+      }
     ]
   },
   {
     "name": "remember_query_with_return_fields",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE users FIELDS { \"user_id\": \"int\", \"name\": \"string\", \"email\": \"string\", \"age\": \"int\" }",
       "STORE users FOR u1 PAYLOAD {\"user_id\":1,\"name\":\"Alice\",\"email\":\"alice@example.com\",\"age\":30}",
@@ -3908,13 +5524,23 @@
       "REMEMBER QUERY users RETURN [user_id, name] AS user_names"
     ],
     "matchers": [
-      { "kind": "include", "value": "remembered query 'user_names'" },
-      { "kind": "include", "value": "rows stored: 2" }
+      {
+        "kind": "include",
+        "value": "remembered query 'user_names'"
+      },
+      {
+        "kind": "include",
+        "value": "rows stored: 2"
+      }
     ]
   },
   {
     "name": "remember_query_with_limit",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE events FIELDS { \"event_id\": \"int\", \"type\": \"string\" }",
       "STORE events FOR e1 PAYLOAD {\"event_id\":1,\"type\":\"click\"}",
@@ -3924,13 +5550,23 @@
       "REMEMBER QUERY events LIMIT 2 AS limited_events"
     ],
     "matchers": [
-      { "kind": "include", "value": "remembered query 'limited_events'" },
-      { "kind": "include", "value": "rows stored: 2" }
+      {
+        "kind": "include",
+        "value": "remembered query 'limited_events'"
+      },
+      {
+        "kind": "include",
+        "value": "rows stored: 2"
+      }
     ]
   },
   {
     "name": "remember_duplicate_name_error",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE test_dup FIELDS { \"id\": \"int\" }",
       "STORE test_dup FOR t1 PAYLOAD {\"id\":1}",
@@ -3945,7 +5581,11 @@
   },
   {
     "name": "show_basic_materialization",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE show_test FIELDS { \"id\": \"int\", \"value\": \"string\" }",
       "STORE show_test FOR s1 PAYLOAD {\"id\":1,\"value\":\"first\"}",
@@ -3955,14 +5595,30 @@
       "SHOW show_basic"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"type\":\"schema\"" },
-      { "kind": "include_all", "value": ["s1", "s2"] },
-      { "kind": "include", "value": "\"type\":\"end\"" }
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include_all",
+        "value": [
+          "s1",
+          "s2"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
     ]
   },
   {
     "name": "show_with_incremental_delta",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE delta_test FIELDS { \"id\": \"int\", \"status\": \"string\" }",
       "STORE delta_test FOR d1 PAYLOAD {\"id\":1,\"status\":\"initial\"}",
@@ -3973,9 +5629,23 @@
       "SHOW delta_materialization"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"type\":\"schema\"" },
-      { "kind": "include_all", "value": ["d1", "d2", "d3", "d4"] },
-      { "kind": "include", "value": "\"type\":\"end\"" }
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include_all",
+        "value": [
+          "d1",
+          "d2",
+          "d3",
+          "d4"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
     ]
   },
   {
@@ -3986,11 +5656,20 @@
     "matcher": {
       "kind": "include",
       "value": "not found"
+    },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
     }
   },
   {
     "name": "show_multiple_incremental_updates",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE multi_update FIELDS { \"id\": \"int\", \"batch\": \"string\" }",
       "STORE multi_update FOR m1 PAYLOAD {\"id\":1,\"batch\":\"A\"}",
@@ -4002,14 +5681,31 @@
       "SHOW multi_materialization"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"type\":\"schema\"" },
-      { "kind": "include_all", "value": ["m1", "m2", "m3"] },
-      { "kind": "include", "value": "\"type\":\"end\"" }
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include_all",
+        "value": [
+          "m1",
+          "m2",
+          "m3"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
     ]
   },
   {
     "name": "remember_and_show_query_with_order_by",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE ordered_test FIELDS { \"id\": \"int\", \"score\": \"int\" }",
       "STORE ordered_test FOR o1 PAYLOAD {\"id\":1,\"score\":50}",
@@ -4019,14 +5715,31 @@
       "SHOW ordered_materialization"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"type\":\"schema\"" },
-      { "kind": "include_all", "value": ["o1", "o2", "o3"] },
-      { "kind": "include", "value": "\"type\":\"end\"" }
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include_all",
+        "value": [
+          "o1",
+          "o2",
+          "o3"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
     ]
   },
   {
     "name": "show_with_where_clause_materialization",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE filtered_test FIELDS { \"id\": \"int\", \"status\": \"string\" }",
       "STORE filtered_test FOR f1 PAYLOAD {\"id\":1,\"status\":\"active\"}",
@@ -4036,15 +5749,36 @@
       "SHOW active_only"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"type\":\"schema\"" },
-      { "kind": "include_all", "value": ["f1", "f3"] },
-      { "kind": "include_none", "value": ["f2"] },
-      { "kind": "include", "value": "\"type\":\"end\"" }
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include_all",
+        "value": [
+          "f1",
+          "f3"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "f2"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
     ]
   },
   {
     "name": "remember_query_with_context_filter",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE ctx_test FIELDS { \"id\": \"int\", \"value\": \"string\" }",
       "STORE ctx_test FOR user1 PAYLOAD {\"id\":1,\"value\":\"user1_data\"}",
@@ -4053,13 +5787,23 @@
       "REMEMBER QUERY ctx_test FOR user1 AS user1_materialization"
     ],
     "matchers": [
-      { "kind": "include", "value": "remembered query 'user1_materialization'" },
-      { "kind": "include", "value": "rows stored: 2" }
+      {
+        "kind": "include",
+        "value": "remembered query 'user1_materialization'"
+      },
+      {
+        "kind": "include",
+        "value": "rows stored: 2"
+      }
     ]
   },
   {
     "name": "show_materialization_with_context_filter",
-    "config": { "query": { "streaming_enabled": true } },
+    "config": {
+      "query": {
+        "streaming_enabled": true
+      }
+    },
     "input_commands": [
       "DEFINE ctx_show FIELDS { \"id\": \"int\", \"data\": \"string\" }",
       "STORE ctx_show FOR ctx1 PAYLOAD {\"id\":1,\"data\":\"initial\"}",
@@ -4070,16 +5814,39 @@
       "SHOW ctx1_materialization"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"type\":\"schema\"" },
-      { "kind": "include_all", "value": ["ctx1"] },
-      { "kind": "include_none", "value": ["ctx2"] },
-      { "kind": "include", "value": "\"type\":\"end\"" }
+      {
+        "kind": "include",
+        "value": "\"type\":\"schema\""
+      },
+      {
+        "kind": "include_all",
+        "value": [
+          "ctx1"
+        ]
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "ctx2"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "\"type\":\"end\""
+      }
     ]
   },
   {
     "name": "permissions_grant_read_write_single_event_type",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
@@ -4088,13 +5855,23 @@
       "SHOW PERMISSIONS FOR testuser"
     ],
     "matchers": [
-      { "kind": "include", "value": "orders: read, write" }
+      {
+        "kind": "include",
+        "value": "orders: read, write"
+      }
     ]
   },
   {
     "name": "permissions_grant_read_only",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE products FIELDS { \"product_id\": \"int\", \"name\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE products FIELDS { \"product_id\": \"int\", \"name\": \"string\" })",
@@ -4103,14 +5880,29 @@
       "SHOW PERMISSIONS FOR readonly"
     ],
     "matchers": [
-      { "kind": "include", "value": "products: read" },
-      { "kind": "include_none", "value": ["write"] }
+      {
+        "kind": "include",
+        "value": "products: read"
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "write"
+        ]
+      }
     ]
   },
   {
     "name": "permissions_grant_write_only",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE events FIELDS { \"event_id\": \"int\", \"type\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE events FIELDS { \"event_id\": \"int\", \"type\": \"string\" })",
@@ -4119,14 +5911,29 @@
       "SHOW PERMISSIONS FOR writeonly"
     ],
     "matchers": [
-      { "kind": "include", "value": "events: write" },
-      { "kind": "include_none", "value": ["read"] }
+      {
+        "kind": "include",
+        "value": "events: write"
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "read"
+        ]
+      }
     ]
   },
   {
     "name": "permissions_grant_multiple_event_types",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
@@ -4136,14 +5943,27 @@
       "SHOW PERMISSIONS FOR multiuser"
     ],
     "matchers": [
-      { "kind": "include", "value": "orders: read, write" },
-      { "kind": "include", "value": "products: read, write" }
+      {
+        "kind": "include",
+        "value": "orders: read, write"
+      },
+      {
+        "kind": "include",
+        "value": "products: read, write"
+      }
     ]
   },
   {
     "name": "permissions_grant_merges_with_existing",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
@@ -4153,13 +5973,23 @@
       "SHOW PERMISSIONS FOR mergeuser"
     ],
     "matchers": [
-      { "kind": "include", "value": "orders: read, write" }
+      {
+        "kind": "include",
+        "value": "orders: read, write"
+      }
     ]
   },
   {
     "name": "permissions_revoke_all_permissions",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
@@ -4169,13 +5999,23 @@
       "SHOW PERMISSIONS FOR revokeuser"
     ],
     "matchers": [
-      { "kind": "include", "value": "has no permissions" }
+      {
+        "kind": "include",
+        "value": "has no permissions"
+      }
     ]
   },
   {
     "name": "permissions_revoke_partial_read",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
@@ -4185,14 +6025,29 @@
       "SHOW PERMISSIONS FOR partialuser"
     ],
     "matchers": [
-      { "kind": "include", "value": "orders: write" },
-      { "kind": "include_none", "value": ["read"] }
+      {
+        "kind": "include",
+        "value": "orders: write"
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "read"
+        ]
+      }
     ]
   },
   {
     "name": "permissions_revoke_partial_write",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
@@ -4202,14 +6057,29 @@
       "SHOW PERMISSIONS FOR partialwrite"
     ],
     "matchers": [
-      { "kind": "include", "value": "orders: read" },
-      { "kind": "include_none", "value": ["orders: write"] }
+      {
+        "kind": "include",
+        "value": "orders: read"
+      },
+      {
+        "kind": "include_none",
+        "value": [
+          "orders: write"
+        ]
+      }
     ]
   },
   {
     "name": "permissions_revoke_multiple_event_types",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
@@ -4220,26 +6090,46 @@
       "SHOW PERMISSIONS FOR multirevoke"
     ],
     "matchers": [
-      { "kind": "include", "value": "has no permissions" }
+      {
+        "kind": "include",
+        "value": "has no permissions"
+      }
     ]
   },
   {
     "name": "permissions_show_empty_permissions",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "CREATE USER emptyuser WITH KEY \"empty-key-123\"",
       "SHOW PERMISSIONS FOR emptyuser"
     ],
     "matchers": [
-      { "kind": "include", "value": "has no permissions" }
+      {
+        "kind": "include",
+        "value": "has no permissions"
+      }
     ]
   },
   {
     "name": "permissions_store_requires_write_permission",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" }",
@@ -4248,13 +6138,23 @@
       "STORE orders FOR ctx1 PAYLOAD {\"order_id\":1,\"status\":\"pending\"} user_id=writer signature=HMAC_SHA256(writer-key-123, STORE orders FOR ctx1 PAYLOAD {\"order_id\":1,\"status\":\"pending\"})"
     ],
     "matchers": [
-      { "kind": "include", "value": "OK" }
+      {
+        "kind": "include",
+        "value": "OK"
+      }
     ]
   },
   {
     "name": "permissions_store_denied_without_write",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" }",
@@ -4270,7 +6170,14 @@
   {
     "name": "permissions_query_requires_read_permission",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE products FIELDS { \"product_id\": \"int\", \"name\": \"string\" }",
@@ -4280,13 +6187,23 @@
       "QUERY products WHERE product_id=1 user_id=reader signature=HMAC_SHA256(reader-key-123, QUERY products WHERE product_id=1)"
     ],
     "matchers": [
-      { "kind": "include", "value": "\"name\":\"Widget\",\"product_id\":1" }
+      {
+        "kind": "include",
+        "value": ",1,\"Widget\"]"
+      }
     ]
   },
   {
     "name": "permissions_query_denied_without_read",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE products FIELDS { \"product_id\": \"int\", \"name\": \"string\" }",
@@ -4303,7 +6220,14 @@
   {
     "name": "permissions_admin_can_manage_permissions",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
@@ -4312,13 +6236,23 @@
       "SHOW PERMISSIONS FOR testuser user_id=admin signature=HMAC_SHA256(admin-key-123, SHOW PERMISSIONS FOR testuser)"
     ],
     "matchers": [
-      { "kind": "include", "value": "orders: read, write" }
+      {
+        "kind": "include",
+        "value": "orders: read, write"
+      }
     ]
   },
   {
     "name": "permissions_non_admin_cannot_grant",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
@@ -4334,7 +6268,14 @@
   {
     "name": "permissions_non_admin_cannot_revoke",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
@@ -4351,7 +6292,14 @@
   {
     "name": "permissions_non_admin_cannot_show_permissions",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "CREATE USER regularuser WITH KEY \"regular-key-123\"",
@@ -4366,7 +6314,14 @@
   {
     "name": "permissions_define_requires_admin",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "CREATE USER regularuser WITH KEY \"regular-key-123\"",
@@ -4380,19 +6335,36 @@
   {
     "name": "permissions_admin_can_define_schema",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE test_schema FIELDS { \"id\": \"int\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE test_schema FIELDS { \"id\": \"int\" })"
     ],
     "matchers": [
-      { "kind": "include", "value": "OK" }
+      {
+        "kind": "include",
+        "value": "OK"
+      }
     ]
   },
   {
     "name": "permissions_full_workflow_read_write",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
@@ -4402,13 +6374,23 @@
       "QUERY orders WHERE order_id=1 user_id=workflowuser signature=HMAC_SHA256(workflow-key-123, QUERY orders WHERE order_id=1)"
     ],
     "matchers": [
-      { "kind": "include", "value": "pending" }
+      {
+        "kind": "include",
+        "value": "pending"
+      }
     ]
   },
   {
     "name": "permissions_grant_to_nonexistent_user_error",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
@@ -4422,7 +6404,14 @@
   {
     "name": "permissions_revoke_from_nonexistent_user_error",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
@@ -4436,7 +6425,14 @@
   {
     "name": "permissions_show_nonexistent_user_error",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "SHOW PERMISSIONS FOR nonexistent user_id=admin signature=HMAC_SHA256(admin-key-123, SHOW PERMISSIONS FOR nonexistent)"
@@ -4449,7 +6445,14 @@
   {
     "name": "permissions_invalid_permission_name_error",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
@@ -4464,7 +6467,14 @@
   {
     "name": "permissions_multiple_grants_same_event_type",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" })",
@@ -4475,13 +6485,23 @@
       "SHOW PERMISSIONS FOR multiuser user_id=admin signature=HMAC_SHA256(admin-key-123, SHOW PERMISSIONS FOR multiuser)"
     ],
     "matchers": [
-      { "kind": "include", "value": "orders: read, write" }
+      {
+        "kind": "include",
+        "value": "orders: read, write"
+      }
     ]
   },
   {
     "name": "permissions_revoke_nonexistent_permission_no_error",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "CREATE USER testuser WITH KEY \"test-key-123\"",
@@ -4489,13 +6509,23 @@
       "SHOW PERMISSIONS FOR testuser user_id=admin signature=HMAC_SHA256(admin-key-123, SHOW PERMISSIONS FOR testuser)"
     ],
     "matchers": [
-      { "kind": "include", "value": "has no permissions" }
+      {
+        "kind": "include",
+        "value": "has no permissions"
+      }
     ]
   },
   {
     "name": "permissions_grant_between_commands_takes_effect",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE orders FIELDS { \"order_id\": \"int\", \"status\": \"string\" }",
@@ -4505,14 +6535,27 @@
       "STORE orders FOR ctx1 PAYLOAD {\"order_id\":2,\"status\":\"confirmed\"} user_id=dynamicuser signature=HMAC_SHA256(dynamic-key-123, STORE orders FOR ctx1 PAYLOAD {\"order_id\":2,\"status\":\"confirmed\"})"
     ],
     "matchers": [
-      { "kind": "include", "value": "403 Write permission denied for event type 'orders'" },
-      { "kind": "include", "value": "200 OK" }
+      {
+        "kind": "include",
+        "value": "403 Write permission denied for event type 'orders'"
+      },
+      {
+        "kind": "include",
+        "value": "200 OK"
+      }
     ]
   },
   {
     "name": "permissions_grant_read_between_queries_takes_effect",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "DEFINE products FIELDS { \"product_id\": \"int\", \"name\": \"string\" }",
@@ -4523,14 +6566,27 @@
       "QUERY products WHERE product_id=1 user_id=queryuser signature=HMAC_SHA256(query-key-123, QUERY products WHERE product_id=1)"
     ],
     "matchers": [
-      { "kind": "include", "value": "403 Read permission denied for event type 'products'" },
-      { "kind": "include", "value": "\"name\":\"Widget\",\"product_id\":1" }
+      {
+        "kind": "include",
+        "value": "403 Read permission denied for event type 'products'"
+      },
+      {
+        "kind": "include",
+        "value": ",1,\"Widget\"]"
+      }
     ]
   },
   {
     "name": "permissions_grant_to_nonexistent_event_type_error",
     "config": {
-      "auth": { "bypass_auth": false, "initial_admin_user": "admin", "initial_admin_key": "admin-key-123" }
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
     },
     "input_commands": [
       "CREATE USER testuser WITH KEY \"test-key-123\"",

@@ -82,6 +82,7 @@ pub struct ServerConfig {
     pub output_format: String,
     pub tcp_addr: String,
     pub http_addr: String,
+    pub ws_addr: String,
     pub auth_token: String,
     pub backpressure_threshold: u8,
 }
@@ -168,7 +169,8 @@ fn default_test_config(paths: &TestPaths) -> TestConfig {
             log_level: "debug".into(),
             output_format: "json".into(),
             tcp_addr: "127.0.0.1:7172".into(),
-            http_addr: "127.0.0.1:8086".into(),
+            http_addr: "127.0.0.1:8087".into(),
+            ws_addr: "127.0.0.1:7173".into(),
             auth_token: "test".into(),
             backpressure_threshold: 90,
         },

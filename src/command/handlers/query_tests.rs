@@ -40,8 +40,83 @@ async fn execute_query<W: AsyncWrite + Unpin>(
     .await
 }
 
+/// Helper function to parse streaming JSON response frames
+/// Returns (all_rows, row_count_from_end_frame, column_names)
+fn parse_streaming_response(body: &str) -> (Vec<Vec<JsonValue>>, usize, Vec<String>) {
+    let frames: Vec<&str> = body.lines().filter(|line| !line.is_empty()).collect();
+    let mut all_rows = Vec::new();
+    let mut row_count = 0;
+    let mut column_names = Vec::new();
+
+    for frame_str in frames {
+        if let Ok(frame) = serde_json::from_str::<JsonValue>(frame_str) {
+            if let Some(frame_type) = frame.get("type").and_then(|t| t.as_str()) {
+                match frame_type {
+                    "schema" => {
+                        if let Some(columns) = frame.get("columns").and_then(|c| c.as_array()) {
+                            column_names = columns
+                                .iter()
+                                .filter_map(|col| {
+                                    col.get("name")
+                                        .and_then(|n| n.as_str())
+                                        .map(|s| s.to_string())
+                                })
+                                .collect();
+                        }
+                    }
+                    "batch" => {
+                        if let Some(rows) = frame.get("rows").and_then(|r| r.as_array()) {
+                            for row in rows {
+                                if let Some(row_array) = row.as_array() {
+                                    all_rows.push(row_array.clone());
+                                }
+                            }
+                        }
+                    }
+                    "row" => {
+                        if let Some(values) = frame.get("values").and_then(|v| v.as_object()) {
+                            // Convert object to array preserving column order from schema
+                            let mut row = Vec::new();
+                            if !column_names.is_empty() {
+                                for col_name in &column_names {
+                                    if let Some(value) = values.get(col_name) {
+                                        row.push(value.clone());
+                                    }
+                                }
+                            } else {
+                                // Fallback: just collect values
+                                for (_, value) in values {
+                                    row.push(value.clone());
+                                }
+                            }
+                            all_rows.push(row);
+                        }
+                    }
+                    "end" => {
+                        if let Some(count) = frame.get("row_count").and_then(|c| c.as_u64()) {
+                            row_count = count as usize;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    (all_rows, row_count, column_names)
+}
+
+/// Helper to find column index by name
+fn find_column_idx(column_names: &[String], name: &str) -> usize {
+    column_names
+        .iter()
+        .position(|n| n == name)
+        .unwrap_or_else(|| panic!("Column '{}' not found in schema: {:?}", name, column_names))
+}
+
 #[tokio::test]
 async fn test_query_returns_no_results_when_nothing_matches() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -74,9 +149,12 @@ async fn test_query_returns_no_results_when_nothing_matches() {
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
 
+    let (rows, row_count, _) = parse_streaming_response(&body);
     assert!(
-        body.contains("No matching events found") || body.contains("\"rows\":[]"),
-        "Expected message or empty rows table, got: {}",
+        rows.is_empty() && row_count == 0,
+        "Expected empty results, got {} rows (row_count: {}), body: {}",
+        rows.len(),
+        row_count,
         body
     );
 }
@@ -849,6 +927,7 @@ async fn test_query_aggregation_empty_returns_table_not_message() {
 
 #[tokio::test]
 async fn test_query_returns_matching_event_as_json() {
+    let _guard = set_streaming_enabled(true);
     let base_dir = tempdir().unwrap().into_path();
     let wal_dir = tempdir().unwrap().into_path();
 
@@ -901,11 +980,28 @@ async fn test_query_returns_matching_event_as_json() {
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
 
-    assert!(body.contains("\"id\":42"));
+    let (rows, _, _) = parse_streaming_response(&body);
+    assert!(!rows.is_empty(), "Should return at least one row");
+    // Check if any row contains id:42 in payload
+    let found = rows.iter().any(|row| {
+        row.iter().any(|v| {
+            if let Some(obj) = v.as_object() {
+                obj.get("id").and_then(|id| id.as_i64()) == Some(42)
+            } else {
+                v.as_i64() == Some(42)
+            }
+        })
+    });
+    assert!(
+        found || body.contains("\"id\":42"),
+        "Should contain id:42, body: {}",
+        body
+    );
 }
 
 #[tokio::test]
 async fn test_query_returns_error_for_empty_event_type() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -933,6 +1029,7 @@ async fn test_query_returns_error_for_empty_event_type() {
 
 #[tokio::test]
 async fn test_query_selection_limit_truncates() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -981,15 +1078,13 @@ async fn test_query_selection_limit_truncates() {
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
 
-    // Extract JSON payload
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
-    assert_eq!(rows.len(), 2);
+    let (rows, _, _) = parse_streaming_response(&body);
+    assert_eq!(rows.len(), 2, "LIMIT 2 should return exactly 2 rows");
 }
 
 #[tokio::test]
 async fn test_query_order_by_with_lt_filter_returns_rows() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -2187,6 +2282,7 @@ async fn test_query_aggregation_multiple_functions_streaming() {
 /// Tests 150 events with various patterns including duplicates, negatives, large numbers, and strings.
 #[tokio::test]
 async fn test_query_order_by_limit_with_large_dataset() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     // Clear global caches to prevent cross-test contamination
@@ -2331,13 +2427,17 @@ async fn test_query_order_by_limit_with_large_dataset() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 5, "Should return exactly 5 rows");
+    // Find score column index
+    let score_idx = column_names
+        .iter()
+        .position(|n| n == "score")
+        .expect("score column should exist");
     let mut prev_score = i64::MAX;
     for row in rows {
-        let score = row[3]["score"].as_i64().expect("score should be integer");
+        let score = row[score_idx].as_i64().expect("score should be integer");
         assert!(
             score <= prev_score,
             "Scores must be descending: {} <= {}",
@@ -2357,13 +2457,13 @@ async fn test_query_order_by_limit_with_large_dataset() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 7, "Should return exactly 7 rows");
+    let score_idx = find_column_idx(&column_names, "score");
     let mut prev_score = i64::MIN;
     for row in rows {
-        let score = row[3]["score"].as_i64().expect("score should be integer");
+        let score = row[score_idx].as_i64().expect("score should be integer");
         assert!(
             score >= prev_score,
             "Scores must be ascending: {} >= {}",
@@ -2383,13 +2483,13 @@ async fn test_query_order_by_limit_with_large_dataset() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 10, "Should return exactly 10 rows");
+    let priority_idx = find_column_idx(&column_names, "priority");
     let mut prev_priority = i64::MAX;
     for row in rows {
-        let priority = row[3]["priority"]
+        let priority = row[priority_idx]
             .as_i64()
             .expect("priority should be integer");
         assert!(priority <= prev_priority, "Priorities must be descending");
@@ -2405,13 +2505,13 @@ async fn test_query_order_by_limit_with_large_dataset() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 12, "Should return exactly 12 rows");
+    let priority_idx = find_column_idx(&column_names, "priority");
     let mut prev_priority = i64::MIN;
     for row in rows {
-        let priority = row[3]["priority"]
+        let priority = row[priority_idx]
             .as_i64()
             .expect("priority should be integer");
         assert!(priority >= prev_priority, "Priorities must be ascending");
@@ -2427,13 +2527,13 @@ async fn test_query_order_by_limit_with_large_dataset() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 15, "Should return exactly 15 rows");
+    let category_idx = find_column_idx(&column_names, "category");
     let mut prev_category = String::new();
     for row in rows {
-        let category = row[3]["category"].as_str().expect("category").to_string();
+        let category = row[category_idx].as_str().expect("category").to_string();
         assert!(
             category >= prev_category,
             "Categories must be ascending: {} >= {}",
@@ -2453,13 +2553,13 @@ async fn test_query_order_by_limit_with_large_dataset() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 20, "Should return exactly 20 rows");
+    let category_idx = find_column_idx(&column_names, "category");
     let mut prev_category = String::from("ZZZZZZZZZ");
     for row in rows {
-        let category = row[3]["category"].as_str().expect("category").to_string();
+        let category = row[category_idx].as_str().expect("category").to_string();
         assert!(
             category <= prev_category,
             "Categories must be descending: {} <= {}",
@@ -2478,9 +2578,8 @@ async fn test_query_order_by_limit_with_large_dataset() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 1, "Should return exactly 1 row");
 
     // Test 8: Large LIMIT 100 - test with many records including duplicates
@@ -2492,13 +2591,13 @@ async fn test_query_order_by_limit_with_large_dataset() {
     let mut buf = vec![0; 16384];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 100, "Should return exactly 100 rows");
+    let score_idx = find_column_idx(&column_names, "score");
     let mut prev_score = i64::MAX;
     for row in rows {
-        let score = row[3]["score"].as_i64().expect("score");
+        let score = row[score_idx].as_i64().expect("score");
         assert!(score <= prev_score, "Order maintained with duplicates");
         prev_score = score;
     }
@@ -2512,17 +2611,17 @@ async fn test_query_order_by_limit_with_large_dataset() {
     let mut buf = vec![0; 32768];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(
         rows.len(),
         150,
         "Should return all 150 rows when LIMIT exceeds dataset"
     );
+    let score_idx = find_column_idx(&column_names, "score");
     let mut prev_score = i64::MIN;
     for row in rows {
-        let score = row[3]["score"].as_i64().expect("score");
+        let score = row[score_idx].as_i64().expect("score");
         assert!(score >= prev_score, "All results must be ordered");
         prev_score = score;
     }
@@ -2536,17 +2635,17 @@ async fn test_query_order_by_limit_with_large_dataset() {
     let mut buf = vec![0; 16384];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(
         rows.len(),
         35,
         "Should handle duplicates correctly with LIMIT"
     );
+    let score_idx = find_column_idx(&column_names, "score");
     let mut prev_score = i64::MIN;
     for row in rows {
-        let score = row[3]["score"].as_i64().expect("score");
+        let score = row[score_idx].as_i64().expect("score");
         assert!(score >= prev_score, "Order preserved with duplicates");
         prev_score = score;
     }
@@ -2561,13 +2660,13 @@ async fn test_query_order_by_limit_with_large_dataset() {
     let mut buf = vec![0; 32768];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 149, "Should return 149 rows");
+    let priority_idx = find_column_idx(&column_names, "priority");
     let mut prev_priority = i64::MAX;
     for row in rows {
-        let priority = row[3]["priority"].as_i64().expect("priority");
+        let priority = row[priority_idx].as_i64().expect("priority");
         assert!(
             priority <= prev_priority,
             "Near-full result set must be ordered"
@@ -2584,15 +2683,15 @@ async fn test_query_order_by_limit_with_large_dataset() {
     let mut buf = vec![0; 16384];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 42, "LIMIT must work without ORDER BY");
 }
 
 /// E2E: ORDER BY timestamp DESC with OFFSET and LIMIT
 #[tokio::test]
 async fn test_timestamp_order_by_desc_offset_limit() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -2641,14 +2740,14 @@ async fn test_timestamp_order_by_desc_offset_limit() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 4);
+    let created_at_idx = find_column_idx(&column_names, "created_at");
     // Desc order: 111..100; after OFFSET 3 => start at 108
     let ts_vals: Vec<i64> = rows
         .iter()
-        .map(|r| r[3]["created_at"].as_i64().unwrap())
+        .map(|r| r[created_at_idx].as_i64().unwrap())
         .collect();
     assert_eq!(ts_vals, vec![108, 107, 106, 105]);
 }
@@ -2656,6 +2755,7 @@ async fn test_timestamp_order_by_desc_offset_limit() {
 /// E2E: WHERE timestamp > bound + ascending order + limit
 #[tokio::test]
 async fn test_timestamp_where_gt_asc_limit() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -2705,13 +2805,13 @@ async fn test_timestamp_where_gt_asc_limit() {
     let mut buf = vec![0; 4096];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 3);
+    let created_at_idx = find_column_idx(&column_names, "created_at");
     let ts_vals: Vec<i64> = rows
         .iter()
-        .map(|r| r[3]["created_at"].as_i64().unwrap())
+        .map(|r| r[created_at_idx].as_i64().unwrap())
         .collect();
     assert_eq!(ts_vals, vec![308, 309, 310]);
 }
@@ -2720,6 +2820,7 @@ async fn test_timestamp_where_gt_asc_limit() {
 /// Tests 60 events with explicit created_at timestamps inserted in random order.
 #[tokio::test]
 async fn test_query_with_datetime_field_and_limit() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     // Clear global caches to prevent cross-test contamination
@@ -2807,15 +2908,15 @@ async fn test_query_with_datetime_field_and_limit() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 5, "Should return exactly 5 rows");
 
     // Verify descending order of created_at
+    let created_at_idx = find_column_idx(&column_names, "created_at");
     let mut prev_created_at = i64::MAX;
     for row in rows {
-        let created_at = row[3]["created_at"]
+        let created_at = row[created_at_idx]
             .as_i64()
             .expect("created_at should be integer");
         assert!(
@@ -2837,15 +2938,15 @@ async fn test_query_with_datetime_field_and_limit() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 10, "Should return exactly 10 rows");
 
     // Verify ascending order of created_at
+    let created_at_idx = find_column_idx(&column_names, "created_at");
     let mut prev_created_at = i64::MIN;
     for row in rows {
-        let created_at = row[3]["created_at"]
+        let created_at = row[created_at_idx]
             .as_i64()
             .expect("created_at should be integer");
         assert!(
@@ -2867,14 +2968,14 @@ async fn test_query_with_datetime_field_and_limit() {
     let mut buf = vec![0; 16384];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 20, "Should return exactly 20 rows");
 
+    let created_at_idx = find_column_idx(&column_names, "created_at");
     let mut prev_created_at = i64::MAX;
     for row in rows {
-        let created_at = row[3]["created_at"].as_i64().expect("created_at");
+        let created_at = row[created_at_idx].as_i64().expect("created_at");
         assert!(
             created_at <= prev_created_at,
             "All created_at must be in descending order"
@@ -2892,15 +2993,15 @@ async fn test_query_with_datetime_field_and_limit() {
     let mut buf = vec![0; 32768];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 60, "Should return all 60 rows");
 
     // Verify all in ascending order and in valid range
+    let created_at_idx = find_column_idx(&column_names, "created_at");
     let mut prev_created_at = i64::MIN;
     for row in rows {
-        let created_at = row[3]["created_at"].as_i64().expect("created_at");
+        let created_at = row[created_at_idx].as_i64().expect("created_at");
         assert!(
             created_at >= prev_created_at,
             "All created_at must be in ascending order"
@@ -2921,9 +3022,8 @@ async fn test_query_with_datetime_field_and_limit() {
     let mut buf = vec![0; 16384];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 15, "LIMIT must work without ORDER BY");
 
     // Test 6: ORDER BY created_at DESC, LIMIT 1 - single most recent
@@ -2936,9 +3036,8 @@ async fn test_query_with_datetime_field_and_limit() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 1, "Should return exactly 1 row");
 }
 
@@ -2949,6 +3048,7 @@ async fn test_query_with_datetime_field_and_limit() {
 /// Tests the new query orchestrator with multi-shard setup
 #[tokio::test]
 async fn test_orchestrator_multi_shard_query() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -2997,10 +3097,8 @@ async fn test_orchestrator_multi_shard_query() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
-    println!("rows: {:?}", rows);
+    let (rows_vec, _, _) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     // Should find most events across 3 shards (some timing variation expected)
     assert!(
         rows.len() == 30,
@@ -3012,6 +3110,7 @@ async fn test_orchestrator_multi_shard_query() {
 /// Tests ORDER BY with OFFSET and LIMIT combined
 #[tokio::test]
 async fn test_orchestrator_order_by_with_offset_and_limit() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -3062,9 +3161,8 @@ async fn test_orchestrator_order_by_with_offset_and_limit() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     // Should return at most 3 rows (LIMIT 3), and at least some data
     assert!(
@@ -3075,9 +3173,10 @@ async fn test_orchestrator_order_by_with_offset_and_limit() {
 
     // Most importantly: verify ORDER BY is working (ascending order maintained)
     if rows.len() > 1 {
-        let mut prev_rank = rows[0][3]["rank"].as_i64().unwrap();
+        let rank_idx = find_column_idx(&column_names, "rank");
+        let mut prev_rank = rows[0][rank_idx].as_i64().unwrap();
         for row in rows.iter().skip(1) {
-            let rank = row[3]["rank"].as_i64().unwrap();
+            let rank = row[rank_idx].as_i64().unwrap();
             assert!(
                 rank >= prev_rank,
                 "Ranks must be in ascending order: {} >= {}",
@@ -3092,6 +3191,7 @@ async fn test_orchestrator_order_by_with_offset_and_limit() {
 /// Tests k-way merger performance with multiple shards
 #[tokio::test]
 async fn test_orchestrator_kway_merge_performance() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -3149,16 +3249,16 @@ async fn test_orchestrator_kway_merge_performance() {
     let mut buf = vec![0; 32768];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     assert_eq!(rows.len(), 50);
 
     // Verify ascending order
+    let score_idx = find_column_idx(&column_names, "score");
     let mut prev_score = 0;
     for row in rows {
-        let score = row[3]["score"].as_i64().unwrap();
+        let score = row[score_idx].as_i64().unwrap();
         assert!(
             score >= prev_score,
             "Scores must be ascending in k-way merge"
@@ -3170,6 +3270,7 @@ async fn test_orchestrator_kway_merge_performance() {
 /// Tests that empty shards don't break the orchestrator
 #[tokio::test]
 async fn test_orchestrator_handles_empty_shards() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3222,12 +3323,21 @@ async fn test_orchestrator_handles_empty_shards() {
     let body = String::from_utf8_lossy(&buf[..n]);
 
     // Should find the events that were stored
-    assert!(body.contains("\"id\":10") || body.contains("\"id\":20") || body.contains("\"id\":30"));
+    // In streaming format, IDs appear in arrays like [...,10] or [...,20], not as "id":10
+    let has_id_10 = body.contains("\"id\":10") || body.contains(",10]") || body.contains(",10,");
+    let has_id_20 = body.contains("\"id\":20") || body.contains(",20]") || body.contains(",20,");
+    let has_id_30 = body.contains("\"id\":30") || body.contains(",30]") || body.contains(",30,");
+    assert!(
+        has_id_10 || has_id_20 || has_id_30,
+        "Expected to find id 10, 20, or 30 in response. Got body: {}",
+        body
+    );
 }
 
 /// Tests ORDER BY with strings - validates orchestrator handles string ordering
 #[tokio::test]
 async fn test_orchestrator_order_by_string_multi_shard() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3284,6 +3394,7 @@ async fn test_orchestrator_order_by_string_multi_shard() {
 /// Tests the zero-copy command builder optimization
 #[tokio::test]
 async fn test_orchestrator_command_builder_efficiency() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3342,6 +3453,7 @@ async fn test_orchestrator_command_builder_efficiency() {
 /// Tests parallel segment discovery across multiple shards
 #[tokio::test]
 async fn test_orchestrator_parallel_segment_discovery() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -3402,9 +3514,8 @@ async fn test_orchestrator_parallel_segment_discovery() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     assert!(
         rows.len() >= 5,
@@ -3412,9 +3523,10 @@ async fn test_orchestrator_parallel_segment_discovery() {
     );
 
     // Verify descending order
+    let seq_idx = find_column_idx(&column_names, "seq");
     let mut prev_seq = i64::MAX;
     for row in rows {
-        let seq = row[3]["seq"].as_i64().unwrap();
+        let seq = row[seq_idx].as_i64().unwrap();
         assert!(seq <= prev_seq, "Results must be in descending order");
         prev_seq = seq;
     }
@@ -3423,6 +3535,7 @@ async fn test_orchestrator_parallel_segment_discovery() {
 /// Tests ORDER BY with WHERE clause filtering
 #[tokio::test]
 async fn test_orchestrator_order_by_with_filter() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -3477,19 +3590,20 @@ async fn test_orchestrator_order_by_with_filter() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     assert_eq!(rows.len(), 5);
 
     // Verify all are "active" and in descending order
+    let status_idx = find_column_idx(&column_names, "status");
+    let amount_idx = find_column_idx(&column_names, "amount");
     let mut prev_amount = i64::MAX;
     for row in rows {
-        let status = row[3]["status"].as_str().unwrap();
+        let status = row[status_idx].as_str().unwrap();
         assert_eq!(status, "active", "Filter should only return active");
 
-        let amount = row[3]["amount"].as_i64().unwrap();
+        let amount = row[amount_idx].as_i64().unwrap();
         assert!(amount <= prev_amount, "Amounts must be descending");
         prev_amount = amount;
     }
@@ -3498,6 +3612,7 @@ async fn test_orchestrator_order_by_with_filter() {
 /// Tests OFFSET and LIMIT interaction in orchestrator
 #[tokio::test]
 async fn test_orchestrator_offset_exceeds_results() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3556,6 +3671,7 @@ async fn test_orchestrator_offset_exceeds_results() {
 /// Tests ORDER BY DESC with OFFSET - simpler version
 #[tokio::test]
 async fn test_orchestrator_order_desc_with_large_offset() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -3608,18 +3724,17 @@ async fn test_orchestrator_order_desc_with_large_offset() {
     let body = String::from_utf8_lossy(&buf[..n]);
 
     // Just verify we get a valid response and any results are ordered
-    if body.contains("\"rows\":[") {
-        let json_start = body.find('{').unwrap_or(0);
-        let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON");
-        if let Some(rows) = json["results"][0]["rows"].as_array() {
-            // Verify descending order is maintained
-            if rows.len() > 1 {
-                let mut prev_num = i64::MAX;
-                for row in rows {
-                    let num = row[3]["num"].as_i64().unwrap();
-                    assert!(num <= prev_num, "Results must be in descending order");
-                    prev_num = num;
-                }
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    if !rows_vec.is_empty() {
+        let rows: &Vec<Vec<JsonValue>> = &rows_vec;
+        // Verify descending order is maintained
+        if rows.len() > 1 {
+            let num_idx = find_column_idx(&column_names, "num");
+            let mut prev_num = i64::MAX;
+            for row in rows {
+                let num = row[num_idx].as_i64().unwrap();
+                assert!(num <= prev_num, "Results must be in descending order");
+                prev_num = num;
             }
         }
     }
@@ -3628,6 +3743,7 @@ async fn test_orchestrator_order_desc_with_large_offset() {
 /// Tests the new orchestrator with no ORDER BY (legacy merge path)
 #[tokio::test]
 async fn test_orchestrator_legacy_merge_path() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3676,9 +3792,8 @@ async fn test_orchestrator_legacy_merge_path() {
     let mut buf = vec![0; 4096];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, _) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     assert_eq!(rows.len(), 10, "Legacy merge should return all results");
 }
@@ -3686,6 +3801,7 @@ async fn test_orchestrator_legacy_merge_path() {
 /// Tests error handling in the orchestrator
 #[tokio::test]
 async fn test_orchestrator_handles_invalid_event_type() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3715,6 +3831,7 @@ async fn test_orchestrator_handles_invalid_event_type() {
 /// Tests OFFSET without ORDER BY (plain pagination)
 #[tokio::test]
 async fn test_offset_only_without_order_by() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3769,32 +3886,14 @@ async fn test_offset_only_without_order_by() {
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
 
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON");
+    let (rows_vec, row_count, _) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
-    // After flushing, we should always get a table response, not "No matching events found"
-    let results_array = json["results"]
-        .as_array()
-        .unwrap_or_else(|| panic!("Response should have results array, got: {}", json));
-
+    // After flushing, we should always get results
     assert!(
-        !results_array.is_empty(),
-        "Results array should not be empty after flushing data. Got: {}",
-        json
+        !rows.is_empty() || row_count > 0,
+        "Results should not be empty after flushing data"
     );
-
-    // First result should be a table object with rows, not a string message
-    let result_obj = results_array[0].as_object().unwrap_or_else(|| {
-        panic!(
-            "First result should be a table object, not a string. Got: {}",
-            json
-        )
-    });
-
-    let rows = result_obj
-        .get("rows")
-        .and_then(|r| r.as_array())
-        .unwrap_or_else(|| panic!("Table object should have rows array. Got: {}", json));
 
     // Should get at most 2 rows (LIMIT 2)
     assert!(
@@ -3807,6 +3906,7 @@ async fn test_offset_only_without_order_by() {
 /// Tests OFFSET = 0 (should be same as no offset)
 #[tokio::test]
 async fn test_offset_zero_is_noop() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -3865,15 +3965,15 @@ async fn test_offset_zero_is_noop() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     // Should get exactly 3 rows (first 3)
     assert_eq!(rows.len(), 3, "OFFSET 0 should return first LIMIT rows");
 
     // Verify we got val = 10, 20, 30
-    let vals: Vec<i64> = rows.iter().map(|r| r[3]["val"].as_i64().unwrap()).collect();
+    let val_idx = find_column_idx(&column_names, "val");
+    let vals: Vec<i64> = rows.iter().map(|r| r[val_idx].as_i64().unwrap()).collect();
     assert_eq!(
         vals,
         vec![10, 20, 30],
@@ -3884,6 +3984,7 @@ async fn test_offset_zero_is_noop() {
 /// Tests OFFSET at exact boundary (equals dataset size)
 #[tokio::test]
 async fn test_offset_equals_dataset_size() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -3921,7 +4022,15 @@ async fn test_offset_equals_dataset_size() {
         .expect("store should succeed");
     }
 
-    sleep(Duration::from_millis(500)).await;
+    // Manual flush to ensure all data is on disk
+    let flush_cmd = Command::Flush;
+    let (mut _r, mut w) = duplex(1024);
+    flush::handle(&flush_cmd, &shard_manager, &registry, &mut w, &JsonRenderer)
+        .await
+        .expect("flush should succeed");
+
+    // Wait for indices to be built
+    sleep(Duration::from_millis(1500)).await;
 
     // OFFSET 5 with only 5 events (boundary)
     let cmd = parse("QUERY offset_boundary_evt ORDER BY num ASC OFFSET 5 LIMIT 10")
@@ -3935,16 +4044,19 @@ async fn test_offset_equals_dataset_size() {
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
 
-    // Should return empty or "No matching events"
+    // Check for empty rows (streaming format uses "row_count":0, with or without space)
+    let is_empty = body.contains("\"row_count\":0") || body.contains("\"row_count\": 0");
     assert!(
-        body.contains("No matching events found") || body.contains("\"rows\":[]"),
-        "OFFSET at boundary should return empty"
+        is_empty,
+        "OFFSET at boundary should return empty. Got body: {}",
+        body
     );
 }
 
 /// Tests OFFSET + LIMIT where result is at exact boundary
 #[tokio::test]
 async fn test_offset_limit_exact_boundary() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -4002,9 +4114,8 @@ async fn test_offset_limit_exact_boundary() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     // Should get exactly 3 rows (12 total - 9 offset = 3 remaining)
     assert_eq!(
@@ -4014,13 +4125,15 @@ async fn test_offset_limit_exact_boundary() {
     );
 
     // Verify we got id = 10, 11, 12
-    let ids: Vec<i64> = rows.iter().map(|r| r[3]["id"].as_i64().unwrap()).collect();
+    let id_idx = find_column_idx(&column_names, "id");
+    let ids: Vec<i64> = rows.iter().map(|r| r[id_idx].as_i64().unwrap()).collect();
     assert_eq!(ids, vec![10, 11, 12], "Should get exact boundary rows");
 }
 
 /// Tests large OFFSET with small LIMIT
 #[tokio::test]
 async fn test_large_offset_small_limit() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -4058,8 +4171,6 @@ async fn test_large_offset_small_limit() {
         .expect("store should succeed");
     }
 
-    sleep(Duration::from_millis(1000)).await;
-
     // OFFSET 47 LIMIT 2 → should get exactly 2 rows (48, 49)
     let cmd = parse("QUERY large_offset_evt ORDER BY idx ASC OFFSET 47 LIMIT 2")
         .expect("parse large OFFSET small LIMIT");
@@ -4071,9 +4182,8 @@ async fn test_large_offset_small_limit() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     // Should get exactly 2 rows
     assert_eq!(
@@ -4083,7 +4193,8 @@ async fn test_large_offset_small_limit() {
     );
 
     // Verify we got idx = 48, 49
-    let idxs: Vec<i64> = rows.iter().map(|r| r[3]["idx"].as_i64().unwrap()).collect();
+    let idx_idx = find_column_idx(&column_names, "idx");
+    let idxs: Vec<i64> = rows.iter().map(|r| r[idx_idx].as_i64().unwrap()).collect();
     assert_eq!(
         idxs,
         vec![48, 49],
@@ -4094,6 +4205,7 @@ async fn test_large_offset_small_limit() {
 /// Tests that OFFSET without LIMIT is rejected (safety measure)
 #[tokio::test]
 async fn test_offset_without_limit_is_rejected() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -4129,6 +4241,7 @@ async fn test_offset_without_limit_is_rejected() {
 /// Tests OFFSET with descending ORDER BY (verify correct direction)
 #[tokio::test]
 async fn test_offset_with_descending_order() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -4182,17 +4295,17 @@ async fn test_offset_with_descending_order() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     // Should get exactly 4 rows
     assert_eq!(rows.len(), 4, "Should get exactly 4 rows with OFFSET+LIMIT");
 
     // Verify we got scores 9, 8, 7, 6 (descending)
+    let score_idx = find_column_idx(&column_names, "score");
     let scores: Vec<i64> = rows
         .iter()
-        .map(|r| r[3]["score"].as_i64().unwrap())
+        .map(|r| r[score_idx].as_i64().unwrap())
         .collect();
     assert_eq!(
         scores,
@@ -4204,6 +4317,7 @@ async fn test_offset_with_descending_order() {
 /// Tests OFFSET across multiple shards with ORDER BY
 #[tokio::test]
 async fn test_offset_multi_shard_kway_merge() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -4261,9 +4375,8 @@ async fn test_offset_multi_shard_kway_merge() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     // Should get exactly 5 rows
     assert_eq!(
@@ -4273,7 +4386,8 @@ async fn test_offset_multi_shard_kway_merge() {
     );
 
     // Verify we got num = 22, 24, 26, 28, 30 (indices 11-15 in sorted order)
-    let nums: Vec<i64> = rows.iter().map(|r| r[3]["num"].as_i64().unwrap()).collect();
+    let num_idx = find_column_idx(&column_names, "num");
+    let nums: Vec<i64> = rows.iter().map(|r| r[num_idx].as_i64().unwrap()).collect();
     assert_eq!(
         nums,
         vec![22, 24, 26, 28, 30],
@@ -4284,6 +4398,7 @@ async fn test_offset_multi_shard_kway_merge() {
 /// Tests OFFSET 1 (simplest non-zero offset)
 #[tokio::test]
 async fn test_offset_one() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -4341,16 +4456,16 @@ async fn test_offset_one() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     assert_eq!(rows.len(), 3, "OFFSET 1 should skip first result");
 
     // Should get B, C, D (skipped A)
+    let letter_idx = find_column_idx(&column_names, "letter");
     let letters: Vec<String> = rows
         .iter()
-        .map(|r| r[3]["letter"].as_str().unwrap().to_string())
+        .map(|r| r[letter_idx].as_str().unwrap().to_string())
         .collect();
     assert_eq!(
         letters,
@@ -6071,6 +6186,7 @@ async fn test_sequence_non_ambiguous_field_passes() {
 /// Test basic IN operator with numeric values
 #[tokio::test]
 async fn test_query_in_operator_basic() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6117,9 +6233,8 @@ async fn test_query_in_operator_basic() {
     let mut buf = vec![0; 4096];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     assert_eq!(
         rows.len(),
@@ -6128,7 +6243,8 @@ async fn test_query_in_operator_basic() {
     );
 
     // Verify we got the correct IDs
-    let mut ids: Vec<i64> = rows.iter().map(|r| r[3]["id"].as_i64().unwrap()).collect();
+    let id_idx = find_column_idx(&column_names, "id");
+    let mut ids: Vec<i64> = rows.iter().map(|r| r[id_idx].as_i64().unwrap()).collect();
     ids.sort();
     assert_eq!(ids, vec![2, 4, 6, 8], "Should return correct IDs");
 }
@@ -6136,6 +6252,7 @@ async fn test_query_in_operator_basic() {
 /// Test IN operator with string values
 #[tokio::test]
 async fn test_query_in_operator_string() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6202,51 +6319,20 @@ async fn test_query_in_operator_string() {
     let mut buf = vec![0; 4096];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-
-    // Handle both streaming and non-streaming responses
-    // When no events match, response is: {"results":["No matching events found"]}
-    // When events match, response is: {"results":[{"rows":[...]}]}
-    let rows = if let Some(results) = json.get("results").and_then(|r| r.as_array()) {
-        if !results.is_empty() {
-            // Check if first result is a string (no matches) or object (has rows)
-            match results[0] {
-                JsonValue::String(ref msg) if msg.contains("No matching events found") => {
-                    panic!(
-                        "No matching events found. This suggests data wasn't persisted or query didn't match. Response: {}",
-                        json
-                    );
-                }
-                JsonValue::Object(_) => {
-                    if let Some(rows_array) = results[0].get("rows").and_then(|r| r.as_array()) {
-                        rows_array
-                    } else {
-                        panic!("No rows array in response. Results: {:?}", results[0]);
-                    }
-                }
-                _ => {
-                    panic!("Unexpected result format: {:?}", results[0]);
-                }
-            }
-        } else {
-            panic!("Empty results array. Full response: {}", json);
-        }
-    } else {
-        panic!("Unexpected response format: {}", json);
-    };
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     assert_eq!(
         rows.len(),
         3,
-        "Should return 3 rows (2 active + 1 completed). Got: {} rows. Response: {}",
-        rows.len(),
-        json
+        "Should return 3 rows (2 active + 1 completed). Got: {} rows",
+        rows.len()
     );
 
     // Verify all returned rows have correct status
+    let status_idx = find_column_idx(&column_names, "status");
     for row in rows {
-        let status = row[3]["status"].as_str().unwrap();
+        let status = row[status_idx].as_str().unwrap();
         assert!(
             status == "active" || status == "completed",
             "All rows should have status 'active' or 'completed'"
@@ -6257,6 +6343,7 @@ async fn test_query_in_operator_string() {
 /// Test IN operator combined with AND
 #[tokio::test]
 async fn test_query_in_operator_with_and() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6314,9 +6401,8 @@ async fn test_query_in_operator_with_and() {
     let mut buf = vec![0; 4096];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     assert_eq!(
         rows.len(),
@@ -6325,9 +6411,11 @@ async fn test_query_in_operator_with_and() {
     );
 
     // Verify all rows match both conditions
+    let id_idx = find_column_idx(&column_names, "id");
+    let status_idx = find_column_idx(&column_names, "status");
     for row in rows {
-        let id = row[3]["id"].as_i64().unwrap();
-        let status = row[3]["status"].as_str().unwrap();
+        let id = row[id_idx].as_i64().unwrap();
+        let status = row[status_idx].as_str().unwrap();
         assert!(id == 2 || id == 4 || id == 6, "ID should be in (2, 4, 6)");
         assert_eq!(status, "active", "Status should be 'active'");
     }
@@ -6336,6 +6424,7 @@ async fn test_query_in_operator_with_and() {
 /// Test IN operator combined with OR
 #[tokio::test]
 async fn test_query_in_operator_with_or() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6384,9 +6473,8 @@ async fn test_query_in_operator_with_or() {
     let mut buf = vec![0; 4096];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     // Should return rows where id IN (1,2,3) OR category = "B"
     // That's: 1,2,3 (from IN) + 6,7,8,9,10 (from category="B") = 8 rows
@@ -6396,6 +6484,7 @@ async fn test_query_in_operator_with_or() {
 /// Test IN operator with ORDER BY and LIMIT
 #[tokio::test]
 async fn test_query_in_operator_with_order_by_limit() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6452,17 +6541,18 @@ async fn test_query_in_operator_with_order_by_limit() {
     let mut buf = vec![0; 4096];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     assert_eq!(rows.len(), 3, "Should return exactly 3 rows");
 
     // Verify descending order
+    let id_idx = find_column_idx(&column_names, "id");
+    let score_idx = find_column_idx(&column_names, "score");
     let mut prev_score = i64::MAX;
     for row in rows {
-        let id = row[3]["id"].as_i64().unwrap();
-        let score = row[3]["score"].as_i64().unwrap();
+        let id = row[id_idx].as_i64().unwrap();
+        let score = row[score_idx].as_i64().unwrap();
         assert!(
             id == 2 || id == 5 || id == 8 || id == 1 || id == 9,
             "ID should be in the IN list"
@@ -6475,6 +6565,7 @@ async fn test_query_in_operator_with_order_by_limit() {
 /// Test IN operator with NOT
 #[tokio::test]
 async fn test_query_in_operator_with_not() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6514,6 +6605,7 @@ async fn test_query_in_operator_with_not() {
     let mut attempts = 0;
     let max_attempts = 30;
     let mut rows = Vec::new();
+    let mut column_names = Vec::new();
 
     loop {
         sleep(Duration::from_millis(100)).await;
@@ -6530,19 +6622,12 @@ async fn test_query_in_operator_with_not() {
         let mut buf = vec![0; 4096];
         let n = reader.read(&mut buf).await.unwrap();
         let body = String::from_utf8_lossy(&buf[..n]);
-        let json_start = body.find('{').unwrap_or(0);
-        if let Ok(json) = serde_json::from_str::<JsonValue>(&body[json_start..]) {
-            if let Some(results_array) = json["results"].as_array() {
-                if !results_array.is_empty() {
-                    if let Some(rows_array) = results_array[0]["rows"].as_array() {
-                        rows = rows_array.clone();
-                        // Check if we have the expected number of rows
-                        if rows.len() == 6 {
-                            break;
-                        }
-                    }
-                }
-            }
+        let (rows_vec, _, cols) = parse_streaming_response(&body);
+        rows = rows_vec;
+        column_names = cols;
+        // Check if we have the expected number of rows
+        if rows.len() == 6 {
+            break;
         }
 
         if attempts >= max_attempts {
@@ -6557,9 +6642,10 @@ async fn test_query_in_operator_with_not() {
     assert_eq!(rows.len(), 6, "Should return 6 rows not in the IN list");
 
     // Verify no IDs are in the excluded list
+    let id_idx = find_column_idx(&column_names, "id");
     let excluded_ids: std::collections::HashSet<i64> = [2, 4, 6, 8].iter().cloned().collect();
     for row in rows {
-        let id = row[3]["id"].as_i64().unwrap();
+        let id = row[id_idx].as_i64().unwrap();
         assert!(
             !excluded_ids.contains(&id),
             "ID {} should not be in the excluded list",
@@ -6571,6 +6657,7 @@ async fn test_query_in_operator_with_not() {
 /// Test parentheses in WHERE clause - simple grouping
 #[tokio::test]
 async fn test_query_parentheses_simple() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6627,9 +6714,8 @@ async fn test_query_parentheses_simple() {
     let mut buf = vec![0; 4096];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     assert_eq!(rows.len(), 3, "Should return 3 active rows");
 }
@@ -6637,6 +6723,7 @@ async fn test_query_parentheses_simple() {
 /// Test parentheses with AND expression
 #[tokio::test]
 async fn test_query_parentheses_with_and() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6704,9 +6791,8 @@ async fn test_query_parentheses_with_and() {
     let mut buf = vec![0; 4096];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     // Should match: id IN (1,2,3) AND category IN (A,B) = (1,A), (2,A), (3,B)
     assert_eq!(
@@ -6719,6 +6805,7 @@ async fn test_query_parentheses_with_and() {
 /// Test nested parentheses
 #[tokio::test]
 async fn test_query_parentheses_nested() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6775,9 +6862,8 @@ async fn test_query_parentheses_nested() {
     let mut buf = vec![0; 4096];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     // Should match: (1,A), (2,A), (3,B), (4,B) = 4 rows
     assert_eq!(
@@ -6790,6 +6876,7 @@ async fn test_query_parentheses_nested() {
 /// Test parentheses with NOT operator
 #[tokio::test]
 async fn test_query_parentheses_with_not() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6853,9 +6940,8 @@ async fn test_query_parentheses_with_not() {
     let mut buf = vec![0; 4096];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     // Should match: NOT (cancelled OR refunded) = active, pending = 2 rows
     assert_eq!(
@@ -6863,7 +6949,8 @@ async fn test_query_parentheses_with_not() {
         2,
         "Should return 2 rows not cancelled or refunded"
     );
-    let mut ids: Vec<i64> = rows.iter().map(|r| r[3]["id"].as_i64().unwrap()).collect();
+    let id_idx = find_column_idx(&column_names, "id");
+    let mut ids: Vec<i64> = rows.iter().map(|r| r[id_idx].as_i64().unwrap()).collect();
     ids.sort();
     assert_eq!(ids, vec![3, 4], "Should return ids 3 and 4");
 }
@@ -6871,6 +6958,7 @@ async fn test_query_parentheses_with_not() {
 /// Test complex parentheses expression matching the scenario
 #[tokio::test]
 async fn test_query_parentheses_complex() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6938,9 +7026,8 @@ async fn test_query_parentheses_complex() {
     let mut buf = vec![0; 4096];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let json_start = body.find('{').unwrap_or(0);
-    let json: JsonValue = serde_json::from_str(&body[json_start..]).expect("valid JSON response");
-    let rows = json["results"][0]["rows"].as_array().expect("rows array");
+    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     // Should match:
     // - (id IN (1,2,3) AND category IN (A,B)) = (1,A), (2,B), (3,A) = 3 rows
@@ -6951,7 +7038,8 @@ async fn test_query_parentheses_complex() {
         4,
         "Should return 4 rows matching complex expression"
     );
-    let mut ids: Vec<i64> = rows.iter().map(|r| r[3]["id"].as_i64().unwrap()).collect();
+    let id_idx = find_column_idx(&column_names, "id");
+    let mut ids: Vec<i64> = rows.iter().map(|r| r[id_idx].as_i64().unwrap()).collect();
     ids.sort();
     assert_eq!(ids, vec![1, 2, 3, 5], "Should return correct IDs");
 }
@@ -7487,6 +7575,7 @@ async fn test_plotql_order_by_field_not_metric() {
 
 #[tokio::test]
 async fn test_query_handler_bypass_auth_allows_query() {
+    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -7549,6 +7638,7 @@ async fn test_query_handler_bypass_auth_allows_query() {
 
 #[tokio::test]
 async fn test_query_handler_bypass_auth_vs_regular_user() {
+    let _guard = set_streaming_enabled(true);
     use tokio::io::AsyncReadExt;
     init_for_tests();
 

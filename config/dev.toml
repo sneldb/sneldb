@@ -36,6 +36,7 @@ log_level = "error"
 output_format = "json"
 tcp_addr = "127.0.0.1:7171"
 http_addr = "127.0.0.1:8085"
+ws_addr = "127.0.0.1:8086"
 auth_token = "mysecrettoken"
 
 [playground]

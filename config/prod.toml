@@ -35,6 +35,7 @@ log_level = "error"
 output_format = "arrow"
 tcp_addr = "127.0.0.1:7171"
 http_addr = "127.0.0.1:8085"
+ws_addr = "127.0.0.1:8086"
 auth_token = "mysecrettoken"
 backpressure_threshold = 90
 
@@ -57,7 +58,7 @@ initial_admin_key = "admin-key-123"
 
 [logging]
 log_dir = "../data/logs"
-stdout_level = "warn"
+stdout_level = "error"
 file_level = "error"
 
 [query]
