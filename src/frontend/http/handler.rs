@@ -56,11 +56,15 @@ impl HttpHandler {
     }
 
     async fn handle(&self, req: Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
-        let path = req.uri().path().to_string();
+        // Use path directly without allocation - avoid to_string()
+        let path = req.uri().path();
 
         // Check shutdown and backpressure before processing requests
         // Static files (playground) are exempt from these checks
-        if !path.starts_with("/static/") && path != "/" {
+        // Use path directly for comparison to avoid allocation
+        let is_static_or_root = path.starts_with("/static/") || path == "/";
+
+        if !is_static_or_root {
             if self.server_state.is_shutting_down() {
                 return Ok(Response::builder()
                     .status(hyper::StatusCode::SERVICE_UNAVAILABLE)
@@ -80,11 +84,13 @@ impl HttpHandler {
             }
         }
 
-        if let Some(resp) = Self::serve_playground(&path) {
+        // Check playground first (only needs string slice, not owned String)
+        if let Some(resp) = Self::serve_playground(path) {
             return Ok(resp);
         }
 
-        match path.as_str() {
+        // Match on path directly without converting to String
+        match path {
             "/command" => {
                 handle_line_command(
                     req,

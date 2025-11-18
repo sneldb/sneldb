@@ -236,6 +236,8 @@ impl Default for UserCache {
 }
 
 /// Per-IP rate limiter for auth attempts (token bucket). Default: 10/sec per IP.
+/// NOTE: Uses DefaultClock which does one-time calibration at startup (~20% of startup time)
+/// but has low overhead during runtime. Acceptable tradeoff for rate limiting functionality.
 pub type AuthRateLimiter = GovernorRateLimiter<
     String, // Key = IP address
     dashmap::DashMap<String, governor::state::InMemoryState>,

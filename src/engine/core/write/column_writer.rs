@@ -2,7 +2,7 @@ use crate::engine::core::column::compression::compressed_column_index::Compresse
 use crate::engine::core::column::compression::compression_codec::Lz4Codec;
 use crate::engine::core::column::format::PhysicalType;
 use crate::engine::core::column::type_catalog::ColumnTypeCatalog;
-use crate::engine::core::write::column_block_writer::ColumnBlockWriter;
+use crate::engine::core::write::column_block_writer_async::ColumnBlockWriterAsync;
 use crate::engine::core::write::column_group_builder::ColumnGroupBuilder;
 use crate::engine::core::write::column_paths::ColumnPathResolver;
 use crate::engine::core::{UidResolver, WriteJob, ZonePlan};
@@ -96,43 +96,41 @@ impl ColumnWriter {
         self.merge_type_hints(&mut types_by_key);
         let segment_dir = self.segment_dir.clone();
 
-        tokio::task::spawn_blocking(move || -> Result<(), StoreError> {
-            let mut builder = ColumnGroupBuilder::with_types(types_by_key);
-            for job in &write_jobs {
-                builder.add(job);
-            }
-            let groups = builder.finish();
+        // Build column groups (CPU-bound, but fast)
+        let mut builder = ColumnGroupBuilder::with_types(types_by_key);
+        for job in &write_jobs {
+            builder.add(job);
+        }
+        let groups = builder.finish();
 
-            let codec = Lz4Codec;
-            let mut indexes_by_key: std::collections::HashMap<
-                (String, String),
-                CompressedColumnIndex,
-            > = std::collections::HashMap::new();
-            // Precompute exact .col paths from jobs to ensure the same paths used in tests
-            let mut key_to_path = std::collections::HashMap::new();
-            for j in &write_jobs {
-                key_to_path.insert(j.key.clone(), j.path.clone());
-            }
-            let mut block_writer = ColumnBlockWriter::with_paths(segment_dir.clone(), key_to_path);
-            let path_resolver = ColumnPathResolver::new(&write_jobs);
+        // Now do async file I/O
+        let codec = Lz4Codec;
+        let mut indexes_by_key: std::collections::HashMap<(String, String), CompressedColumnIndex> =
+            std::collections::HashMap::new();
+        // Precompute exact .col paths from jobs to ensure the same paths used in tests
+        let mut key_to_path = std::collections::HashMap::new();
+        for j in &write_jobs {
+            key_to_path.insert(j.key.clone(), j.path.clone());
+        }
+        let mut block_writer = ColumnBlockWriterAsync::with_paths(segment_dir.clone(), key_to_path);
+        let path_resolver = ColumnPathResolver::new(&write_jobs);
 
-            for ((key, zone_id), (buf, offs, values)) in groups {
-                let index = indexes_by_key.entry(key.clone()).or_default();
-                let row_count = offs.len() as u32;
-                block_writer.append_zone(index, key.clone(), zone_id, &buf, row_count, &codec)?;
-                let _ = values; // values used only for compressed data; index built elsewhere
-            }
+        for ((key, zone_id), (buf, offs, values)) in groups {
+            let index = indexes_by_key.entry(key.clone()).or_default();
+            let row_count = offs.len() as u32;
+            block_writer
+                .append_zone(index, key.clone(), zone_id, &buf, row_count, &codec)
+                .await?;
+            let _ = values; // values used only for compressed data; index built elsewhere
+        }
 
-            block_writer.finish()?;
-            for (key, index) in indexes_by_key {
-                let path = path_resolver.zfc_path_for_key(&key);
-                index.write_to_path(&path)?;
-            }
+        block_writer.finish().await?;
 
-            Ok(())
-        })
-        .await
-        .map_err(|e| StoreError::FlushFailed(format!("join error: {e}")))??;
+        // Write index files (also convert to async)
+        for (key, index) in indexes_by_key {
+            let path = path_resolver.zfc_path_for_key(&key);
+            index.write_to_path_async(&path).await?;
+        }
 
         info!("wrote all columns");
         Ok(())

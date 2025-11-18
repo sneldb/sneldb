@@ -1,6 +1,6 @@
 use crate::command::types::{FieldSpec, MiniSchema as CommandMiniSchema};
 use crate::engine::schema::errors::SchemaError;
-use crate::engine::schema::schema_store::SchemaStore;
+use crate::engine::schema::store::SchemaStore;
 use crate::engine::schema::types::{EnumType, FieldType};
 use crate::shared::config::CONFIG;
 use rand::{Rng, distributions::Alphanumeric};
@@ -31,7 +31,7 @@ impl MiniSchema {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaRecord {
     pub uid: String,
     pub event_type: String,
@@ -88,6 +88,42 @@ impl SchemaRegistry {
         };
 
         self.store.append(&record)?;
+        self.register_record(record);
+        Ok(())
+    }
+
+    /// Async version of define that moves blocking I/O to the blocking thread pool
+    pub async fn define_async(
+        &mut self,
+        event_type: &str,
+        schema: MiniSchema,
+    ) -> Result<(), SchemaError> {
+        if self.schemas.contains_key(event_type) {
+            return Err(SchemaError::AlreadyDefined(event_type.to_string()));
+        }
+        if schema.fields.is_empty() {
+            return Err(SchemaError::EmptySchema);
+        }
+
+        let uid: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(16)
+            .map(char::from)
+            .collect();
+
+        let record = SchemaRecord {
+            uid: uid.clone(),
+            event_type: event_type.to_string(),
+            schema: schema.clone(),
+        };
+
+        // Move blocking I/O to blocking thread pool
+        let store = self.store.clone();
+        let record_clone = record.clone();
+        tokio::task::spawn_blocking(move || store.append(&record_clone))
+            .await
+            .map_err(|e| SchemaError::IoWriteFailed(format!("spawn_blocking failed: {}", e)))??;
+
         self.register_record(record);
         Ok(())
     }

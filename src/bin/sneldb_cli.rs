@@ -2,24 +2,45 @@ use arrow_array::RecordBatch;
 use arrow_ipc::reader::StreamReader;
 use arrow_schema::Schema;
 use clap::Parser;
+use hmac::{Hmac, Mac};
+use rustyline::DefaultEditor;
+use rustyline::error::ReadlineError;
+use sha2::Sha256;
+use std::env;
+use std::fs;
 use std::io::{self, Cursor, Read};
+use std::path::Path;
 use std::sync::Arc;
+
+type HmacSha256 = Hmac<Sha256>;
 
 #[derive(Parser)]
 #[command(name = "sneldb-cli")]
-#[command(about = "Query SnelDB and display results as a table", long_about = None)]
+#[command(about = "Interactive SnelDB query console", long_about = None)]
 struct Args {
-    /// The SnelDB query to execute
+    /// The SnelDB query to execute (non-interactive mode)
     #[arg(short, long)]
     query: Option<String>,
 
     /// SnelDB HTTP server URL
-    #[arg(short, long, default_value = "http://127.0.0.1:8085")]
-    url: String,
+    /// Can also be set via SNELDB_URL environment variable
+    #[arg(short, long)]
+    url: Option<String>,
 
-    /// Authentication token
-    #[arg(short, long, default_value = "mysecrettoken")]
-    token: String,
+    /// Authentication token (Bearer token)
+    /// Can also be set via SNELDB_TOKEN environment variable or config file
+    #[arg(short, long)]
+    token: Option<String>,
+
+    /// User ID for HMAC authentication
+    /// Can also be set via SNELDB_USER_ID environment variable or config file
+    #[arg(long)]
+    user_id: Option<String>,
+
+    /// Secret key for HMAC authentication
+    /// Can also be set via SNELDB_SECRET_KEY environment variable or config file
+    #[arg(long)]
+    secret_key: Option<String>,
 
     /// Read query from stdin instead of command line
     #[arg(long)]
@@ -30,86 +51,547 @@ struct Args {
     limit: usize,
 }
 
+#[derive(Clone)]
+enum AuthMethod {
+    BearerToken(String),
+    UserHmac { user_id: String, secret_key: String },
+}
+
+struct Config {
+    url: String,
+    auth: AuthMethod,
+}
+
+impl Config {
+    fn load() -> anyhow::Result<Self> {
+        // Priority order:
+        // 1. Command line arguments (handled in main)
+        // 2. Environment variables
+        // 3. Config file (~/.sneldb/config or .sneldb/config)
+        // 4. Defaults
+
+        let url = env::var("SNELDB_URL")
+            .ok()
+            .or_else(|| read_config_file().and_then(|c| c.url))
+            .unwrap_or_else(|| "http://127.0.0.1:8085".to_string());
+
+        // Check for user-based auth first (user_id + secret_key)
+        let user_id = env::var("SNELDB_USER_ID")
+            .ok()
+            .or_else(|| read_config_file().and_then(|c| c.user_id.clone()));
+        let secret_key = env::var("SNELDB_SECRET_KEY")
+            .ok()
+            .or_else(|| read_config_file().and_then(|c| c.secret_key.clone()));
+
+        let auth = if let (Some(uid), Some(key)) = (user_id, secret_key) {
+            AuthMethod::UserHmac {
+                user_id: uid,
+                secret_key: key,
+            }
+        } else {
+            // Fall back to Bearer token
+            let token = env::var("SNELDB_TOKEN")
+                .ok()
+                .or_else(|| read_config_file().and_then(|c| c.token))
+                .unwrap_or_else(|| "mysecrettoken".to_string());
+            AuthMethod::BearerToken(token)
+        };
+
+        Ok(Config { url, auth })
+    }
+
+    fn merge_with_args(&mut self, args: &Args) {
+        if let Some(url) = &args.url {
+            self.url = url.clone();
+        }
+
+        // Command-line args override everything
+        if let (Some(user_id), Some(secret_key)) = (&args.user_id, &args.secret_key) {
+            self.auth = AuthMethod::UserHmac {
+                user_id: user_id.clone(),
+                secret_key: secret_key.clone(),
+            };
+        } else if let Some(token) = &args.token {
+            self.auth = AuthMethod::BearerToken(token.clone());
+        }
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct ConfigFile {
+    #[serde(rename = "config")]
+    config: Option<ConfigSection>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+struct ConfigSection {
+    url: Option<String>,
+    token: Option<String>,
+    user_id: Option<String>,
+    secret_key: Option<String>,
+}
+
+fn read_config_file() -> Option<ConfigSection> {
+    // Try ~/.sneldb/config first
+    if let Some(home) = dirs::home_dir() {
+        let config_path = home.join(".sneldb").join("config");
+        if let Ok(content) = fs::read_to_string(&config_path) {
+            if let Ok(config_file) = toml::from_str::<ConfigFile>(&content) {
+                if let Some(config) = config_file.config {
+                    return Some(config);
+                }
+            }
+        }
+    }
+
+    // Try .sneldb/config in current directory
+    let local_config = Path::new(".sneldb").join("config");
+    if let Ok(content) = fs::read_to_string(&local_config) {
+        if let Ok(config_file) = toml::from_str::<ConfigFile>(&content) {
+            if let Some(config) = config_file.config {
+                return Some(config);
+            }
+        }
+    }
+
+    None
+}
+
+fn compute_hmac_signature(secret_key: &str, message: &str) -> String {
+    let mut mac =
+        HmacSha256::new_from_slice(secret_key.as_bytes()).expect("HMAC can take key of any size");
+    mac.update(message.trim().as_bytes());
+    hex::encode(mac.finalize().into_bytes())
+}
+
+struct Client {
+    url: String,
+    auth: AuthMethod,
+    runtime: tokio::runtime::Runtime,
+    http_client: hyper_util::client::legacy::Client<
+        hyper_util::client::legacy::connect::HttpConnector,
+        http_body_util::Full<bytes::Bytes>,
+    >,
+}
+
+impl Client {
+    fn new(url: String, auth: AuthMethod) -> anyhow::Result<Self> {
+        use hyper_util::client::legacy::Client;
+        use hyper_util::client::legacy::connect::HttpConnector;
+        use hyper_util::rt::TokioExecutor;
+
+        let runtime = tokio::runtime::Runtime::new()?;
+        let http_client: Client<HttpConnector, http_body_util::Full<bytes::Bytes>> =
+            Client::builder(TokioExecutor::new()).build_http();
+
+        Ok(Self {
+            url,
+            auth,
+            runtime,
+            http_client,
+        })
+    }
+
+    fn execute_query(&self, query: &str) -> anyhow::Result<(Vec<u8>, Option<f64>)> {
+        use http_body_util::{BodyExt, Full};
+        use hyper::{Method, Request};
+
+        self.runtime.block_on(async {
+            let uri = format!("{}/command", self.url)
+                .parse::<hyper::Uri>()
+                .map_err(|e| anyhow::anyhow!("Invalid URL: {}", e))?;
+
+            let body = Full::new(bytes::Bytes::from(query.to_string()));
+            let mut req_builder = Request::builder()
+                .method(Method::POST)
+                .uri(uri)
+                .header("Content-Type", "text/plain");
+
+            // Add authentication headers
+            match &self.auth {
+                AuthMethod::BearerToken(token) => {
+                    req_builder = req_builder.header("Authorization", format!("Bearer {}", token));
+                }
+                AuthMethod::UserHmac { user_id, secret_key } => {
+                    let signature = compute_hmac_signature(secret_key, query);
+                    req_builder = req_builder
+                        .header("X-Auth-User", user_id.as_str())
+                        .header("X-Auth-Signature", signature.as_str());
+                }
+            }
+
+            let req = req_builder
+                .body(body)
+                .map_err(|e| anyhow::anyhow!("Failed to build request: {}", e))?;
+
+            let res = self.http_client.request(req).await?;
+            let status = res.status();
+
+            if !status.is_success() {
+                let body_bytes = res.collect().await?.to_bytes();
+                let body_str = String::from_utf8_lossy(&body_bytes);
+
+                // Provide helpful error message for authentication failures
+                if status == 401 {
+                    let auth_help = match &self.auth {
+                        AuthMethod::BearerToken(_) => {
+                            "The server requires user-based HMAC authentication (not Bearer token).\n\n\
+                            When the server has 'bypass_auth = false' in its config, you must use\n\
+                            user-based authentication with user_id and secret_key.\n\n\
+                            To fix this:\n\
+                            1. Use user credentials instead of Bearer token:\n\
+                               sneldb_cli --user-id 'admin' --secret-key 'your-secret-key'\n\n\
+                            2. Or set environment variables:\n\
+                               export SNELDB_USER_ID='your-user-id'\n\
+                               export SNELDB_SECRET_KEY='your-secret-key'\n\n\
+                            3. Or create a config file at ~/.sneldb/config:\n\
+                               [config]\n\
+                               user_id = 'your-user-id'\n\
+                               secret_key = 'your-secret-key'\n\
+                               url = 'http://127.0.0.1:8085'\n\n\
+                            Note: If you don't have a user yet, you may need to:\n\
+                            - Check if your server config has 'initial_admin_user' and 'initial_admin_key'\n\
+                            - Or temporarily set 'bypass_auth = true' to create a user"
+                        }
+                        AuthMethod::UserHmac { .. } => {
+                            "The server rejected your user credentials.\n\n\
+                            To fix this:\n\
+                            1. Verify your user_id and secret_key are correct\n\
+                            2. Check if the user exists in the server\n\
+                            3. If using initial admin credentials, verify they match server config:\n\
+                               - Check server config for 'initial_admin_user' and 'initial_admin_key'\n\n\
+                            You can also set credentials via:\n\
+                            - Environment variables: SNELDB_USER_ID and SNELDB_SECRET_KEY\n\
+                            - Command line: --user-id and --secret-key flags\n\
+                            - Config file: ~/.sneldb/config"
+                        }
+                    };
+                    anyhow::bail!(
+                        "Authentication failed (401 Unauthorized)\n\n{}\n\nServer response: {}",
+                        auth_help,
+                        body_str
+                    );
+                }
+
+                anyhow::bail!("HTTP error {}: {}", status, body_str);
+            }
+
+            // Extract execution time from header
+            let execution_time_ms = res
+                .headers()
+                .iter()
+                .find(|(name, _)| name.as_str().eq_ignore_ascii_case("x-execution-time-ms"))
+                .and_then(|(_, value)| value.to_str().ok())
+                .and_then(|s| s.parse::<f64>().ok());
+
+            let body_bytes = res.collect().await?.to_bytes();
+            Ok((body_bytes.to_vec(), execution_time_ms))
+        })
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    // Get query from args, stdin, or prompt
-    let query = if args.stdin {
+    // Load configuration (env vars, config file, defaults)
+    let mut config = Config::load()?;
+    config.merge_with_args(&args);
+
+    // Non-interactive mode: execute query and exit
+    if args.stdin {
         let mut input = String::new();
         io::stdin().read_to_string(&mut input)?;
-        input.trim().to_string()
-    } else if let Some(q) = args.query {
-        q
-    } else {
-        eprintln!("Error: No query provided. Use --query <query> or --stdin");
-        std::process::exit(1);
-    };
-
-    if query.is_empty() {
-        eprintln!("Error: Query cannot be empty");
-        std::process::exit(1);
+        let query = input.trim().to_string();
+        if query.is_empty() {
+            eprintln!("Error: Query cannot be empty");
+            std::process::exit(1);
+        }
+        let client = Client::new(config.url.clone(), config.auth.clone())?;
+        let (response_data, execution_time_ms) = client.execute_query(&query)?;
+        display_arrow_data(&response_data, args.limit)?;
+        if let Some(time_ms) = execution_time_ms {
+            eprintln!("\nServer execution time: {:.3} ms", time_ms);
+        }
+        return Ok(());
     }
 
-    // Execute query via HTTP
-    let (response_data, execution_time_ms) = execute_query(&args.url, &args.token, &query)?;
-
-    // Parse and display Arrow data
-    display_arrow_data(&response_data, args.limit)?;
-
-    // Display execution time if available
-    if let Some(time_ms) = execution_time_ms {
-        eprintln!("\nServer execution time: {:.3} ms", time_ms);
+    if let Some(query) = args.query {
+        if query.is_empty() {
+            eprintln!("Error: Query cannot be empty");
+            std::process::exit(1);
+        }
+        let client = Client::new(config.url.clone(), config.auth.clone())?;
+        let (response_data, execution_time_ms) = client.execute_query(&query)?;
+        display_arrow_data(&response_data, args.limit)?;
+        if let Some(time_ms) = execution_time_ms {
+            eprintln!("\nServer execution time: {:.3} ms", time_ms);
+        }
+        return Ok(());
     }
+
+    // Interactive mode
+    run_interactive(config, args)
+}
+
+fn run_interactive(config: Config, args: Args) -> anyhow::Result<()> {
+    let client = Client::new(config.url.clone(), config.auth.clone())?;
+    let mut rl = DefaultEditor::new()?;
+
+    // Load history if available
+    let _ = rl.load_history(".sneldb_history");
+
+    println!("SnelDB Interactive Console");
+    println!("Type '\\h' for help, '\\q' to quit");
+    println!("Connected to: {}", config.url);
+
+    // Show authentication status
+    match &config.auth {
+        AuthMethod::BearerToken(token) => {
+            let token_display = if token.len() > 8 {
+                format!("{}...{}", &token[..4], &token[token.len() - 4..])
+            } else {
+                "***".to_string()
+            };
+            println!("Using Bearer token: {}\n", token_display);
+        }
+        AuthMethod::UserHmac {
+            user_id,
+            secret_key,
+        } => {
+            let key_display = if secret_key.len() > 8 {
+                format!(
+                    "{}...{}",
+                    &secret_key[..4],
+                    &secret_key[secret_key.len() - 4..]
+                )
+            } else {
+                "***".to_string()
+            };
+            println!(
+                "Using user authentication: user_id={}, secret_key={}\n",
+                user_id, key_display
+            );
+        }
+    }
+
+    let mut query_buffer = String::new();
+    let mut in_multiline = false;
+
+    loop {
+        let prompt = if in_multiline { "  -> " } else { "sneldb=> " };
+        match rl.readline(prompt) {
+            Ok(line) => {
+                let trimmed = line.trim();
+
+                // Handle empty lines in multiline mode
+                if trimmed.is_empty() && in_multiline {
+                    // Empty line in multiline mode - check if query is complete
+                    if !query_buffer.trim().is_empty() {
+                        // Execute the accumulated query
+                        let query = query_buffer.trim().to_string();
+                        query_buffer.clear();
+                        in_multiline = false;
+
+                        if !query.is_empty() {
+                            match client.execute_query(&query) {
+                                Ok((response_data, execution_time_ms)) => {
+                                    if let Err(e) = display_arrow_data(&response_data, args.limit) {
+                                        eprintln!("Error displaying results: {}", e);
+                                    }
+                                    if let Some(time_ms) = execution_time_ms {
+                                        eprintln!("Execution time: {:.3} ms", time_ms);
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!("Error: {}", e);
+                                }
+                            }
+                        }
+                    }
+                    continue;
+                }
+
+                if trimmed.is_empty() {
+                    continue;
+                }
+
+                // Handle special commands (backslash commands)
+                if trimmed.starts_with('\\') {
+                    let cmd = trimmed
+                        .trim_start_matches('\\')
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or("");
+                    match cmd {
+                        "q" | "quit" | "exit" => {
+                            println!("Goodbye!");
+                            break;
+                        }
+                        "h" | "help" => {
+                            print_help();
+                            continue;
+                        }
+                        "c" | "clear" => {
+                            query_buffer.clear();
+                            in_multiline = false;
+                            print!("\x1B[2J\x1B[1;1H"); // Clear screen
+                            continue;
+                        }
+                        "l" | "limit" => {
+                            if let Some(limit_str) = trimmed.split_whitespace().nth(1) {
+                                if let Ok(limit) = limit_str.parse::<usize>() {
+                                    println!("Row limit set to: {}", limit);
+                                    // Note: This would require storing limit in a mutable way
+                                    // For now, we'll just acknowledge it
+                                } else {
+                                    eprintln!("Invalid limit value");
+                                }
+                            } else {
+                                println!("Current row limit: {}", args.limit);
+                            }
+                            continue;
+                        }
+                        "config" => {
+                            println!();
+                            println!("Current Configuration:");
+                            println!("  URL:   {}", config.url);
+                            match &config.auth {
+                                AuthMethod::BearerToken(token) => {
+                                    let token_display = if token.len() > 8 {
+                                        format!("{}...{}", &token[..4], &token[token.len() - 4..])
+                                    } else {
+                                        "***".to_string()
+                                    };
+                                    println!("  Auth:  Bearer token ({})", token_display);
+                                }
+                                AuthMethod::UserHmac {
+                                    user_id,
+                                    secret_key,
+                                } => {
+                                    let key_display = if secret_key.len() > 8 {
+                                        format!(
+                                            "{}...{}",
+                                            &secret_key[..4],
+                                            &secret_key[secret_key.len() - 4..]
+                                        )
+                                    } else {
+                                        "***".to_string()
+                                    };
+                                    println!(
+                                        "  Auth:  User HMAC (user_id={}, secret_key={})",
+                                        user_id, key_display
+                                    );
+                                }
+                            }
+                            println!();
+                            println!("Configuration sources (in priority order):");
+                            println!("  1. Command line arguments");
+                            println!("  2. Environment variables");
+                            println!("  3. Config file (~/.sneldb/config or .sneldb/config)");
+                            println!("  4. Defaults");
+                            println!();
+                            continue;
+                        }
+                        _ => {
+                            eprintln!("Unknown command: \\{}. Type \\h for help.", cmd);
+                            continue;
+                        }
+                    }
+                }
+
+                // Add line to query buffer
+                if !query_buffer.is_empty() {
+                    query_buffer.push('\n');
+                }
+                query_buffer.push_str(&line);
+
+                // Check if query seems complete (ends with semicolon)
+                // For now, we'll use a simple heuristic: if line ends with semicolon
+                if trimmed.ends_with(';') {
+                    // Execute the query
+                    let query = query_buffer.trim_end_matches(';').trim().to_string();
+                    query_buffer.clear();
+                    in_multiline = false;
+
+                    if !query.is_empty() {
+                        // Save to history
+                        let _ = rl.add_history_entry(&query);
+
+                        match client.execute_query(&query) {
+                            Ok((response_data, execution_time_ms)) => {
+                                if let Err(e) = display_arrow_data(&response_data, args.limit) {
+                                    eprintln!("Error displaying results: {}", e);
+                                }
+                                if let Some(time_ms) = execution_time_ms {
+                                    eprintln!("Execution time: {:.3} ms", time_ms);
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("Error: {}", e);
+                            }
+                        }
+                    }
+                } else {
+                    // Continue multiline input
+                    in_multiline = true;
+                }
+            }
+            Err(ReadlineError::Interrupted) => {
+                println!("^C");
+                query_buffer.clear();
+                in_multiline = false;
+            }
+            Err(ReadlineError::Eof) => {
+                println!("\nGoodbye!");
+                break;
+            }
+            Err(err) => {
+                eprintln!("Error: {:?}", err);
+                break;
+            }
+        }
+    }
+
+    // Save history
+    let _ = rl.save_history(".sneldb_history");
 
     Ok(())
 }
 
-fn execute_query(url: &str, token: &str, query: &str) -> anyhow::Result<(Vec<u8>, Option<f64>)> {
-    use http_body_util::{BodyExt, Full};
-    use hyper::{Method, Request};
-    use hyper_util::client::legacy::Client;
-    use hyper_util::client::legacy::connect::HttpConnector;
-    use hyper_util::rt::TokioExecutor;
-
-    let rt = tokio::runtime::Runtime::new()?;
-    rt.block_on(async {
-        let client: Client<HttpConnector, Full<bytes::Bytes>> =
-            Client::builder(TokioExecutor::new()).build_http();
-
-        let uri = format!("{}/command", url)
-            .parse::<hyper::Uri>()
-            .map_err(|e| anyhow::anyhow!("Invalid URL: {}", e))?;
-
-        let body = http_body_util::Full::new(bytes::Bytes::from(query.to_string()));
-        let req = Request::builder()
-            .method(Method::POST)
-            .uri(uri)
-            .header("Authorization", format!("Bearer {}", token))
-            .header("Content-Type", "text/plain")
-            .body(body)
-            .map_err(|e| anyhow::anyhow!("Failed to build request: {}", e))?;
-
-        let res = client.request(req).await?;
-        let status = res.status();
-
-        if !status.is_success() {
-            let body_bytes = res.collect().await?.to_bytes();
-            let body_str = String::from_utf8_lossy(&body_bytes);
-            anyhow::bail!("HTTP error {}: {}", status, body_str);
-        }
-
-        // Extract execution time from header (before collecting body)
-        // HTTP headers are case-insensitive, but hyper normalizes them
-        let execution_time_ms = res
-            .headers()
-            .iter()
-            .find(|(name, _)| name.as_str().eq_ignore_ascii_case("x-execution-time-ms"))
-            .and_then(|(_, value)| value.to_str().ok())
-            .and_then(|s| s.parse::<f64>().ok());
-
-        let body_bytes = res.collect().await?.to_bytes();
-        Ok((body_bytes.to_vec(), execution_time_ms))
-    })
+fn print_help() {
+    println!();
+    println!("SnelDB Console Help");
+    println!("───────────────────");
+    println!("Special commands:");
+    println!("  \\q, \\quit, \\exit    Exit the console");
+    println!("  \\h, \\help          Show this help message");
+    println!("  \\c, \\clear         Clear the screen");
+    println!("  \\l, \\limit [n]     Show or set row display limit");
+    println!("  \\config            Show current configuration");
+    println!();
+    println!("Query input:");
+    println!("  - Enter queries normally");
+    println!("  - End queries with semicolon (;) or press Enter twice");
+    println!("  - Use Ctrl+C to cancel current query");
+    println!();
+    println!("Authentication:");
+    println!("  Bearer token (simple):");
+    println!("    --token flag, SNELDB_TOKEN env var, or config file");
+    println!("  User HMAC (production):");
+    println!("    --user-id and --secret-key flags");
+    println!("    SNELDB_USER_ID and SNELDB_SECRET_KEY env vars");
+    println!("    Or config file");
+    println!("  Config file:   ~/.sneldb/config or .sneldb/config");
+    println!("  Example config file:");
+    println!("    [config]");
+    println!("    url = \"http://127.0.0.1:8085\"");
+    println!("    # For Bearer token:");
+    println!("    token = \"your-token\"");
+    println!("    # OR for user authentication:");
+    println!("    user_id = \"admin\"");
+    println!("    secret_key = \"your-secret-key\"");
+    println!();
 }
 
 fn display_arrow_data(data: &[u8], row_limit: usize) -> anyhow::Result<()> {
@@ -119,16 +601,13 @@ fn display_arrow_data(data: &[u8], row_limit: usize) -> anyhow::Result<()> {
 
         if trimmed.starts_with('{') || trimmed.starts_with('[') {
             // Check if this is streaming JSON (newline-delimited JSON) format
-            // Streaming JSON has multiple JSON objects, one per line
             if trimmed.contains('\n') {
-                // Check if it looks like streaming format (has "type" field in first line)
                 let first_line = trimmed.lines().next().unwrap_or("");
                 if first_line.contains("\"type\":\"schema\"")
                     || first_line.contains("\"type\":\"batch\"")
                 {
                     return display_streaming_json(trimmed, row_limit);
                 }
-                // If it has newlines and is large, likely streaming format
                 if data.len() > 10000 {
                     return display_streaming_json(trimmed, row_limit);
                 }
@@ -141,7 +620,6 @@ fn display_arrow_data(data: &[u8], row_limit: usize) -> anyhow::Result<()> {
                     return Ok(());
                 }
                 Err(e) => {
-                    // If large response, likely streaming format
                     if data.len() > 10000 {
                         return display_streaming_json(trimmed, row_limit);
                     }

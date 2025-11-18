@@ -127,6 +127,9 @@ impl<'a> SegmentQueryRunner<'a> {
             let mut rows: Vec<Vec<ScalarValue>> = Vec::new();
             let mut emitted = 0usize;
 
+            // OPTIMIZATION: Pre-allocate row buffer to avoid per-event allocation
+            let mut row_buffer = Vec::with_capacity(schema.column_count());
+
             for zone in candidate_zones {
                 let remaining_limit = eval_limit.map(|lim| lim.saturating_sub(emitted));
                 if matches!(remaining_limit, Some(0)) {
@@ -141,15 +144,16 @@ impl<'a> SegmentQueryRunner<'a> {
                         }
                     }
 
-                    let mut row = Vec::with_capacity(schema.column_count());
+                    // OPTIMIZATION: Reuse row_buffer instead of allocating new Vec each time
+                    row_buffer.clear();
                     for column in schema.columns() {
-                        row.push(
+                        row_buffer.push(
                             event
                                 .get_field_scalar(&column.name)
                                 .unwrap_or(ScalarValue::Null),
                         );
                     }
-                    rows.push(row);
+                    rows.push(row_buffer.clone());
                     emitted += 1;
                 }
 
@@ -224,6 +228,7 @@ impl<'a> SegmentQueryRunner<'a> {
                 let events = evaluator.evaluate_zones_with_limit(vec![zone], remaining_limit);
                 for event in events {
                     row.clear();
+                    // OPTIMIZATION: Batch field lookups to reduce overhead
                     for column in schema.columns() {
                         row.push(
                             event

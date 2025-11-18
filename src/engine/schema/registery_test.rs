@@ -255,21 +255,29 @@ fn test_duplicate_define_even_if_identical() {
 
 #[test]
 fn test_oversized_schema_record_skipped_silently() {
+    use crate::engine::schema::store::SCHEMA_STORE_VERSION;
+    use crate::shared::storage_header::{BinaryHeader, FileKind};
+
     let temp_dir = tempdir().unwrap();
     let path = temp_dir.path().join("schemas.bin");
 
-    // Write a corrupted schema with a very large size prefix
+    // Write a valid header first
     let mut file = File::create(&path).unwrap();
+    let header = BinaryHeader::new(FileKind::SchemaStore.magic(), SCHEMA_STORE_VERSION, 0);
+    header.write_to(&mut file).unwrap();
+
+    // Write a corrupted schema with a very large size prefix (exceeds MAX_RECORD_LEN_BYTES)
     let large_len: u32 = 999_999;
     file.write_all(&large_len.to_le_bytes()).unwrap();
     file.write_all(&vec![0u8; 16]).unwrap(); // dummy payload
 
     // Load the registry — should succeed but yield no records
+    // The oversized record should be skipped during load
     let registry = SchemaRegistry::new_with_path(path).expect("Registry load should succeed");
     assert_eq!(
         registry.get_all().len(),
         0,
-        "No schemas should be loaded from corrupted file"
+        "No schemas should be loaded from corrupted file with oversized record"
     );
 }
 

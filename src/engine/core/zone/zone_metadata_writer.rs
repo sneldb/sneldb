@@ -31,4 +31,20 @@ impl<'a> ZoneMetadataWriter<'a> {
 
         Ok(())
     }
+
+    /// Build `ZoneMeta` entries for all plans and persist them to disk (async)
+    pub async fn write_async(&self, zone_plans: &[ZonePlan]) -> Result<(), StoreError> {
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target: "sneldb::flush",
+                uid = self.uid,
+                "Writing .zones metadata (async)"
+            );
+        }
+
+        let zone_meta = ZoneMeta::build_all(zone_plans);
+        ZoneMeta::save_async(self.uid, &zone_meta, self.segment_dir).await?;
+
+        Ok(())
+    }
 }

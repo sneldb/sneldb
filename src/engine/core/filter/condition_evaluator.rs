@@ -137,6 +137,24 @@ impl ConditionEvaluator {
                 .map(|vals| vals.len() == 0)
                 .unwrap_or(true);
 
+            // OPTIMIZATION: Pre-classify fields by type to avoid repeated physical_type() calls
+            // in the hot inner loop. physical_type() doesn't change between rows.
+            let mut u64_fields: Vec<(&String, &_)> = Vec::new();
+            let mut i64_fields: Vec<(&String, &_)> = Vec::new();
+            let mut f64_fields: Vec<(&String, &_)> = Vec::new();
+            let mut bool_fields: Vec<(&String, &_)> = Vec::new();
+            let mut str_fields: Vec<(&String, &_)> = Vec::new();
+
+            for (field, values) in &zone.values {
+                match values.physical_type() {
+                    Some(PhysicalType::U64) => u64_fields.push((field, values)),
+                    Some(PhysicalType::I64) => i64_fields.push((field, values)),
+                    Some(PhysicalType::F64) => f64_fields.push((field, values)),
+                    Some(PhysicalType::Bool) => bool_fields.push((field, values)),
+                    _ => str_fields.push((field, values)),
+                }
+            }
+
             for i in 0..event_count {
                 if !mask[i] {
                     continue;
@@ -147,45 +165,44 @@ impl ConditionEvaluator {
                     }
                 }
                 let mut builder = EventBuilder::new();
-                for (field, values) in &zone.values {
-                    match values.physical_type() {
-                        Some(PhysicalType::U64) => {
-                            if let Some(n) = values.get_u64_at(i) {
-                                builder.add_field_u64(field, n);
-                            } else {
-                                builder.add_field_null(field);
-                            }
-                        }
-                        Some(PhysicalType::I64) => {
-                            if let Some(n) = values.get_i64_at(i) {
-                                builder.add_field_i64(field, n);
-                            } else {
-                                builder.add_field_null(field);
-                            }
-                        }
-                        Some(PhysicalType::F64) => {
-                            if let Some(f) = values.get_f64_at(i) {
-                                builder.add_field_f64(field, f);
-                            } else {
-                                builder.add_field_null(field);
-                            }
-                        }
-                        Some(PhysicalType::Bool) => {
-                            if let Some(b) = values.get_bool_at(i) {
-                                builder.add_field_bool(field, b);
-                            } else {
-                                builder.add_field_null(field);
-                            }
-                        }
-                        _ => {
-                            if let Some(value) = values.get_str_at(i) {
-                                builder.add_field(field, value);
-                            } else {
-                                builder.add_field_null(field);
-                            }
-                        }
+
+                // Optimized: Use pre-classified field lists instead of matching every field
+                for (field, values) in &u64_fields {
+                    if let Some(n) = values.get_u64_at(i) {
+                        builder.add_field_u64(field, n);
+                    } else {
+                        builder.add_field_null(field);
                     }
                 }
+                for (field, values) in &i64_fields {
+                    if let Some(n) = values.get_i64_at(i) {
+                        builder.add_field_i64(field, n);
+                    } else {
+                        builder.add_field_null(field);
+                    }
+                }
+                for (field, values) in &f64_fields {
+                    if let Some(f) = values.get_f64_at(i) {
+                        builder.add_field_f64(field, f);
+                    } else {
+                        builder.add_field_null(field);
+                    }
+                }
+                for (field, values) in &bool_fields {
+                    if let Some(b) = values.get_bool_at(i) {
+                        builder.add_field_bool(field, b);
+                    } else {
+                        builder.add_field_null(field);
+                    }
+                }
+                for (field, values) in &str_fields {
+                    if let Some(value) = values.get_str_at(i) {
+                        builder.add_field(field, value);
+                    } else {
+                        builder.add_field_null(field);
+                    }
+                }
+
                 let mut event = builder.build();
                 // If event_id column is missing/empty, generate a unique ID based on zone and row index
                 // This prevents deduplication from incorrectly removing valid events

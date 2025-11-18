@@ -198,24 +198,12 @@ pub async fn list_users(cache: &Arc<RwLock<UserCache>>) -> Vec<UserKey> {
     cache_guard.all_users().into_iter().cloned().collect()
 }
 
-/// Bootstraps admin user from config if no users exist.
+/// Bootstraps admin user from config if it doesn't exist in cache or database.
 pub async fn bootstrap_admin_user(
     cache: &Arc<RwLock<UserCache>>,
     permission_cache: &Arc<RwLock<PermissionCache>>,
     auth_storage: &Arc<dyn AuthStorage>,
 ) -> AuthResult<()> {
-    let user_count = {
-        let cache_guard = cache.read().await;
-        cache_guard.all_users().len()
-    };
-
-    if user_count > 0 {
-        if tracing::enabled!(tracing::Level::DEBUG) {
-            debug!(target: "sneldb::auth", "Users exist, skipping bootstrap");
-        }
-        return Ok(());
-    }
-
     let Some(auth_config) = &CONFIG.auth else {
         if tracing::enabled!(tracing::Level::DEBUG) {
             debug!(target: "sneldb::auth", "No auth config, skipping bootstrap");
@@ -235,11 +223,39 @@ pub async fn bootstrap_admin_user(
         return Ok(());
     };
 
+    // Check if the specific admin user already exists in cache
+    let admin_exists_in_cache = {
+        let cache_guard = cache.read().await;
+        cache_guard.get(admin_user).is_some()
+    };
+
+    if admin_exists_in_cache {
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(target: "sneldb::auth", user_id = admin_user, "Admin user exists in cache, skipping bootstrap");
+        }
+        return Ok(());
+    }
+
+    // Check if the admin user exists in the database
+    // This handles the case where the user exists in DB but cache wasn't loaded yet
+    let users_from_db = auth_storage.load_users()?;
+    let admin_exists_in_db = users_from_db
+        .iter()
+        .any(|stored| stored.user.user_id == *admin_user);
+
+    if admin_exists_in_db {
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(target: "sneldb::auth", user_id = admin_user, "Admin user exists in database, skipping bootstrap");
+        }
+        return Ok(());
+    }
+
     if tracing::enabled!(tracing::Level::INFO) {
         info!(target: "sneldb::auth", user_id = admin_user, "Bootstrapping admin user from config");
     }
 
-    create_user_with_roles(
+    // Create the admin user since it doesn't exist in cache or database
+    match create_user_with_roles(
         cache,
         permission_cache,
         auth_storage,
@@ -247,8 +263,19 @@ pub async fn bootstrap_admin_user(
         Some(admin_key.clone()),
         vec!["admin".to_string()],
     )
-    .await?;
-
-    info!(target: "sneldb::auth", user_id = admin_user, "Bootstrap admin user created");
-    Ok(())
+    .await
+    {
+        Ok(_) => {
+            info!(target: "sneldb::auth", user_id = admin_user, "Bootstrap admin user created");
+            Ok(())
+        }
+        Err(AuthError::UserExists) => {
+            // User exists in cache (shouldn't happen due to check above, but handle gracefully)
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                debug!(target: "sneldb::auth", user_id = admin_user, "Admin user already exists, skipping bootstrap");
+            }
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
 }

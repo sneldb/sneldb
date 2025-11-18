@@ -208,3 +208,41 @@ pub fn open_and_header_offset(
     }
     Ok((file, BinaryHeader::TOTAL_LEN))
 }
+
+// Async versions for tokio::fs
+pub async fn ensure_header_if_new_async(
+    path: &Path,
+    expected_magic: [u8; 8],
+) -> std::io::Result<tokio::fs::File> {
+    use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
+
+    let mut file = tokio::fs::OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .open(path)
+        .await?;
+
+    let len = file.metadata().await?.len();
+    if len == 0 {
+        let header = BinaryHeader::new(expected_magic, 1, 0);
+        let mut header_buf = Vec::with_capacity(BinaryHeader::TOTAL_LEN);
+        header.write_to(&mut header_buf)?;
+        file.write_all(&header_buf).await?;
+    } else {
+        // Require valid header for any non-empty file
+        file.seek(tokio::io::SeekFrom::Start(0)).await?;
+        let mut header_buf = vec![0u8; BinaryHeader::TOTAL_LEN];
+        file.read_exact(&mut header_buf).await?;
+        let header = BinaryHeader::read_from(&mut header_buf.as_slice())?;
+        if header.magic != expected_magic {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "unexpected magic in existing file",
+            ));
+        }
+    }
+
+    file.seek(tokio::io::SeekFrom::End(0)).await?;
+    Ok(file)
+}

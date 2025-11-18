@@ -1,4 +1,5 @@
 pub mod column_block_writer;
+pub mod column_block_writer_async;
 pub mod column_group_builder;
 pub mod column_paths;
 pub use column_paths::ColumnPathResolver;

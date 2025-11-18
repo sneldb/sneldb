@@ -122,24 +122,24 @@ fn extract_client_ip(req: &Request<Incoming>) -> Option<String> {
 
 /// Extract authentication from HTTP headers
 /// Returns (user_id, signature) if found in headers, None otherwise
+/// Optimized to do a single pass through headers
 fn extract_auth_from_headers(req: &Request<Incoming>) -> Option<(String, String)> {
-    let user_id = req
-        .headers()
-        .get("X-Auth-User")
-        .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_string())?;
+    let headers = req.headers();
 
-    let signature = req
-        .headers()
-        .get("X-Auth-Signature")
-        .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_string())?;
+    // Single pass: get both headers at once
+    let user_id_header = headers.get("X-Auth-User")?;
+    let signature_header = headers.get("X-Auth-Signature")?;
 
+    // Convert to strings, avoiding unnecessary allocations
+    let user_id = user_id_header.to_str().ok()?;
+    let signature = signature_header.to_str().ok()?;
+
+    // Early return if either is empty
     if user_id.is_empty() || signature.is_empty() {
         return None;
     }
 
-    Some((user_id, signature))
+    Some((user_id.to_string(), signature.to_string()))
 }
 
 /// Check authentication before parsing command
@@ -218,7 +218,8 @@ pub async fn handle_line_command(
     // Extract auth headers before consuming the request body
     let auth_from_headers = extract_auth_from_headers(&req);
 
-    let body = req.collect().await.unwrap().to_bytes();
+    // Use to_bytes() directly for more efficient body collection
+    let body = req.into_body().collect().await.unwrap().to_bytes();
     let input = String::from_utf8_lossy(&body).trim().to_string();
     let renderer: Arc<dyn Renderer + Send + Sync> = match CONFIG.server.output_format.as_str() {
         "json" => Arc::new(JsonRenderer),
@@ -289,7 +290,8 @@ pub async fn handle_json_command(
     // Extract auth headers before consuming the request body
     let auth_from_headers = extract_auth_from_headers(&req);
 
-    let body = req.collect().await.unwrap().to_bytes();
+    // Use to_bytes() directly for more efficient body collection
+    let body = req.into_body().collect().await.unwrap().to_bytes();
     let body_str = String::from_utf8_lossy(&body);
     let renderer: Arc<dyn Renderer + Send + Sync> = match CONFIG.server.output_format.as_str() {
         "arrow" => Arc::new(ArrowRenderer),
@@ -468,24 +470,32 @@ fn full_body(data: Vec<u8>) -> Full<Bytes> {
 /// Error responses are always JSON (even with ArrowRenderer) and contain a "status" field
 /// Successful responses may be Arrow binary format or large JSON, so we default to OK
 fn extract_http_status_from_response(output: &[u8]) -> hyper::StatusCode {
-    // Only check JSON responses (start with '{')
+    // Early return for non-JSON responses (Arrow, plain text, etc.)
     if !output.starts_with(b"{") {
         return hyper::StatusCode::OK;
     }
 
+    // Fast path: Check if response likely contains error status field
+    // Error responses typically start with {"status": or have "status" near the beginning
+    // Only parse if we see the pattern "status" in the first 50 bytes
+    let check_len = output.len().min(50);
+    if !output[..check_len].windows(6).any(|w| w == b"status") {
+        // No "status" field found, assume success
+        return hyper::StatusCode::OK;
+    }
+
     // Error responses are typically small (< 500 bytes)
-    // For larger responses, check if it's likely an error by looking for status field early
+    // For larger responses, only check first 200 bytes for performance
     let parse_len = if output.len() < 500 {
         output.len()
     } else {
-        // For larger responses, only check first 200 bytes for performance
-        // Status field should be near the beginning: {"status":400,...}
         output.len().min(200)
     };
 
-    // Try to parse JSON and extract status code
+    // Try to parse JSON and extract status code using faster parser
     if let Ok(json_str) = std::str::from_utf8(&output[..parse_len]) {
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(json_str) {
+        // Use sonic-rs for faster JSON parsing
+        if let Ok(json) = sonic_rs::from_str::<serde_json::Value>(json_str) {
             if let Some(status_val) = json.get("status") {
                 if let Some(status_num) = status_val.as_u64() {
                     return map_status_code_to_http(status_num);

@@ -46,6 +46,39 @@ impl CompressedColumnIndex {
         Ok(())
     }
 
+    pub async fn write_to_path_async(&self, path: &Path) -> Result<(), StoreError> {
+        use tokio::io::AsyncWriteExt;
+
+        let mut file = tokio::fs::File::create(path)
+            .await
+            .map_err(|e| StoreError::FlushFailed(format!("Failed to create index file: {}", e)))?;
+
+        // Write header
+        let header = BinaryHeader::new(FileKind::ZoneCompressedOffsets.magic(), 1, 0);
+        let mut header_buf = Vec::with_capacity(BinaryHeader::TOTAL_LEN);
+        header.write_to(&mut header_buf)?;
+        file.write_all(&header_buf)
+            .await
+            .map_err(|e| StoreError::FlushFailed(format!("Failed to write header: {}", e)))?;
+
+        // Write entries
+        let mut entries: Vec<_> = self.entries.values().cloned().collect();
+        entries.sort_by_key(|e| e.zone_id);
+
+        for e in entries {
+            file.write_all(&e.zone_id.to_le_bytes()).await?;
+            file.write_all(&e.block_start.to_le_bytes()).await?;
+            file.write_all(&e.comp_len.to_le_bytes()).await?;
+            file.write_all(&e.uncomp_len.to_le_bytes()).await?;
+            file.write_all(&e.num_rows.to_le_bytes()).await?;
+        }
+
+        file.sync_all()
+            .await
+            .map_err(|e| StoreError::FlushFailed(format!("Failed to sync file: {}", e)))?;
+        Ok(())
+    }
+
     pub fn load_from_path(path: &Path) -> Result<Self, StoreError> {
         let (file, header_offset) =
             open_and_header_offset(path, FileKind::ZoneCompressedOffsets.magic())?;

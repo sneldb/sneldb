@@ -17,12 +17,13 @@ data_dir = "../data/cols"
 index_dir = "../data/index/"
 shard_count = 8
 event_per_zone = 8000
-compaction_interval = 60
+compaction_interval = 600
 sys_io_threshold = 100
 sys_memory_threshold_mb = 512
-max_inflight_passives = 8
+max_inflight_passives = 32
 segments_per_merge = 8
 compaction_max_shard_concurrency = 2
+system_info_refresh_interval = 30
 
 
 [schema]
@@ -51,10 +52,12 @@ bypass_auth = false
 rate_limit_per_second = 100
 # Enable rate limiting for failed authentication attempts (recommended for production)
 rate_limit_enabled = true
+initial_admin_user = "admin"
+initial_admin_key = "admin-key-123"
 
 [logging]
 log_dir = "../data/logs"
-stdout_level = "warn"
+stdout_level = "error"
 file_level = "error"
 
 [query]

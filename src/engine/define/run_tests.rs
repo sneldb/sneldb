@@ -4,8 +4,8 @@ use crate::engine::schema::registry::{MiniSchema, SchemaRegistry};
 use std::collections::HashMap;
 use tempfile;
 
-#[test]
-fn test_define_schema_success() {
+#[tokio::test]
+async fn test_define_schema_success() {
     crate::logging::init_for_tests();
     let tmpfile = tempfile::NamedTempFile::new().unwrap();
     let mut registry = SchemaRegistry::new_with_path(tmpfile.path().to_path_buf()).unwrap();
@@ -14,13 +14,13 @@ fn test_define_schema_success() {
     let schema = MiniSchema {
         fields: fields.clone(),
     };
-    let result = define_schema(&mut registry, "test_event", 1, schema.clone());
+    let result = define_schema(&mut registry, "test_event", 1, schema.clone()).await;
     assert!(result.is_ok(), "define_schema failed: {:?}", result);
     assert_eq!(registry.get("test_event").unwrap(), &schema);
 }
 
-#[test]
-fn test_define_schema_duplicate() {
+#[tokio::test]
+async fn test_define_schema_duplicate() {
     let tmpfile = tempfile::NamedTempFile::new().unwrap();
     let mut registry = SchemaRegistry::new_with_path(tmpfile.path().to_path_buf()).unwrap();
     let mut fields = HashMap::new();
@@ -28,7 +28,7 @@ fn test_define_schema_duplicate() {
     let schema = MiniSchema {
         fields: fields.clone(),
     };
-    let _ = define_schema(&mut registry, "test_event", 1, schema.clone());
-    let result = define_schema(&mut registry, "test_event", 1, schema);
+    let _ = define_schema(&mut registry, "test_event", 1, schema.clone()).await;
+    let result = define_schema(&mut registry, "test_event", 1, schema).await;
     assert!(result.is_err());
 }

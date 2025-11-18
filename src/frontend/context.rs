@@ -1,15 +1,11 @@
 use crate::engine::auth::AuthManager;
 use crate::engine::schema::SchemaRegistry;
-use crate::engine::schema::registry::MiniSchema;
-use crate::engine::schema::types::FieldType;
 use crate::engine::shard::manager::ShardManager;
 use crate::frontend::server_state::ServerState;
 use crate::shared::config::CONFIG;
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::info;
 
 #[derive(Clone)]
 pub struct FrontendContext {
@@ -38,9 +34,6 @@ impl FrontendContext {
         // Initialize auth manager
         let auth_manager = Some(Arc::new(AuthManager::new(Arc::clone(&shard_manager))));
 
-        // Initialize auth schema
-        Self::init_auth_schema(&registry).await;
-
         // Load users from DB
         if let Some(ref auth_mgr) = auth_manager {
             if let Err(e) = auth_mgr.load_from_db().await {
@@ -50,6 +43,11 @@ impl FrontendContext {
             if let Err(e) = auth_mgr.bootstrap_admin_user().await {
                 tracing::warn!("Failed to bootstrap admin user: {}", e);
             }
+            // Reload from DB after bootstrap to ensure cache is synced
+            // This handles cases where users exist in DB but weren't in cache
+            if let Err(e) = auth_mgr.load_from_db().await {
+                tracing::warn!("Failed to reload users from DB after bootstrap: {}", e);
+            }
         }
 
         Arc::new(Self {
@@ -58,35 +56,5 @@ impl FrontendContext {
             server_state,
             auth_manager,
         })
-    }
-
-    /// Initialize the __auth_user schema if it doesn't exist
-    async fn init_auth_schema(registry: &Arc<RwLock<SchemaRegistry>>) {
-        let mut reg = registry.write().await;
-
-        // Check if schema already exists
-        if reg.get("__auth_user").is_some() {
-            info!("Auth schema already defined");
-            return;
-        }
-
-        // Define the auth user schema
-        let mut fields = HashMap::new();
-        fields.insert("user_id".to_string(), FieldType::String);
-        fields.insert("secret_key".to_string(), FieldType::String);
-        fields.insert("active".to_string(), FieldType::Bool);
-        fields.insert("created_at".to_string(), FieldType::U64);
-        fields.insert("roles".to_string(), FieldType::String); // JSON array stored as string
-
-        let schema = MiniSchema { fields };
-
-        match reg.define("__auth_user", schema) {
-            Ok(_) => {
-                info!("Auth schema '__auth_user' initialized successfully");
-            }
-            Err(e) => {
-                tracing::warn!("Failed to initialize auth schema: {}", e);
-            }
-        }
     }
 }
