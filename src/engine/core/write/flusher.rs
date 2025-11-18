@@ -2,9 +2,9 @@ use crate::engine::core::{Event, MemTable, SegmentIndexBuilder, ZonePlanner, Zon
 use crate::engine::errors::StoreError;
 use crate::engine::schema::registry::SchemaRegistry;
 use std::collections::HashMap;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tokio::fs;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, instrument, trace};
 
@@ -50,7 +50,8 @@ impl Flusher {
             return Ok(());
         }
 
-        fs::create_dir_all(&segment_dir)?;
+        // Use async I/O for directory creation
+        fs::create_dir_all(&segment_dir).await?;
 
         // Move events out of the MemTable without cloning
         let table = self.memtable.take(); // BTreeMap<String, Vec<Event>> grouped by context_id
@@ -121,7 +122,8 @@ impl Flusher {
             .await?;
         } else {
             // No files were written, clean up empty directory
-            if let Err(e) = fs::remove_dir(&segment_dir) {
+            // Use async I/O for directory removal
+            if let Err(e) = fs::remove_dir(&segment_dir).await {
                 debug!(
                     target: "sneldb::flush",
                     segment_id = segment_id,

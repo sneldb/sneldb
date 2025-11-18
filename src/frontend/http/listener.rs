@@ -2,8 +2,9 @@ use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::net::TcpListener;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::frontend::context::FrontendContext;
 use crate::shared::config::CONFIG;
@@ -24,18 +25,41 @@ pub async fn run_http_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
         .and_then(|s| s.parse().ok())
         .unwrap_or(false);
 
-    // Optional connection limit (matches TCP behavior: no limit by default)
+    // Connection limit with reasonable default
+    // Default to 1024 concurrent connections to prevent resource exhaustion
     // With keep-alive disabled (default), connections close after each request,
-    // so this limit is only needed if keep-alive is enabled or for very high load scenarios
-    // Set to 0 or unset to disable the limit (unlimited, like TCP)
-    let max_connections: Option<usize> = std::env::var("SNELDB_MAX_HTTP_CONNECTIONS")
+    // so this mainly limits concurrent request processing
+    // Set to 0 or unset to use default, or specify a custom limit
+    let max_connections: usize = std::env::var("SNELDB_MAX_HTTP_CONNECTIONS")
         .ok()
         .and_then(|s| {
             let val: usize = s.parse().ok()?;
-            if val == 0 { None } else { Some(val) }
-        });
-    let connection_semaphore =
-        max_connections.map(|max| Arc::new(tokio::sync::Semaphore::new(max)));
+            if val == 0 { Some(1024) } else { Some(val) }
+        })
+        .unwrap_or(1024);
+    let connection_semaphore = Arc::new(tokio::sync::Semaphore::new(max_connections));
+
+    // Track connection statistics for periodic logging
+    let connection_stats = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let connection_stats_clone = connection_stats.clone();
+    let semaphore_for_stats = connection_semaphore.clone();
+    let max_connections_for_stats = max_connections;
+
+    // Spawn periodic connection statistics logger
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+        loop {
+            interval.tick().await;
+            let total_accepted = connection_stats_clone.load(std::sync::atomic::Ordering::Relaxed);
+            let active = max_connections_for_stats - semaphore_for_stats.available_permits();
+            if total_accepted > 0 || active > 0 {
+                warn!(
+                    "HTTP connection stats: total_accepted={}, active={}/{}",
+                    total_accepted, active, max_connections_for_stats
+                );
+            }
+        }
+    });
 
     loop {
         // Check shutdown before accepting new connections
@@ -43,13 +67,6 @@ pub async fn run_http_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
             info!("HTTP server shutting down, not accepting new connections");
             break;
         }
-
-        // Acquire permit if connection limit is enabled (matches TCP: no limit by default)
-        let permit = if let Some(ref semaphore) = connection_semaphore {
-            Some(semaphore.clone().acquire_owned().await.unwrap())
-        } else {
-            None
-        };
 
         // Use select to make accept cancellable on shutdown
         let accept_result = tokio::select! {
@@ -65,39 +82,85 @@ pub async fn run_http_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
             } => {
                 // Shutdown detected during accept wait
                 info!("HTTP server shutting down, stopping accept loop");
-                if let Some(p) = permit {
-                    drop(p);
-                }
                 break;
             }
         };
 
-        let (stream, _peer_addr) = match accept_result {
-            Ok(stream) => stream,
+        let (stream, peer_addr) = match accept_result {
+            Ok((stream, addr)) => {
+                // Increment connection counter
+                connection_stats.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                (stream, addr)
+            }
             Err(e) => {
                 warn!("Failed to accept HTTP connection: {}", e);
-                if let Some(p) = permit {
-                    drop(p);
-                }
+                continue;
+            }
+        };
+
+        // Optimize TCP buffer sizes for better network I/O performance
+        // Larger buffers reduce syscall overhead and improve throughput
+        use socket2::SockRef;
+
+        // Set TCP_NODELAY for lower latency (disable Nagle's algorithm)
+        if let Err(e) = stream.set_nodelay(true) {
+            debug!("Failed to set nodelay: {}", e);
+        }
+
+        // Configure TCP buffer sizes using socket2
+        #[cfg(unix)]
+        {
+            let sock_ref = SockRef::from(&stream);
+            // Set send buffer size (1MB)
+            if let Err(e) = sock_ref.set_send_buffer_size(1024 * 1024) {
+                debug!("Failed to set send buffer size: {}", e);
+            }
+            // Set receive buffer size (1MB)
+            if let Err(e) = sock_ref.set_recv_buffer_size(1024 * 1024) {
+                debug!("Failed to set recv buffer size: {}", e);
+            }
+        }
+
+        // Try to acquire permit - if we can't, drop the connection to prevent overload
+        // This prevents unbounded task spawning when the server is under heavy load
+        let available = connection_semaphore.available_permits();
+        let permit = match connection_semaphore.clone().try_acquire_owned() {
+            Ok(p) => p,
+            Err(_) => {
+                // Connection limit reached - drop the connection
+                // Client will retry and hopefully get through when capacity is available
+                warn!(
+                    "Connection limit reached (active={}/{}, max={}), dropping connection from {}",
+                    max_connections - available,
+                    max_connections,
+                    max_connections,
+                    peer_addr
+                );
                 continue;
             }
         };
         let io = TokioIo::new(stream);
 
         let ctx = Arc::clone(&ctx);
+        let peer_addr_log = peer_addr;
 
         let keep_alive_enabled = enable_keep_alive;
         // Move permit into the spawned task so it's released when connection closes
         let permit_for_task = permit;
         tokio::spawn(async move {
+            let connection_start = Instant::now();
             // Configure HTTP/1.1 connection with keep-alive behavior
             // Disabling keep-alive prevents connections from staying open indefinitely,
             // which helps prevent file descriptor exhaustion under high load
             let mut builder = hyper::server::conn::http1::Builder::new();
             builder.keep_alive(keep_alive_enabled);
 
-            // Connection will be closed when this task completes, releasing the permit
-            if let Err(err) = builder
+            // Note: Hyper handles keep-alive timeout automatically
+            // When keep-alive is enabled, connections will timeout based on the
+            // underlying TCP keepalive settings and read timeouts
+            // The connection will close naturally when idle or on errors
+
+            let connection_result = builder
                 .serve_connection(
                     io,
                     service_fn(move |req| {
@@ -110,20 +173,46 @@ pub async fn run_http_server(ctx: Arc<FrontendContext>) -> anyhow::Result<()> {
                         )
                     }),
                 )
-                .await
-            {
-                // Only log non-connection-closed errors to reduce noise
-                if !err.to_string().contains("connection closed")
-                    && !err.to_string().contains("broken pipe")
-                    && !err.to_string().contains("Connection reset")
-                {
-                    eprintln!("Error serving connection: {:?}", err);
+                .await;
+
+            let duration = connection_start.elapsed();
+
+            // Log connection lifecycle - only warn if there's an error or unusual behavior
+            match connection_result {
+                Ok(_) => {
+                    // Connection completed successfully
+                    // Only log if connection was open for an unusually long time (>1s)
+                    // Fast closures (<1s) are normal with keep-alive disabled
+                    if duration.as_secs_f64() > 1.0 {
+                        warn!(
+                            "HTTP connection from {} closed after {:.2}s (unusually long)",
+                            peer_addr_log,
+                            duration.as_secs_f64()
+                        );
+                    }
+                }
+                Err(err) => {
+                    // Connection had an error
+                    let err_str = err.to_string();
+                    if !err_str.contains("connection closed")
+                        && !err_str.contains("broken pipe")
+                        && !err_str.contains("Connection reset")
+                        && !err_str.contains("Socket is not connected")
+                        && !err_str.contains("NotConnected")
+                        && !err_str.contains("Shutdown")
+                    {
+                        warn!(
+                            "Error serving HTTP connection from {} after {:.2}ms: {:?}",
+                            peer_addr_log,
+                            duration.as_secs_f64() * 1000.0,
+                            err
+                        );
+                    }
                 }
             }
-            // Permit is released when connection task completes (if limit is enabled)
-            if let Some(p) = permit_for_task {
-                drop(p);
-            }
+
+            // Permit is released when connection task completes
+            drop(permit_for_task);
         });
     }
 

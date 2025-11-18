@@ -53,9 +53,9 @@ impl<'a> ZoneWriter<'a> {
             );
         }
 
-        // Write .zones metadata (delegated)
+        // Write .zones metadata (delegated, async)
         let metadata_writer = ZoneMetadataWriter::new(self.uid, self.segment_dir);
-        metadata_writer.write(zone_plans)?;
+        metadata_writer.write_async(zone_plans).await?;
 
         // Write .col files
         let mut writer = ColumnWriter::new(self.segment_dir.to_path_buf(), self.registry.clone());
@@ -288,7 +288,7 @@ impl<'a> ZoneWriter<'a> {
                 "Writing zone index"
             );
         }
-        index.write_to_path(index_path)?;
+        index.write_to_path_async(index_path).await?;
 
         // Write index catalog (.icx) if plan exists
         if let Some(plan) = build_plan.clone() {

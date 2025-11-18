@@ -4,12 +4,12 @@ use tracing::info;
 
 /// Defines and registers a schema for a specific event type.
 /// This assumes the schema has been validated and is ready to persist.
-pub fn define_schema(
+pub async fn define_schema(
     registry: &mut SchemaRegistry,
     event_type: &str,
     _version: u32,
     schema: EngineMiniSchema,
 ) -> Result<(), SchemaError> {
     info!("Defining schema for event_type '{}'", event_type);
-    registry.define(event_type, schema)
+    registry.define_async(event_type, schema).await
 }

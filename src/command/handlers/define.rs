@@ -67,7 +67,9 @@ pub async fn handle<W: AsyncWrite + Unpin>(
         event_type,
         version.unwrap_or(1),
         schema.clone().into(),
-    ) {
+    )
+    .await
+    {
         Ok(_) => {
             info!(
                 target: "sneldb::define",

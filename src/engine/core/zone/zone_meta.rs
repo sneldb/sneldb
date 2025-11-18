@@ -81,6 +81,51 @@ impl ZoneMeta {
         Ok(())
     }
 
+    pub async fn save_async(
+        uid: &str,
+        zones: &[ZoneMeta],
+        segment_dir: &Path,
+    ) -> Result<(), ZoneMetaError> {
+        use tokio::io::AsyncWriteExt;
+
+        let path = segment_dir.join(format!("{}.zones", uid));
+
+        if tracing::enabled!(tracing::Level::TRACE) {
+            trace!(
+                target: "sneldb::flush",
+                uid,
+                zone_count = zones.len(),
+                path = %path.display(),
+                "Saving zone meta to disk (async)"
+            );
+        }
+
+        let mut file = tokio::fs::File::create(&path).await?;
+
+        // Write header
+        let header = BinaryHeader::new(FileKind::ZoneMeta.magic(), 1, 0);
+        let mut header_buf = Vec::with_capacity(BinaryHeader::TOTAL_LEN);
+        header.write_to(&mut header_buf)?;
+        file.write_all(&header_buf).await?;
+
+        // Serialize zones to buffer then write
+        let serialized = bincode::serialize(zones)?;
+        file.write_all(&serialized).await?;
+        file.sync_all().await?;
+
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target: "sneldb::flush",
+                uid,
+                zone_count = zones.len(),
+                path = %path.display(),
+                "Wrote zone meta file (async)"
+            );
+        }
+
+        Ok(())
+    }
+
     pub fn build(zone_plan: &ZonePlan) -> Result<ZoneMeta, StoreError> {
         if zone_plan.events.is_empty() {
             if tracing::enabled!(tracing::Level::WARN) {

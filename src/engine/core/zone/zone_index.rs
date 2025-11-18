@@ -117,6 +117,48 @@ impl ZoneIndex {
         Ok(())
     }
 
+    pub async fn write_to_path_async<P: AsRef<Path>>(&self, path: P) -> Result<(), StoreError> {
+        use tokio::io::AsyncWriteExt;
+
+        let mut file = tokio::fs::File::create(&path).await.map_err(|e| {
+            error!(target: "sneldb::index", error = %e, path = %path.as_ref().display(), "Failed to create file");
+            StoreError::FlushFailed(e.to_string())
+        })?;
+
+        let header = BinaryHeader::new(FileKind::ZoneIndex.magic(), 1, 0);
+        let mut header_buf = Vec::with_capacity(BinaryHeader::TOTAL_LEN);
+        header.write_to(&mut header_buf)?;
+        file.write_all(&header_buf).await?;
+
+        for (event_type, context_map) in &self.index {
+            let event_type_bytes = event_type.as_bytes();
+            file.write_all(&(event_type_bytes.len() as u32).to_le_bytes())
+                .await?;
+            file.write_all(event_type_bytes).await?;
+
+            file.write_all(&(context_map.len() as u32).to_le_bytes())
+                .await?;
+
+            for (context_id, zones) in context_map {
+                let context_bytes = context_id.as_bytes();
+                file.write_all(&(context_bytes.len() as u32).to_le_bytes())
+                    .await?;
+                file.write_all(context_bytes).await?;
+
+                file.write_all(&(zones.len() as u32).to_le_bytes()).await?;
+                for id in zones {
+                    file.write_all(&id.to_le_bytes()).await?;
+                }
+            }
+        }
+
+        file.sync_all().await.map_err(|e| {
+            error!(target: "sneldb::index", error = %e, "Failed to sync file");
+            StoreError::FlushFailed(e.to_string())
+        })?;
+        Ok(())
+    }
+
     pub fn load_from_path<P: AsRef<Path>>(path: P) -> Result<Self, StoreError> {
         let file = File::open(&path).map_err(|e| {
             error!(target: "sneldb::index", error = %e, path = %path.as_ref().display(), "Failed to open zone index file");

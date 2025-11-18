@@ -325,9 +325,10 @@ async fn create_test_components() -> (
     let base_dir = tempdir().unwrap().into_path();
     let wal_dir = tempdir().unwrap().into_path();
     let schema_dir = tempdir().unwrap().into_path();
+    let schema_path = schema_dir.join("schemas.bin");
     let shard_manager = Arc::new(ShardManager::new(1, base_dir, wal_dir).await);
     let registry = Arc::new(RwLock::new(
-        SchemaRegistry::new_with_path(schema_dir).expect("Failed to initialize SchemaRegistry"),
+        SchemaRegistry::new_with_path(schema_path).expect("Failed to initialize SchemaRegistry"),
     ));
     let auth_manager = Arc::new(AuthManager::new(Arc::clone(&shard_manager)));
     let temp_dir = tempdir().unwrap();

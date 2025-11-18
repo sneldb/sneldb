@@ -103,48 +103,109 @@ async fn main() -> Result<()> {
     let mut control_reader = BufReader::new(control_reader_half);
     let mut control_writer = control_writer_half;
 
-    // Create a user for authentication first (doesn't require auth)
-    let user_id = "stress_user".to_string();
-    println!("Creating user '{}'...", user_id);
-    let create_user_cmd = format!("CREATE USER {}\n", user_id);
-    let secret_key = match send_and_extract_secret_key(
-        &mut control_reader,
-        &mut control_writer,
-        &create_user_cmd,
-        wait_dur,
-    )
-    .await
-    {
-        Ok(key) => {
-            println!("User created successfully. Secret key: {}", key);
-            key
-        }
-        Err(e) => {
-            eprintln!("Failed to create user: {}. Continuing without auth...", e);
-            return Err(e);
-        }
-    };
+    // Get admin credentials from config or environment
+    let admin_user = CONFIG
+        .auth
+        .as_ref()
+        .and_then(|a| a.initial_admin_user.as_ref())
+        .map(|s| s.clone())
+        .or_else(|| std::env::var("SNELDB_ADMIN_USER").ok())
+        .unwrap_or_else(|| "admin".to_string());
+    let admin_key = CONFIG
+        .auth
+        .as_ref()
+        .and_then(|a| a.initial_admin_key.as_ref())
+        .map(|s| s.clone())
+        .or_else(|| std::env::var("SNELDB_ADMIN_KEY").ok())
+        .unwrap_or_else(|| "admin-key-123".to_string());
 
-    // Authenticate the control connection before defining schemas
-    println!("Authenticating control connection...");
-    let auth_signature = compute_hmac(&secret_key, &user_id);
-    let auth_cmd = format!("AUTH {}:{}\n", user_id, auth_signature);
+    // Authenticate as admin first
+    println!("Authenticating as admin user '{}'...", admin_user);
+    let admin_auth_signature = compute_hmac(&admin_key, &admin_user);
+    let admin_auth_cmd = format!("AUTH {}:{}\n", admin_user, admin_auth_signature);
     match send_and_check_ok(
         &mut control_reader,
         &mut control_writer,
-        &auth_cmd,
+        &admin_auth_cmd,
         wait_dur,
     )
     .await
     {
-        Ok(_) => println!("Control connection authenticated"),
+        Ok(_) => println!("Admin authentication successful"),
         Err(e) => {
-            eprintln!("Failed to authenticate control connection: {}", e);
+            eprintln!(
+                "Failed to authenticate as admin: {}. Make sure admin user exists in config.",
+                e
+            );
             return Err(e);
         }
     }
 
-    // Define schemas for all event types (now authenticated)
+    // Create a user for stress testing (requires admin auth)
+    // Try base username first, then use timestamped if it already exists
+    let base_user_id = "stress_user";
+    let (user_id, secret_key) = {
+        println!("Creating user '{}'...", base_user_id);
+        let create_user_cmd = format!("CREATE USER {}\n", base_user_id);
+        // Sign the CREATE USER command with admin key
+        let cmd_trimmed = create_user_cmd.trim();
+        let create_signature = compute_hmac(&admin_key, cmd_trimmed);
+        let authenticated_create_cmd = format!("{}:{}\n", create_signature, cmd_trimmed);
+        match send_and_extract_secret_key(
+            &mut control_reader,
+            &mut control_writer,
+            &authenticated_create_cmd,
+            wait_dur,
+        )
+        .await
+        {
+            Ok(key) => {
+                println!("User created successfully. Secret key: {}", key);
+                (base_user_id.to_string(), key)
+            }
+            Err(e) => {
+                // If user already exists, try with timestamped username
+                if e.to_string().contains("User already exists") {
+                    let timestamp = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+                    let user_id = format!("{}_{}", base_user_id, timestamp);
+                    println!(
+                        "User '{}' already exists, trying '{}'...",
+                        base_user_id, user_id
+                    );
+                    let create_user_cmd = format!("CREATE USER {}\n", user_id);
+                    let cmd_trimmed = create_user_cmd.trim();
+                    let create_signature = compute_hmac(&admin_key, cmd_trimmed);
+                    let authenticated_create_cmd =
+                        format!("{}:{}\n", create_signature, cmd_trimmed);
+                    match send_and_extract_secret_key(
+                        &mut control_reader,
+                        &mut control_writer,
+                        &authenticated_create_cmd,
+                        wait_dur,
+                    )
+                    .await
+                    {
+                        Ok(key) => {
+                            println!("User created successfully. Secret key: {}", key);
+                            (user_id, key)
+                        }
+                        Err(e2) => {
+                            eprintln!("Failed to create user: {}", e2);
+                            return Err(e2);
+                        }
+                    }
+                } else {
+                    eprintln!("Failed to create user: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+    };
+
+    // Define schemas for all event types (using admin authentication - DEFINE requires admin)
     // All event types share the same schema with link_field for sequence queries
     println!(
         "Defining schemas for {} event type(s): {:?}",
@@ -156,9 +217,9 @@ async fn main() -> Result<()> {
             "DEFINE {} FIELDS {{ id: \"u64\", v: \"string\", flag: \"bool\", created_at: \"datetime\", {}: \"u64\", plan: [\"type01\", \"type02\", \"type03\", \"type04\", \"type05\", \"type06\", \"type07\", \"type08\", \"type09\", \"type10\", \"type11\", \"type12\", \"type13\", \"type14\", \"type15\", \"type16\", \"type17\", \"type18\", \"type19\", \"type20\"] }}\n",
             event_type, link_field
         );
-        // Sign the DEFINE command
+        // Sign the DEFINE command with admin key (control connection is authenticated as admin)
         let cmd_trimmed = schema_cmd.trim();
-        let signature = compute_hmac(&secret_key, cmd_trimmed);
+        let signature = compute_hmac(&admin_key, cmd_trimmed);
         let authenticated_cmd = format!("{}:{}\n", signature, cmd_trimmed);
         send_and_drain(
             &mut control_reader,
@@ -168,6 +229,28 @@ async fn main() -> Result<()> {
         )
         .await?;
     }
+
+    // Grant write permissions to stress_user for all event types
+    // This is required because newly created users don't have permissions by default
+    println!(
+        "Granting write permissions to user '{}' for {} event type(s)...",
+        user_id,
+        event_types.len()
+    );
+    let event_types_list = event_types.join(",");
+    let grant_cmd = format!("GRANT WRITE ON {} TO {}\n", event_types_list, user_id);
+    // Sign the GRANT command with admin key (control connection is authenticated as admin)
+    let cmd_trimmed = grant_cmd.trim();
+    let signature = compute_hmac(&admin_key, cmd_trimmed);
+    let authenticated_cmd = format!("{}:{}\n", signature, cmd_trimmed);
+    send_and_drain(
+        &mut control_reader,
+        &mut control_writer,
+        &authenticated_cmd,
+        wait_dur,
+    )
+    .await?;
+    println!("Write permissions granted successfully");
 
     // Pre-generate contexts
     let contexts: Vec<String> = (0..context_pool).map(|i| format!("ctx-{}", i)).collect();
@@ -405,12 +488,13 @@ async fn main() -> Result<()> {
 
     // Run REPLAY to sample latency (only if control connection is still alive)
     // Use first event type for replay
+    // Control connection is authenticated as admin, so use admin key for signing
     if let Some(first_event_type) = event_types.first() {
         if let Ok(replay_result) = timeout(Duration::from_secs(2), async {
             let replay_cmd = format!("REPLAY {} FOR {}\n", first_event_type, sample_ctx);
-            // Sign the REPLAY command
+            // Sign the REPLAY command with admin key (control connection is authenticated as admin)
             let cmd_trimmed = replay_cmd.trim();
-            let signature = compute_hmac(&secret_key, cmd_trimmed);
+            let signature = compute_hmac(&admin_key, cmd_trimmed);
             let authenticated_cmd = format!("{}:{}\n", signature, cmd_trimmed);
             let t0 = Instant::now();
             send_and_collect_json_with_timeout(
@@ -437,6 +521,7 @@ async fn main() -> Result<()> {
 
     // Run QUERY (scoped) to sample latency over time using `created_at` (only if connection alive)
     // Use first event type for regular query
+    // Control connection is authenticated as admin, so use admin key for signing
     if let Some(first_event_type) = event_types.first() {
         if let Ok(query_result) = timeout(Duration::from_secs(2), async {
             let since_secs = now_secs_i64 - 86_400; // last 24h
@@ -444,9 +529,9 @@ async fn main() -> Result<()> {
                 "QUERY {} SINCE {} USING created_at WHERE id < 100\n",
                 first_event_type, since_secs
             );
-            // Sign the QUERY command
+            // Sign the QUERY command with admin key (control connection is authenticated as admin)
             let cmd_trimmed = query_cmd.trim();
-            let signature = compute_hmac(&secret_key, cmd_trimmed);
+            let signature = compute_hmac(&admin_key, cmd_trimmed);
             let authenticated_cmd = format!("{}:{}\n", signature, cmd_trimmed);
             let t1 = Instant::now();
             send_and_collect_json_with_timeout(
@@ -548,13 +633,23 @@ async fn write_all_with_timeout_stream<W: AsyncWriteExt + Unpin>(
     buf: &[u8],
     wait: Option<Duration>,
 ) -> std::io::Result<()> {
-    if let Some(dur) = wait {
+    let write_result = if let Some(dur) = wait {
         match tokio::time::timeout(dur, writer.write_all(buf)).await {
             Ok(res) => res,
             Err(_) => Err(std::io::Error::new(ErrorKind::TimedOut, "write timeout")),
         }
     } else {
         writer.write_all(buf).await
+    };
+    write_result?;
+    // Flush to ensure data is sent immediately
+    if let Some(dur) = wait {
+        match tokio::time::timeout(dur, writer.flush()).await {
+            Ok(res) => res,
+            Err(_) => Err(std::io::Error::new(ErrorKind::TimedOut, "flush timeout")),
+        }
+    } else {
+        writer.flush().await
     }
 }
 
@@ -590,25 +685,74 @@ async fn send_and_extract_secret_key<R: AsyncRead + Unpin, W: AsyncWriteExt + Un
 ) -> Result<String> {
     write_all_with_timeout_stream(writer, cmd.as_bytes(), wait).await?;
 
-    // Read status line (e.g., "200 OK")
+    // Read status line (e.g., "200 OK" or "400 User already exists")
+    // Use a reasonable timeout if none provided (5 seconds)
+    let read_timeout = wait.unwrap_or(Duration::from_secs(5));
     let mut status = String::new();
-    read_line_with_timeout(reader, &mut status, wait).await?;
+    let bytes_read = read_line_with_timeout(reader, &mut status, Some(read_timeout)).await?;
+    if bytes_read == 0 {
+        return Err(anyhow::anyhow!(
+            "Connection closed while reading status line"
+        ));
+    }
+    let status_trimmed = status.trim();
+    eprintln!("DEBUG: Status line: {:?}", status_trimmed);
 
-    // Read "User '...' created" line
+    // Check if this is an error response
+    // Error responses can be in format "400 Error message" (single line) or "400 Bad Request" followed by error line
+    if !status_trimmed.starts_with("200") {
+        // Check if error message is in the status line itself (format: "400 Error message")
+        if status_trimmed.len() > 4 && status_trimmed.chars().nth(3) == Some(' ') {
+            // Error message is in status line, extract it
+            let error_msg = status_trimmed[4..].trim();
+            eprintln!("DEBUG: Error message in status line: {:?}", error_msg);
+            return Err(anyhow::anyhow!("CREATE USER failed: {}", error_msg));
+        } else {
+            // Try to read error message line (format: "400 Bad Request" followed by error line)
+            let mut error_line = String::new();
+            let bytes_read =
+                read_line_with_timeout(reader, &mut error_line, Some(read_timeout)).await?;
+            if bytes_read == 0 {
+                // No error line, use status line as error
+                return Err(anyhow::anyhow!("CREATE USER failed: {}", status_trimmed));
+            }
+            let error_msg = error_line.trim();
+            eprintln!("DEBUG: Error line: {:?}", error_msg);
+            return Err(anyhow::anyhow!(
+                "CREATE USER failed: {} - {}",
+                status_trimmed,
+                error_msg
+            ));
+        }
+    }
+
+    // Success response - read "User '...' created" line
     let mut user_line = String::new();
-    read_line_with_timeout(reader, &mut user_line, wait).await?;
+    let bytes_read = read_line_with_timeout(reader, &mut user_line, Some(read_timeout)).await?;
+    if bytes_read == 0 {
+        return Err(anyhow::anyhow!("Connection closed while reading user line"));
+    }
+    let user_line_trimmed = user_line.trim();
+    eprintln!("DEBUG: User line: {:?}", user_line_trimmed);
 
     // Read "Secret key: ..." line
     let mut key_line = String::new();
-    read_line_with_timeout(reader, &mut key_line, wait).await?;
+    let bytes_read = read_line_with_timeout(reader, &mut key_line, Some(read_timeout)).await?;
+    if bytes_read == 0 {
+        return Err(anyhow::anyhow!(
+            "Connection closed while reading secret key line"
+        ));
+    }
+    let key_line_trimmed = key_line.trim();
+    eprintln!("DEBUG: Key line: {:?}", key_line_trimmed);
 
     // Extract secret key from "Secret key: <key>"
-    if let Some(key_part) = key_line.strip_prefix("Secret key: ") {
+    if let Some(key_part) = key_line_trimmed.strip_prefix("Secret key: ") {
         Ok(key_part.trim().to_string())
     } else {
         Err(anyhow::anyhow!(
-            "Failed to parse secret key from response: {}",
-            key_line
+            "Failed to parse secret key from response: {:?}",
+            key_line_trimmed
         ))
     }
 }

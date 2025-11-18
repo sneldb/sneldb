@@ -78,7 +78,7 @@ Creates a user with a word-based secret key (no quotes needed for simple keys).
 
 - Validates the user ID format before creation.
 - Checks if the user already exists (returns error if duplicate).
-- Stores the user in the protected auth store (backed by `__auth_user` in the `__system_auth` context).
+- Stores the user in the protected auth store (backed by `AuthWalStorage`, a dedicated encrypted WAL file).
 - Caches the user credentials in memory for fast authentication lookups (auth checks are O(1)).
 - Returns the secret key in the response (only shown once during creation).
 
@@ -168,10 +168,10 @@ LIST USERS
 
 ## Auth Storage and Durability
 
-- **Isolation:** User data lives in the `__system_auth` context and is not queryable through regular commands. The HTTP dispatcher rejects any `__system_*` context from user input.
+- **Isolation:** User data is stored in a dedicated encrypted WAL file (`AuthWalStorage`) and is not queryable through regular commands. The HTTP dispatcher rejects any `__system_*` context from user input to prevent access to system contexts.
 - **Hot path:** Authentication and authorization are served from in-memory caches (`UserCache`, `PermissionCache`) for O(1) checks.
-- **Durability:** Mutations (create/revoke/grant/revoke permissions) append to a dedicated secured WAL (`.swal`). Frames are binary, length-prefixed, CRC-checked, and versioned with the standard storage header. Corrupted frames are skipped during replay instead of failing startup.
-- **Replay:** On startup, the auth WAL is replayed with “latest timestamp wins” semantics to rebuild the caches. The WAL is small because auth mutations are rare compared to data events.
+- **Durability:** Mutations (create/revoke/grant/revoke permissions) append to a dedicated secured WAL (`.swal`). Frames are binary, length-prefixed, CRC-checked, encrypted with ChaCha20Poly1305, and versioned with the standard storage header. Corrupted frames are skipped during replay instead of failing startup.
+- **Replay:** On startup, the auth WAL is replayed with "latest timestamp wins" semantics to rebuild the caches. The WAL is small because auth mutations are rare compared to data events.
 - **Configurable fsync cadence:** The auth WAL flushes each write and fsyncs periodically; you can tune fsync frequency via the WAL settings (or override per storage instance) to balance throughput and durability.
 - **Encryption:** Auth WAL payloads are encrypted (AEAD). Provide a 32-byte master key via `SNELDB_AUTH_WAL_KEY` (64-char hex). If unset, a key is derived from the server `auth_token`.
 

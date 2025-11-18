@@ -161,6 +161,9 @@ async fn test_protected_context_rejected() {
         SchemaRegistry::new().expect("schema registry should initialize"),
     ));
 
+    // Test that queries to protected contexts (starting with __system_) are rejected
+    // Note: __auth_user is just used as an example - auth users are stored in AuthWalStorage,
+    // not as queryable events. This test verifies the protection mechanism works.
     let cmd = Command::Query {
         event_type: "__auth_user".to_string(),
         context_id: Some("__system_auth".to_string()),
