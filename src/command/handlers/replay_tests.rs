@@ -58,19 +58,35 @@ async fn test_replay_returns_matching_event() {
     .await
     .unwrap();
 
-    let mut buf = vec![0; 1024];
+    let mut buf = vec![0; 4096];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
 
+    // Streaming format returns: schema + batch + end messages
+    // The batch rows are arrays: [context_id, event_type, timestamp, event_id, id]
+    // We expect the id field (value 99) to be present
     assert!(
-        body.contains("\"id\":99"),
-        "Expected payload in response, got: {}",
+        body.contains("99"),
+        "Expected id value 99 in streaming response, got: {}",
+        body
+    );
+    assert!(
+        body.contains("ctx42"),
+        "Expected context_id ctx42 in streaming response, got: {}",
+        body
+    );
+    assert!(
+        body.contains("replay_event"),
+        "Expected event_type replay_event in streaming response, got: {}",
         body
     );
 }
 
 #[tokio::test]
 async fn test_replay_returns_error_for_empty_context_id() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
     let base_dir = tempdir().unwrap().into_path();
     let wal_dir = tempdir().unwrap().into_path();
 
@@ -96,6 +112,9 @@ async fn test_replay_returns_error_for_empty_context_id() {
 
 #[tokio::test]
 async fn test_replay_returns_no_results() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
     let base_dir = tempdir().unwrap().into_path();
     let wal_dir = tempdir().unwrap().into_path();
 
@@ -117,9 +136,14 @@ async fn test_replay_returns_no_results() {
         .await
         .unwrap();
 
-    let mut buf = vec![0; 512];
+    let mut buf = vec![0; 4096];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
 
-    assert!(body.contains("No matching events found"));
+    // Streaming format returns row_count: 0 in the end message
+    assert!(
+        body.contains("\"row_count\":0"),
+        "Expected empty result set with row_count:0, got: {}",
+        body
+    );
 }

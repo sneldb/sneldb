@@ -76,15 +76,28 @@ async fn test_shard_message_factory_variants() {
         _ => panic!("Expected Query variant"),
     }
 
-    // Replay
-    let (tx_replay, _) = mpsc::channel(1);
-    let msg = factory.replay(cmd.clone(), tx_replay.clone());
+    // QueryStream
+    let (msg, _rx) = factory.query_stream(cmd.clone());
     match msg {
-        ShardMessage::Replay(c, sender, reg) => {
+        ShardMessage::QueryStream {
+            command: c,
+            metadata: _,
+            response: _,
+            registry: reg,
+        } => {
             assert_eq!(format!("{:?}", c), format!("{:?}", cmd));
-            sender.clone().send(vec![]).await.ok();
             assert!(Arc::ptr_eq(&reg, &registry));
         }
-        _ => panic!("Expected Replay variant"),
+        _ => panic!("Expected QueryStream variant"),
     }
+
+    // Shutdown
+    let (msg, rx_shutdown) = factory.shutdown();
+    match msg {
+        ShardMessage::Shutdown { completion } => {
+            completion.send(Ok(())).expect("oneshot send failed");
+        }
+        _ => panic!("Expected Shutdown variant"),
+    }
+    assert!(matches!(rx_shutdown.await, Ok(Ok(()))));
 }

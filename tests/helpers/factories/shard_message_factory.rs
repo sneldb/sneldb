@@ -40,10 +40,6 @@ impl ShardMessageFactory {
         }
     }
 
-    pub fn replay(&self, command: Command, tx: mpsc::Sender<Vec<Event>>) -> ShardMessage {
-        ShardMessage::Replay(command, tx, Arc::clone(&self.registry))
-    }
-
     pub fn query_stream(
         &self,
         command: Command,

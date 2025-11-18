@@ -4,7 +4,6 @@ use crate::engine::core::MemTable;
 use crate::engine::core::read::flow::shard_pipeline::ShardFlowHandle;
 use crate::engine::core::read::result::QueryResult;
 use crate::engine::query::scan::{scan, scan_streaming};
-use crate::engine::replay::scan::scan as replay_scan;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::context::ShardContext;
 use crate::engine::shard::message::ShardMessage;
@@ -16,7 +15,7 @@ use tracing::{debug, error, info};
 const LOG_TARGET: &str = "engine::shard::worker";
 
 /// Main worker loop for a shard.
-/// Processes messages: Store, Query, Replay, Flush.
+/// Processes messages: Store, Query, QueryStream, Flush, Shutdown.
 pub async fn run_worker_loop(mut ctx: ShardContext, mut rx: Receiver<ShardMessage>) {
     let id = ctx.id;
     info!(target: LOG_TARGET, shard_id = id, "Shard worker started");
@@ -50,12 +49,6 @@ pub async fn run_worker_loop(mut ctx: ShardContext, mut rx: Receiver<ShardMessag
                 let result = on_query_streaming(command, metadata, &ctx, &registry).await;
                 if response.send(result).is_err() {
                     error!(target: LOG_TARGET, shard_id = id, "Streaming response receiver dropped");
-                }
-            }
-            ShardMessage::Replay(command, tx, registry) => {
-                debug!(target: LOG_TARGET, shard_id = id, "Received Replay message");
-                if let Err(e) = on_replay(command, tx, &ctx, &registry).await {
-                    error!(target: LOG_TARGET, shard_id = id, error = %e, "Replay failed");
                 }
             }
             ShardMessage::Flush {
@@ -148,27 +141,6 @@ async fn on_query_streaming(
     )
     .await
     .map_err(|e| e.to_string())
-}
-
-/// Handles Replay messages.
-async fn on_replay(
-    command: Command,
-    tx: tokio::sync::mpsc::Sender<Vec<Event>>,
-    ctx: &ShardContext,
-    registry: &Arc<tokio::sync::RwLock<SchemaRegistry>>,
-) -> Result<(), String> {
-    let results = replay_scan(
-        &command,
-        registry,
-        &ctx.base_dir,
-        &ctx.segment_ids,
-        &ctx.memtable,
-        &ctx.passive_buffers,
-    )
-    .await
-    .map_err(|e| e.to_string())?;
-    debug!(target: LOG_TARGET, shard_id = ctx.id, results_count = results.len(), "Replay completed");
-    tx.send(results).await.map_err(|e| e.to_string())
 }
 
 /// Handles Flush messages.

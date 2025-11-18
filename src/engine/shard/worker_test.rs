@@ -178,36 +178,8 @@ async fn test_replay_message() {
             .expect("Failed to send store message");
     }
 
-    // Test replay message handling - verifies that ShardMessage::Replay is processed correctly
-    let replay_cmd = CommandFactory::replay()
-        .with_event_type("test_event")
-        .with_context_id("ctx-replay")
-        .create();
-
-    let (tx_replay, mut rx_replay) = tokio::sync::mpsc::channel(10);
-    let replay_msg = message_factory.replay(replay_cmd, tx_replay);
-    shard
-        .tx
-        .send(replay_msg)
-        .await
-        .expect("Failed to send replay message");
-
-    // Collect replay results - on_replay sends all events in one batch via tx.send(results)
-    let mut events = Vec::new();
-    if let Some(event_batch) = rx_replay.recv().await {
-        events.extend(event_batch);
-    }
-    // Channel closes after sending, so this will be None
-    assert!(
-        rx_replay.recv().await.is_none(),
-        "Replay should send events in a single batch"
-    );
-
-    // Verify that replay message was handled without error
-    // The replay scan may return fewer events than expected if it encounters issues with
-    // segment reading, but the important thing is that the message was processed successfully
-    // Replay message should be processed without error
-    let _ = events.len();
+    // Note: REPLAY now uses the streaming query path via QueryStream messages,
+    // so it's tested through the query_stream integration tests.
 }
 
 #[tokio::test]

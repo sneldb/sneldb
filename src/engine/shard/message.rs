@@ -28,7 +28,7 @@ pub enum ShardMessage {
         response: oneshot::Sender<Result<ShardFlowHandle, String>>,
         registry: Arc<RwLock<SchemaRegistry>>,
     },
-    Replay(Command, Sender<Vec<Event>>, Arc<RwLock<SchemaRegistry>>),
+    // Note: Replay has been removed - REPLAY commands now use QueryStream
     Shutdown {
         completion: oneshot::Sender<Result<(), String>>,
     },

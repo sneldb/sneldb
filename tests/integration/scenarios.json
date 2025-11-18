@@ -13,14 +13,22 @@
         "kind": "include_all",
         "value": [
           "Desk",
-          "Chair"
+          "Chair",
+          "\"type\":\"schema\"",
+          "\"type\":\"batch\"",
+          "\"type\":\"end\"",
+          "\"row_count\":2"
         ]
       },
       {
         "kind": "include_none",
         "value": [
-          "\"color\"",
-          "\"price\""
+          "color",
+          "price",
+          "25",
+          "50",
+          "red",
+          "blue"
         ]
       }
     ],
@@ -370,15 +378,21 @@
       {
         "kind": "include_all",
         "value": [
-          "\"order_id\":999",
-          "\"order_id\":1000",
-          "\"order_id\":1001"
+          "999",
+          "1000",
+          "1001",
+          "customer-99",
+          "\"type\":\"schema\"",
+          "\"type\":\"batch\"",
+          "\"type\":\"end\"",
+          "\"row_count\":3"
         ]
       },
       {
         "kind": "include_none",
         "value": [
-          "1002"
+          "1002",
+          "customer-100"
         ]
       }
     ],
@@ -402,13 +416,19 @@
         "kind": "include_all",
         "value": [
           "android",
-          "web"
+          "web",
+          "alice",
+          "\"type\":\"schema\"",
+          "\"type\":\"batch\"",
+          "\"type\":\"end\"",
+          "\"row_count\":2"
         ]
       },
       {
         "kind": "include_none",
         "value": [
-          "bob"
+          "bob",
+          "iphone"
         ]
       }
     ],
@@ -473,8 +493,12 @@
       "REPLAY FOR ghost-user"
     ],
     "matcher": {
-      "kind": "include",
-      "value": "No matching events found"
+      "kind": "include_all",
+      "value": [
+        "\"type\":\"schema\"",
+        "\"type\":\"end\"",
+        "\"row_count\":0"
+      ]
     },
     "config": {
       "query": {
@@ -499,7 +523,12 @@
         "991",
         "992",
         "993",
-        "994"
+        "994",
+        "user-2",
+        "\"type\":\"schema\"",
+        "\"type\":\"batch\"",
+        "\"type\":\"end\"",
+        "\"row_count\":4"
       ]
     },
     "config": {
@@ -1001,8 +1030,13 @@
     ],
     "matchers": [
       {
-        "kind": "include",
-        "value": "\"id\":2"
+        "kind": "include_all",
+        "value": [
+          "\"type\":\"schema\"",
+          "\"type\":\"batch\"",
+          "\"type\":\"end\"",
+          "\"row_count\":1"
+        ]
       },
       {
         "kind": "include_none",
@@ -1029,8 +1063,10 @@
     "matcher": {
       "kind": "include_all",
       "value": [
-        "\"id\":1",
-        "\"id\":2"
+        "\"type\":\"schema\"",
+        "\"type\":\"batch\"",
+        "\"type\":\"end\"",
+        "\"row_count\":2"
       ]
     },
     "config": {
@@ -1049,8 +1085,13 @@
       "REPLAY evt_rp3 FOR rctx3 SINCE \"2025-01-02T00:00:00Z\" USING on"
     ],
     "matcher": {
-      "kind": "include",
-      "value": "\"id\":2"
+      "kind": "include_all",
+      "value": [
+        "\"type\":\"schema\"",
+        "\"type\":\"batch\"",
+        "\"type\":\"end\"",
+        "\"row_count\":1"
+      ]
     },
     "config": {
       "query": {
@@ -1070,8 +1111,10 @@
     "matcher": {
       "kind": "include_all",
       "value": [
-        "\"id\":1",
-        "\"id\":2"
+        "\"type\":\"schema\"",
+        "\"type\":\"batch\"",
+        "\"type\":\"end\"",
+        "\"row_count\":2"
       ]
     },
     "config": {
