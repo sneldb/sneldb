@@ -1,11 +1,12 @@
-use crate::engine::core::read::result::QueryResult;
 use crate::engine::query::scan::scan;
 use crate::engine::store::insert::insert_and_maybe_flush;
 use crate::test_helpers::factories::{
     CommandFactory, EventFactory, SchemaRegistryFactory, ShardContextFactory,
 };
 use serde_json::json;
+use std::time::Duration;
 use tempfile::tempdir;
+use tokio::time::timeout;
 
 #[tokio::test]
 async fn test_insert_and_maybe_flush_e2e() {
@@ -155,7 +156,7 @@ async fn test_insert_and_maybe_flush_e2e() {
         .with_event_type(event_type)
         .with_context_id("ctx1")
         .create();
-    let result = scan(
+    let handle = scan(
         &cmd,
         None,
         &registry,
@@ -165,9 +166,17 @@ async fn test_insert_and_maybe_flush_e2e() {
         &ctx.passive_buffers,
     )
     .await
-    .unwrap();
-    match result {
-        QueryResult::Selection(selection) => assert_eq!(selection.rows.len(), 2),
-        _ => panic!("Expected selection result, got {:?}", result),
+    .expect("scan should succeed");
+
+    // Count rows from streaming response
+    let mut receiver = handle.receiver;
+    let mut row_count = 0;
+    while let Some(batch) = timeout(Duration::from_secs(1), receiver.recv())
+        .await
+        .ok()
+        .flatten()
+    {
+        row_count += batch.len();
     }
+    assert_eq!(row_count, 2, "Should find 2 events for ctx1");
 }

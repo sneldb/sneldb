@@ -1,9 +1,7 @@
 use crate::command::types::Command;
-use crate::engine::core::read::result::{QueryResult, SelectionResult};
 use crate::engine::shard::message::ShardMessage;
 use crate::test_helpers::factories::{EventFactory, SchemaRegistryFactory, ShardMessageFactory};
 use std::sync::Arc;
-use tokio::sync::mpsc;
 
 #[tokio::test]
 async fn test_shard_message_factory_variants() {
@@ -52,29 +50,6 @@ async fn test_shard_message_factory_variants() {
         _ => panic!("Expected Flush variant"),
     }
     assert!(matches!(rx_flush.await, Ok(Ok(()))));
-
-    // Query
-    let (tx_query, _) = mpsc::channel(1);
-    let msg = factory.query(cmd.clone(), tx_query.clone());
-    match msg {
-        ShardMessage::Query {
-            command: c,
-            metadata: _,
-            tx: sender,
-            registry: reg,
-        } => {
-            assert_eq!(format!("{:?}", c), format!("{:?}", cmd));
-            sender
-                .send(QueryResult::Selection(SelectionResult {
-                    columns: vec![],
-                    rows: vec![],
-                }))
-                .await
-                .ok();
-            assert!(Arc::ptr_eq(&reg, &registry));
-        }
-        _ => panic!("Expected Query variant"),
-    }
 
     // QueryStream
     let (msg, _rx) = factory.query_stream(cmd.clone());

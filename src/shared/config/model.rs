@@ -62,7 +62,6 @@ pub struct QueryConfig {
     pub zone_index_cache_max_entries: Option<usize>,
     pub column_block_cache_max_bytes: Option<usize>,
     pub zone_surf_cache_max_bytes: Option<usize>,
-    pub streaming_enabled: Option<bool>,
     /// Batch size for streaming JSON responses (0 = per-row, >0 = batched)
     /// Defaults to 1000 if not specified
     pub streaming_batch_size: Option<usize>,

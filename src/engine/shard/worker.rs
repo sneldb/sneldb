@@ -2,8 +2,7 @@ use crate::command::types::Command;
 use crate::engine::core::Event;
 use crate::engine::core::MemTable;
 use crate::engine::core::read::flow::shard_pipeline::ShardFlowHandle;
-use crate::engine::core::read::result::QueryResult;
-use crate::engine::query::scan::{scan, scan_streaming};
+use crate::engine::query::scan::scan;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::context::ShardContext;
 use crate::engine::shard::message::ShardMessage;
@@ -15,7 +14,7 @@ use tracing::{debug, error, info};
 const LOG_TARGET: &str = "engine::shard::worker";
 
 /// Main worker loop for a shard.
-/// Processes messages: Store, Query, QueryStream, Flush, Shutdown.
+/// Processes messages: Store, QueryStream, Flush, Shutdown.
 pub async fn run_worker_loop(mut ctx: ShardContext, mut rx: Receiver<ShardMessage>) {
     let id = ctx.id;
     info!(target: LOG_TARGET, shard_id = id, "Shard worker started");
@@ -26,17 +25,6 @@ pub async fn run_worker_loop(mut ctx: ShardContext, mut rx: Receiver<ShardMessag
                 debug!(target: LOG_TARGET, shard_id = id, "Received Store message");
                 if let Err(e) = on_store(event, &mut ctx, &registry).await {
                     error!(target: LOG_TARGET, shard_id = id, error = %e, "Failed to store event");
-                }
-            }
-            ShardMessage::Query {
-                command,
-                metadata,
-                tx,
-                registry,
-            } => {
-                debug!(target: LOG_TARGET, shard_id = id, "Received Query message");
-                if let Err(e) = on_query(command, metadata, tx, &ctx, &registry).await {
-                    error!(target: LOG_TARGET, shard_id = id, error = %e, "Query failed");
                 }
             }
             ShardMessage::QueryStream {
@@ -100,37 +88,13 @@ async fn on_store(
 }
 
 /// Handles Query messages.
-async fn on_query(
-    command: Command,
-    metadata: Option<std::collections::HashMap<String, String>>,
-    tx: tokio::sync::mpsc::Sender<QueryResult>,
-    ctx: &ShardContext,
-    registry: &Arc<tokio::sync::RwLock<SchemaRegistry>>,
-) -> Result<(), String> {
-    let results = scan(
-        &command,
-        metadata,
-        registry,
-        &ctx.base_dir,
-        &ctx.segment_ids,
-        &ctx.memtable,
-        &ctx.passive_buffers,
-    )
-    .await
-    .map_err(|e| e.to_string())?;
-    if tracing::enabled!(tracing::Level::DEBUG) {
-        debug!(target: LOG_TARGET, shard_id = ctx.id, "Query completed on shard");
-    }
-    tx.send(results).await.map_err(|e| e.to_string())
-}
-
 async fn on_query_streaming(
     command: Command,
     metadata: Option<std::collections::HashMap<String, String>>,
     ctx: &ShardContext,
     registry: &Arc<tokio::sync::RwLock<SchemaRegistry>>,
 ) -> Result<ShardFlowHandle, String> {
-    scan_streaming(
+    scan(
         &command,
         metadata,
         registry,

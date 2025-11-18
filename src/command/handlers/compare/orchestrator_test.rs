@@ -1,6 +1,5 @@
-use crate::command::handlers::compare::orchestrator::ComparisonExecutionPipeline;
 #[cfg(test)]
-use crate::command::handlers::query::set_streaming_enabled;
+use crate::command::handlers::compare::orchestrator::ComparisonExecutionPipeline;
 use crate::command::handlers::store;
 use crate::command::parser::commands::plotql;
 use crate::command::types::{AggSpec, Command, QueryCommand, TimeGranularity};
@@ -85,7 +84,6 @@ async fn test_execute_streaming_rejects_empty_queries() {
 
 #[tokio::test]
 async fn test_execute_streaming_single_query() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -138,7 +136,6 @@ async fn test_execute_streaming_single_query() {
 
 #[tokio::test]
 async fn test_execute_streaming_two_queries() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -212,7 +209,6 @@ async fn test_execute_streaming_two_queries() {
 
 #[tokio::test]
 async fn test_execute_streaming_three_queries() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -283,7 +279,6 @@ async fn test_execute_streaming_three_queries() {
 
 #[tokio::test]
 async fn test_execute_streaming_with_breakdown() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -361,7 +356,6 @@ async fn test_execute_streaming_with_breakdown() {
 
 #[tokio::test]
 async fn test_execute_streaming_with_time_bucket() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -437,7 +431,6 @@ async fn test_execute_streaming_with_time_bucket() {
 
 #[tokio::test]
 async fn test_execute_streaming_handles_nonexistent_event_type() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -461,7 +454,6 @@ async fn test_execute_streaming_handles_nonexistent_event_type() {
 
 #[tokio::test]
 async fn test_execute_streaming_parses_plotql_query() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -522,7 +514,6 @@ async fn test_execute_streaming_parses_plotql_query() {
 
 #[tokio::test]
 async fn test_execute_streaming_empty_results() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
