@@ -128,12 +128,19 @@ pub struct UserCache {
 }
 
 /// O(1) permission cache: user_id -> event_type -> PermissionSet.
+/// Supports role-based access control (RBAC) with multiple role types.
 #[derive(Debug, Clone)]
 pub struct PermissionCache {
     /// Map of user_id -> event_type -> PermissionSet
     permissions: HashMap<String, HashMap<String, PermissionSet>>,
-    /// Set of admin user IDs for fast admin checks
+    /// Set of admin user IDs for fast admin checks (full access)
     admin_users: std::collections::HashSet<String>,
+    /// Set of read-only user IDs (can read all event types)
+    read_only_users: std::collections::HashSet<String>,
+    /// Set of editor user IDs (can read/write all event types, no admin functions)
+    editor_users: std::collections::HashSet<String>,
+    /// Set of write-only user IDs (can write all event types, no read)
+    write_only_users: std::collections::HashSet<String>,
 }
 
 impl PermissionCache {
@@ -141,35 +148,89 @@ impl PermissionCache {
         Self {
             permissions: HashMap::new(),
             admin_users: std::collections::HashSet::new(),
+            read_only_users: std::collections::HashSet::new(),
+            editor_users: std::collections::HashSet::new(),
+            write_only_users: std::collections::HashSet::new(),
         }
     }
 
     /// Check if user can read from event_type
+    /// Priority: admin > specific permissions > roles
+    /// Permissions override roles (more specific overrides broader access)
+    /// If permission set grants READ, use it.
+    /// If permission set exists but denies READ (and also denies WRITE), explicitly deny (override role).
+    /// Otherwise fall back to role.
     pub fn can_read(&self, user_id: &str, event_type: &str) -> bool {
         // Admin users can read everything
         if self.admin_users.contains(user_id) {
             return true;
         }
 
-        self.permissions
-            .get(user_id)
-            .and_then(|user_perms| user_perms.get(event_type))
-            .map(|perms| perms.read)
-            .unwrap_or(false)
+        // Check specific permissions first (most granular)
+        if let Some(user_perms) = self.permissions.get(user_id) {
+            if let Some(perms) = user_perms.get(event_type) {
+                if perms.read {
+                    return true;
+                }
+                // Permission set exists but doesn't grant READ
+                // If both read and write are false, this is an explicit denial (e.g., after REVOKE ALL)
+                // In that case, override role and deny access
+                if !perms.read && !perms.write {
+                    return false;
+                }
+                // Permission set has read=false but write=true - likely from GRANT WRITE
+                // Fall through to check role for READ
+            }
+        }
+
+        // If no specific permissions for this event_type, check roles (broader access)
+        // Read-only and editor roles can read everything
+        if self.read_only_users.contains(user_id) || self.editor_users.contains(user_id) {
+            return true;
+        }
+
+        // Write-only role cannot read (unless overridden by permissions above)
+        if self.write_only_users.contains(user_id) {
+            return false;
+        }
+
+        // No permissions and no roles
+        false
     }
 
     /// Check if user can write to event_type
+    /// Priority: admin > specific permissions > roles
+    /// Permissions override roles (more specific overrides broader access)
+    /// If permission set exists for event_type, it completely overrides role for WRITE.
+    /// This ensures that REVOKE WRITE explicitly denies WRITE even if role would grant it.
     pub fn can_write(&self, user_id: &str, event_type: &str) -> bool {
         // Admin users can write everything
         if self.admin_users.contains(user_id) {
             return true;
         }
 
-        self.permissions
-            .get(user_id)
-            .and_then(|user_perms| user_perms.get(event_type))
-            .map(|perms| perms.write)
-            .unwrap_or(false)
+        // Check specific permissions first (most granular)
+        // If permission set exists for this event_type, it overrides role completely
+        if let Some(user_perms) = self.permissions.get(user_id) {
+            if let Some(perms) = user_perms.get(event_type) {
+                // Permission set exists - use it directly (overrides role)
+                return perms.write;
+            }
+        }
+
+        // If no specific permissions for this event_type, check roles (broader access)
+        // Editor and write-only roles can write everything
+        if self.editor_users.contains(user_id) || self.write_only_users.contains(user_id) {
+            return true;
+        }
+
+        // Read-only role cannot write (unless overridden by permissions above)
+        if self.read_only_users.contains(user_id) {
+            return false;
+        }
+
+        // No permissions and no roles
+        false
     }
 
     /// Check if user is admin
@@ -177,21 +238,55 @@ impl PermissionCache {
         self.admin_users.contains(user_id)
     }
 
-    /// Update permissions for a user
+    /// Check if user has a specific role
+    #[allow(dead_code)] // Public API method, may be used by external code
+    pub fn has_role(&self, user_id: &str, role: &str) -> bool {
+        match role {
+            "admin" => self.admin_users.contains(user_id),
+            "read-only" | "viewer" => self.read_only_users.contains(user_id),
+            "editor" => self.editor_users.contains(user_id),
+            "write-only" => self.write_only_users.contains(user_id),
+            _ => false,
+        }
+    }
+
+    /// Update permissions for a user based on their roles
     pub fn update_user(&mut self, user: &UserKey) {
-        // Update admin set
-        if user.roles.contains(&"admin".to_string()) {
-            self.admin_users.insert(user.user_id.clone());
-        } else {
-            self.admin_users.remove(&user.user_id);
+        let user_id = &user.user_id;
+
+        // Update role sets - remove from all first, then add to appropriate ones
+        self.admin_users.remove(user_id);
+        self.read_only_users.remove(user_id);
+        self.editor_users.remove(user_id);
+        self.write_only_users.remove(user_id);
+
+        // Add user to appropriate role sets
+        for role in &user.roles {
+            match role.as_str() {
+                "admin" => {
+                    self.admin_users.insert(user_id.clone());
+                }
+                "read-only" | "viewer" => {
+                    self.read_only_users.insert(user_id.clone());
+                }
+                "editor" => {
+                    self.editor_users.insert(user_id.clone());
+                }
+                "write-only" => {
+                    self.write_only_users.insert(user_id.clone());
+                }
+                _ => {
+                    // Unknown role - ignore (could log in future)
+                }
+            }
         }
 
         // Update permissions
         if user.permissions.is_empty() {
-            self.permissions.remove(&user.user_id);
+            self.permissions.remove(user_id);
         } else {
             self.permissions
-                .insert(user.user_id.clone(), user.permissions.clone());
+                .insert(user_id.clone(), user.permissions.clone());
         }
     }
 }
@@ -308,6 +403,22 @@ impl SessionStore {
 
     pub fn len(&self) -> usize {
         self.sessions.len()
+    }
+
+    /// Remove all sessions for a specific user. Returns number of sessions removed.
+    pub fn revoke_user_sessions(&mut self, user_id: &str) -> usize {
+        let tokens_to_remove: Vec<String> = self
+            .sessions
+            .iter()
+            .filter(|(_, session)| session.user_id == user_id)
+            .map(|(token, _)| token.clone())
+            .collect();
+
+        let count = tokens_to_remove.len();
+        for token in tokens_to_remove {
+            self.sessions.remove(&token);
+        }
+        count
     }
 }
 

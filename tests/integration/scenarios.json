@@ -6018,7 +6018,7 @@
     ]
   },
   {
-    "name": "permissions_revoke_all_permissions",
+    "name": "permissions_revoke_all",
     "config": {
       "auth": {
         "bypass_auth": false,
@@ -6039,7 +6039,7 @@
     "matchers": [
       {
         "kind": "include",
-        "value": "has no permissions"
+        "value": "orders: none"
       }
     ]
   },
@@ -6130,7 +6130,11 @@
     "matchers": [
       {
         "kind": "include",
-        "value": "has no permissions"
+        "value": "products: none"
+      },
+      {
+        "kind": "include",
+        "value": "orders: none"
       }
     ]
   },
@@ -6549,7 +6553,7 @@
     "matchers": [
       {
         "kind": "include",
-        "value": "has no permissions"
+        "value": "nonexistent_event: none"
       }
     ]
   },
@@ -6634,5 +6638,685 @@
       "kind": "include",
       "value": "No schema defined for event type 'nonexistent_event'"
     }
+  },
+  {
+    "name": "revoke_key_revokes_session_tokens",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123",
+        "session_token_expiry_seconds": 300
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER testuser WITH KEY \"test-key-123\" user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER testuser WITH KEY \"test-key-123\")",
+      "DEFINE test_event FIELDS { \"value\": \"int\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE test_event FIELDS { \"value\": \"int\" })",
+      "GRANT READ, WRITE ON test_event TO testuser user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT READ, WRITE ON test_event TO testuser)",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":42} user_id=testuser signature=HMAC_SHA256(test-key-123, STORE test_event FOR ctx1 PAYLOAD {\"value\":42})",
+      "REVOKE KEY testuser user_id=admin signature=HMAC_SHA256(admin-key-123, REVOKE KEY testuser)",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":43} user_id=testuser signature=HMAC_SHA256(test-key-123, STORE test_event FOR ctx1 PAYLOAD {\"value\":43})"
+    ],
+    "matchers": [
+      {
+        "kind": "include",
+        "value": "Key revoked for user 'testuser'"
+      },
+      {
+        "kind": "include",
+        "value": "Authentication failed"
+      }
+    ]
+  },
+  {
+    "name": "revoke_key_preserves_user_record",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER testuser WITH KEY \"test-key-123\" user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER testuser WITH KEY \"test-key-123\")",
+      "LIST USERS user_id=admin signature=HMAC_SHA256(admin-key-123, LIST USERS)",
+      "REVOKE KEY testuser user_id=admin signature=HMAC_SHA256(admin-key-123, REVOKE KEY testuser)",
+      "LIST USERS user_id=admin signature=HMAC_SHA256(admin-key-123, LIST USERS)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "testuser: active",
+          "Key revoked for user 'testuser'",
+          "testuser: inactive"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "revoke_key_with_roles",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER editoruser WITH KEY \"editor-key-123\" WITH ROLES [\"editor\"] user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER editoruser WITH KEY \"editor-key-123\" WITH ROLES [\"editor\"])",
+      "DEFINE test_event FIELDS { \"value\": \"int\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE test_event FIELDS { \"value\": \"int\" })",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":42} user_id=editoruser signature=HMAC_SHA256(editor-key-123, STORE test_event FOR ctx1 PAYLOAD {\"value\":42})",
+      "REVOKE KEY editoruser user_id=admin signature=HMAC_SHA256(admin-key-123, REVOKE KEY editoruser)",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":43} user_id=editoruser signature=HMAC_SHA256(editor-key-123, STORE test_event FOR ctx1 PAYLOAD {\"value\":43})"
+    ],
+    "matchers": [
+      {
+        "kind": "include",
+        "value": "Key revoked for user 'editoruser'"
+      },
+      {
+        "kind": "include",
+        "value": "Authentication failed"
+      }
+    ]
+  },
+  {
+    "name": "revoke_key_error_user_not_found",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "REVOKE KEY nonexistent_user user_id=admin signature=HMAC_SHA256(admin-key-123, REVOKE KEY nonexistent_user)"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "User not found"
+    }
+  },
+  {
+    "name": "revoke_key_then_create_same_user_fails",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER testuser WITH KEY \"test-key-123\" user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER testuser WITH KEY \"test-key-123\")",
+      "REVOKE KEY testuser user_id=admin signature=HMAC_SHA256(admin-key-123, REVOKE KEY testuser)",
+      "CREATE USER testuser WITH KEY \"new-key-456\" user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER testuser WITH KEY \"new-key-456\")"
+    ],
+    "matcher": {
+      "kind": "include",
+      "value": "User already exists"
+    }
+  },
+  {
+    "name": "revoke_key_preserves_permissions",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER permuser WITH KEY \"perm-key-123\" user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER permuser WITH KEY \"perm-key-123\")",
+      "DEFINE test_event FIELDS { \"value\": \"int\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE test_event FIELDS { \"value\": \"int\" })",
+      "GRANT READ, WRITE ON test_event TO permuser user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT READ, WRITE ON test_event TO permuser)",
+      "SHOW PERMISSIONS FOR permuser user_id=admin signature=HMAC_SHA256(admin-key-123, SHOW PERMISSIONS FOR permuser)",
+      "REVOKE KEY permuser user_id=admin signature=HMAC_SHA256(admin-key-123, REVOKE KEY permuser)",
+      "SHOW PERMISSIONS FOR permuser user_id=admin signature=HMAC_SHA256(admin-key-123, SHOW PERMISSIONS FOR permuser)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "test_event: read, write",
+          "Key revoked for user 'permuser'"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "create_user_with_admin_role",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER adminuser WITH KEY \"admin-user-key\" WITH ROLES [\"admin\"] user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER adminuser WITH KEY \"admin-user-key\" WITH ROLES [\"admin\"])",
+      "DEFINE test_event FIELDS { \"value\": \"int\" } user_id=adminuser signature=HMAC_SHA256(admin-user-key, DEFINE test_event FIELDS { \"value\": \"int\" })",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":42} user_id=adminuser signature=HMAC_SHA256(admin-user-key, STORE test_event FOR ctx1 PAYLOAD {\"value\":42})",
+      "QUERY test_event WHERE value=42 user_id=adminuser signature=HMAC_SHA256(admin-user-key, QUERY test_event WHERE value=42)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "User 'adminuser' created",
+          ",42]"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "create_user_with_read_only_role",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER readonlyuser WITH KEY \"read-key-123\" WITH ROLES [\"read-only\"] user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER readonlyuser WITH KEY \"read-key-123\" WITH ROLES [\"read-only\"])",
+      "DEFINE test_event FIELDS { \"value\": \"int\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE test_event FIELDS { \"value\": \"int\" })",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":42} user_id=admin signature=HMAC_SHA256(admin-key-123, STORE test_event FOR ctx1 PAYLOAD {\"value\":42})",
+      "QUERY test_event WHERE value=42 user_id=readonlyuser signature=HMAC_SHA256(read-key-123, QUERY test_event WHERE value=42)",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":43} user_id=readonlyuser signature=HMAC_SHA256(read-key-123, STORE test_event FOR ctx1 PAYLOAD {\"value\":43})"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "User 'readonlyuser' created",
+          ",42]"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "Write permission denied"
+      }
+    ]
+  },
+  {
+    "name": "create_user_with_editor_role",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER editoruser WITH KEY \"editor-key-123\" WITH ROLES [\"editor\"] user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER editoruser WITH KEY \"editor-key-123\" WITH ROLES [\"editor\"])",
+      "DEFINE test_event FIELDS { \"value\": \"int\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE test_event FIELDS { \"value\": \"int\" })",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":42} user_id=editoruser signature=HMAC_SHA256(editor-key-123, STORE test_event FOR ctx1 PAYLOAD {\"value\":42})",
+      "QUERY test_event WHERE value=42 user_id=editoruser signature=HMAC_SHA256(editor-key-123, QUERY test_event WHERE value=42)",
+      "CREATE USER testuser user_id=editoruser signature=HMAC_SHA256(editor-key-123, CREATE USER testuser)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "User 'editoruser' created",
+          ",42]"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "Only admin users can manage users"
+      }
+    ]
+  },
+  {
+    "name": "create_user_with_write_only_role",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER writeonlyuser WITH KEY \"write-key-123\" WITH ROLES [\"write-only\"] user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER writeonlyuser WITH KEY \"write-key-123\" WITH ROLES [\"write-only\"])",
+      "DEFINE test_event FIELDS { \"value\": \"int\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE test_event FIELDS { \"value\": \"int\" })",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":42} user_id=writeonlyuser signature=HMAC_SHA256(write-key-123, STORE test_event FOR ctx1 PAYLOAD {\"value\":42})",
+      "QUERY test_event WHERE value=42 user_id=writeonlyuser signature=HMAC_SHA256(write-key-123, QUERY test_event WHERE value=42)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "User 'writeonlyuser' created"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "Read permission denied"
+      }
+    ]
+  },
+  {
+    "name": "permissions_override_read_only_role",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER readonlyuser WITH KEY \"read-key-123\" WITH ROLES [\"read-only\"] user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER readonlyuser WITH KEY \"read-key-123\" WITH ROLES [\"read-only\"])",
+      "DEFINE test_event FIELDS { \"value\": \"int\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE test_event FIELDS { \"value\": \"int\" })",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":42} user_id=admin signature=HMAC_SHA256(admin-key-123, STORE test_event FOR ctx1 PAYLOAD {\"value\":42})",
+      "GRANT WRITE ON test_event TO readonlyuser user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT WRITE ON test_event TO readonlyuser)",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":43} user_id=readonlyuser signature=HMAC_SHA256(read-key-123, STORE test_event FOR ctx1 PAYLOAD {\"value\":43})",
+      "QUERY test_event WHERE value=43 user_id=readonlyuser signature=HMAC_SHA256(read-key-123, QUERY test_event WHERE value=43)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "Permissions granted to user 'readonlyuser'",
+          ",43]"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "permissions_override_editor_role",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER editoruser WITH KEY \"editor-key-123\" WITH ROLES [\"editor\"] user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER editoruser WITH KEY \"editor-key-123\" WITH ROLES [\"editor\"])",
+      "DEFINE test_event FIELDS { \"value\": \"int\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE test_event FIELDS { \"value\": \"int\" })",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":42} user_id=editoruser signature=HMAC_SHA256(editor-key-123, STORE test_event FOR ctx1 PAYLOAD {\"value\":42})",
+      "GRANT READ ON test_event TO editoruser user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT READ ON test_event TO editoruser)",
+      "REVOKE WRITE ON test_event FROM editoruser user_id=admin signature=HMAC_SHA256(admin-key-123, REVOKE WRITE ON test_event FROM editoruser)",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":43} user_id=editoruser signature=HMAC_SHA256(editor-key-123, STORE test_event FOR ctx1 PAYLOAD {\"value\":43})",
+      "QUERY test_event WHERE value=42 user_id=editoruser signature=HMAC_SHA256(editor-key-123, QUERY test_event WHERE value=42)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "Permissions revoked from user 'editoruser'",
+          ",42]"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "Write permission denied"
+      }
+    ]
+  },
+  {
+    "name": "permissions_override_write_only_role",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER writeonlyuser WITH KEY \"write-key-123\" WITH ROLES [\"write-only\"] user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER writeonlyuser WITH KEY \"write-key-123\" WITH ROLES [\"write-only\"])",
+      "DEFINE test_event FIELDS { \"value\": \"int\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE test_event FIELDS { \"value\": \"int\" })",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":42} user_id=writeonlyuser signature=HMAC_SHA256(write-key-123, STORE test_event FOR ctx1 PAYLOAD {\"value\":42})",
+      "GRANT READ ON test_event TO writeonlyuser user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT READ ON test_event TO writeonlyuser)",
+      "QUERY test_event WHERE value=42 user_id=writeonlyuser signature=HMAC_SHA256(write-key-123, QUERY test_event WHERE value=42)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "Permissions granted to user 'writeonlyuser'",
+          ",42]"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "create_user_with_multiple_roles",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER multiuser WITH KEY \"multi-key-123\" WITH ROLES [\"admin\", \"read-only\", \"editor\"] user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER multiuser WITH KEY \"multi-key-123\" WITH ROLES [\"admin\", \"read-only\", \"editor\"])",
+      "DEFINE test_event FIELDS { \"value\": \"int\" } user_id=multiuser signature=HMAC_SHA256(multi-key-123, DEFINE test_event FIELDS { \"value\": \"int\" })",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":42} user_id=multiuser signature=HMAC_SHA256(multi-key-123, STORE test_event FOR ctx1 PAYLOAD {\"value\":42})",
+      "QUERY test_event WHERE value=42 user_id=multiuser signature=HMAC_SHA256(multi-key-123, QUERY test_event WHERE value=42)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "User 'multiuser' created",
+          ",42]"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "permissions_override_role_none_permission",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123"
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER readonlyuser WITH KEY \"read-key-123\" WITH ROLES [\"read-only\"] user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER readonlyuser WITH KEY \"read-key-123\" WITH ROLES [\"read-only\"])",
+      "DEFINE test_event FIELDS { \"value\": \"int\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE test_event FIELDS { \"value\": \"int\" })",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":42} user_id=admin signature=HMAC_SHA256(admin-key-123, STORE test_event FOR ctx1 PAYLOAD {\"value\":42})",
+      "GRANT READ, WRITE ON test_event TO readonlyuser user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT READ, WRITE ON test_event TO readonlyuser)",
+      "REVOKE READ, WRITE ON test_event FROM readonlyuser user_id=admin signature=HMAC_SHA256(admin-key-123, REVOKE READ, WRITE ON test_event FROM readonlyuser)",
+      "QUERY test_event WHERE value=42 user_id=readonlyuser signature=HMAC_SHA256(read-key-123, QUERY test_event WHERE value=42)"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "Permissions revoked from user 'readonlyuser'"
+        ]
+      },
+      {
+        "kind": "include",
+        "value": "Read permission denied"
+      }
+    ]
+  },
+  {
+    "name": "auth_with_token_success",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123",
+        "session_token_expiry_seconds": 300
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER tokenuser WITH KEY \"token-key-123\" user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER tokenuser WITH KEY \"token-key-123\")",
+      "DEFINE test_event FIELDS { \"value\": \"int\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE test_event FIELDS { \"value\": \"int\" })",
+      "GRANT READ, WRITE ON test_event TO tokenuser user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT READ, WRITE ON test_event TO tokenuser)",
+      "AUTH tokenuser:HMAC_SHA256(token-key-123, tokenuser)",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":42} TOKEN {TOKEN:tokenuser}"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "OK TOKEN",
+          "Event accepted"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "auth_with_token_invalid_token",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123",
+        "session_token_expiry_seconds": 300
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER tokenuser WITH KEY \"token-key-123\" user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER tokenuser WITH KEY \"token-key-123\")",
+      "DEFINE test_event FIELDS { \"value\": \"int\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE test_event FIELDS { \"value\": \"int\" })",
+      "GRANT READ, WRITE ON test_event TO tokenuser user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT READ, WRITE ON test_event TO tokenuser)",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":42} TOKEN invalid_token_that_does_not_exist"
+    ],
+    "matchers": [
+      {
+        "kind": "include",
+        "value": "Authentication failed"
+      }
+    ]
+  },
+  {
+    "name": "auth_with_token_inactive_user",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123",
+        "session_token_expiry_seconds": 300
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER tokenuser WITH KEY \"token-key-123\" user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER tokenuser WITH KEY \"token-key-123\")",
+      "DEFINE test_event FIELDS { \"value\": \"int\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE test_event FIELDS { \"value\": \"int\" })",
+      "GRANT READ, WRITE ON test_event TO tokenuser user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT READ, WRITE ON test_event TO tokenuser)",
+      "AUTH tokenuser:HMAC_SHA256(token-key-123, tokenuser)",
+      "REVOKE KEY tokenuser user_id=admin signature=HMAC_SHA256(admin-key-123, REVOKE KEY tokenuser)",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":42} TOKEN {TOKEN:tokenuser}"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "OK TOKEN",
+          "Authentication failed"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "auth_with_token_insufficient_permissions",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123",
+        "session_token_expiry_seconds": 300
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER readonlyuser WITH KEY \"read-key-123\" WITH ROLES [\"read-only\"] user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER readonlyuser WITH KEY \"read-key-123\" WITH ROLES [\"read-only\"])",
+      "DEFINE test_event FIELDS { \"value\": \"int\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE test_event FIELDS { \"value\": \"int\" })",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":42} user_id=admin signature=HMAC_SHA256(admin-key-123, STORE test_event FOR ctx1 PAYLOAD {\"value\":42})",
+      "AUTH readonlyuser:HMAC_SHA256(read-key-123, readonlyuser)",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":43} TOKEN {TOKEN:readonlyuser}"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "OK TOKEN",
+          "Write permission denied"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "auth_with_token_query_command",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123",
+        "session_token_expiry_seconds": 300
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER tokenuser WITH KEY \"token-key-123\" WITH ROLES [\"read-only\"] user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER tokenuser WITH KEY \"token-key-123\" WITH ROLES [\"read-only\"])",
+      "DEFINE test_event FIELDS { \"value\": \"int\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE test_event FIELDS { \"value\": \"int\" })",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":42} user_id=admin signature=HMAC_SHA256(admin-key-123, STORE test_event FOR ctx1 PAYLOAD {\"value\":42})",
+      "AUTH tokenuser:HMAC_SHA256(token-key-123, tokenuser)",
+      "QUERY test_event WHERE value=42 TOKEN {TOKEN:tokenuser}"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "OK TOKEN",
+          ",42]"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "auth_with_token_token_in_payload",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123",
+        "session_token_expiry_seconds": 300
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER tokenuser WITH KEY \"token-key-123\" user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER tokenuser WITH KEY \"token-key-123\")",
+      "DEFINE test_event FIELDS { \"value\": \"int\", \"token\": \"string\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE test_event FIELDS { \"value\": \"int\", \"token\": \"string\" })",
+      "GRANT READ, WRITE ON test_event TO tokenuser user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT READ, WRITE ON test_event TO tokenuser)",
+      "AUTH tokenuser:HMAC_SHA256(token-key-123, tokenuser)",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":42,\"token\":\"some_token_value\"} TOKEN {TOKEN:tokenuser}"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "OK TOKEN",
+          "Event accepted"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "auth_with_token_empty_token",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123",
+        "session_token_expiry_seconds": 300
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER tokenuser WITH KEY \"token-key-123\" user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER tokenuser WITH KEY \"token-key-123\")",
+      "DEFINE test_event FIELDS { \"value\": \"int\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE test_event FIELDS { \"value\": \"int\" })",
+      "GRANT READ, WRITE ON test_event TO tokenuser user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT READ, WRITE ON test_event TO tokenuser)",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":42} TOKEN "
+    ],
+    "matchers": [
+      {
+        "kind": "include",
+        "value": "Authentication failed"
+      }
+    ]
+  },
+  {
+    "name": "auth_with_token_multiple_users",
+    "config": {
+      "auth": {
+        "bypass_auth": false,
+        "initial_admin_user": "admin",
+        "initial_admin_key": "admin-key-123",
+        "session_token_expiry_seconds": 300
+      },
+      "query": {
+        "streaming_enabled": true
+      }
+    },
+    "input_commands": [
+      "CREATE USER user1 WITH KEY \"key1\" user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER user1 WITH KEY \"key1\")",
+      "CREATE USER user2 WITH KEY \"key2\" user_id=admin signature=HMAC_SHA256(admin-key-123, CREATE USER user2 WITH KEY \"key2\")",
+      "DEFINE test_event FIELDS { \"value\": \"int\" } user_id=admin signature=HMAC_SHA256(admin-key-123, DEFINE test_event FIELDS { \"value\": \"int\" })",
+      "GRANT READ, WRITE ON test_event TO user1 user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT READ, WRITE ON test_event TO user1)",
+      "GRANT READ, WRITE ON test_event TO user2 user_id=admin signature=HMAC_SHA256(admin-key-123, GRANT READ, WRITE ON test_event TO user2)",
+      "AUTH user1:HMAC_SHA256(key1, user1)",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":1} TOKEN {TOKEN:user1}",
+      "AUTH user2:HMAC_SHA256(key2, user2)",
+      "STORE test_event FOR ctx1 PAYLOAD {\"value\":2} TOKEN {TOKEN:user2}"
+    ],
+    "matchers": [
+      {
+        "kind": "include_all",
+        "value": [
+          "OK TOKEN",
+          "Event accepted"
+        ]
+      }
+    ]
   }
 ]

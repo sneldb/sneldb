@@ -4,6 +4,13 @@
 
 SnelDB provides authentication and authorization through HMAC-based signatures and session tokens. User management commands allow you to create users, revoke their access keys, list all registered users, and manage fine-grained permissions for event types.
 
+SnelDB uses a two-tier access control system:
+
+- **Roles**: Broad privileges (e.g., "can read everything", "can write everything")
+- **Permissions**: Fine-grained access per event type (e.g., "can read orders", "can write payments")
+
+**Important:** Permissions override roles, but the behavior depends on what the permission grants or denies. If you have a `read-only` role but are granted write permission on a specific event type, you can write to that event type while still reading from your role. See [Roles and Permissions](#roles-and-permissions) for detailed examples.
+
 All commands require authentication. SnelDB supports multiple authentication methods:
 
 - **Session tokens** (recommended for high-throughput): Authenticate once with `AUTH`, receive a token, then use it for subsequent commands
@@ -72,12 +79,12 @@ The signature is computed as: `HMAC-SHA256(secret_key, message)` where `message`
 
 ### Purpose
 
-Create a new user with authentication credentials. The user will receive a secret key that can be used to sign commands.
+Create a new user with authentication credentials and optional roles. The user will receive a secret key that can be used to sign commands. Roles provide broad access privileges, while permissions provide fine-grained control per event type.
 
 ### Form
 
 ```sneldb
-CREATE USER <user_id:WORD or STRING> [ WITH KEY <secret_key:STRING> ]
+CREATE USER <user_id:WORD or STRING> [ WITH KEY <secret_key:STRING> ] [ WITH ROLES [<role:STRING>[,<role:STRING>...]] ]
 ```
 
 ### Constraints
@@ -86,7 +93,22 @@ CREATE USER <user_id:WORD or STRING> [ WITH KEY <secret_key:STRING> ]
 - `<user_id>` is case-sensitive (e.g., `user1` ≠ `User1`).
 - If `WITH KEY` is omitted, a random 64-character hexadecimal secret key is generated.
 - If `WITH KEY` is provided, the secret key can contain any characters.
+- `WITH ROLES` is optional. If omitted, the user has no roles (access controlled only by permissions).
+- Roles can be specified as string literals (e.g., `"admin"`) or word identifiers (e.g., `admin`).
+- Multiple roles can be specified in the array.
+- `WITH KEY` and `WITH ROLES` can be specified in any order.
 - Requires admin authentication.
+
+### Supported Roles
+
+SnelDB supports the following roles:
+
+- **`admin`**: Full system access. Can read/write all event types and manage users/permissions.
+- **`read-only`** or **`viewer`**: Can read all event types, but cannot write. Useful for monitoring and analytics users.
+- **`editor`**: Can read and write all event types, but cannot manage users or permissions. Useful for data entry users.
+- **`write-only`**: Can write all event types, but cannot read. Useful for data ingestion services.
+
+**Note:** Roles provide broad access, but specific permissions can override role-based access (see [Roles and Permissions](#roles-and-permissions) below).
 
 ### Examples
 
@@ -94,19 +116,61 @@ CREATE USER <user_id:WORD or STRING> [ WITH KEY <secret_key:STRING> ]
 CREATE USER api_client
 ```
 
-Creates a user named `api_client` and returns a randomly generated secret key.
+Creates a user named `api_client` with no roles. Access is controlled entirely by permissions.
 
 ```sneldb
 CREATE USER "service-account" WITH KEY "my_custom_secret_key_12345"
 ```
 
-Creates a user with a custom secret key.
+Creates a user with a custom secret key and no roles.
 
 ```sneldb
-CREATE USER monitoring_service WITH KEY monitoring_key_2024
+CREATE USER monitoring_service WITH KEY monitoring_key_2024 WITH ROLES ["read-only"]
 ```
 
-Creates a user with a word-based secret key (no quotes needed for simple keys).
+Creates a read-only user for monitoring purposes. This user can read all event types but cannot write.
+
+```sneldb
+CREATE USER data_entry WITH ROLES ["editor"]
+```
+
+Creates an editor user who can read and write all event types.
+
+```sneldb
+CREATE USER admin_user WITH ROLES ["admin"]
+```
+
+Creates an admin user with full system access.
+
+```sneldb
+CREATE USER viewer WITH ROLES ["viewer"]
+```
+
+Creates a viewer user (alias for read-only role).
+
+```sneldb
+CREATE USER writer WITH ROLES ["write-only"]
+```
+
+Creates a write-only user who can write but not read.
+
+```sneldb
+CREATE USER multi_role WITH ROLES ["admin", "read-only"]
+```
+
+Creates a user with multiple roles. Admin role takes precedence.
+
+```sneldb
+CREATE USER api_client WITH KEY "secret" WITH ROLES ["read-only"]
+```
+
+Creates a user with both a custom key and a role. Order doesn't matter.
+
+```sneldb
+CREATE USER api_client WITH ROLES ["read-only"] WITH KEY "secret"
+```
+
+Same as above, with roles and key in different order.
 
 ### Behavior
 
@@ -531,19 +595,181 @@ The following critical security issues need to be addressed:
 - [ ] **No input length limits**: Missing input length validation allows potential denial-of-service attacks via oversized inputs.
 - [ ] **Token validation timing**: Token validation uses hash lookup (O(1)), but error messages may leak information about token existence.
 
-## Permissions and Access Control
+## Roles and Permissions
 
-SnelDB implements fine-grained access control at the event type level. Users can be granted read and/or write permissions for specific event types:
+SnelDB implements a two-tier access control system combining **roles** (broad privileges) and **permissions** (fine-grained access per event type).
+
+### Understanding Roles vs Permissions
+
+- **Roles**: Provide broad, organization-wide access privileges (e.g., "can read everything", "can write everything")
+- **Permissions**: Provide specific access to individual event types (e.g., "can read orders", "can write payments")
+
+### Access Control Priority
+
+When checking access, SnelDB uses the following priority order:
+
+1. **Admin role** → Full access (highest priority)
+2. **Specific permissions** → Override roles (most granular)
+3. **Roles** → Apply when no specific permissions exist (broader access)
+4. **Deny** → If no permissions and no roles
+
+**Key Principle:** Permissions override roles, but only for the specific permission type being checked. This allows for flexible access control where roles provide defaults and permissions provide exceptions.
+
+#### How Permission Override Works
+
+The permission override logic works differently for READ and WRITE checks:
+
+**For READ access:**
+
+- If a permission set **grants READ** (`read=true`), use it (permission overrides role)
+- If a permission set **denies READ** (`read=false`) but grants WRITE (`write=true`), fall back to role for READ
+  - **Rationale:** `GRANT WRITE` is additive—it adds write capability without removing existing read access from roles. If you want write-only access, explicitly `REVOKE READ` first.
+- If a permission set **explicitly denies both** (`read=false, write=false`), deny access completely (override role)
+- If **no permission set exists**, use role
+
+**For WRITE access:**
+
+- If a permission set **exists for the event type**, it completely overrides the role (both granting and denying)
+- If **no permission set exists**, use role
+
+This design ensures that:
+
+- Granting WRITE permission doesn't remove READ access from roles
+- Revoking WRITE permission explicitly denies WRITE even if role would grant it
+- Revoking all permissions creates an explicit denial that overrides roles
+
+### Roles
+
+SnelDB supports the following roles:
+
+| Role                   | Read All Events | Write All Events | Admin Functions |
+| ---------------------- | --------------- | ---------------- | --------------- |
+| `admin`                | ✅              | ✅               | ✅              |
+| `read-only` / `viewer` | ✅              | ❌               | ❌              |
+| `editor`               | ✅              | ✅               | ❌              |
+| `write-only`           | ❌              | ✅               | ❌              |
+
+**Role Behavior:**
+
+- **Admin**: Full system access. Can manage users, grant permissions, define schemas, and access all event types.
+- **Read-only / Viewer**: Can read all event types by default, but cannot write. Useful for monitoring, analytics, or reporting users.
+- **Editor**: Can read and write all event types by default, but cannot manage users or permissions. Useful for data entry or ETL processes.
+- **Write-only**: Can write all event types by default, but cannot read. Useful for data ingestion services that only need to store events.
+
+### Permissions
+
+Permissions provide fine-grained access control at the event type level:
 
 - **Read permission**: Allows users to query events of the specified event type.
 - **Write permission**: Allows users to store events of the specified event type.
-- **Admin role**: Users with the admin role have full access to all event types and can manage users and permissions.
+
+Permissions can be granted per event type, allowing precise control over what each user can access.
+
+### How Roles and Permissions Work Together
+
+**Example 1: Read-only role with write permission**
+
+```sneldb
+CREATE USER analyst WITH ROLES ["read-only"]
+GRANT WRITE ON special_events TO analyst
+```
+
+Result:
+
+- ✅ Can read all event types (read-only role provides READ)
+- ✅ Can write to `special_events` (permission grants WRITE)
+- ❌ Cannot write to other event types (read-only role denies WRITE)
+
+**Why:** The permission grants WRITE, so it overrides the role for WRITE. But since the permission doesn't grant READ (`read=false`), the system falls back to the role for READ access, which the read-only role provides.
+
+**Example 2: Editor role with restrictive permission**
+
+```sneldb
+CREATE USER editor_user WITH ROLES ["editor"]
+GRANT READ ON sensitive_data TO editor_user
+REVOKE WRITE ON sensitive_data FROM editor_user
+```
+
+Result:
+
+- ✅ Can read/write most event types (editor role)
+- ✅ Can read `sensitive_data` (permission grants READ)
+- ❌ Cannot write to `sensitive_data` (permission denies WRITE, overrides role)
+
+**Why:** The permission set exists for `sensitive_data` with `read=true, write=false`. For READ, the permission grants it. For WRITE, the permission explicitly denies it, which overrides the editor role's ability to write.
+
+**Example 3: Write-only role with read permission**
+
+```sneldb
+CREATE USER ingester WITH ROLES ["write-only"]
+GRANT READ ON status_events TO ingester
+```
+
+Result:
+
+- ✅ Can write all event types (write-only role)
+- ✅ Can read `status_events` (permission grants READ)
+- ❌ Cannot read other event types (write-only role denies READ)
+
+**Why:** The permission grants READ for `status_events`, so it overrides the role. For other event types, no permission exists, so the write-only role applies (can write, cannot read).
+
+**Example 4: Revoking all permissions**
+
+```sneldb
+CREATE USER readonly_user WITH ROLES ["read-only"]
+GRANT READ, WRITE ON orders TO readonly_user
+REVOKE READ, WRITE ON orders FROM readonly_user
+```
+
+Result:
+
+- ❌ Cannot read `orders` (explicit denial overrides role)
+- ❌ Cannot write `orders` (explicit denial overrides role)
+- ✅ Can read other event types (read-only role applies)
+
+**Why:** When all permissions are revoked, a permission set with `read=false, write=false` is created. This explicit denial overrides the role completely for that event type.
+
+**Example 5: No role, permissions only**
+
+```sneldb
+CREATE USER api_client
+GRANT READ, WRITE ON orders TO api_client
+GRANT READ ON products TO api_client
+```
+
+Result:
+
+- ✅ Can read/write `orders` (permission)
+- ✅ Can read `products` (permission)
+- ❌ Cannot access other event types (no role, no permission)
+
+**Why:** Without a role, access is controlled entirely by permissions. No permission means no access.
+
+**Example 6: Permission grants only one type**
+
+```sneldb
+CREATE USER readonly_user WITH ROLES ["read-only"]
+GRANT WRITE ON events TO readonly_user
+```
+
+Result:
+
+- ✅ Can read `events` (role provides READ, permission doesn't grant it so falls back to role)
+- ✅ Can write `events` (permission grants WRITE)
+- ✅ Can read other event types (read-only role)
+- ❌ Cannot write other event types (read-only role)
+
+**Why:** The permission grants WRITE but not READ (`read=false, write=true`). For READ, since the permission doesn't grant it, the system falls back to the role, which provides READ. For WRITE, the permission grants it, overriding the role's denial.
+
+### Permission Checking
 
 Permissions are checked at command execution time:
 
-- `STORE` commands require write permission for the event type.
-- `QUERY` commands require read permission for the event type.
-- `DEFINE` commands require admin privileges.
+- `STORE` commands require write permission for the event type (or appropriate role).
+- `QUERY` commands require read permission for the event type (or appropriate role).
+- `DEFINE` commands require admin role.
+- User management commands (`CREATE USER`, `REVOKE KEY`, `LIST USERS`) require admin role.
+- Permission management commands (`GRANT`, `REVOKE`, `SHOW PERMISSIONS`) require admin role.
 
 Permissions take effect immediately when granted or revoked. Changes apply to new commands; commands already in progress are not affected.
 
@@ -554,9 +780,21 @@ Admin users are created with the `admin` role. They have full system access and 
 - Create and manage users
 - Grant and revoke permissions
 - Define event schemas
-- Access all event types regardless of permissions
+- Access all event types regardless of permissions or other roles
 
 The initial admin user can be configured via the `initial_admin_user` and `initial_admin_key` configuration options, which automatically creates an admin user on first startup if no users exist.
+
+### Best Practices
+
+1. **Use roles for broad access patterns**: Assign roles like `read-only` or `editor` when users need consistent access across many event types.
+
+2. **Use permissions for exceptions**: Grant specific permissions when you need to override role-based access for particular event types.
+
+3. **Combine roles and permissions**: Use roles as defaults and permissions as exceptions. For example, give most users a `read-only` role, then grant write permissions only on specific event types they need to modify.
+
+4. **Start restrictive**: Create users without roles initially, then grant specific permissions. Add roles only when users need broader access.
+
+5. **Document access patterns**: Keep track of which users have which roles and permissions to maintain security and compliance.
 
 ## Future Work
 

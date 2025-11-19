@@ -40,6 +40,7 @@ async fn test_create_user_success_without_secret_key() {
     let cmd = Command::CreateUser {
         user_id: "test_user".to_string(),
         secret_key: None,
+        roles: None,
     };
 
     let (mut reader, mut writer) = duplex(1024);
@@ -84,6 +85,7 @@ async fn test_create_user_success_with_secret_key() {
     let cmd = Command::CreateUser {
         user_id: "test_user2".to_string(),
         secret_key: Some(provided_key.to_string()),
+        roles: None,
     };
 
     let (mut reader, mut writer) = duplex(1024);
@@ -133,6 +135,7 @@ async fn test_create_user_error_user_exists() {
     let cmd1 = Command::CreateUser {
         user_id: "existing_user".to_string(),
         secret_key: None,
+        roles: None,
     };
     let (_reader1, mut writer1) = duplex(1024);
     handle(
@@ -149,6 +152,7 @@ async fn test_create_user_error_user_exists() {
     let cmd2 = Command::CreateUser {
         user_id: "existing_user".to_string(),
         secret_key: None,
+        roles: None,
     };
     let (mut reader2, mut writer2) = duplex(1024);
 
@@ -187,6 +191,7 @@ async fn test_create_user_error_invalid_user_id() {
     let cmd = Command::CreateUser {
         user_id: "invalid@user#123".to_string(),
         secret_key: None,
+        roles: None,
     };
     let (mut reader, mut writer) = duplex(1024);
 
@@ -229,6 +234,7 @@ async fn test_create_user_valid_user_id_with_underscore_and_hyphen() {
         let cmd = Command::CreateUser {
             user_id: user_id.to_string(),
             secret_key: None,
+            roles: None,
         };
         let (_reader, mut writer) = duplex(1024);
 
@@ -258,6 +264,7 @@ async fn test_revoke_key_success() {
     let create_cmd = Command::CreateUser {
         user_id: "user_to_revoke".to_string(),
         secret_key: None,
+        roles: None,
     };
     let (_reader1, mut writer1) = duplex(1024);
     let admin_id = create_admin_user(&auth_manager).await;
@@ -393,6 +400,7 @@ async fn test_list_users_with_multiple_users() {
         let create_cmd = Command::CreateUser {
             user_id: user_id.to_string(),
             secret_key: None,
+            roles: None,
         };
         let (_reader, mut writer) = duplex(1024);
         handle(
@@ -443,6 +451,7 @@ async fn test_list_users_shows_active_and_inactive() {
     let create_cmd1 = Command::CreateUser {
         user_id: "active_user".to_string(),
         secret_key: None,
+        roles: None,
     };
     let (_reader1, mut writer1) = duplex(1024);
     let admin_id = create_admin_user(&auth_manager).await;
@@ -459,6 +468,7 @@ async fn test_list_users_shows_active_and_inactive() {
     let create_cmd2 = Command::CreateUser {
         user_id: "inactive_user".to_string(),
         secret_key: None,
+        roles: None,
     };
     let (_reader2, mut writer2) = duplex(1024);
     handle(
@@ -559,6 +569,7 @@ async fn test_response_formatting_unix_renderer() {
     let cmd = Command::CreateUser {
         user_id: "format_test".to_string(),
         secret_key: Some("test_key".to_string()),
+        roles: None,
     };
     let (mut reader, mut writer) = duplex(1024);
 
@@ -594,6 +605,7 @@ async fn test_create_user_then_revoke_then_create_again() {
     let create_cmd1 = Command::CreateUser {
         user_id: "recreate_user".to_string(),
         secret_key: None,
+        roles: None,
     };
     let (_reader1, mut writer1) = duplex(1024);
     let admin_id = create_admin_user(&auth_manager).await;
@@ -626,6 +638,7 @@ async fn test_create_user_then_revoke_then_create_again() {
     let create_cmd2 = Command::CreateUser {
         user_id: "recreate_user".to_string(),
         secret_key: None,
+        roles: None,
     };
     let (mut reader3, mut writer3) = duplex(1024);
 
@@ -660,6 +673,7 @@ async fn test_create_user_empty_user_id() {
     let cmd = Command::CreateUser {
         user_id: "".to_string(),
         secret_key: None,
+        roles: None,
     };
     let (mut reader, mut writer) = duplex(1024);
 
@@ -727,6 +741,7 @@ async fn test_multiple_operations_sequence() {
     let cmd1 = Command::CreateUser {
         user_id: "user1".to_string(),
         secret_key: Some("key1".to_string()),
+        roles: None,
     };
     let (_reader1, mut writer1) = duplex(1024);
     let admin_id = create_admin_user(&auth_manager).await;
@@ -744,6 +759,7 @@ async fn test_multiple_operations_sequence() {
     let cmd2 = Command::CreateUser {
         user_id: "user2".to_string(),
         secret_key: Some("key2".to_string()),
+        roles: None,
     };
     let (_reader2, mut writer2) = duplex(1024);
     handle(
@@ -822,6 +838,7 @@ async fn test_auth_handler_bypass_auth_allows_user_management() {
     let cmd = Command::CreateUser {
         user_id: "bypass_created_user".to_string(),
         secret_key: None,
+        roles: None,
     };
 
     let (mut reader, mut writer) = duplex(1024);
@@ -865,6 +882,7 @@ async fn test_auth_handler_bypass_auth_vs_regular_user() {
     let cmd = Command::CreateUser {
         user_id: "test_user".to_string(),
         secret_key: None,
+        roles: None,
     };
 
     // Test with regular user (should fail - not admin)
@@ -902,4 +920,84 @@ async fn test_auth_handler_bypass_auth_vs_regular_user() {
     let msg2 = String::from_utf8_lossy(&response2[..n2]);
     assert!(msg2.contains("200 OK"));
     assert!(msg2.contains("User 'test_user' created"));
+}
+
+#[tokio::test]
+async fn test_create_user_with_roles() {
+    init_for_tests();
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+    let cmd = Command::CreateUser {
+        user_id: "admin_user".to_string(),
+        secret_key: Some("secret".to_string()),
+        roles: Some(vec!["admin".to_string(), "read-only".to_string()]),
+    };
+
+    let (mut reader, mut writer) = duplex(1024);
+
+    let admin_id = create_admin_user(&auth_manager).await;
+    handle(
+        &cmd,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
+
+    // Read response
+    let mut response = vec![0u8; 1024];
+    let n = reader.read(&mut response).await.unwrap();
+    let msg = String::from_utf8_lossy(&response[..n]);
+
+    // Verify success response
+    assert!(msg.contains("200 OK"));
+    assert!(msg.contains("User 'admin_user' created"));
+
+    // Verify user was created with roles
+    let users = auth_manager.list_users().await;
+    let created_user = users
+        .iter()
+        .find(|u| u.user_id == "admin_user")
+        .expect("admin_user should exist");
+    assert_eq!(
+        created_user.roles,
+        vec!["admin".to_string(), "read-only".to_string()]
+    );
+    assert!(auth_manager.is_admin("admin_user").await);
+}
+
+#[tokio::test]
+async fn test_create_user_without_roles_defaults_to_empty() {
+    init_for_tests();
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+    let cmd = Command::CreateUser {
+        user_id: "regular_user".to_string(),
+        secret_key: Some("secret".to_string()),
+        roles: None,
+    };
+
+    let (_reader, mut writer) = duplex(1024);
+
+    let admin_id = create_admin_user(&auth_manager).await;
+    handle(
+        &cmd,
+        &auth_manager,
+        Some(&admin_id),
+        &mut writer,
+        &UnixRenderer,
+    )
+    .await
+    .expect("handler should not fail");
+
+    // Verify user was created with empty roles
+    let users = auth_manager.list_users().await;
+    let created_user = users
+        .iter()
+        .find(|u| u.user_id == "regular_user")
+        .expect("regular_user should exist");
+    assert_eq!(created_user.roles, Vec::<String>::new());
+    assert!(!auth_manager.is_admin("regular_user").await);
 }

@@ -1192,3 +1192,164 @@ async fn test_rate_limiting_mixed_success_and_failure() {
         }
     }
 }
+
+#[tokio::test]
+async fn test_revoke_key_revokes_session_tokens() {
+    init_for_tests();
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+
+    // Create a user
+    auth_manager
+        .create_user("test_user".to_string(), Some("secret".to_string()))
+        .await
+        .expect("User creation should succeed");
+
+    // Generate session tokens
+    let token1 = auth_manager.generate_session_token("test_user").await;
+    let token2 = auth_manager.generate_session_token("test_user").await;
+
+    // Verify tokens work
+    assert!(auth_manager.validate_session_token(&token1).await.is_some());
+    assert!(auth_manager.validate_session_token(&token2).await.is_some());
+
+    // Revoke user key
+    auth_manager
+        .revoke_key("test_user")
+        .await
+        .expect("Revoke should succeed");
+
+    // Verify tokens are revoked
+    assert!(auth_manager.validate_session_token(&token1).await.is_none());
+    assert!(auth_manager.validate_session_token(&token2).await.is_none());
+}
+
+#[tokio::test]
+async fn test_revoke_user_sessions_without_revoking_key() {
+    init_for_tests();
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+
+    // Create a user
+    auth_manager
+        .create_user("test_user".to_string(), Some("secret".to_string()))
+        .await
+        .expect("User creation should succeed");
+
+    // Generate session tokens
+    let token1 = auth_manager.generate_session_token("test_user").await;
+    let token2 = auth_manager.generate_session_token("test_user").await;
+
+    // Verify tokens work
+    assert!(auth_manager.validate_session_token(&token1).await.is_some());
+    assert!(auth_manager.validate_session_token(&token2).await.is_some());
+
+    // Revoke sessions only (not the key)
+    let revoked_count = auth_manager.revoke_user_sessions("test_user").await;
+    assert_eq!(revoked_count, 2);
+
+    // Verify tokens are revoked
+    assert!(auth_manager.validate_session_token(&token1).await.is_none());
+    assert!(auth_manager.validate_session_token(&token2).await.is_none());
+
+    // Verify user is still active (can still authenticate with signature)
+    let message = "STORE event FOR ctx PAYLOAD {\"id\":1}";
+    let signature = compute_hmac(message, "secret");
+    assert!(
+        auth_manager
+            .verify_signature(message, "test_user", &signature, None)
+            .await
+            .is_ok()
+    );
+
+    // User can generate new session tokens
+    let token3 = auth_manager.generate_session_token("test_user").await;
+    assert!(auth_manager.validate_session_token(&token3).await.is_some());
+}
+
+#[tokio::test]
+async fn test_validate_session_token_rejects_inactive_user() {
+    init_for_tests();
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+
+    // Create a user
+    auth_manager
+        .create_user("test_user".to_string(), Some("secret".to_string()))
+        .await
+        .expect("User creation should succeed");
+
+    // Generate session token
+    let token = auth_manager.generate_session_token("test_user").await;
+
+    // Verify token works
+    assert!(auth_manager.validate_session_token(&token).await.is_some());
+
+    // Revoke user key
+    auth_manager
+        .revoke_key("test_user")
+        .await
+        .expect("Revoke should succeed");
+
+    // Verify token is rejected (user is inactive)
+    assert!(auth_manager.validate_session_token(&token).await.is_none());
+}
+
+#[tokio::test]
+async fn test_revoke_user_sessions_multiple_users() {
+    init_for_tests();
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+
+    // Create two users
+    auth_manager
+        .create_user("user1".to_string(), Some("secret1".to_string()))
+        .await
+        .expect("User creation should succeed");
+    auth_manager
+        .create_user("user2".to_string(), Some("secret2".to_string()))
+        .await
+        .expect("User creation should succeed");
+
+    // Generate tokens for both users
+    let token1_user1 = auth_manager.generate_session_token("user1").await;
+    let token2_user1 = auth_manager.generate_session_token("user1").await;
+    let token1_user2 = auth_manager.generate_session_token("user2").await;
+
+    // Revoke sessions for user1 only
+    let revoked = auth_manager.revoke_user_sessions("user1").await;
+    assert_eq!(revoked, 2);
+
+    // Verify user1 tokens are revoked
+    assert!(
+        auth_manager
+            .validate_session_token(&token1_user1)
+            .await
+            .is_none()
+    );
+    assert!(
+        auth_manager
+            .validate_session_token(&token2_user1)
+            .await
+            .is_none()
+    );
+
+    // Verify user2 token still works
+    assert!(
+        auth_manager
+            .validate_session_token(&token1_user2)
+            .await
+            .is_some()
+    );
+}
+
+#[tokio::test]
+async fn test_revoke_user_sessions_nonexistent_user() {
+    init_for_tests();
+
+    let (auth_manager, _temp_dir) = create_test_auth_manager().await;
+
+    // Try to revoke sessions for nonexistent user
+    let revoked = auth_manager.revoke_user_sessions("nonexistent").await;
+    assert_eq!(revoked, 0);
+}

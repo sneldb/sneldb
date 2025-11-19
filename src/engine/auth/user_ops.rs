@@ -137,6 +137,8 @@ pub async fn create_user_with_roles(
 }
 
 /// Revokes a user's key (marks inactive). User record kept for audit.
+/// Note: This function only marks the user as inactive. To also revoke session tokens,
+/// use AuthManager::revoke_key() which calls this function and handles session revocation.
 pub async fn revoke_key(
     cache: &Arc<RwLock<UserCache>>,
     permission_cache: &Arc<RwLock<PermissionCache>>,

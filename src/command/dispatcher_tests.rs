@@ -369,6 +369,7 @@ async fn test_dispatch_create_user_with_auth_manager() {
     let cmd = Command::CreateUser {
         user_id: "test_user".to_string(),
         secret_key: None,
+        roles: None,
     };
 
     // Create admin user for user management commands
@@ -414,6 +415,7 @@ async fn test_dispatch_create_user_without_auth_manager() {
     let cmd = Command::CreateUser {
         user_id: "test_user".to_string(),
         secret_key: None,
+        roles: None,
     };
 
     let (mut reader, mut writer) = duplex(1024);
@@ -460,6 +462,7 @@ async fn test_dispatch_revoke_key_with_auth_manager() {
     let create_cmd = Command::CreateUser {
         user_id: "user_to_revoke".to_string(),
         secret_key: None,
+        roles: None,
     };
     let (_reader1, mut writer1) = duplex(1024);
     dispatch_command(
@@ -555,6 +558,7 @@ async fn test_dispatch_list_users_with_auth_manager() {
     let create_cmd = Command::CreateUser {
         user_id: "list_test_user".to_string(),
         secret_key: None,
+        roles: None,
     };
     let (_reader1, mut writer1) = duplex(1024);
     dispatch_command(
@@ -670,6 +674,7 @@ async fn test_dispatch_create_user_error_user_exists() {
     let create_cmd1 = Command::CreateUser {
         user_id: "existing_user".to_string(),
         secret_key: None,
+        roles: None,
     };
     let (_reader1, mut writer1) = duplex(1024);
     dispatch_command(
@@ -688,6 +693,7 @@ async fn test_dispatch_create_user_error_user_exists() {
     let create_cmd2 = Command::CreateUser {
         user_id: "existing_user".to_string(),
         secret_key: None,
+        roles: None,
     };
     let (mut reader2, mut writer2) = duplex(1024);
 
@@ -759,6 +765,7 @@ async fn test_dispatch_create_user_with_secret_key() {
     let cmd = Command::CreateUser {
         user_id: "user_with_key".to_string(),
         secret_key: Some("my_custom_secret_key".to_string()),
+        roles: None,
     };
 
     let (mut reader, mut writer) = duplex(1024);
@@ -797,6 +804,7 @@ async fn test_dispatch_multiple_auth_commands_sequence() {
     let create_cmd1 = Command::CreateUser {
         user_id: "user1".to_string(),
         secret_key: None,
+        roles: None,
     };
     let (_reader1, mut writer1) = duplex(1024);
     dispatch_command(
@@ -815,6 +823,7 @@ async fn test_dispatch_multiple_auth_commands_sequence() {
     let create_cmd2 = Command::CreateUser {
         user_id: "user2".to_string(),
         secret_key: None,
+        roles: None,
     };
     let (_reader2, mut writer2) = duplex(1024);
     dispatch_command(
