@@ -24,4 +24,6 @@ mod signature_test;
 #[cfg(test)]
 mod storage_test;
 #[cfg(test)]
+mod types_test;
+#[cfg(test)]
 mod user_ops_test;

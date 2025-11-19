@@ -54,6 +54,7 @@ pub enum Command {
     CreateUser {
         user_id: String,
         secret_key: Option<String>,
+        roles: Option<Vec<String>>,
     },
     RevokeKey {
         user_id: String,

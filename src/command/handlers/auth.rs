@@ -39,11 +39,19 @@ pub async fn handle<W: AsyncWrite + Unpin>(
         Command::CreateUser {
             user_id,
             secret_key,
+            roles,
         } => {
-            match auth_manager
-                .create_user(user_id.clone(), secret_key.clone())
-                .await
-            {
+            let result = if let Some(roles_vec) = roles {
+                auth_manager
+                    .create_user_with_roles(user_id.clone(), secret_key.clone(), roles_vec.clone())
+                    .await
+            } else {
+                auth_manager
+                    .create_user(user_id.clone(), secret_key.clone())
+                    .await
+            };
+
+            match result {
                 Ok(key) => {
                     info!(target: "sneldb::auth", user_id, admin_user = authenticated_user_id, "User created");
                     let resp = Response::ok_lines(vec![

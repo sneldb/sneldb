@@ -133,9 +133,49 @@ impl AuthManager {
         .await
     }
 
-    /// Revokes a user's key.
+    /// Revokes a user's key and all their session tokens.
+    /// This is a comprehensive revocation that:
+    /// 1. Marks the user as inactive
+    /// 2. Revokes all active session tokens for the user
+    /// 3. Updates permission cache
     pub async fn revoke_key(&self, user_id: &str) -> AuthResult<()> {
-        revoke_key(&self.cache, &self.permission_cache, &self.storage, user_id).await
+        // Revoke the user key (marks inactive)
+        revoke_key(&self.cache, &self.permission_cache, &self.storage, user_id).await?;
+
+        // Revoke all session tokens for this user
+        let mut store = self.session_store.write().await;
+        let revoked_count = store.revoke_user_sessions(user_id);
+        drop(store);
+
+        if revoked_count > 0 {
+            tracing::info!(
+                target: "sneldb::auth",
+                user_id,
+                revoked_sessions = revoked_count,
+                "Revoked all session tokens for user"
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Revokes all session tokens for a specific user without revoking their key.
+    /// Useful for forcing re-authentication without disabling the user account.
+    pub async fn revoke_user_sessions(&self, user_id: &str) -> usize {
+        let mut store = self.session_store.write().await;
+        let count = store.revoke_user_sessions(user_id);
+        drop(store);
+
+        if count > 0 {
+            tracing::info!(
+                target: "sneldb::auth",
+                user_id,
+                revoked_sessions = count,
+                "Revoked all session tokens for user"
+            );
+        }
+
+        count
     }
 
     /// Lists all users
@@ -267,11 +307,12 @@ impl AuthManager {
     }
 
     /// Validate a session token and return the associated user_id if valid.
-    /// Returns None if token is invalid or expired.
+    /// Returns None if token is invalid, expired, or user is inactive.
     pub async fn validate_session_token(&self, token: &str) -> Option<String> {
+        let session = {
         let store = self.session_store.read().await;
-        let session = match store.get(token) {
-            Some(s) => s,
+            match store.get(token) {
+                Some(s) => s.clone(),
             None => {
                 tracing::warn!(
                     target: "sneldb::auth",
@@ -279,6 +320,7 @@ impl AuthManager {
                     "Token not found in session store"
                 );
                 return None;
+                }
             }
         };
 
@@ -298,6 +340,27 @@ impl AuthManager {
             );
             return None;
         }
+
+        // Check if user is still active
+        let cache_guard = self.cache.read().await;
+        if let Some(user_key) = cache_guard.get(&session.user_id) {
+            if !user_key.active {
+                tracing::warn!(
+                    target: "sneldb::auth",
+                    user_id = session.user_id,
+                    "Token validation failed: user is inactive"
+                );
+                return None;
+            }
+        } else {
+            tracing::warn!(
+                target: "sneldb::auth",
+                user_id = session.user_id,
+                "Token validation failed: user not found"
+            );
+            return None;
+        }
+        drop(cache_guard);
 
         tracing::warn!(
             target: "sneldb::auth",

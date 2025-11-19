@@ -31,33 +31,84 @@ pub fn parse(tokens: &[Token]) -> Result<Command, ParseError> {
         None => return Err(ParseError::MissingArgument("user_id".into())),
     };
 
-    // Optional: WITH KEY "secret_key"
-    let secret_key = if let Some(Word(word)) = iter.peek() {
+    // Optional: WITH KEY "secret_key" and/or WITH ROLES ["admin", "read-only"]
+    let mut secret_key = None;
+    let mut roles = None;
+
+    while let Some(Word(word)) = iter.peek() {
         if word.eq_ignore_ascii_case("WITH") {
             iter.next(); // consume WITH
             match iter.next() {
-                Some(Word(kw)) if kw.eq_ignore_ascii_case("KEY") => {}
+                Some(Word(kw)) if kw.eq_ignore_ascii_case("KEY") => match iter.next() {
+                    Some(StringLiteral(key)) => secret_key = Some(key.clone()),
+                    Some(Word(key)) => secret_key = Some(key.clone()),
+                    Some(tok) => {
+                        return Err(ParseError::UnexpectedToken(format!("{:?}", tok)));
+                    }
+                    None => return Err(ParseError::MissingArgument("secret_key".into())),
+                },
+                Some(Word(kw)) if kw.eq_ignore_ascii_case("ROLES") => {
+                    // Parse array: ["admin", "read-only"]
+                    match iter.next() {
+                        Some(LeftSquareBracket) => {
+                            let mut role_list = Vec::new();
+                            loop {
+                                match iter.next() {
+                                    Some(StringLiteral(role)) => {
+                                        role_list.push(role.clone());
+                                    }
+                                    Some(Word(role)) => {
+                                        role_list.push(role.clone());
+                                    }
+                                    Some(RightSquareBracket) => {
+                                        break;
+                                    }
+                                    Some(Symbol(',')) => {
+                                        // Skip comma, continue to next role
+                                        continue;
+                                    }
+                                    Some(tok) => {
+                                        return Err(ParseError::UnexpectedToken(format!(
+                                            "Expected role name or ']', found {:?}",
+                                            tok
+                                        )));
+                                    }
+                                    None => {
+                                        return Err(ParseError::MissingArgument(
+                                            "Missing closing ']' for ROLES array".into(),
+                                        ));
+                                    }
+                                }
+                            }
+                            roles = Some(role_list);
+                        }
+                        Some(tok) => {
+                            return Err(ParseError::ExpectedKeyword(
+                                "Expected '[' after ROLES".into(),
+                                format!("{:?}", tok),
+                            ));
+                        }
+                        None => {
+                            return Err(ParseError::MissingArgument(
+                                "Expected '[' after ROLES".into(),
+                            ));
+                        }
+                    }
+                }
                 Some(tok) => {
                     return Err(ParseError::ExpectedKeyword(
-                        "KEY".into(),
+                        "KEY or ROLES".into(),
                         format!("{:?}", tok),
                     ));
                 }
-                None => return Err(ParseError::MissingArgument("KEY".into())),
-            }
-
-            match iter.next() {
-                Some(StringLiteral(key)) => Some(key.clone()),
-                Some(Word(key)) => Some(key.clone()),
-                Some(tok) => return Err(ParseError::UnexpectedToken(format!("{:?}", tok))),
-                None => return Err(ParseError::MissingArgument("secret_key".into())),
+                None => {
+                    return Err(ParseError::MissingArgument("KEY or ROLES".into()));
+                }
             }
         } else {
-            None
+            break;
         }
-    } else {
-        None
-    };
+    }
 
     if iter.peek().is_some() {
         return Err(ParseError::UnexpectedToken(
@@ -68,5 +119,6 @@ pub fn parse(tokens: &[Token]) -> Result<Command, ParseError> {
     Ok(Command::CreateUser {
         user_id,
         secret_key,
+        roles,
     })
 }

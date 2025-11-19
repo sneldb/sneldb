@@ -418,9 +418,13 @@ async fn test_revoke_permission_success_full_revocation() {
     assert!(response.contains("200"));
     assert!(response.contains("Permissions revoked"));
 
-    // Verify permission was removed
+    // Verify permission was set to explicit denial (read=false, write=false)
+    // This ensures explicit denials override roles
     let permissions = auth_manager.get_permissions("test_user").await.unwrap();
-    assert!(!permissions.contains_key("test_event"));
+    assert!(permissions.contains_key("test_event"));
+    let perm_set = permissions.get("test_event").unwrap();
+    assert!(!perm_set.read);
+    assert!(!perm_set.write);
 }
 
 #[tokio::test]
