@@ -65,7 +65,6 @@ file_level = "error"
 zone_index_cache_max_entries = 60000
 column_block_cache_max_bytes = 4294967296
 zone_surf_cache_max_bytes = 4294967296
-streaming_enabled = true
 streaming_batch_size = 1000
 
 [time]

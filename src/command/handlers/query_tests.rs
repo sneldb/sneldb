@@ -1,7 +1,6 @@
 use crate::command::handlers::flush;
 use crate::command::handlers::query::QueryCommandHandler;
 #[cfg(test)]
-use crate::command::handlers::query::set_streaming_enabled;
 use crate::command::handlers::store;
 use crate::command::parser;
 use crate::command::parser::commands::query::parse;
@@ -116,7 +115,6 @@ fn find_column_idx(column_names: &[String], name: &str) -> usize {
 
 #[tokio::test]
 async fn test_query_returns_no_results_when_nothing_matches() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -161,7 +159,6 @@ async fn test_query_returns_no_results_when_nothing_matches() {
 
 #[tokio::test]
 async fn test_query_aggregation_count_unique_by_returns_values() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -235,7 +232,6 @@ async fn test_query_aggregation_count_unique_by_returns_values() {
 /// This verifies that overlapping values are correctly deduplicated when merging
 #[tokio::test]
 async fn test_query_aggregation_count_unique_merging_accuracy() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -378,7 +374,6 @@ async fn test_query_aggregation_count_unique_merging_accuracy() {
 /// which serializes to "[]" and merges correctly
 #[tokio::test]
 async fn test_query_aggregation_count_unique_missing_field() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -506,7 +501,6 @@ async fn test_query_aggregation_count_unique_missing_field() {
 
 #[tokio::test]
 async fn test_query_aggregation_count_field_by_returns_values() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -581,7 +575,6 @@ async fn test_query_aggregation_count_field_by_returns_values() {
 
 #[tokio::test]
 async fn test_query_aggregation_per_month_by_country_returns_bucket_and_group() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -636,7 +629,6 @@ async fn test_query_aggregation_per_month_by_country_returns_bucket_and_group() 
 
 #[tokio::test]
 async fn test_query_aggregation_count_per_day_by_two_fields() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -710,7 +702,6 @@ async fn test_query_aggregation_count_per_day_by_two_fields() {
 
 #[tokio::test]
 async fn test_query_aggregation_multiple_aggs_returns_all_metrics() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -765,7 +756,6 @@ async fn test_query_aggregation_multiple_aggs_returns_all_metrics() {
 
 #[tokio::test]
 async fn test_query_aggregation_count_returns_value() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -828,7 +818,6 @@ async fn test_query_aggregation_count_returns_value() {
 
 #[tokio::test]
 async fn test_query_aggregation_avg_with_filter_returns_value() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -892,7 +881,6 @@ async fn test_query_aggregation_avg_with_filter_returns_value() {
 
 #[tokio::test]
 async fn test_query_aggregation_empty_returns_table_not_message() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -927,7 +915,6 @@ async fn test_query_aggregation_empty_returns_table_not_message() {
 
 #[tokio::test]
 async fn test_query_returns_matching_event_as_json() {
-    let _guard = set_streaming_enabled(true);
     let base_dir = tempdir().unwrap().into_path();
     let wal_dir = tempdir().unwrap().into_path();
 
@@ -1001,7 +988,6 @@ async fn test_query_returns_matching_event_as_json() {
 
 #[tokio::test]
 async fn test_query_returns_error_for_empty_event_type() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -1029,7 +1015,6 @@ async fn test_query_returns_error_for_empty_event_type() {
 
 #[tokio::test]
 async fn test_query_selection_limit_truncates() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -1084,7 +1069,6 @@ async fn test_query_selection_limit_truncates() {
 
 #[tokio::test]
 async fn test_query_order_by_with_lt_filter_returns_rows() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -1142,7 +1126,6 @@ async fn test_query_order_by_with_lt_filter_returns_rows() {
 
 #[tokio::test]
 async fn test_query_aggregation_limit_truncates_and_sorts_groups() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -1231,7 +1214,6 @@ async fn test_query_aggregation_limit_truncates_and_sorts_groups() {
 /// Test that scalar aggregates (no group_by) work correctly in streaming mode
 #[tokio::test]
 async fn test_query_aggregation_scalar_count_streaming() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -1302,7 +1284,6 @@ async fn test_query_aggregation_scalar_count_streaming() {
 /// Test that empty groups are filtered out when merging from multiple shards/segments
 #[tokio::test]
 async fn test_query_aggregation_filters_empty_groups_from_multiple_segments() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -1385,7 +1366,6 @@ async fn test_query_aggregation_filters_empty_groups_from_multiple_segments() {
 /// Test SUM aggregation in streaming mode
 #[tokio::test]
 async fn test_query_aggregation_sum_streaming() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -1457,7 +1437,6 @@ async fn test_query_aggregation_sum_streaming() {
 /// AVG now correctly preserves sum/count for accurate merging across shards/segments.
 #[tokio::test]
 async fn test_query_aggregation_avg_streaming() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -1531,7 +1510,6 @@ async fn test_query_aggregation_avg_streaming() {
 /// Test scalar AVG (no group_by) merging across segments - now works correctly!
 #[tokio::test]
 async fn test_query_aggregation_scalar_avg_streaming() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -1608,7 +1586,6 @@ async fn test_query_aggregation_scalar_avg_streaming() {
 /// Test AVG merging accuracy across multiple segments with different group distributions
 #[tokio::test]
 async fn test_query_aggregation_avg_merging_accuracy() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -1707,7 +1684,6 @@ async fn test_query_aggregation_avg_merging_accuracy() {
 /// Test AVG with time bucketing in streaming mode
 #[tokio::test]
 async fn test_query_aggregation_avg_with_time_bucket_streaming() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -1798,7 +1774,6 @@ async fn test_query_aggregation_avg_with_time_bucket_streaming() {
 /// Note: Scalar MIN/MAX may have issues with empty groups from segments with no events
 #[tokio::test]
 async fn test_query_aggregation_min_max_streaming() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -1916,7 +1891,6 @@ async fn test_query_aggregation_min_max_streaming() {
 /// Test scalar MIN/MAX (no group_by) to verify empty group handling
 #[tokio::test]
 async fn test_query_aggregation_scalar_min_max_streaming() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -2033,7 +2007,6 @@ async fn test_query_aggregation_scalar_min_max_streaming() {
 /// This verifies the empty group filtering logic works correctly
 #[tokio::test]
 async fn test_query_aggregation_group_by_missing_field() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -2112,7 +2085,6 @@ async fn test_query_aggregation_group_by_missing_field() {
 /// Test LIMIT with aggregates when there are empty groups to filter
 #[tokio::test]
 async fn test_query_aggregation_limit_with_empty_groups_filtered() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -2191,7 +2163,6 @@ async fn test_query_aggregation_limit_with_empty_groups_filtered() {
 /// Test multiple aggregate functions together in streaming mode
 #[tokio::test]
 async fn test_query_aggregation_multiple_functions_streaming() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -2282,7 +2253,6 @@ async fn test_query_aggregation_multiple_functions_streaming() {
 /// Tests 150 events with various patterns including duplicates, negatives, large numbers, and strings.
 #[tokio::test]
 async fn test_query_order_by_limit_with_large_dataset() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     // Clear global caches to prevent cross-test contamination
@@ -2691,7 +2661,6 @@ async fn test_query_order_by_limit_with_large_dataset() {
 /// E2E: ORDER BY timestamp DESC with OFFSET and LIMIT
 #[tokio::test]
 async fn test_timestamp_order_by_desc_offset_limit() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -2755,7 +2724,6 @@ async fn test_timestamp_order_by_desc_offset_limit() {
 /// E2E: WHERE timestamp > bound + ascending order + limit
 #[tokio::test]
 async fn test_timestamp_where_gt_asc_limit() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -2820,7 +2788,6 @@ async fn test_timestamp_where_gt_asc_limit() {
 /// Tests 60 events with explicit created_at timestamps inserted in random order.
 #[tokio::test]
 async fn test_query_with_datetime_field_and_limit() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     // Clear global caches to prevent cross-test contamination
@@ -3048,7 +3015,6 @@ async fn test_query_with_datetime_field_and_limit() {
 /// Tests the new query orchestrator with multi-shard setup
 #[tokio::test]
 async fn test_orchestrator_multi_shard_query() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3110,7 +3076,6 @@ async fn test_orchestrator_multi_shard_query() {
 /// Tests ORDER BY with OFFSET and LIMIT combined
 #[tokio::test]
 async fn test_orchestrator_order_by_with_offset_and_limit() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -3191,7 +3156,6 @@ async fn test_orchestrator_order_by_with_offset_and_limit() {
 /// Tests k-way merger performance with multiple shards
 #[tokio::test]
 async fn test_orchestrator_kway_merge_performance() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -3231,8 +3195,6 @@ async fn test_orchestrator_kway_merge_performance() {
         .expect("store should succeed");
     }
 
-    sleep(Duration::from_millis(1500)).await;
-
     // Test k-way merge with ORDER BY
     let start = std::time::Instant::now();
     let cmd = parse("QUERY perf_evt ORDER BY score ASC LIMIT 50")
@@ -3270,7 +3232,6 @@ async fn test_orchestrator_kway_merge_performance() {
 /// Tests that empty shards don't break the orchestrator
 #[tokio::test]
 async fn test_orchestrator_handles_empty_shards() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3337,7 +3298,6 @@ async fn test_orchestrator_handles_empty_shards() {
 /// Tests ORDER BY with strings - validates orchestrator handles string ordering
 #[tokio::test]
 async fn test_orchestrator_order_by_string_multi_shard() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3394,7 +3354,6 @@ async fn test_orchestrator_order_by_string_multi_shard() {
 /// Tests the zero-copy command builder optimization
 #[tokio::test]
 async fn test_orchestrator_command_builder_efficiency() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3453,7 +3412,6 @@ async fn test_orchestrator_command_builder_efficiency() {
 /// Tests parallel segment discovery across multiple shards
 #[tokio::test]
 async fn test_orchestrator_parallel_segment_discovery() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -3535,7 +3493,6 @@ async fn test_orchestrator_parallel_segment_discovery() {
 /// Tests ORDER BY with WHERE clause filtering
 #[tokio::test]
 async fn test_orchestrator_order_by_with_filter() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -3612,7 +3569,6 @@ async fn test_orchestrator_order_by_with_filter() {
 /// Tests OFFSET and LIMIT interaction in orchestrator
 #[tokio::test]
 async fn test_orchestrator_offset_exceeds_results() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3671,7 +3627,6 @@ async fn test_orchestrator_offset_exceeds_results() {
 /// Tests ORDER BY DESC with OFFSET - simpler version
 #[tokio::test]
 async fn test_orchestrator_order_desc_with_large_offset() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -3743,7 +3698,6 @@ async fn test_orchestrator_order_desc_with_large_offset() {
 /// Tests the new orchestrator with no ORDER BY (legacy merge path)
 #[tokio::test]
 async fn test_orchestrator_legacy_merge_path() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3801,7 +3755,6 @@ async fn test_orchestrator_legacy_merge_path() {
 /// Tests error handling in the orchestrator
 #[tokio::test]
 async fn test_orchestrator_handles_invalid_event_type() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3831,7 +3784,6 @@ async fn test_orchestrator_handles_invalid_event_type() {
 /// Tests OFFSET without ORDER BY (plain pagination)
 #[tokio::test]
 async fn test_offset_only_without_order_by() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -3906,7 +3858,6 @@ async fn test_offset_only_without_order_by() {
 /// Tests OFFSET = 0 (should be same as no offset)
 #[tokio::test]
 async fn test_offset_zero_is_noop() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -3984,7 +3935,6 @@ async fn test_offset_zero_is_noop() {
 /// Tests OFFSET at exact boundary (equals dataset size)
 #[tokio::test]
 async fn test_offset_equals_dataset_size() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -4056,7 +4006,6 @@ async fn test_offset_equals_dataset_size() {
 /// Tests OFFSET + LIMIT where result is at exact boundary
 #[tokio::test]
 async fn test_offset_limit_exact_boundary() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -4133,7 +4082,6 @@ async fn test_offset_limit_exact_boundary() {
 /// Tests large OFFSET with small LIMIT
 #[tokio::test]
 async fn test_large_offset_small_limit() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -4205,7 +4153,6 @@ async fn test_large_offset_small_limit() {
 /// Tests that OFFSET without LIMIT is rejected (safety measure)
 #[tokio::test]
 async fn test_offset_without_limit_is_rejected() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -4241,7 +4188,6 @@ async fn test_offset_without_limit_is_rejected() {
 /// Tests OFFSET with descending ORDER BY (verify correct direction)
 #[tokio::test]
 async fn test_offset_with_descending_order() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -4317,7 +4263,6 @@ async fn test_offset_with_descending_order() {
 /// Tests OFFSET across multiple shards with ORDER BY
 #[tokio::test]
 async fn test_offset_multi_shard_kway_merge() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -4398,7 +4343,6 @@ async fn test_offset_multi_shard_kway_merge() {
 /// Tests OFFSET 1 (simplest non-zero offset)
 #[tokio::test]
 async fn test_offset_one() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     GlobalZoneIndexCache::instance().clear_for_test();
@@ -4481,7 +4425,6 @@ async fn test_offset_one() {
 /// E2E test for basic FOLLOWED BY sequence query
 #[tokio::test]
 async fn test_sequence_followed_by_basic() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -4570,7 +4513,6 @@ async fn test_sequence_followed_by_basic() {
 /// E2E test for FOLLOWED BY with WHERE clause filtering
 #[tokio::test]
 async fn test_sequence_followed_by_with_where_clause() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -4699,7 +4641,6 @@ async fn test_sequence_followed_by_with_where_clause() {
 /// E2E test for PRECEDED BY sequence query
 #[tokio::test]
 async fn test_sequence_preceded_by_basic() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -4791,7 +4732,6 @@ async fn test_sequence_preceded_by_basic() {
 /// E2E test for sequence query with numeric link field
 #[tokio::test]
 async fn test_sequence_with_numeric_link_field() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -4886,7 +4826,6 @@ async fn test_sequence_with_numeric_link_field() {
 /// for the same user, all valid sequences are matched.
 #[tokio::test]
 async fn test_sequence_multiple_sequences_same_link_value() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -4983,7 +4922,6 @@ async fn test_sequence_multiple_sequences_same_link_value() {
 /// Tests that when events exist but don't match the sequence pattern, no results are returned.
 #[tokio::test]
 async fn test_sequence_no_matching_sequences() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -5067,7 +5005,6 @@ async fn test_sequence_no_matching_sequences() {
 /// Tests that FOLLOWED BY requires correct temporal ordering.
 #[tokio::test]
 async fn test_sequence_wrong_temporal_order() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -5151,7 +5088,6 @@ async fn test_sequence_wrong_temporal_order() {
 /// Tests that only users with complete sequences are returned.
 #[tokio::test]
 async fn test_sequence_multiple_users_partial_matches() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -5258,7 +5194,6 @@ async fn test_sequence_multiple_users_partial_matches() {
 /// Tests that LIMIT works correctly with sequence queries.
 #[tokio::test]
 async fn test_sequence_with_limit() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -5348,7 +5283,6 @@ async fn test_sequence_with_limit() {
 /// Tests WHERE clause filtering on the second event in the sequence.
 #[tokio::test]
 async fn test_sequence_where_clause_on_second_event() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -5482,7 +5416,6 @@ async fn test_sequence_where_clause_on_second_event() {
 /// Tests that multiple events of the same type for the same link value are handled correctly.
 #[tokio::test]
 async fn test_sequence_duplicate_events_same_link() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -5570,7 +5503,6 @@ async fn test_sequence_duplicate_events_same_link() {
 /// Tests that sequences work when events are stored in different shards.
 #[tokio::test]
 async fn test_sequence_across_multiple_shards() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -5658,7 +5590,6 @@ async fn test_sequence_across_multiple_shards() {
 /// Tests that PRECEDED BY correctly requires the preceding event to come first.
 #[tokio::test]
 async fn test_sequence_preceded_by_wrong_order() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -5746,7 +5677,6 @@ async fn test_sequence_preceded_by_wrong_order() {
 /// Tests complex WHERE clause filtering on both events in the sequence.
 #[tokio::test]
 async fn test_sequence_where_clause_both_events() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -5891,7 +5821,6 @@ async fn test_sequence_where_clause_both_events() {
 /// Tests that sequences work correctly when events have very close timestamps.
 #[tokio::test]
 async fn test_sequence_very_close_timestamps() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -5979,7 +5908,6 @@ async fn test_sequence_very_close_timestamps() {
 /// the query returns a BadRequest error requiring event-prefixed fields.
 #[tokio::test]
 async fn test_sequence_ambiguous_field_error() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6089,7 +6017,6 @@ async fn test_sequence_ambiguous_field_error() {
 /// Tests that a common field that exists in only one event type doesn't cause an error.
 #[tokio::test]
 async fn test_sequence_non_ambiguous_field_passes() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6186,7 +6113,6 @@ async fn test_sequence_non_ambiguous_field_passes() {
 /// Test basic IN operator with numeric values
 #[tokio::test]
 async fn test_query_in_operator_basic() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6252,7 +6178,6 @@ async fn test_query_in_operator_basic() {
 /// Test IN operator with string values
 #[tokio::test]
 async fn test_query_in_operator_string() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6343,7 +6268,6 @@ async fn test_query_in_operator_string() {
 /// Test IN operator combined with AND
 #[tokio::test]
 async fn test_query_in_operator_with_and() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6424,7 +6348,6 @@ async fn test_query_in_operator_with_and() {
 /// Test IN operator combined with OR
 #[tokio::test]
 async fn test_query_in_operator_with_or() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6484,7 +6407,6 @@ async fn test_query_in_operator_with_or() {
 /// Test IN operator with ORDER BY and LIMIT
 #[tokio::test]
 async fn test_query_in_operator_with_order_by_limit() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6565,7 +6487,6 @@ async fn test_query_in_operator_with_order_by_limit() {
 /// Test IN operator with NOT
 #[tokio::test]
 async fn test_query_in_operator_with_not() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6599,8 +6520,6 @@ async fn test_query_in_operator_with_not() {
         .await
         .expect("store should succeed");
     }
-
-    sleep(Duration::from_millis(100)).await;
 
     let mut attempts = 0;
     let max_attempts = 30;
@@ -6657,7 +6576,6 @@ async fn test_query_in_operator_with_not() {
 /// Test parentheses in WHERE clause - simple grouping
 #[tokio::test]
 async fn test_query_parentheses_simple() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6723,7 +6641,6 @@ async fn test_query_parentheses_simple() {
 /// Test parentheses with AND expression
 #[tokio::test]
 async fn test_query_parentheses_with_and() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6805,7 +6722,6 @@ async fn test_query_parentheses_with_and() {
 /// Test nested parentheses
 #[tokio::test]
 async fn test_query_parentheses_nested() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6876,7 +6792,6 @@ async fn test_query_parentheses_nested() {
 /// Test parentheses with NOT operator
 #[tokio::test]
 async fn test_query_parentheses_with_not() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -6958,7 +6873,6 @@ async fn test_query_parentheses_with_not() {
 /// Test complex parentheses expression matching the scenario
 #[tokio::test]
 async fn test_query_parentheses_complex() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -7049,7 +6963,6 @@ async fn test_query_parentheses_complex() {
 /// both metrics are computed and results are sorted correctly by avg(price).
 #[tokio::test]
 async fn test_plotql_order_by_different_metric() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -7240,7 +7153,6 @@ async fn test_plotql_order_by_different_metric() {
 /// Verifies reverse scenario: main metric is avg(rating), order by count.
 #[tokio::test]
 async fn test_plotql_order_by_count_when_main_is_avg() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -7417,7 +7329,6 @@ async fn test_plotql_order_by_count_when_main_is_avg() {
 /// at the engine level and works correctly with aggregation.
 #[tokio::test]
 async fn test_plotql_order_by_field_not_metric() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -7575,7 +7486,6 @@ async fn test_plotql_order_by_field_not_metric() {
 
 #[tokio::test]
 async fn test_query_handler_bypass_auth_allows_query() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -7638,7 +7548,6 @@ async fn test_query_handler_bypass_auth_allows_query() {
 
 #[tokio::test]
 async fn test_query_handler_bypass_auth_vs_regular_user() {
-    let _guard = set_streaming_enabled(true);
     use tokio::io::AsyncReadExt;
     init_for_tests();
 

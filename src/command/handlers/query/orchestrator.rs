@@ -2,17 +2,13 @@ use std::sync::Arc;
 
 use crate::command::handlers::query_batch_stream::QueryBatchStream;
 use crate::command::types::Command;
-use crate::engine::core::read::result::QueryResult;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
 use tokio::sync::RwLock;
 
 use super::context::QueryContext;
-use super::dispatch::{
-    BatchDispatch, BatchShardDispatcher, SequenceStreamingDispatcher, StreamingDispatch,
-    StreamingShardDispatcher,
-};
-use super::merge::{BatchMerger, SequenceStreamMerger, StreamMergerKind};
+use super::dispatch::{SequenceStreamingDispatcher, StreamingDispatch, StreamingShardDispatcher};
+use super::merge::{SequenceStreamMerger, StreamMergerKind};
 use super::planner::{QueryPlanner, QueryPlannerBuilder};
 
 pub struct QueryExecutionPipeline<'a> {
@@ -41,10 +37,6 @@ impl<'a> QueryExecutionPipeline<'a> {
         self
     }
 
-    pub fn streaming_supported(&self) -> bool {
-        true
-    }
-
     pub fn is_sequence_query(&self) -> bool {
         matches!(
             self.ctx.command,
@@ -56,22 +48,10 @@ impl<'a> QueryExecutionPipeline<'a> {
         )
     }
 
-    pub async fn execute(&self) -> Result<QueryResult, String> {
-        let plan = self.planner.build_plan(&self.ctx).await?;
-        let dispatcher = BatchShardDispatcher::new();
-        let shard_results = dispatcher.dispatch(&self.ctx, &plan).await?;
-        let merger = BatchMerger::for_command(self.ctx.command);
-        merger.merge(&self.ctx, shard_results)
-    }
-
     pub async fn execute_streaming(&self) -> Result<Option<QueryBatchStream>, String> {
         // Check if this is a sequence query
         if self.is_sequence_query() {
             return self.execute_sequence_streaming().await;
-        }
-
-        if !self.streaming_supported() {
-            return Ok(None);
         }
 
         let plan = self.planner.build_plan(&self.ctx).await?;

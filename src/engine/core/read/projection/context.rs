@@ -40,7 +40,20 @@ impl<'a> ProjectionContext<'a> {
     }
 
     pub async fn payload_fields(&self) -> Vec<String> {
-        if let Some(schema) = self.plan.registry.read().await.get(self.plan.event_type()) {
+        let registry = self.plan.registry.read().await;
+
+        // Handle wildcard event_type by collecting fields from all schemas
+        if self.plan.event_type() == "*" {
+            let mut all_fields: std::collections::HashSet<String> = std::collections::HashSet::new();
+            for schema in registry.get_all().values() {
+                for field in schema.fields() {
+                    all_fields.insert(field.clone());
+                }
+            }
+            let mut fields: Vec<String> = all_fields.into_iter().collect();
+            fields.sort();
+            fields
+        } else if let Some(schema) = registry.get(self.plan.event_type()) {
             let mut fields: Vec<String> = schema.fields().cloned().collect();
             fields.sort();
             fields

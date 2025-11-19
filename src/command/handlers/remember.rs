@@ -72,10 +72,6 @@ pub(crate) async fn remember_query_with_data_dir(
 
     let pipeline = QueryExecutionPipeline::new(&query_command, shard_manager, Arc::clone(registry));
 
-    if !pipeline.streaming_supported() {
-        return Err("REMEMBER QUERY requires a streaming-compatible SELECT".into());
-    }
-
     let mut stream = pipeline
         .execute_streaming()
         .await

@@ -1,5 +1,4 @@
 use crate::command::parser::commands::replay;
-use crate::command::parser::tokenizer::tokenize;
 use crate::command::types::Command;
 
 #[cfg(test)]
@@ -9,9 +8,8 @@ mod replay_tests {
     #[test]
     fn test_parse_replay_minimal() {
         let input = r#"REPLAY FOR user-123"#;
-        let tokens = tokenize(input);
 
-        let command = replay::parse(&tokens).expect("Failed to parse REPLAY command");
+        let command = replay::parse(input).expect("Failed to parse REPLAY command");
 
         assert_eq!(
             command,
@@ -28,9 +26,8 @@ mod replay_tests {
     #[test]
     fn test_parse_replay_with_event_type() {
         let input = r#"REPLAY order_created FOR user-123"#;
-        let tokens = tokenize(input);
 
-        let command = replay::parse(&tokens).expect("Failed to parse REPLAY with event_type");
+        let command = replay::parse(input).expect("Failed to parse REPLAY with event_type");
 
         assert_eq!(
             command,
@@ -47,9 +44,8 @@ mod replay_tests {
     #[test]
     fn test_parse_replay_with_since() {
         let input = r#"REPLAY FOR user-123 SINCE "2024-01-01T00:00:00Z""#;
-        let tokens = tokenize(input);
 
-        let command = replay::parse(&tokens).expect("Failed to parse REPLAY with SINCE");
+        let command = replay::parse(input).expect("Failed to parse REPLAY with SINCE");
 
         assert_eq!(
             command,
@@ -66,10 +62,9 @@ mod replay_tests {
     #[test]
     fn test_parse_replay_with_event_type_and_since() {
         let input = r#"REPLAY order_created FOR user-123 SINCE "2024-01-01T00:00:00Z""#;
-        let tokens = tokenize(input);
 
         let command =
-            replay::parse(&tokens).expect("Failed to parse REPLAY with event_type and SINCE");
+            replay::parse(input).expect("Failed to parse REPLAY with event_type and SINCE");
 
         assert_eq!(
             command,
@@ -87,9 +82,8 @@ mod replay_tests {
     fn test_parse_replay_with_using_time_field() {
         let input =
             r#"REPLAY order_created FOR user-9 SINCE "2025-01-01T00:00:00Z" USING created_at"#;
-        let tokens = tokenize(input);
 
-        let command = replay::parse(&tokens).expect("Failed to parse REPLAY with USING");
+        let command = replay::parse(input).expect("Failed to parse REPLAY with USING");
 
         assert_eq!(
             command,
@@ -106,9 +100,8 @@ mod replay_tests {
     #[test]
     fn test_parse_replay_missing_for_should_fail() {
         let input = r#"REPLAY order_created"#; // Missing "FOR context_id"
-        let tokens = tokenize(input);
 
-        let result = replay::parse(&tokens);
+        let result = replay::parse(input);
 
         assert!(result.is_err());
     }
@@ -116,9 +109,8 @@ mod replay_tests {
     #[test]
     fn test_parse_replay_missing_context_id_should_fail() {
         let input = r#"REPLAY order_created FOR"#; // Missing actual context_id
-        let tokens = tokenize(input);
 
-        let result = replay::parse(&tokens);
+        let result = replay::parse(input);
 
         assert!(result.is_err());
     }
@@ -126,16 +118,14 @@ mod replay_tests {
     #[test]
     fn test_parse_replay_with_trailing_garbage_should_fail() {
         let input = r#"REPLAY order_created FOR user-123 garbage"#;
-        let tokens = tokenize(input);
-        let result = replay::parse(&tokens);
+        let result = replay::parse(input);
         assert!(result.is_err(), "Expected failure due to trailing garbage");
     }
 
     #[test]
     fn test_parse_replay_with_forgarbled_keyword_should_fail() {
         let input = r#"REPLAY order_created FORGARBAGE"#;
-        let tokens = tokenize(input);
-        let result = replay::parse(&tokens);
+        let result = replay::parse(input);
         assert!(
             result.is_err(),
             "Expected failure due to missing space after FOR"
@@ -145,9 +135,8 @@ mod replay_tests {
     #[test]
     fn test_parse_replay_with_return_ignored() {
         let input = r#"REPLAY order_created FOR user-123 RETURN [context_id, event_type, "timestamp", payload]"#;
-        let tokens = tokenize(input);
 
-        let command = replay::parse(&tokens).expect("Failed to parse REPLAY with RETURN");
+        let command = replay::parse(input).expect("Failed to parse REPLAY with RETURN");
 
         assert_eq!(
             command,
@@ -169,9 +158,8 @@ mod replay_tests {
     #[test]
     fn test_parse_replay_with_return_and_since() {
         let input = r#"REPLAY FOR user-123 SINCE "2024-01-01T00:00:00Z" RETURN ["plan", country]"#;
-        let tokens = tokenize(input);
 
-        let command = replay::parse(&tokens).expect("Failed to parse REPLAY with SINCE and RETURN");
+        let command = replay::parse(input).expect("Failed to parse REPLAY with SINCE and RETURN");
 
         assert_eq!(
             command,
@@ -188,9 +176,8 @@ mod replay_tests {
     #[test]
     fn test_parse_replay_with_return_empty_list() {
         let input = r#"REPLAY FOR user-123 RETURN []"#;
-        let tokens = tokenize(input);
 
-        let command = replay::parse(&tokens).expect("Failed to parse REPLAY with empty RETURN");
+        let command = replay::parse(input).expect("Failed to parse REPLAY with empty RETURN");
 
         assert_eq!(
             command,
@@ -207,10 +194,9 @@ mod replay_tests {
     #[test]
     fn test_parse_replay_with_return_mixed_whitespace_and_quotes() {
         let input = r#"REPLAY order_created FOR user-123 RETURN [ name , "country" , plan ]"#;
-        let tokens = tokenize(input);
 
         let command =
-            replay::parse(&tokens).expect("Failed to parse REPLAY with mixed RETURN list");
+            replay::parse(input).expect("Failed to parse REPLAY with mixed RETURN list");
 
         assert_eq!(
             command,
@@ -231,10 +217,9 @@ mod replay_tests {
     #[test]
     fn test_parse_replay_with_return_duplicates_preserved() {
         let input = r#"REPLAY FOR user-123 RETURN [name, name, "name"]"#;
-        let tokens = tokenize(input);
 
         let command =
-            replay::parse(&tokens).expect("Failed to parse REPLAY with duplicate RETURN fields");
+            replay::parse(input).expect("Failed to parse REPLAY with duplicate RETURN fields");
 
         assert_eq!(
             command,
@@ -255,27 +240,24 @@ mod replay_tests {
     #[test]
     fn test_parse_replay_with_return_missing_right_bracket_should_fail() {
         let input = r#"REPLAY FOR user-123 RETURN ["name", country"#; // missing closing ]
-        let tokens = tokenize(input);
 
-        let result = replay::parse(&tokens);
+        let result = replay::parse(input);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_parse_replay_with_return_missing_left_bracket_should_fail() {
         let input = r#"REPLAY FOR user-123 RETURN name]"#; // missing opening [
-        let tokens = tokenize(input);
 
-        let result = replay::parse(&tokens);
+        let result = replay::parse(input);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_parse_replay_with_return_invalid_token_should_fail() {
         let input = r#"REPLAY FOR user-123 RETURN [123, name]"#; // 123 is invalid token for field
-        let tokens = tokenize(input);
 
-        let result = replay::parse(&tokens);
+        let result = replay::parse(input);
         assert!(result.is_err());
     }
 }

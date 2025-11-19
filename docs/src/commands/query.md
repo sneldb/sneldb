@@ -21,7 +21,7 @@ QUERY <event_type:WORD>
 
 ## Constraints
 
-- Requires authentication and read permission for the event type (or admin role).
+- Requires authentication and read permission for the event type (or appropriate role: `admin`, `read-only`/`viewer`, or `editor`).
 
 ## Examples
 

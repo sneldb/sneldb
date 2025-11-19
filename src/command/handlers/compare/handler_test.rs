@@ -1,6 +1,5 @@
 use crate::command::handlers::compare::ComparisonCommandHandler;
 #[cfg(test)]
-use crate::command::handlers::query::set_streaming_enabled;
 use crate::command::handlers::store;
 use crate::command::parser::commands::plotql;
 use crate::command::types::{AggSpec, Command, QueryCommand, TimeGranularity};
@@ -121,7 +120,6 @@ async fn test_comparison_handler_rejects_single_query() {
 
 #[tokio::test]
 async fn test_comparison_handler_rejects_when_streaming_disabled() {
-    let _guard = set_streaming_enabled(false);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -192,16 +190,18 @@ async fn test_comparison_handler_rejects_when_streaming_disabled() {
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
 
+    // Since streaming is always enabled now, comparison queries should succeed
+    // (even if they return empty results)
+    // The test verifies that the comparison handler doesn't reject the query
     assert!(
-        body.contains("streaming is disabled") || body.contains("InternalError"),
-        "Expected error about streaming disabled, got: {}",
+        body.contains("schema") || body.contains("end"),
+        "Expected valid streaming response, got: {}",
         body
     );
 }
 
 #[tokio::test]
 async fn test_comparison_handler_basic_two_way_comparison() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -286,7 +286,6 @@ async fn test_comparison_handler_basic_two_way_comparison() {
 
 #[tokio::test]
 async fn test_comparison_handler_three_way_comparison() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -361,7 +360,6 @@ async fn test_comparison_handler_three_way_comparison() {
 
 #[tokio::test]
 async fn test_comparison_handler_with_time_bucket() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -433,7 +431,6 @@ async fn test_comparison_handler_with_time_bucket() {
 
 #[tokio::test]
 async fn test_comparison_handler_with_breakdown() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -505,7 +502,6 @@ async fn test_comparison_handler_with_breakdown() {
 
 #[tokio::test]
 async fn test_comparison_handler_with_per_side_filters() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -577,7 +573,6 @@ async fn test_comparison_handler_with_per_side_filters() {
 
 #[tokio::test]
 async fn test_comparison_handler_empty_results() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -624,7 +619,6 @@ async fn test_comparison_handler_empty_results() {
 
 #[tokio::test]
 async fn test_comparison_handler_same_event_type_uses_fallback_prefixes() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -690,7 +684,6 @@ async fn test_comparison_handler_same_event_type_uses_fallback_prefixes() {
 
 #[tokio::test]
 async fn test_comparison_handler_pipeline_error_returns_internal_error() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -770,7 +763,6 @@ async fn test_comparison_handler_pipeline_error_returns_internal_error() {
 
 #[tokio::test]
 async fn test_comparison_handler_with_multiple_metrics() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();
@@ -877,7 +869,6 @@ async fn test_comparison_handler_zero_queries() {
 
 #[tokio::test]
 async fn test_comparison_handler_with_shared_time_and_breakdown() {
-    let _guard = set_streaming_enabled(true);
     init_for_tests();
 
     let base_dir = tempdir().unwrap().into_path();

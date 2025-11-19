@@ -156,16 +156,12 @@ pub async fn handle<W: AsyncWrite + Unpin>(
                     write: existing_perms.write && !revoke_write,
                 };
 
-                // Update permissions (grant new set, or revoke if empty)
-                let result = if !new_perms.read && !new_perms.write {
-                    // Remove permission entirely
-                    auth_manager.revoke_permission(user_id, event_type).await
-                } else {
-                    // Update with reduced permissions
-                    auth_manager
+                // Update permissions
+                // If both are false, create explicit denial PermissionSet to override role
+                // Otherwise, update with reduced permissions
+                let result = auth_manager
                         .grant_permission(user_id, event_type, new_perms)
-                        .await
-                };
+                    .await;
 
                 match result {
                     Ok(_) => {
