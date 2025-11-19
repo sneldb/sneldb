@@ -5712,10 +5712,14 @@
       "DEFINE multi_update FIELDS { \"id\": \"int\", \"batch\": \"string\" }",
       "STORE multi_update FOR m1 PAYLOAD {\"id\":1,\"batch\":\"A\"}",
       "REMEMBER QUERY multi_update AS multi_materialization",
+      "SLEEP 200",
       "SHOW multi_materialization",
+      "SLEEP 200",
       "STORE multi_update FOR m2 PAYLOAD {\"id\":2,\"batch\":\"B\"}",
+      "SLEEP 200",
       "SHOW multi_materialization",
       "STORE multi_update FOR m3 PAYLOAD {\"id\":3,\"batch\":\"C\"}",
+      "SLEEP 200",
       "SHOW multi_materialization"
     ],
     "matchers": [
