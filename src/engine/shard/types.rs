@@ -22,11 +22,7 @@ pub struct ShardSharedState {
 
 impl Shard {
     /// Spawns a shard worker with its context and command channel.
-    pub async fn spawn(
-        id: usize,
-        base_dir: PathBuf,
-        wal_dir: PathBuf,
-    ) -> (Self, ShardSharedState) {
+    pub async fn spawn(id: usize, base_dir: PathBuf, wal_dir: PathBuf) -> (Self, ShardSharedState) {
         // Channel for shard messages
         let (tx, rx) = channel(8096);
 
