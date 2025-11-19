@@ -2,7 +2,6 @@ use crate::engine::core::EventId;
 use crate::engine::shard::context::ShardContext;
 use std::fs::{File, create_dir_all};
 use tempfile::tempdir;
-use tokio::sync::mpsc;
 
 #[tokio::test]
 async fn test_shard_context_initialization_with_existing_segments() {
@@ -19,10 +18,8 @@ async fn test_shard_context_initialization_with_existing_segments() {
     File::create(base_dir.join("00002")).unwrap();
     File::create(base_dir.join("random-file.txt")).unwrap(); // ignored
 
-    let (tx, _rx) = mpsc::channel(1);
-
     // Act
-    let ctx = ShardContext::new(0, tx, base_dir.clone(), wal_dir.clone());
+    let ctx = ShardContext::new(0, base_dir.clone(), wal_dir.clone());
 
     // Assert
     assert_eq!(ctx.id, 0);
@@ -49,8 +46,7 @@ async fn next_event_id_is_monotonic_and_shard_encoded() {
     let wal_dir = base_dir.clone();
     create_dir_all(&base_dir).unwrap();
 
-    let (tx, _rx) = mpsc::channel(1);
-    let mut ctx = ShardContext::new(7, tx, base_dir, wal_dir);
+    let mut ctx = ShardContext::new(7, base_dir, wal_dir);
 
     let first: EventId = ctx.next_event_id();
     let second: EventId = ctx.next_event_id();

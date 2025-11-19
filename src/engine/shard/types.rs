@@ -1,17 +1,10 @@
-use crate::engine::core::MemTable;
-use crate::engine::errors::StoreError;
-use crate::engine::schema::registry::SchemaRegistry;
 use crate::engine::shard::context::ShardContext;
 use crate::engine::shard::message::ShardMessage;
 use crate::engine::shard::worker::run_worker_loop;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock as StdRwLock};
 use std::time::Duration;
-use tokio::sync::{
-    RwLock,
-    mpsc::{Receiver, Sender, channel},
-    oneshot,
-};
+use tokio::sync::mpsc::{Sender, channel};
 use tracing::{error, info};
 
 #[derive(Debug)]
@@ -28,31 +21,13 @@ pub struct ShardSharedState {
 }
 
 impl Shard {
-    /// Spawns a shard worker with its context and channels.
-    /// Returns the shard handle and a receiver for flush operations.
+    /// Spawns a shard worker with its context and command channel.
     pub async fn spawn(
         id: usize,
         base_dir: PathBuf,
         wal_dir: PathBuf,
-    ) -> (
-        Self,
-        Receiver<(
-            u64,
-            MemTable,
-            Arc<RwLock<SchemaRegistry>>,
-            Arc<tokio::sync::Mutex<MemTable>>,
-            Option<oneshot::Sender<Result<(), StoreError>>>,
-        )>,
-        ShardSharedState,
-    ) {
-        // Channels: one for shard messages, one for flush notifications
-        let (flush_tx, flush_rx) = channel::<(
-            u64,
-            MemTable,
-            Arc<RwLock<SchemaRegistry>>,
-            Arc<tokio::sync::Mutex<MemTable>>,
-            Option<oneshot::Sender<Result<(), StoreError>>>,
-        )>(8096);
+    ) -> (Self, ShardSharedState) {
+        // Channel for shard messages
         let (tx, rx) = channel(8096);
 
         // Ensure shard directory exists
@@ -62,7 +37,7 @@ impl Shard {
         }
 
         // Create shard context (includes WAL + MemTable)
-        let ctx = ShardContext::new(id, flush_tx.clone(), base_dir.clone(), wal_dir.clone());
+        let ctx = ShardContext::new(id, base_dir.clone(), wal_dir.clone());
 
         // Clone shared state before moving ctx
         let flush_lock = ctx.flush_coordination_lock.clone();
@@ -90,7 +65,6 @@ impl Shard {
 
         (
             Shard { id, tx, base_dir },
-            flush_rx,
             ShardSharedState {
                 flush_lock,
                 segment_ids,

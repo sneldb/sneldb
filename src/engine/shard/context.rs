@@ -1,17 +1,14 @@
 use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
 use crate::engine::core::segment::range_allocator::RangeAllocator;
 use crate::engine::core::{
-    Event, EventId, EventIdGenerator, FlushManager, MemTable, SegmentIdLoader, WalHandle,
-    WalRecovery,
+    Event, EventId, EventIdGenerator, FlushManager, MemTable, SegmentIdLoader,
+    SegmentLifecycleTracker, WalHandle, WalRecovery,
 };
-use crate::engine::errors::StoreError;
-use crate::engine::schema::registry::SchemaRegistry;
 use crate::shared::config::CONFIG;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
-use tokio::sync::mpsc::Sender;
-use tokio::sync::{Mutex, oneshot};
+use tokio::sync::Mutex;
 use tracing::{info, warn};
 
 #[derive(Debug, Clone)]
@@ -21,13 +18,6 @@ pub struct ShardContext {
     // LSM ingestion
     pub memtable: MemTable,
     pub passive_buffers: Arc<PassiveBufferSet>,
-    pub flush_sender: Sender<(
-        u64,
-        MemTable,
-        Arc<tokio::sync::RwLock<SchemaRegistry>>,
-        Arc<Mutex<MemTable>>,
-        Option<oneshot::Sender<Result<(), StoreError>>>,
-    )>,
     pub segment_id: u64,
     pub next_l0_id: u32,
     pub allocator: RangeAllocator,
@@ -46,22 +36,14 @@ pub struct ShardContext {
     // Flush coordination - prevents concurrent segment index updates
     pub flush_coordination_lock: Arc<Mutex<()>>,
 
+    // Segment lifecycle tracking for passive buffer management
+    pub segment_lifecycle: Arc<SegmentLifecycleTracker>,
+
     pub event_id_gen: EventIdGenerator,
 }
 
 impl ShardContext {
-    pub fn new(
-        id: usize,
-        flush_sender: Sender<(
-            u64,
-            MemTable,
-            Arc<tokio::sync::RwLock<SchemaRegistry>>,
-            Arc<Mutex<MemTable>>,
-            Option<oneshot::Sender<Result<(), StoreError>>>,
-        )>,
-        base_dir: PathBuf,
-        wal_dir: PathBuf,
-    ) -> Self {
+    pub fn new(id: usize, base_dir: PathBuf, wal_dir: PathBuf) -> Self {
         // Step 1: Initialize WAL
         info!(target: "shard::context", shard_id = id, "Creating WAL handle");
         let wal_handle = WalHandle::new(id, &wal_dir).expect("Failed to create WAL writer");
@@ -82,11 +64,13 @@ impl ShardContext {
 
         // Step 3: Initialize core components
         let flush_coordination_lock = Arc::new(Mutex::new(()));
+        let segment_lifecycle = Arc::new(SegmentLifecycleTracker::new());
         let flush_manager = FlushManager::new(
             id,
             base_dir.clone(),
             Arc::clone(&segment_ids),
             Arc::clone(&flush_coordination_lock),
+            Arc::clone(&segment_lifecycle),
         );
 
         let capacity = CONFIG.engine.fill_factor * CONFIG.engine.event_per_zone;
@@ -97,7 +81,6 @@ impl ShardContext {
             passive_buffers: Arc::new(PassiveBufferSet::new(
                 CONFIG.engine.max_inflight_passives.unwrap_or(8),
             )),
-            flush_sender,
             segment_id,
             next_l0_id,
             allocator,
@@ -109,6 +92,7 @@ impl ShardContext {
             wal: Some(wal),
             flush_manager,
             flush_coordination_lock,
+            segment_lifecycle,
             event_id_gen: EventIdGenerator::new(),
         };
 

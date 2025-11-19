@@ -1,10 +1,9 @@
-use crate::engine::core::FlushWorker;
-use crate::engine::core::MemTable;
+use crate::engine::core::{FlushWorker, MemTable, SegmentLifecycleTracker};
 use crate::engine::errors::StoreError;
 use crate::engine::schema::registry::SchemaRegistry;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
-use tokio::sync::{Mutex, RwLock as TokioRwLock, mpsc::Sender, oneshot};
+use tokio::sync::{mpsc::Sender, oneshot, Mutex, RwLock as TokioRwLock};
 use tracing::{debug, error, info};
 
 /// Manages the flushing of MemTables to disk segments
@@ -28,11 +27,17 @@ impl FlushManager {
         base_dir: PathBuf,
         segment_ids: Arc<RwLock<Vec<String>>>,
         flush_coordination_lock: Arc<Mutex<()>>,
+        segment_lifecycle: Arc<SegmentLifecycleTracker>,
     ) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel(4096);
 
         // Spawn the flush worker task
-        let worker = FlushWorker::new(shard_id, base_dir.clone(), flush_coordination_lock);
+        let worker = FlushWorker::new(
+            shard_id,
+            base_dir.clone(),
+            flush_coordination_lock,
+            segment_lifecycle,
+        );
 
         let worker_handle = tokio::spawn(async move {
             let result = worker.run(rx).await;
