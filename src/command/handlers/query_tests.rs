@@ -6521,8 +6521,6 @@ async fn test_query_in_operator_with_not() {
         .expect("store should succeed");
     }
 
-    sleep(Duration::from_millis(100)).await;
-
     let mut attempts = 0;
     let max_attempts = 30;
     let mut rows = Vec::new();
