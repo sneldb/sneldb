@@ -106,6 +106,11 @@ module SnelDB
         @session_token = token
       end
 
+      # Set authenticated user ID (after successful AUTH)
+      def authenticated_user_id=(user_id)
+        @authenticated_user_id = user_id
+      end
+
       # Clear authentication state
       def clear
         @session_token = nil
