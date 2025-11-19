@@ -52,3 +52,29 @@ puts "Pinging server..."
 response = client.ping
 puts "Ping result: #{response}"
 
+# User Management (requires admin authentication)
+# First, ensure you're authenticated as admin
+admin_client = SnelDB::Client.new(
+  base_url: "http://localhost:8085",
+  user_id: "admin",              # Admin user from config
+  secret_key: "admin-key-123"   # Admin key from config
+)
+
+# Create a new user
+puts "Creating user..."
+result = admin_client.create_user(user_id: "api_client")
+if result[:success]
+  puts "User created successfully"
+  # The response contains the secret key
+  result[:data].each { |line| puts line[:raw] }
+else
+  puts "Failed to create user: #{result[:error]}"
+end
+
+# List all users
+puts "Listing users..."
+users_result = admin_client.list_users
+if users_result[:success]
+  users_result[:data].each { |user| puts user[:raw] }
+end
+

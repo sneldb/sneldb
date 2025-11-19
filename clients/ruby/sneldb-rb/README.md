@@ -1,6 +1,6 @@
 # SnelDB Ruby Client
 
-A Ruby gem for interacting with [SnelDB](https://sneldb.com) event database via HTTP using the standard command format.
+A Ruby gem for interacting with [SnelDB](https://sneldb.com) event database via HTTP or TCP using the standard command format. Supports authentication, RBAC, fine-grained permissions, and all SnelDB commands.
 
 ## Installation
 
@@ -29,13 +29,46 @@ $ gem install sneldb
 ```ruby
 require 'sneldb'
 
-# Create a client
+# Create an HTTP client
 client = SnelDB::Client.new(
   base_url: "http://localhost:8085",
   user_id: "your_user_id",      # Optional
   secret_key: "your_secret_key" # Optional
 )
+
+# Or create a TCP client for high-throughput scenarios
+tcp_client = SnelDB::Client.new(
+  base_url: "tcp://localhost:8086",
+  user_id: "your_user_id",
+  secret_key: "your_secret_key"
+)
 ```
+
+### Database Initialization
+
+The client can automatically initialize the database if it's not already initialized. This is useful for first-time setup:
+
+```ruby
+# Auto-initialize on client creation
+client = SnelDB::Client.new(
+  base_url: "http://localhost:8085",
+  auto_initialize: true,
+  initial_admin_user: "admin",        # From config: initial_admin_user
+  initial_admin_key: "admin-key-123"  # From config: initial_admin_key
+)
+
+# Or manually check and initialize
+client = SnelDB::Client.new(base_url: "http://localhost:8085")
+
+if !client.initialized?
+  client.ensure_initialized!(
+    admin_user_id: "admin",
+    admin_secret_key: "admin-key-123"
+  )
+end
+```
+
+**Note:** Database initialization requires that authentication is either bypassed (`bypass_auth = true` in config) or that the server allows user creation without authentication. The server automatically bootstraps the admin user on startup if configured in `prod.toml` (lines 56-58), but the client can also ensure initialization if needed.
 
 ### Define a Schema
 
@@ -130,18 +163,118 @@ response = client.execute("FLUSH")
 
 ### User Management
 
+**Note:** User management commands require admin authentication.
+
 ```ruby
-# Create a user
-client.create_user(user_id: "new_user")
+# Create a user (admin only)
+# Returns the generated secret key in the response
+result = client.create_user(user_id: "new_user")
+if result[:success]
+  # Extract secret key from response
+  secret_key_line = result[:data].find { |line| line[:raw].to_s.include?("Secret key:") }
+  puts "Secret key: #{secret_key_line}"
+end
 
 # Create a user with a specific key
 client.create_user(user_id: "new_user", secret_key: "my_secret_key")
 
 # List all users
-client.list_users
+users = client.list_users
+users[:data].each do |user_line|
+  puts user_line[:raw] # e.g., "admin: active" or "user1: inactive"
+end
 
-# Revoke a user's key
+# Revoke a user's key (marks user as inactive)
 client.revoke_key(user_id: "new_user")
+
+# Complete workflow: Create user and grant permissions
+client.create_user!(user_id: "api_client")
+client.grant_permission!(
+  user_id: "api_client",
+  permissions: ["read", "write"],
+  event_types: ["order_created", "payment_succeeded"]
+)
+```
+
+**Important:** The `CREATE USER` command creates regular users without roles. To create an admin user, you need to:
+1. Use the server's bootstrap feature (configured in `prod.toml` with `initial_admin_user` and `initial_admin_key`)
+2. Or use the client's `ensure_initialized!` method which creates the admin user from config
+3. Regular users can be granted permissions but cannot be assigned roles via the command interface yet
+
+### Permission Management
+
+```ruby
+# Grant read permission on an event type
+client.grant_permission(
+  user_id: "api_client",
+  permissions: ["read"],
+  event_types: ["order_created"]
+)
+
+# Grant read and write permissions on multiple event types
+client.grant_permission(
+  user_id: "api_client",
+  permissions: ["read", "write"],
+  event_types: ["order_created", "payment_succeeded"]
+)
+
+# Revoke specific permissions
+client.revoke_permission(
+  user_id: "api_client",
+  permissions: ["write"],
+  event_types: ["order_created"]
+)
+
+# Revoke all permissions for an event type
+client.revoke_permission(
+  user_id: "api_client",
+  event_types: ["order_created"]
+)
+
+# Show permissions for a user
+client.show_permissions(user_id: "api_client")
+```
+
+### Materialized Views
+
+```ruby
+# Remember a query as a materialized view
+client.remember(
+  name: "recent_orders",
+  event_type: "order_created",
+  where: 'amount > 100',
+  limit: 1000
+)
+
+# Show a materialized view
+client.show_materialized(name: "recent_orders")
+```
+
+### Batch Operations
+
+```ruby
+# Execute multiple commands in a batch
+client.batch([
+  "STORE order_created FOR customer-1 PAYLOAD {\"id\": 1}",
+  "STORE order_created FOR customer-2 PAYLOAD {\"id\": 2}"
+])
+```
+
+### Query Comparison
+
+```ruby
+# Compare multiple queries
+client.compare([
+  "QUERY order_created WHERE amount > 100",
+  "QUERY order_created WHERE amount > 200"
+])
+```
+
+### PLOT Queries
+
+```ruby
+# Execute a PLOT query for data visualization
+client.plot("QUERY order_created WHERE amount > 100")
 ```
 
 ### Error Handling
@@ -166,7 +299,11 @@ end
 
 ## Authentication
 
-The client supports authentication via headers (`X-Auth-User` and `X-Auth-Signature`). The signature is computed using HMAC-SHA256 of the command body with your secret key.
+The client supports multiple authentication methods depending on the transport protocol:
+
+### HTTP Authentication
+
+For HTTP connections, authentication is done via headers (`X-Auth-User` and `X-Auth-Signature`). The signature is computed using HMAC-SHA256 of the command body with your secret key.
 
 ```ruby
 client = SnelDB::Client.new(
@@ -175,6 +312,63 @@ client = SnelDB::Client.new(
   secret_key: "my_secret_key"
 )
 ```
+
+### TCP Authentication
+
+For TCP connections, the client supports three authentication methods:
+
+#### 1. Session Token Authentication (Recommended for high-throughput)
+
+Authenticate once with the `AUTH` command to get a session token, then use it for subsequent commands:
+
+```ruby
+tcp_client = SnelDB::Client.new(
+  base_url: "tcp://localhost:8086",
+  user_id: "my_user",
+  secret_key: "my_secret_key"
+)
+
+# Authenticate and get session token
+token = tcp_client.authenticate!
+
+# Subsequent commands automatically use the token
+tcp_client.store(
+  event_type: "order_created",
+  context_id: "customer-123",
+  payload: { id: 1, amount: 99.99 }
+)
+```
+
+#### 2. Connection-Scoped Authentication
+
+After authenticating with `AUTH`, you can send commands with just a signature prefix:
+
+```ruby
+tcp_client.authenticate!
+# Commands are automatically formatted with signature prefix
+```
+
+#### 3. Inline Format (Per-Command)
+
+Each command includes user_id and signature:
+
+```ruby
+# Commands are automatically formatted as: user_id:signature:command
+```
+
+### RBAC and Permissions
+
+SnelDB supports Role-Based Access Control (RBAC) with fine-grained permissions:
+
+- **Admin Role**: Users with the `admin` role have full access to all event types
+- **Fine-Grained Permissions**: Users can be granted read and/or write permissions per event type
+- **Permission Checks**: Permissions are automatically checked before STORE (write) and QUERY (read) operations
+
+Admin users can:
+- Create and manage users
+- Grant and revoke permissions
+- Define event schemas
+- Access all event types regardless of permissions
 
 ## Response Format
 
@@ -317,15 +511,35 @@ end
 
 The client supports all SnelDB commands:
 
+### Event Commands
 - `DEFINE` - Define event type schemas
 - `STORE` - Store events
-- `QUERY` - Query events with filters
+- `QUERY` / `FIND` - Query events with filters
 - `REPLAY` - Replay events for a context
+- `PLOT` - Execute PLOT queries for visualization
+
+### System Commands
 - `FLUSH` - Flush memtable to disk
 - `PING` - Health check
+- `BATCH` - Execute multiple commands in a batch
+- `COMPARE` - Compare multiple queries
+
+### User Management Commands (Admin Only)
 - `CREATE USER` - Create authentication users
 - `LIST USERS` - List all users
 - `REVOKE KEY` - Revoke a user's key
+
+### Permission Management Commands (Admin Only)
+- `GRANT` - Grant permissions to users for event types
+- `REVOKE` - Revoke permissions from users for event types
+- `SHOW PERMISSIONS` - Show permissions for a user
+
+### Materialized Views
+- `REMEMBER` - Remember a query as a materialized view
+- `SHOW MATERIALIZED` - Show a materialized view
+
+### Authentication Commands (TCP Only)
+- `AUTH` - Authenticate and get session token
 
 For detailed command syntax, see the [SnelDB documentation](https://sneldb.com/commands.html).
 

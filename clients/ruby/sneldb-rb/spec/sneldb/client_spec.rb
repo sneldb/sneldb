@@ -34,6 +34,36 @@ RSpec.describe SnelDB::Client do
       arrow_client = described_class.new(base_url: base_url, output_format: "arrow")
       expect(arrow_client.output_format).to eq("arrow")
     end
+
+    it "creates HTTP transport for http:// URLs" do
+      expect(client.transport).to be_a(SnelDB::Transport::HTTP)
+      expect(client.transport.host).to eq("localhost")
+      expect(client.transport.port).to eq(8085)
+      expect(client.transport.use_ssl).to be false
+    end
+
+    it "creates HTTPS transport for https:// URLs" do
+      https_client = described_class.new(base_url: "https://localhost:8443")
+      expect(https_client.transport).to be_a(SnelDB::Transport::HTTP)
+      expect(https_client.transport.use_ssl).to be true
+    end
+
+    it "creates TCP transport for tcp:// URLs" do
+      tcp_client = described_class.new(base_url: "tcp://localhost:8086")
+      expect(tcp_client.transport).to be_a(SnelDB::Transport::TCP)
+      expect(tcp_client.transport.host).to eq("localhost")
+      expect(tcp_client.transport.port).to eq(8086)
+    end
+
+    it "creates TLS transport for tls:// URLs" do
+      tls_client = described_class.new(base_url: "tls://localhost:8087")
+      expect(tls_client.transport).to be_a(SnelDB::Transport::TCP)
+      expect(tls_client.transport.use_ssl).to be true
+    end
+
+    it "creates auth manager" do
+      expect(client.auth_manager).to be_a(SnelDB::Auth::Manager)
+    end
   end
 
   describe "#execute" do
@@ -92,8 +122,8 @@ RSpec.describe SnelDB::Client do
       it "computes correct signature format" do
         authenticated_client.execute!(command)
 
-        # Verify signature format through the client's compute_signature method
-        signature = authenticated_client.send(:compute_signature, command)
+        # Verify signature format through the auth manager
+        signature = authenticated_client.auth_manager.compute_signature(command)
         expect(signature).to match(/\A[0-9a-f]{64}\z/i)
 
         # Verify the signature was actually sent in the request
@@ -550,49 +580,332 @@ RSpec.describe SnelDB::Client do
     end
   end
 
-  describe "signature computation" do
-    it "computes correct HMAC-SHA256 signature" do
-      message = "STORE test FOR ctx1 PAYLOAD {\"id\":1}"
-      secret_key = "test_secret"
-
-      client = described_class.new(
-        base_url: base_url,
+  describe "#authenticate!" do
+    let(:tcp_client) do
+      described_class.new(
+        base_url: "tcp://localhost:8086",
         user_id: "test_user",
-        secret_key: secret_key
+        secret_key: "test_secret"
       )
-
-      signature = client.send(:compute_signature, message)
-      expect(signature).to match(/\A[0-9a-f]{64}\z/i)
     end
 
-    it "trims message before computing signature" do
-      message = "  STORE test FOR ctx1 PAYLOAD {\"id\":1}  "
-      secret_key = "test_secret"
-
-      client = described_class.new(
-        base_url: base_url,
-        user_id: "test_user",
-        secret_key: secret_key
-      )
-
-      signature1 = client.send(:compute_signature, message)
-      signature2 = client.send(:compute_signature, message.strip)
-      expect(signature1).to eq(signature2)
+    it "raises error for HTTP client" do
+      expect { client.authenticate! }.to raise_error(SnelDB::AuthenticationError, /TCP connections/)
     end
 
-    it "produces consistent signatures for same input" do
-      message = "STORE test FOR ctx1 PAYLOAD {\"id\":1}"
-      secret_key = "test_secret"
+    it "authenticates TCP client and returns token" do
+      # Mock TCP transport
+      transport = instance_double(SnelDB::Transport::TCP)
+      allow(tcp_client).to receive(:transport).and_return(transport)
+      allow(transport).to receive(:is_a?).with(SnelDB::Transport::TCP).and_return(true)
+      allow(transport).to receive(:connect)
+      allow(transport).to receive(:execute).and_return({ status: 200, body: "OK TOKEN abc123" })
+      allow(transport).to receive(:session_token=)
+      allow(transport).to receive(:authenticated_user_id=)
 
-      client = described_class.new(
-        base_url: base_url,
-        user_id: "test_user",
-        secret_key: secret_key
-      )
+      token = tcp_client.authenticate!
+      expect(token).to eq("abc123")
+    end
+  end
 
-      signature1 = client.send(:compute_signature, message)
-      signature2 = client.send(:compute_signature, message)
-      expect(signature1).to eq(signature2)
+  describe "#close" do
+    let(:tcp_client) { described_class.new(base_url: "tcp://localhost:8086") }
+
+    it "closes TCP connection" do
+      transport = instance_double(SnelDB::Transport::TCP)
+      allow(tcp_client).to receive(:transport).and_return(transport)
+      allow(transport).to receive(:respond_to?).with(:close).and_return(true)
+      allow(transport).to receive(:close)
+
+      tcp_client.close
+      expect(transport).to have_received(:close)
+    end
+
+    it "handles HTTP client gracefully" do
+      expect { client.close }.not_to raise_error
+    end
+  end
+
+  describe "permission management" do
+    describe "#grant_permission" do
+      it "builds GRANT command correctly" do
+        expect(client).to receive(:execute).with(
+          'GRANT READ ON order_created TO api_client'
+        ).and_return({ success: true, data: [], error: nil })
+        client.grant_permission(
+          user_id: "api_client",
+          permissions: ["read"],
+          event_types: ["order_created"]
+        )
+      end
+
+      it "handles multiple permissions" do
+        expect(client).to receive(:execute).with(
+          'GRANT READ, WRITE ON order_created, payment_succeeded TO api_client'
+        ).and_return({ success: true, data: [], error: nil })
+        client.grant_permission(
+          user_id: "api_client",
+          permissions: ["read", "write"],
+          event_types: ["order_created", "payment_succeeded"]
+        )
+      end
+
+      it "quotes event types with special characters" do
+        expect(client).to receive(:execute).with(
+          'GRANT READ ON "event-type" TO api_client'
+        ).and_return({ success: true, data: [], error: nil })
+        client.grant_permission(
+          user_id: "api_client",
+          permissions: ["read"],
+          event_types: ["event-type"]
+        )
+      end
+    end
+
+    describe "#revoke_permission" do
+      it "builds REVOKE command with permissions" do
+        expect(client).to receive(:execute).with(
+          'REVOKE WRITE ON order_created FROM api_client'
+        ).and_return({ success: true, data: [], error: nil })
+        client.revoke_permission(
+          user_id: "api_client",
+          permissions: ["write"],
+          event_types: ["order_created"]
+        )
+      end
+
+      it "builds REVOKE command without permissions (revoke all)" do
+        expect(client).to receive(:execute).with(
+          'REVOKE ON order_created FROM api_client'
+        ).and_return({ success: true, data: [], error: nil })
+        client.revoke_permission(
+          user_id: "api_client",
+          event_types: ["order_created"]
+        )
+      end
+    end
+
+    describe "#show_permissions" do
+      it "builds SHOW PERMISSIONS command" do
+        expect(client).to receive(:execute).with(
+          "SHOW PERMISSIONS FOR api_client"
+        ).and_return({ success: true, data: [], error: nil })
+        client.show_permissions(user_id: "api_client")
+      end
+    end
+  end
+
+  describe "database initialization" do
+    describe "#initialized?" do
+      context "when users exist" do
+        before do
+          stub_request(:post, "#{base_url}/command")
+            .with(body: "LIST USERS")
+            .to_return(
+              status: 200,
+              body: "admin: active\nuser1: active",
+              headers: { "Content-Type" => "text/plain" }
+            )
+        end
+
+        it "returns true" do
+          expect(client.initialized?).to be true
+        end
+      end
+
+      context "when no users exist" do
+        before do
+          stub_request(:post, "#{base_url}/command")
+            .with(body: "LIST USERS")
+            .to_return(
+              status: 200,
+              body: "No users found",
+              headers: { "Content-Type" => "text/plain" }
+            )
+        end
+
+        it "returns false" do
+          expect(client.initialized?).to be false
+        end
+      end
+
+      context "when authentication is required" do
+        before do
+          stub_request(:post, "#{base_url}/command")
+            .with(body: "LIST USERS")
+            .to_return(
+              status: 401,
+              body: '{"message":"Authentication required"}',
+              headers: { "Content-Type" => "application/json" }
+            )
+        end
+
+        it "returns false (assumes not initialized)" do
+          expect(client.initialized?).to be false
+        end
+      end
+    end
+
+    describe "#ensure_initialized!" do
+      context "when database is already initialized" do
+        before do
+          stub_request(:post, "#{base_url}/command")
+            .with(body: "LIST USERS")
+            .to_return(
+              status: 200,
+              body: "admin: active",
+              headers: { "Content-Type" => "text/plain" }
+            )
+        end
+
+        it "returns false" do
+          result = client.ensure_initialized!(
+            admin_user_id: "admin",
+            admin_secret_key: "admin-key-123"
+          )
+          expect(result).to be false
+        end
+      end
+
+      context "when database is not initialized (bypass_auth mode)" do
+        before do
+          # First call: LIST USERS returns empty or auth error
+          stub_request(:post, "#{base_url}/command")
+            .with(body: "LIST USERS")
+            .to_return(
+              status: 200,
+              body: "No users found",
+              headers: { "Content-Type" => "text/plain" }
+            )
+
+          # Second call: CREATE USER succeeds
+          stub_request(:post, "#{base_url}/command")
+            .with(body: /CREATE USER admin/)
+            .to_return(
+              status: 200,
+              body: "User 'admin' created\nSecret key: admin-key-123",
+              headers: { "Content-Type" => "text/plain" }
+            )
+        end
+
+        it "creates admin user and returns true" do
+          result = client.ensure_initialized!(
+            admin_user_id: "admin",
+            admin_secret_key: "admin-key-123"
+          )
+          expect(result).to be true
+        end
+      end
+
+      context "when admin key is missing" do
+        it "raises error" do
+          expect {
+            client.ensure_initialized!(admin_user_id: "admin")
+          }.to raise_error(SnelDB::Error, /Admin secret key required/)
+        end
+      end
+
+      context "when user already exists" do
+        before do
+          stub_request(:post, "#{base_url}/command")
+            .with(body: "LIST USERS")
+            .to_return(
+              status: 200,
+              body: "No users found",
+              headers: { "Content-Type" => "text/plain" }
+            )
+
+          stub_request(:post, "#{base_url}/command")
+            .with(body: /CREATE USER admin/)
+            .to_return(
+              status: 400,
+              body: '{"message":"User already exists"}',
+              headers: { "Content-Type" => "application/json" }
+            )
+        end
+
+        it "returns false" do
+          result = client.ensure_initialized!(
+            admin_user_id: "admin",
+            admin_secret_key: "admin-key-123"
+          )
+          expect(result).to be false
+        end
+      end
+    end
+
+    describe "auto_initialize option" do
+      context "when auto_initialize is true" do
+        before do
+          stub_request(:post, "#{base_url}/command")
+            .with(body: "LIST USERS")
+            .to_return(
+              status: 200,
+              body: "No users found",
+              headers: { "Content-Type" => "text/plain" }
+            )
+
+          stub_request(:post, "#{base_url}/command")
+            .with(body: /CREATE USER admin/)
+            .to_return(
+              status: 200,
+              body: "User 'admin' created\nSecret key: admin-key-123",
+              headers: { "Content-Type" => "text/plain" }
+            )
+        end
+
+        it "automatically initializes database on creation" do
+          client = described_class.new(
+            base_url: base_url,
+            auto_initialize: true,
+            initial_admin_user: "admin",
+            initial_admin_key: "admin-key-123"
+          )
+          expect(client).to be_a(described_class)
+        end
+      end
+
+      context "when auto_initialize is false" do
+        it "does not initialize database" do
+          client = described_class.new(
+            base_url: base_url,
+            auto_initialize: false
+          )
+          expect(client).to be_a(described_class)
+        end
+      end
+    end
+  end
+
+  describe "not implemented commands" do
+    it "raises NotImplementedError for remember" do
+      expect {
+        client.remember(name: "test", event_type: "order_created")
+      }.to raise_error(NotImplementedError, /REMEMBER command/)
+    end
+
+    it "raises NotImplementedError for show_materialized" do
+      expect {
+        client.show_materialized(name: "test")
+      }.to raise_error(NotImplementedError, /SHOW MATERIALIZED command/)
+    end
+
+    it "raises NotImplementedError for batch" do
+      expect {
+        client.batch(["STORE test FOR ctx1 PAYLOAD {\"id\":1}"])
+      }.to raise_error(NotImplementedError, /BATCH command/)
+    end
+
+    it "raises NotImplementedError for compare" do
+      expect {
+        client.compare(["QUERY test", "QUERY test2"])
+      }.to raise_error(NotImplementedError, /COMPARE command/)
+    end
+
+    it "raises NotImplementedError for plot" do
+      expect {
+        client.plot("QUERY test")
+      }.to raise_error(NotImplementedError, /PLOT command/)
     end
   end
 

@@ -1,8 +1,9 @@
-require "net/http"
 require "uri"
 require "json"
-require "openssl"
 require_relative "errors"
+require_relative "transport/http"
+require_relative "transport/tcp"
+require_relative "auth/manager"
 
 # Optional Arrow support - only load if available
 begin
@@ -14,19 +15,61 @@ end
 
 module SnelDB
   class Client
-    attr_reader :base_url, :user_id, :secret_key, :output_format
+    attr_reader :user_id, :secret_key, :output_format, :transport, :auth_manager, :base_url
 
     # Initialize a new SnelDB client
     #
-    # @param base_url [String] The base URL of the SnelDB server (e.g., "http://localhost:8085")
+    # @param base_url [String] The base URL of the SnelDB server (e.g., "http://localhost:8085" or "tcp://localhost:8086")
     # @param user_id [String, nil] Optional user ID for authentication
     # @param secret_key [String, nil] Optional secret key for authentication
     # @param output_format [String] Response format: "text", "json", or "arrow" (default: "text")
-    def initialize(base_url:, user_id: nil, secret_key: nil, output_format: "text")
+    # @param read_timeout [Integer] Read timeout in seconds (default: 60)
+    # @param auto_initialize [Boolean] Automatically initialize database if not initialized (default: false)
+    # @param initial_admin_user [String, nil] Admin user ID for initialization (from config: initial_admin_user)
+    # @param initial_admin_key [String, nil] Admin secret key for initialization (from config: initial_admin_key)
+    def initialize(base_url:, user_id: nil, secret_key: nil, output_format: "text", read_timeout: 60, auto_initialize: false, initial_admin_user: nil, initial_admin_key: nil)
       @base_url = base_url.chomp("/")
       @user_id = user_id
       @secret_key = secret_key
       @output_format = output_format
+      @read_timeout = read_timeout
+      @initial_admin_user = initial_admin_user
+      @initial_admin_key = initial_admin_key
+
+      # Parse URL and create appropriate transport
+      uri = URI.parse(@base_url)
+      case uri.scheme
+      when "http", "https"
+        @transport = Transport::HTTP.new(
+          host: uri.host || "localhost",
+          port: uri.port || (uri.scheme == "https" ? 443 : 80),
+          use_ssl: uri.scheme == "https",
+          read_timeout: @read_timeout
+        )
+      when "tcp", "tls"
+        @transport = Transport::TCP.new(
+          host: uri.host || "localhost",
+          port: uri.port || 8086,
+          use_ssl: uri.scheme == "tls",
+          read_timeout: @read_timeout
+        )
+      else
+        # Default to HTTP if scheme not specified
+        @transport = Transport::HTTP.new(
+          host: uri.host || "localhost",
+          port: uri.port || 8085,
+          use_ssl: false,
+          read_timeout: @read_timeout
+        )
+      end
+
+      # Create auth manager
+      @auth_manager = Auth::Manager.new(user_id: @user_id, secret_key: @secret_key)
+
+      # Auto-initialize if requested
+      if auto_initialize
+        ensure_initialized!
+      end
     end
 
     # Execute a raw command string (non-raising version)
@@ -58,47 +101,24 @@ module SnelDB
     # @raise [SnelDB::ParseError] if response parsing fails
     # @raise [SnelDB::Error] for other errors
     def execute!(command)
-      begin
-        uri = URI("#{@base_url}/command")
-      rescue URI::InvalidURIError => e
-        raise ConnectionError, "Invalid server URL: #{@base_url} - #{e.message}"
+      # Format command with authentication based on transport type
+      formatted_command = if @transport.is_a?(Transport::TCP)
+        @auth_manager.format_tcp_command(command, @transport)
+      else
+        command
       end
 
-      begin
-        http = Net::HTTP.new(uri.host, uri.port)
-        http.use_ssl = uri.scheme == "https"
-        http.read_timeout = 60
-
-        request = Net::HTTP::Post.new(uri.path)
-        request.body = command
-        request["Content-Type"] = "text/plain"
-
-        # Add authentication headers if credentials are provided
-        if @user_id && @secret_key
-          # Compute signature on trimmed command (server trims before verifying)
-          signature = compute_signature(command)
-          request["X-Auth-User"] = @user_id
-          request["X-Auth-Signature"] = signature
-        end
-
-        response = http.request(request)
-      rescue Errno::ECONNREFUSED, Errno::EHOSTUNREACH, Errno::ETIMEDOUT => e
-        raise ConnectionError, "Cannot connect to server at #{@base_url}: #{e.message}"
-      rescue SocketError => e
-        raise ConnectionError, "Network error: #{e.message}"
-      rescue OpenSSL::SSL::SSLError => e
-        raise ConnectionError, "SSL error: #{e.message}"
-      rescue Net::ReadTimeout => e
-        raise ConnectionError, "Request timeout: #{e.message}"
-      rescue Net::OpenTimeout => e
-        raise ConnectionError, "Connection timeout: #{e.message}"
-      rescue => e
-        # Catch any other network/HTTP errors
-        raise ConnectionError, "Network error: #{e.class} - #{e.message}"
+      # Prepare headers
+      headers = {}
+      if @transport.is_a?(Transport::HTTP)
+        headers = @auth_manager.add_http_headers(formatted_command, headers: headers)
       end
 
-      # Handle HTTP status codes
-      case response.code.to_i
+      # Execute via transport
+      response = @transport.execute(formatted_command, headers: headers)
+
+      # Handle response status codes
+      case response[:status]
       when 200
         # Parse response and normalize to array of hashes
         begin
@@ -107,27 +127,147 @@ module SnelDB
           raise ParseError, "Failed to parse response: #{e.message}"
         end
       when 400, 405  # 405 Method Not Allowed is treated as BadRequest
-        # Try to extract the error message from JSON response
-        error_message = extract_error_message(response.body)
+        error_message = extract_error_message(response[:body])
         raise CommandError, error_message
       when 401
-        error_message = extract_error_message(response.body)
+        error_message = extract_error_message(response[:body])
         raise AuthenticationError, error_message
       when 403
-        error_message = extract_error_message(response.body)
+        error_message = extract_error_message(response[:body])
         raise AuthorizationError, error_message
       when 404
-        error_message = extract_error_message(response.body)
+        error_message = extract_error_message(response[:body])
         raise NotFoundError, error_message
       when 500
-        error_message = extract_error_message(response.body)
+        error_message = extract_error_message(response[:body])
         raise ServerError, error_message
       when 503
-        error_message = extract_error_message(response.body)
+        error_message = extract_error_message(response[:body])
         raise ConnectionError, error_message
       else
         # For other status codes, raise generic error with status code
-        raise Error, "HTTP #{response.code}: #{response.body}"
+        raise Error, "HTTP #{response[:status]}: #{response[:body]}"
+      end
+    end
+
+    # Authenticate using AUTH command (for TCP/WebSocket connections)
+    # This establishes a session token for high-throughput authentication
+    # @return [String] Session token
+    # @raise [SnelDB::AuthenticationError] if authentication fails
+    def authenticate!
+      unless @transport.is_a?(Transport::TCP)
+        raise AuthenticationError, "AUTH command is only supported for TCP connections"
+      end
+      @auth_manager.authenticate!(@transport)
+    end
+
+    # Close the connection (for TCP connections)
+    def close
+      @transport.close if @transport.respond_to?(:close)
+    end
+
+    # Ensure database is initialized by checking if users exist and creating admin user if needed
+    # This is useful for first-time setup or when the database needs to be initialized
+    #
+    # This method works when:
+    # - Authentication is bypassed (bypass_auth = true in server config)
+    # - Or when the server allows user creation without authentication when no users exist
+    #
+    # @param admin_user_id [String, nil] Admin user ID (defaults to @initial_admin_user or "admin")
+    # @param admin_secret_key [String, nil] Admin secret key (defaults to @initial_admin_key)
+    # @return [Boolean] true if initialization was performed, false if already initialized
+    # @raise [SnelDB::Error] if initialization fails
+    def ensure_initialized!(admin_user_id: nil, admin_secret_key: nil)
+      admin_user = admin_user_id || @initial_admin_user || "admin"
+      admin_key = admin_secret_key || @initial_admin_key
+
+      if admin_key.nil?
+        raise Error, "Admin secret key required for initialization. Provide initial_admin_key parameter or set it in config."
+      end
+
+      # First, try to check if database is initialized by listing users
+      # Use a client without auth credentials to check if auth is bypassed
+      check_client = self.class.new(
+        base_url: @base_url,
+        output_format: @output_format,
+        read_timeout: @read_timeout,
+        auto_initialize: false
+      )
+
+      begin
+        result = check_client.list_users
+        if result[:success] && result[:data] && result[:data].any?
+          # Users exist, database is initialized
+          return false
+        end
+      rescue AuthenticationError, AuthorizationError
+        # Auth required but no users exist, proceed with initialization
+        # Try creating user without authentication (works if bypass_auth = true)
+      rescue
+        # Other errors - might be connection issues, but try initialization anyway
+      end
+
+      # Try to create admin user without authentication first (for bypass_auth mode)
+      begin
+        result = check_client.create_user(user_id: admin_user, secret_key: admin_key)
+
+        if result[:success]
+          # Update this client's credentials if they weren't set
+          if @user_id.nil? && @secret_key.nil?
+            @user_id = admin_user
+            @secret_key = admin_key
+            @auth_manager = Auth::Manager.new(user_id: @user_id, secret_key: @secret_key)
+          end
+          return true
+        else
+          # Check if user already exists (which means DB is initialized)
+          if result[:error].is_a?(CommandError) && result[:error].message.include?("already exists")
+            return false
+          end
+          raise result[:error] || Error.new("Failed to initialize database")
+        end
+      rescue AuthenticationError, AuthorizationError
+        # Auth required - can't create user without authentication
+        # This means either:
+        # 1. Auth is not bypassed and users already exist (DB is initialized)
+        # 2. Auth is required but no users exist (server should bootstrap on startup)
+        # Try one more time with auth to see if user exists
+        temp_client = self.class.new(
+          base_url: @base_url,
+          user_id: admin_user,
+          secret_key: admin_key,
+          output_format: @output_format,
+          read_timeout: @read_timeout,
+          auto_initialize: false
+        )
+
+        begin
+          result = temp_client.list_users
+          if result[:success]
+            return false # Users exist, already initialized
+          end
+        rescue
+          # If listing fails even with auth, the server might need to bootstrap on startup
+          raise Error, "Cannot initialize database: authentication required but no users exist. " \
+                       "The server should automatically bootstrap the admin user on startup if " \
+                       "initial_admin_user and initial_admin_key are configured in prod.toml."
+        end
+      end
+    end
+
+    # Check if database is initialized (has at least one user)
+    #
+    # @return [Boolean] true if database appears initialized, false otherwise
+    def initialized?
+      begin
+        result = list_users
+        result[:success] && result[:data] && result[:data].any?
+      rescue AuthenticationError, AuthorizationError
+        # If we get auth errors, assume not initialized
+        false
+      rescue
+        # For other errors, assume initialized (to avoid false positives)
+        true
       end
     end
 
@@ -348,12 +488,28 @@ module SnelDB
 
     # Create a user (non-raising)
     #
+    # Requires admin authentication. Creates a regular user without roles.
+    # To grant permissions, use #grant_permission after creating the user.
+    #
     # @param user_id [String] The user ID to create
     # @param secret_key [String, nil] Optional secret key (generated if not provided)
     # @return [Hash] Result hash with :success, :data, :error
+    # @example
+    #   # Create a user with auto-generated key
+    #   result = client.create_user(user_id: "api_client")
+    #   secret_key = result[:data].find { |line| line[:raw].include?("Secret key:") }
+    #
+    #   # Create a user with custom key
+    #   client.create_user(user_id: "service_account", secret_key: "my_secret_key")
     def create_user(user_id:, secret_key: nil)
       command = if secret_key
-        "CREATE USER #{user_id} WITH KEY #{secret_key}"
+        # Quote secret key if it contains special characters
+        quoted_key = if secret_key.match?(/^[a-zA-Z0-9_-]+$/)
+          secret_key
+        else
+          "\"#{secret_key}\""
+        end
+        "CREATE USER #{user_id} WITH KEY #{quoted_key}"
       else
         "CREATE USER #{user_id}"
       end
@@ -362,18 +518,32 @@ module SnelDB
 
     # Create a user (raising)
     #
+    # Requires admin authentication. Creates a regular user without roles.
+    # To grant permissions, use #grant_permission after creating the user.
+    #
     # @param user_id [String] The user ID to create
     # @param secret_key [String, nil] Optional secret key (generated if not provided)
     # @return [Array<Hash>] The response as an array of hashes
     # @raise [SnelDB::Error] (see #execute! for error types)
+    # @example
+    #   # Create a user and get the generated secret key
+    #   result = client.create_user!(user_id: "api_client")
+    #   # Response contains: ["User 'api_client' created", "Secret key: abc123..."]
     def create_user!(user_id:, secret_key: nil)
       command = if secret_key
-        "CREATE USER #{user_id} WITH KEY #{secret_key}"
+        # Quote secret key if it contains special characters
+        quoted_key = if secret_key.match?(/^[a-zA-Z0-9_-]+$/)
+          secret_key
+        else
+          "\"#{secret_key}\""
+        end
+        "CREATE USER #{user_id} WITH KEY #{quoted_key}"
       else
         "CREATE USER #{user_id}"
       end
       execute!(command)
     end
+
 
     # List all users (non-raising)
     #
@@ -405,6 +575,192 @@ module SnelDB
     # @raise [SnelDB::Error] (see #execute! for error types)
     def revoke_key!(user_id:)
       execute!("REVOKE KEY #{user_id}")
+    end
+
+    # Grant permissions to a user for event types (non-raising)
+    #
+    # @param user_id [String] The user ID
+    # @param permissions [Array<String>] Permissions to grant: ["read"], ["write"], or ["read", "write"]
+    # @param event_types [Array<String>] Event types to grant permissions for
+    # @return [Hash] Result hash with :success, :data, :error
+    def grant_permission(user_id:, permissions:, event_types:)
+      perms_str = permissions.map(&:upcase).join(", ")
+      event_types_str = event_types.map { |et| quote_if_needed(et) }.join(", ")
+      command = "GRANT #{perms_str} ON #{event_types_str} TO #{user_id}"
+      execute(command)
+    end
+
+    # Grant permissions to a user for event types (raising)
+    #
+    # @param user_id [String] The user ID
+    # @param permissions [Array<String>] Permissions to grant: ["read"], ["write"], or ["read", "write"]
+    # @param event_types [Array<String>] Event types to grant permissions for
+    # @return [Array<Hash>] The response as an array of hashes
+    # @raise [SnelDB::Error] (see #execute! for error types)
+    def grant_permission!(user_id:, permissions:, event_types:)
+      perms_str = permissions.map(&:upcase).join(", ")
+      event_types_str = event_types.map { |et| quote_if_needed(et) }.join(", ")
+      command = "GRANT #{perms_str} ON #{event_types_str} TO #{user_id}"
+      execute!(command)
+    end
+
+    # Revoke permissions from a user for event types (non-raising)
+    #
+    # @param user_id [String] The user ID
+    # @param permissions [Array<String>, nil] Permissions to revoke: ["read"], ["write"], or ["read", "write"]. If nil, revokes all permissions.
+    # @param event_types [Array<String>] Event types to revoke permissions for
+    # @return [Hash] Result hash with :success, :data, :error
+    def revoke_permission(user_id:, permissions: nil, event_types:)
+      perms_str = if permissions && !permissions.empty?
+        permissions.map(&:upcase).join(", ")
+      else
+        ""
+      end
+      event_types_str = event_types.map { |et| quote_if_needed(et) }.join(", ")
+      command = if perms_str.empty?
+        "REVOKE ON #{event_types_str} FROM #{user_id}"
+      else
+        "REVOKE #{perms_str} ON #{event_types_str} FROM #{user_id}"
+      end
+      execute(command)
+    end
+
+    # Revoke permissions from a user for event types (raising)
+    #
+    # @param user_id [String] The user ID
+    # @param permissions [Array<String>, nil] Permissions to revoke: ["read"], ["write"], or ["read", "write"]. If nil, revokes all permissions.
+    # @param event_types [Array<String>] Event types to revoke permissions for
+    # @return [Array<Hash>] The response as an array of hashes
+    # @raise [SnelDB::Error] (see #execute! for error types)
+    def revoke_permission!(user_id:, permissions: nil, event_types:)
+      perms_str = if permissions && !permissions.empty?
+        permissions.map(&:upcase).join(", ")
+      else
+        ""
+      end
+      event_types_str = event_types.map { |et| quote_if_needed(et) }.join(", ")
+      command = if perms_str.empty?
+        "REVOKE ON #{event_types_str} FROM #{user_id}"
+      else
+        "REVOKE #{perms_str} ON #{event_types_str} FROM #{user_id}"
+      end
+      execute!(command)
+    end
+
+    # Show permissions for a user (non-raising)
+    #
+    # @param user_id [String] The user ID
+    # @return [Hash] Result hash with :success, :data, :error
+    def show_permissions(user_id:)
+      execute("SHOW PERMISSIONS FOR #{user_id}")
+    end
+
+    # Show permissions for a user (raising)
+    #
+    # @param user_id [String] The user ID
+    # @return [Array<Hash>] The response as an array of hashes
+    # @raise [SnelDB::Error] (see #execute! for error types)
+    def show_permissions!(user_id:)
+      execute!("SHOW PERMISSIONS FOR #{user_id}")
+    end
+
+    # Remember a query as a materialized view (NOT IMPLEMENTED YET)
+    #
+    # @param name [String] The name of the materialized view
+    # @param event_type [String] The event type to query
+    # @param context_id [String, nil] Optional context ID filter
+    # @param since [String, Integer, nil] Optional timestamp filter
+    # @param using [String, nil] Optional time field name
+    # @param where [String, nil] Optional WHERE clause
+    # @param limit [Integer, nil] Optional result limit
+    # @param return_fields [Array<String>, nil] Optional fields to return
+    # @return [Hash] Result hash with :success, :data, :error
+    def remember(name:, event_type:, context_id: nil, since: nil, using: nil, where: nil, limit: nil, return_fields: nil)
+      raise NotImplementedError, "REMEMBER command is not yet implemented"
+    end
+
+    # Remember a query as a materialized view (NOT IMPLEMENTED YET)
+    #
+    # @param name [String] The name of the materialized view
+    # @param event_type [String] The event type to query
+    # @param context_id [String, nil] Optional context ID filter
+    # @param since [String, Integer, nil] Optional timestamp filter
+    # @param using [String, nil] Optional time field name
+    # @param where [String, nil] Optional WHERE clause
+    # @param limit [Integer, nil] Optional result limit
+    # @param return_fields [Array<String>, nil] Optional fields to return
+    # @return [Array<Hash>] The response as an array of hashes
+    # @raise [SnelDB::Error] (see #execute! for error types)
+    def remember!(name:, event_type:, context_id: nil, since: nil, using: nil, where: nil, limit: nil, return_fields: nil)
+      raise NotImplementedError, "REMEMBER command is not yet implemented"
+    end
+
+    # Show a materialized view (NOT IMPLEMENTED YET)
+    #
+    # @param name [String] The name of the materialized view
+    # @return [Hash] Result hash with :success, :data, :error
+    def show_materialized(name:)
+      raise NotImplementedError, "SHOW MATERIALIZED command is not yet implemented"
+    end
+
+    # Show a materialized view (NOT IMPLEMENTED YET)
+    #
+    # @param name [String] The name of the materialized view
+    # @return [Array<Hash>] The response as an array of hashes
+    # @raise [SnelDB::Error] (see #execute! for error types)
+    def show_materialized!(name:)
+      raise NotImplementedError, "SHOW MATERIALIZED command is not yet implemented"
+    end
+
+    # Execute a batch of commands (NOT IMPLEMENTED YET)
+    #
+    # @param commands [Array<String>] Array of command strings
+    # @return [Hash] Result hash with :success, :data, :error
+    def batch(commands)
+      raise NotImplementedError, "BATCH command is not yet implemented"
+    end
+
+    # Execute a batch of commands (NOT IMPLEMENTED YET)
+    #
+    # @param commands [Array<String>] Array of command strings
+    # @return [Array<Hash>] The response as an array of hashes
+    # @raise [SnelDB::Error] (see #execute! for error types)
+    def batch!(commands)
+      raise NotImplementedError, "BATCH command is not yet implemented"
+    end
+
+    # Compare multiple queries (NOT IMPLEMENTED YET)
+    #
+    # @param queries [Array<String>] Array of query command strings
+    # @return [Hash] Result hash with :success, :data, :error
+    def compare(queries)
+      raise NotImplementedError, "COMPARE command is not yet implemented"
+    end
+
+    # Compare multiple queries (NOT IMPLEMENTED YET)
+    #
+    # @param queries [Array<String>] Array of query command strings
+    # @return [Array<Hash>] The response as an array of hashes
+    # @raise [SnelDB::Error] (see #execute! for error types)
+    def compare!(queries)
+      raise NotImplementedError, "COMPARE command is not yet implemented"
+    end
+
+    # Execute a PLOT query (NOT IMPLEMENTED YET)
+    #
+    # @param query [String] The PLOT query string
+    # @return [Hash] Result hash with :success, :data, :error
+    def plot(query)
+      raise NotImplementedError, "PLOT command is not yet implemented"
+    end
+
+    # Execute a PLOT query (NOT IMPLEMENTED YET)
+    #
+    # @param query [String] The PLOT query string
+    # @return [Array<Hash>] The response as an array of hashes
+    # @raise [SnelDB::Error] (see #execute! for error types)
+    def plot!(query)
+      raise NotImplementedError, "PLOT command is not yet implemented"
     end
 
     private
@@ -447,8 +803,14 @@ module SnelDB
 
     # Parse and normalize response to always return array of hashes
     def parse_and_normalize_response(response)
-      content_type = response["Content-Type"] || ""
-      body = response.body
+      # Handle both HTTP response objects and hash responses from transport
+      if response.is_a?(Hash)
+        content_type = response[:headers] && response[:headers]["content-type"] ? response[:headers]["content-type"].first : ""
+        body = response[:body]
+      else
+        content_type = response["Content-Type"] || ""
+        body = response.body
+      end
 
       # If content type is explicitly JSON, don't try Arrow parsing
       if content_type.include?("application/json")
@@ -467,7 +829,7 @@ module SnelDB
         # This handles cases where server returns 200 OK with JSON error messages
         begin
           parse_arrow_to_hashes(body)
-        rescue => e
+        rescue
           # If Arrow parsing fails, it might be a JSON error message
           # Fall back to text parsing
           parse_text_to_hashes(body)
@@ -667,14 +1029,6 @@ module SnelDB
       end
     end
 
-    # Compute HMAC signature for authentication
-    # The message should be trimmed to match server expectations
-    def compute_signature(message)
-      digest = OpenSSL::Digest.new("sha256")
-      # Server trims the command before verifying, so we should too
-      trimmed_message = message.strip
-      OpenSSL::HMAC.hexdigest(digest, @secret_key, trimmed_message)
-    end
 
     # Quote a value if it contains special characters or spaces
     def quote_if_needed(value)
