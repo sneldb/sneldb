@@ -1,0 +1,63 @@
+# Ruby gem build artifacts
+*.gem
+*.rbc
+/.config
+/coverage/
+/InstalledFiles
+/pkg
+/spec/reports
+/spec/examples.txt
+/test/tmp
+/test/version_tmp
+/tmp
+
+# Bundler
+/.bundle/
+/vendor/bundle
+/lib/bundler/man/
+Gemfile.lock
+
+# Ruby version managers
+.ruby-version
+.ruby-gemset
+.rvmrc
+.rbenv-version
+
+# IDE and editor files
+*.swp
+*.swo
+*~
+.DS_Store
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Logs
+*.log
+log/
+logs/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# RSpec
+.rspec_status
+spec/examples.txt
+
+# Documentation
+doc/
+.yardoc/
+.yardopts
+
+# Temporary files
+*.tmp
+*.bak
+*.cache
+
+# OS files
+Thumbs.db
+.DS_Store
+

@@ -58,8 +58,8 @@ initial_admin_key = "admin-key-123"
 
 [logging]
 log_dir = "../data/logs"
-stdout_level = "error"
-file_level = "error"
+stdout_level = "debug"
+file_level = "debug"
 
 [query]
 zone_index_cache_max_entries = 60000

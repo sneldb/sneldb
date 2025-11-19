@@ -1,6 +1,6 @@
 use crate::command::handlers::query::QueryCommandHandler;
 use crate::command::handlers::{
-    auth, compare, define, flush, permissions, remember, replay, show, store,
+    auth, compare, define, flush, permissions, ping, remember, replay, show, store,
 };
 use crate::command::types::Command;
 use crate::engine::auth::AuthManager;
@@ -83,6 +83,7 @@ pub async fn dispatch_command<W: AsyncWrite + Unpin>(
             show::handle(cmd, shard_manager, registry, writer, renderer).await
         }
         Flush { .. } => flush::handle(cmd, shard_manager, registry, writer, renderer).await,
+        Ping => ping::handle(cmd, writer, renderer).await,
         CreateUser { .. } | RevokeKey { .. } | ListUsers => {
             if let Some(auth_mgr) = auth_manager {
                 auth::handle(cmd, auth_mgr, user_id, writer, renderer).await

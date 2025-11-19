@@ -81,6 +81,46 @@ jobs:
       - name: Run E2E test runner
         run: cargo run --bin test_runner
 
+  ruby-tests:
+    name: Ruby RSpec tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for path detection
+
+      - name: Check for Ruby file changes
+        id: changed-files
+        uses: dorny/paths-filter@v2
+        with:
+          filters: |
+            ruby:
+              - 'clients/ruby/**/*.rb'
+              - 'clients/ruby/**/*.gemspec'
+              - 'clients/ruby/Gemfile'
+              - 'clients/ruby/Gemfile.lock'
+
+      - name: Set up Ruby
+        if: steps.changed-files.outputs.ruby == 'true'
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'  # Minimum supported: >= 2.7.0, using 3.3 for CI
+          bundler-cache: true
+
+      - name: Install dependencies
+        if: steps.changed-files.outputs.ruby == 'true'
+        working-directory: clients/ruby/sneldb-rb
+        run: bundle install
+
+      - name: Run RSpec tests
+        if: steps.changed-files.outputs.ruby == 'true'
+        working-directory: clients/ruby/sneldb-rb
+        run: bundle exec rspec
+
+      - name: Skip message
+        if: steps.changed-files.outputs.ruby != 'true'
+        run: echo "No Ruby files changed, skipping RSpec tests"
+
   # Optional: build docs so you can add it as a required check later
   mdbook:
     name: mdBook build

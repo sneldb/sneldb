@@ -4,6 +4,7 @@ pub mod define;
 pub mod flush;
 pub mod kway_merger;
 pub mod permissions;
+pub mod ping;
 pub mod query;
 pub mod query_batch_stream;
 pub mod remember;
@@ -25,6 +26,8 @@ mod flush_tests;
 mod kway_merger_test;
 #[cfg(test)]
 mod permissions_test;
+#[cfg(test)]
+mod ping_tests;
 #[cfg(test)]
 mod query_batch_stream_test;
 #[cfg(test)]
