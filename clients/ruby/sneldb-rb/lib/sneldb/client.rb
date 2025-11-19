@@ -277,8 +277,9 @@ module SnelDB
     # @param event_type [String] The event type name
     # @param fields [Hash] Field definitions (e.g., { "id" => "int", "name" => "string", "plan" => ["pro", "basic"] })
     # @param version [Integer, nil] Optional schema version
+    # @param grant_permissions [Boolean] Automatically grant read and write permissions to current user (default: true)
     # @return [Hash] Result hash with :success, :data, :error
-    def define(event_type:, fields:, version: nil)
+    def define(event_type:, fields:, version: nil, grant_permissions: true)
       schema = build_fields_json(fields)
 
       command = if version
@@ -287,7 +288,25 @@ module SnelDB
         "DEFINE #{event_type} FIELDS #{schema}"
       end
 
-      execute(command)
+      result = execute(command)
+
+      # Automatically grant permissions to current user if definition succeeded
+      if grant_permissions && result[:success] && @user_id
+        grant_result = grant_permission(
+          user_id: @user_id,
+          permissions: ["read", "write"],
+          event_types: [event_type]
+        )
+        # Merge any errors from grant_permission into the result
+        # But don't fail the define operation if grant fails
+        if !grant_result[:success] && grant_result[:error]
+          # Add a warning note to the result data
+          result[:data] ||= []
+          result[:data] << { raw: "Warning: Failed to grant permissions: #{grant_result[:error].message}" }
+        end
+      end
+
+      result
     end
 
     # Define a schema for an event type (raising)
@@ -295,9 +314,10 @@ module SnelDB
     # @param event_type [String] The event type name
     # @param fields [Hash] Field definitions (e.g., { "id" => "int", "name" => "string", "plan" => ["pro", "basic"] })
     # @param version [Integer, nil] Optional schema version
+    # @param grant_permissions [Boolean] Automatically grant read and write permissions to current user (default: true)
     # @return [Array<Hash>] The response as an array of hashes
     # @raise [SnelDB::Error] (see #execute! for error types)
-    def define!(event_type:, fields:, version: nil)
+    def define!(event_type:, fields:, version: nil, grant_permissions: true)
       schema = build_fields_json(fields)
 
       command = if version
@@ -306,7 +326,24 @@ module SnelDB
         "DEFINE #{event_type} FIELDS #{schema}"
       end
 
-      execute!(command)
+      result = execute!(command)
+
+      # Automatically grant permissions to current user if definition succeeded
+      if grant_permissions && @user_id
+        begin
+          grant_permission!(
+            user_id: @user_id,
+            permissions: ["read", "write"],
+            event_types: [event_type]
+          )
+        rescue Error => e
+          # Log warning but don't fail the define operation
+          # The result already contains the successful define response
+          result << { raw: "Warning: Failed to grant permissions: #{e.message}" }
+        end
+      end
+
+      result
     end
 
     # Store an event (non-raising)
@@ -471,28 +508,78 @@ module SnelDB
       execute!("FLUSH")
     end
 
-    # Ping the server (non-raising)
+    # Ping the server to check availability (non-raising)
+    #
+    # Checks if the server is available and responding correctly.
+    # Raises ConnectionError if the server is unreachable or not responding.
     #
     # @return [Hash] Result hash with :success, :data, :error
+    # @raise [SnelDB::ConnectionError] if server is unreachable
+    # @raise [SnelDB::Error] for other errors
     def ping
-      execute("PING")
+      begin
+        result = execute("PING")
+
+        # Verify the response contains PONG to confirm server is responding correctly
+        if result[:success] && result[:data]
+          pong_found = result[:data].any? do |item|
+            item[:raw].to_s.upcase.include?("PONG") ||
+            (item.is_a?(Hash) && item.values.any? { |v| v.to_s.upcase.include?("PONG") })
+          end
+
+          unless pong_found
+            return {
+              success: false,
+              data: nil,
+              error: ConnectionError.new("Server responded but did not return PONG")
+            }
+          end
+        end
+
+        result
+      rescue ConnectionError => e
+        # Re-raise connection errors as-is
+        { success: false, data: nil, error: e }
+      rescue Error => e
+        { success: false, data: nil, error: e }
+      rescue => e
+        # Wrap unexpected errors
+        { success: false, data: nil, error: ConnectionError.new("Unexpected error during ping: #{e.class} - #{e.message}") }
+      end
     end
 
-    # Ping the server (raising)
+    # Ping the server to check availability (raising)
+    #
+    # Checks if the server is available and responding correctly.
+    # Raises ConnectionError if the server is unreachable or not responding.
     #
     # @return [Array<Hash>] The response as an array of hashes
+    # @raise [SnelDB::ConnectionError] if server is unreachable or not responding correctly
     # @raise [SnelDB::Error] (see #execute! for error types)
     def ping!
-      execute!("PING")
+      result = execute!("PING")
+
+      # Verify the response contains PONG to confirm server is responding correctly
+      pong_found = result.any? do |item|
+        item[:raw].to_s.upcase.include?("PONG") ||
+        (item.is_a?(Hash) && item.values.any? { |v| v.to_s.upcase.include?("PONG") })
+      end
+
+      unless pong_found
+        raise ConnectionError, "Server responded but did not return PONG. Response: #{result.inspect}"
+      end
+
+      result
     end
 
     # Create a user (non-raising)
     #
-    # Requires admin authentication. Creates a regular user without roles.
+    # Requires admin authentication. Creates a user with optional roles and secret key.
     # To grant permissions, use #grant_permission after creating the user.
     #
     # @param user_id [String] The user ID to create
     # @param secret_key [String, nil] Optional secret key (generated if not provided)
+    # @param roles [Array<String>, nil] Optional roles to assign (e.g., ["admin", "read-only"])
     # @return [Hash] Result hash with :success, :data, :error
     # @example
     #   # Create a user with auto-generated key
@@ -501,47 +588,71 @@ module SnelDB
     #
     #   # Create a user with custom key
     #   client.create_user(user_id: "service_account", secret_key: "my_secret_key")
-    def create_user(user_id:, secret_key: nil)
-      command = if secret_key
+    #
+    #   # Create a user with roles
+    #   client.create_user(user_id: "admin_user", roles: ["admin"])
+    #
+    #   # Create a user with key and roles
+    #   client.create_user(user_id: "editor_user", secret_key: "key123", roles: ["editor", "read-only"])
+    def create_user(user_id:, secret_key: nil, roles: nil)
+      parts = ["CREATE USER #{user_id}"]
+
+      if secret_key
         # Quote secret key if it contains special characters
         quoted_key = if secret_key.match?(/^[a-zA-Z0-9_-]+$/)
           secret_key
         else
           "\"#{secret_key}\""
         end
-        "CREATE USER #{user_id} WITH KEY #{quoted_key}"
-      else
-        "CREATE USER #{user_id}"
+        parts << "WITH KEY #{quoted_key}"
       end
-      execute(command)
+
+      if roles && !roles.empty?
+        # Format roles as array: ["admin", "read-only"]
+        roles_str = roles.map { |role| "\"#{role}\"" }.join(", ")
+        parts << "WITH ROLES [#{roles_str}]"
+      end
+
+      execute(parts.join(" "))
     end
 
     # Create a user (raising)
     #
-    # Requires admin authentication. Creates a regular user without roles.
+    # Requires admin authentication. Creates a user with optional roles and secret key.
     # To grant permissions, use #grant_permission after creating the user.
     #
     # @param user_id [String] The user ID to create
     # @param secret_key [String, nil] Optional secret key (generated if not provided)
+    # @param roles [Array<String>, nil] Optional roles to assign (e.g., ["admin", "read-only"])
     # @return [Array<Hash>] The response as an array of hashes
     # @raise [SnelDB::Error] (see #execute! for error types)
     # @example
     #   # Create a user and get the generated secret key
     #   result = client.create_user!(user_id: "api_client")
     #   # Response contains: ["User 'api_client' created", "Secret key: abc123..."]
-    def create_user!(user_id:, secret_key: nil)
-      command = if secret_key
+    #
+    #   # Create a user with roles
+    #   client.create_user!(user_id: "admin_user", roles: ["admin"])
+    def create_user!(user_id:, secret_key: nil, roles: nil)
+      parts = ["CREATE USER #{user_id}"]
+
+      if secret_key
         # Quote secret key if it contains special characters
         quoted_key = if secret_key.match?(/^[a-zA-Z0-9_-]+$/)
           secret_key
         else
           "\"#{secret_key}\""
         end
-        "CREATE USER #{user_id} WITH KEY #{quoted_key}"
-      else
-        "CREATE USER #{user_id}"
+        parts << "WITH KEY #{quoted_key}"
       end
-      execute!(command)
+
+      if roles && !roles.empty?
+        # Format roles as array: ["admin", "read-only"]
+        roles_str = roles.map { |role| "\"#{role}\"" }.join(", ")
+        parts << "WITH ROLES [#{roles_str}]"
+      end
+
+      execute!(parts.join(" "))
     end
 
 
@@ -929,6 +1040,17 @@ module SnelDB
         raise ParseError, "Failed to encode response as UTF-8: #{e.message}"
       end
 
+      # Check if this is a streaming JSON response (queries/replay)
+      # Format: one JSON object per line
+      # {"type":"schema",...}
+      # {"type":"row",...} (optional, multiple)
+      # {"type":"end","row_count":N}
+      lines = text.split("\n").reject { |l| l.nil? || l.strip.empty? }
+      if lines.any? && lines.first.strip.start_with?('{') && lines.first.include?('"type"')
+        # This is a streaming JSON response
+        return parse_streaming_json_response(lines)
+      end
+
       # Try to parse as JSON first
       # Only attempt JSON parsing if it looks like valid JSON (starts with { or [ and has matching brackets)
       stripped = text.strip
@@ -1029,6 +1151,72 @@ module SnelDB
       end
     end
 
+
+    # Parse streaming JSON response format
+    # Format: {"type":"schema",...}\n{"type":"batch","rows":[[...],[...]]}\n...{"type":"end","row_count":N}\n
+    # Or: {"type":"schema",...}\n{"type":"row","values":{...}}\n...{"type":"end","row_count":N}\n
+    def parse_streaming_json_response(lines)
+      records = []
+      schema = nil
+
+      lines.each do |line|
+        next if line.strip.empty?
+
+        begin
+          frame = JSON.parse(line.strip)
+
+          case frame["type"]
+          when "schema"
+            schema = frame["columns"]
+            # Don't add schema to records, it's metadata
+          when "batch"
+            # Batch format: {"type":"batch","rows":[[value1, value2, ...], [value1, value2, ...], ...]}
+            if frame["rows"] && schema
+              frame["rows"].each do |row_values|
+                record = {}
+                row_values.each_with_index do |value, idx|
+                  column_info = schema[idx]
+                  column_name = column_info ? column_info["name"] : "col_#{idx}"
+                  record[column_name] = value
+                end
+                records << record
+              end
+            elsif frame["rows"]
+              # Fallback: add rows as arrays
+              records.concat(frame["rows"])
+            end
+          when "row"
+            # Single row format: {"type":"row","values":{...}} or {"type":"row","values":[value1, value2, ...]}
+            if frame["values"]
+              if frame["values"].is_a?(Hash)
+                # Values are already a hash with column names as keys
+                records << frame["values"]
+              elsif frame["values"].is_a?(Array) && schema
+                # Values are an array, need to map to column names
+                record = {}
+                frame["values"].each_with_index do |value, idx|
+                  column_info = schema[idx]
+                  column_name = column_info ? column_info["name"] : "col_#{idx}"
+                  record[column_name] = value
+                end
+                records << record
+              else
+                # Fallback: use values as-is
+                records << frame["values"]
+              end
+            end
+          when "end"
+            # End frame, we're done
+            break
+          end
+        rescue JSON::ParserError => e
+          # If a line fails to parse, log it but continue
+          $stderr.puts "[WARN] Failed to parse streaming frame: #{e.message}" if ENV['SNELDB_DEBUG']
+        end
+      end
+
+      records
+    end
 
     # Quote a value if it contains special characters or spaces
     def quote_if_needed(value)

@@ -253,19 +253,23 @@ test("Non-raising method with error") do
   result[:success] == false && result[:error].is_a?(SnelDB::CommandError)
 end
 
-# 11. Test connection error (if server is down)
+# 11. Test ping for server availability checking
 puts "\n" + "-" * 80
-puts "Testing connection error (if server is down)..."
-begin
-  bad_client = SnelDB::Client.new(base_url: "http://localhost:9999")
-  result = bad_client.ping
-  if result[:success] == false && result[:error].is_a?(SnelDB::ConnectionError)
-    puts "✅ Connection error handled correctly"
+puts "Testing ping for server availability..."
+test("Ping server (should succeed)") do
+  result = client.ping
+  if result[:success]
+    puts "   Server is available and responding correctly"
+    true
   else
-    puts "⚠️  Server is reachable (connection error test skipped)"
+    puts "   Server check failed: #{result[:error].message}"
+    false
   end
-rescue => e
-  puts "⚠️  Connection test: #{e.class} - #{e.message}"
+end
+
+test_error("Ping unreachable server", SnelDB::ConnectionError) do
+  bad_client = SnelDB::Client.new(base_url: "http://localhost:9999")
+  bad_client.ping!  # Should raise ConnectionError
 end
 
 # ============================================================================

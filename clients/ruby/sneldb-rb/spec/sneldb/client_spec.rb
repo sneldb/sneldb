@@ -317,7 +317,8 @@ RSpec.describe SnelDB::Client do
       ).and_return({ success: true, data: [], error: nil })
       client.define(
         event_type: "order_created",
-        fields: { "id" => "int", "amount" => "float" }
+        fields: { "id" => "int", "amount" => "float" },
+        grant_permissions: false
       )
     end
 
@@ -328,7 +329,8 @@ RSpec.describe SnelDB::Client do
       client.define(
         event_type: "order_created",
         version: 1,
-        fields: { "id" => "int" }
+        fields: { "id" => "int" },
+        grant_permissions: false
       )
     end
 
@@ -343,7 +345,8 @@ RSpec.describe SnelDB::Client do
           "name" => "string",
           "email" => "string",
           "created_at" => "timestamp"
-        }
+        },
+        grant_permissions: false
       )
     end
 
@@ -353,7 +356,8 @@ RSpec.describe SnelDB::Client do
       ).and_return({ success: true, data: [], error: nil })
       client.define(
         event_type: "subscription",
-        fields: { "plan" => ["pro", "basic"] }
+        fields: { "plan" => ["pro", "basic"] },
+        grant_permissions: false
       )
     end
 
@@ -366,8 +370,86 @@ RSpec.describe SnelDB::Client do
         fields: {
           "id" => "int",
           "role" => ["admin", "user", "guest"]
-        }
+        },
+        grant_permissions: false
       )
+    end
+
+    context "with grant_permissions enabled" do
+      let(:authenticated_client) do
+        described_class.new(
+          base_url: "http://localhost:8085",
+          user_id: "test_user",
+          secret_key: "test_key"
+        )
+      end
+
+      it "automatically grants permissions after successful definition" do
+        expect(authenticated_client).to receive(:execute).with(
+          'DEFINE order_created FIELDS { "id": "int" }'
+        ).and_return({ success: true, data: [], error: nil })
+        expect(authenticated_client).to receive(:grant_permission).with(
+          user_id: "test_user",
+          permissions: ["read", "write"],
+          event_types: ["order_created"]
+        ).and_return({ success: true, data: [], error: nil })
+        authenticated_client.define(
+          event_type: "order_created",
+          fields: { "id" => "int" }
+        )
+      end
+
+      it "does not grant permissions if definition fails" do
+        expect(authenticated_client).to receive(:execute).with(
+          'DEFINE order_created FIELDS { "id": "int" }'
+        ).and_return({ success: false, data: nil, error: StandardError.new("Definition failed") })
+        expect(authenticated_client).not_to receive(:grant_permission)
+        authenticated_client.define(
+          event_type: "order_created",
+          fields: { "id" => "int" }
+        )
+      end
+
+      it "does not grant permissions if grant_permissions is false" do
+        expect(authenticated_client).to receive(:execute).with(
+          'DEFINE order_created FIELDS { "id": "int" }'
+        ).and_return({ success: true, data: [], error: nil })
+        expect(authenticated_client).not_to receive(:grant_permission)
+        authenticated_client.define(
+          event_type: "order_created",
+          fields: { "id" => "int" },
+          grant_permissions: false
+        )
+      end
+
+      it "handles grant permission failure gracefully" do
+        expect(authenticated_client).to receive(:execute).with(
+          'DEFINE order_created FIELDS { "id": "int" }'
+        ).and_return({ success: true, data: [], error: nil })
+        expect(authenticated_client).to receive(:grant_permission).with(
+          user_id: "test_user",
+          permissions: ["read", "write"],
+          event_types: ["order_created"]
+        ).and_return({ success: false, data: nil, error: StandardError.new("Permission denied") })
+        result = authenticated_client.define(
+          event_type: "order_created",
+          fields: { "id" => "int" }
+        )
+        expect(result[:success]).to be true
+        expect(result[:data].any? { |d| d[:raw].to_s.include?("Warning") }).to be true
+      end
+
+      it "does not grant permissions if user_id is not set" do
+        unauthenticated_client = described_class.new(base_url: "http://localhost:8085")
+        expect(unauthenticated_client).to receive(:execute).with(
+          'DEFINE order_created FIELDS { "id": "int" }'
+        ).and_return({ success: true, data: [], error: nil })
+        expect(unauthenticated_client).not_to receive(:grant_permission)
+        unauthenticated_client.define(
+          event_type: "order_created",
+          fields: { "id" => "int" }
+        )
+      end
     end
   end
 
@@ -541,9 +623,35 @@ RSpec.describe SnelDB::Client do
   end
 
   describe "#ping" do
-    it "executes PING command" do
-      expect(client).to receive(:execute).with("PING")
-      client.ping
+    it "executes PING command and verifies PONG response" do
+      expect(client).to receive(:execute).with("PING").and_return({
+        success: true,
+        data: [{ raw: "PONG" }],
+        error: nil
+      })
+      result = client.ping
+      expect(result[:success]).to be true
+    end
+
+    it "returns error if server does not respond with PONG" do
+      expect(client).to receive(:execute).with("PING").and_return({
+        success: true,
+        data: [{ raw: "OK" }],
+        error: nil
+      })
+      result = client.ping
+      expect(result[:success]).to be false
+      expect(result[:error]).to be_a(SnelDB::ConnectionError)
+      expect(result[:error].message).to include("PONG")
+    end
+
+    it "handles connection errors" do
+      expect(client).to receive(:execute).with("PING").and_raise(
+        SnelDB::ConnectionError.new("Cannot connect to server")
+      )
+      result = client.ping
+      expect(result[:success]).to be false
+      expect(result[:error]).to be_a(SnelDB::ConnectionError)
     end
   end
 
@@ -563,6 +671,31 @@ RSpec.describe SnelDB::Client do
     it "builds CREATE USER command with key" do
       expect(client).to receive(:execute).with("CREATE USER new_user WITH KEY my_secret_key")
       client.create_user(user_id: "new_user", secret_key: "my_secret_key")
+    end
+
+    it "builds CREATE USER command with roles" do
+      expect(client).to receive(:execute).with('CREATE USER new_user WITH ROLES ["admin"]')
+      client.create_user(user_id: "new_user", roles: ["admin"])
+    end
+
+    it "builds CREATE USER command with multiple roles" do
+      expect(client).to receive(:execute).with('CREATE USER new_user WITH ROLES ["admin", "read-only"]')
+      client.create_user(user_id: "new_user", roles: ["admin", "read-only"])
+    end
+
+    it "builds CREATE USER command with key and roles" do
+      expect(client).to receive(:execute).with('CREATE USER new_user WITH KEY my_secret_key WITH ROLES ["admin"]')
+      client.create_user(user_id: "new_user", secret_key: "my_secret_key", roles: ["admin"])
+    end
+
+    it "ignores empty roles array" do
+      expect(client).to receive(:execute).with("CREATE USER new_user")
+      client.create_user(user_id: "new_user", roles: [])
+    end
+
+    it "ignores nil roles" do
+      expect(client).to receive(:execute).with("CREATE USER new_user")
+      client.create_user(user_id: "new_user", roles: nil)
     end
   end
 
@@ -594,14 +727,16 @@ RSpec.describe SnelDB::Client do
     end
 
     it "authenticates TCP client and returns token" do
-      # Mock TCP transport
-      transport = instance_double(SnelDB::Transport::TCP)
-      allow(tcp_client).to receive(:transport).and_return(transport)
-      allow(transport).to receive(:is_a?).with(SnelDB::Transport::TCP).and_return(true)
-      allow(transport).to receive(:connect)
-      allow(transport).to receive(:execute).and_return({ status: 200, body: "OK TOKEN abc123" })
-      allow(transport).to receive(:session_token=)
-      allow(transport).to receive(:authenticated_user_id=)
+      # Create a real TCP transport instance and stub its socket
+      transport = tcp_client.transport
+      socket = instance_double(TCPSocket)
+      allow(TCPSocket).to receive(:new).and_return(socket)
+      allow(socket).to receive(:setsockopt)
+      allow(socket).to receive(:closed?).and_return(false)
+      allow(socket).to receive(:puts)
+      allow(socket).to receive(:flush)
+      allow(socket).to receive(:gets).and_return("OK TOKEN abc123\n")
+      allow(IO).to receive(:select).and_return([[socket], [], []])
 
       token = tcp_client.authenticate!
       expect(token).to eq("abc123")
@@ -612,12 +747,12 @@ RSpec.describe SnelDB::Client do
     let(:tcp_client) { described_class.new(base_url: "tcp://localhost:8086") }
 
     it "closes TCP connection" do
-      transport = instance_double(SnelDB::Transport::TCP)
-      allow(tcp_client).to receive(:transport).and_return(transport)
-      allow(transport).to receive(:respond_to?).with(:close).and_return(true)
+      # Use real transport instance
+      transport = tcp_client.transport
       allow(transport).to receive(:close)
 
       tcp_client.close
+      # Verify close was called
       expect(transport).to have_received(:close)
     end
 
@@ -651,13 +786,26 @@ RSpec.describe SnelDB::Client do
       end
 
       it "quotes event types with special characters" do
+        # event-type contains a hyphen which is valid in identifiers, so it won't be quoted
+        # But if it had spaces or other special chars, it would be quoted
         expect(client).to receive(:execute).with(
-          'GRANT READ ON "event-type" TO api_client'
+          'GRANT READ ON event-type TO api_client'
         ).and_return({ success: true, data: [], error: nil })
         client.grant_permission(
           user_id: "api_client",
           permissions: ["read"],
           event_types: ["event-type"]
+        )
+      end
+
+      it "quotes event types with spaces" do
+        expect(client).to receive(:execute).with(
+          'GRANT READ ON "event type" TO api_client'
+        ).and_return({ success: true, data: [], error: nil })
+        client.grant_permission(
+          user_id: "api_client",
+          permissions: ["read"],
+          event_types: ["event type"]
         )
       end
     end
@@ -719,8 +867,8 @@ RSpec.describe SnelDB::Client do
             .with(body: "LIST USERS")
             .to_return(
               status: 200,
-              body: "No users found",
-              headers: { "Content-Type" => "text/plain" }
+              body: "[]",  # Empty JSON array means no users
+              headers: { "Content-Type" => "application/json" }
             )
         end
 
@@ -769,13 +917,13 @@ RSpec.describe SnelDB::Client do
 
       context "when database is not initialized (bypass_auth mode)" do
         before do
-          # First call: LIST USERS returns empty or auth error
+          # First call: LIST USERS returns empty array
           stub_request(:post, "#{base_url}/command")
             .with(body: "LIST USERS")
             .to_return(
               status: 200,
-              body: "No users found",
-              headers: { "Content-Type" => "text/plain" }
+              body: "[]",  # Empty JSON array means no users
+              headers: { "Content-Type" => "application/json" }
             )
 
           # Second call: CREATE USER succeeds
@@ -1009,6 +1157,68 @@ RSpec.describe SnelDB::Client do
         result = client.send(:parse_text_to_hashes, text)
         expect(result.length).to eq(2)
         expect(result.first[:raw]).to include("café")
+      end
+
+      it "parses streaming JSON batch format" do
+        streaming_json = <<~JSON
+          {"type":"schema","columns":[{"name":"id","logical_type":"Integer"},{"name":"amount","logical_type":"Float"}]}
+          {"type":"batch","rows":[[1,99.99],[2,149.99]]}
+          {"type":"end","row_count":2}
+        JSON
+        result = client.send(:parse_text_to_hashes, streaming_json)
+        expect(result).to eq([
+          { "id" => 1, "amount" => 99.99 },
+          { "id" => 2, "amount" => 149.99 }
+        ])
+      end
+
+      it "parses streaming JSON with empty result set" do
+        streaming_json = <<~JSON
+          {"type":"schema","columns":[{"name":"id","logical_type":"Integer"}]}
+          {"type":"end","row_count":0}
+        JSON
+        result = client.send(:parse_text_to_hashes, streaming_json)
+        expect(result).to eq([])
+      end
+
+      it "parses streaming JSON with multiple batch frames" do
+        streaming_json = <<~JSON
+          {"type":"schema","columns":[{"name":"id","logical_type":"Integer"}]}
+          {"type":"batch","rows":[[1],[2]]}
+          {"type":"batch","rows":[[3],[4]]}
+          {"type":"end","row_count":4}
+        JSON
+        result = client.send(:parse_text_to_hashes, streaming_json)
+        expect(result).to eq([
+          { "id" => 1 },
+          { "id" => 2 },
+          { "id" => 3 },
+          { "id" => 4 }
+        ])
+      end
+
+      it "handles streaming JSON with row format (fallback)" do
+        streaming_json = <<~JSON
+          {"type":"schema","columns":[{"name":"id","logical_type":"Integer"}]}
+          {"type":"row","values":[1]}
+          {"type":"row","values":[2]}
+          {"type":"end","row_count":2}
+        JSON
+        result = client.send(:parse_text_to_hashes, streaming_json)
+        expect(result).to eq([
+          { "id" => 1 },
+          { "id" => 2 }
+        ])
+      end
+
+      it "handles streaming JSON with row format as hash" do
+        streaming_json = <<~JSON
+          {"type":"schema","columns":[{"name":"id","logical_type":"Integer"}]}
+          {"type":"row","values":{"id":1}}
+          {"type":"end","row_count":1}
+        JSON
+        result = client.send(:parse_text_to_hashes, streaming_json)
+        expect(result).to eq([{ "id" => 1 }])
       end
     end
 
@@ -1248,6 +1458,7 @@ RSpec.describe SnelDB::Client do
     end
 
     describe "#ping" do
+      context "with successful PONG response" do
       before do
         stub_request(:post, "#{base_url}/command")
           .to_return(status: 200, body: "PONG", headers: { "Content-Type" => "text/plain" })
@@ -1258,6 +1469,83 @@ RSpec.describe SnelDB::Client do
         expect(result[:success]).to be true
         expect(result[:error]).to be_nil
         expect(result[:data]).to be_an(Array)
+        end
+      end
+
+      context "with connection error" do
+        before do
+          stub_request(:post, "#{base_url}/command")
+            .to_raise(Errno::ECONNREFUSED.new("Connection refused"))
+        end
+
+        it "returns error hash with ConnectionError" do
+          result = client.ping
+          expect(result[:success]).to be false
+          expect(result[:error]).to be_a(SnelDB::ConnectionError)
+        end
+      end
+
+      context "with invalid response (no PONG)" do
+        before do
+          stub_request(:post, "#{base_url}/command")
+            .to_return(status: 200, body: "OK", headers: { "Content-Type" => "text/plain" })
+        end
+
+        it "returns error hash" do
+          result = client.ping
+          expect(result[:success]).to be false
+          expect(result[:error]).to be_a(SnelDB::ConnectionError)
+          expect(result[:error].message).to include("PONG")
+        end
+      end
+
+      context "with timeout" do
+        before do
+          stub_request(:post, "#{base_url}/command")
+            .to_timeout
+        end
+
+        it "returns error hash with ConnectionError" do
+          result = client.ping
+          expect(result[:success]).to be false
+          expect(result[:error]).to be_a(SnelDB::ConnectionError)
+        end
+      end
+    end
+
+    describe "#ping!" do
+      context "with successful PONG response" do
+        before do
+          stub_request(:post, "#{base_url}/command")
+            .to_return(status: 200, body: "PONG", headers: { "Content-Type" => "text/plain" })
+        end
+
+        it "returns array of hashes" do
+          result = client.ping!
+          expect(result).to be_an(Array)
+        end
+      end
+
+      context "with connection error" do
+        before do
+          stub_request(:post, "#{base_url}/command")
+            .to_raise(Errno::ECONNREFUSED.new("Connection refused"))
+        end
+
+        it "raises ConnectionError" do
+          expect { client.ping! }.to raise_error(SnelDB::ConnectionError)
+        end
+      end
+
+      context "with invalid response (no PONG)" do
+        before do
+          stub_request(:post, "#{base_url}/command")
+            .to_return(status: 200, body: "OK", headers: { "Content-Type" => "text/plain" })
+        end
+
+        it "raises ConnectionError" do
+          expect { client.ping! }.to raise_error(SnelDB::ConnectionError, /PONG/)
+        end
       end
     end
 

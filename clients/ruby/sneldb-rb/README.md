@@ -22,6 +22,10 @@ Or install it yourself as:
 $ gem install sneldb
 ```
 
+## Quick Start
+
+For a complete real-world example demonstrating TCP connections, user management, event definition, storage, querying, and role-based access control, see `examples/realworld_scenario.rb`.
+
 ## Usage
 
 ### Basic Setup
@@ -74,6 +78,7 @@ end
 
 ```ruby
 # Define an event type schema
+# By default, automatically grants read and write permissions to the current user
 client.define(
   event_type: "order_created",
   fields: {
@@ -93,7 +98,16 @@ client.define(
     "amount" => "float"
   }
 )
+
+# Disable automatic permission granting
+client.define(
+  event_type: "order_created",
+  fields: { "id" => "int" },
+  grant_permissions: false
+)
 ```
+
+**Note:** When you define a new event type, the client automatically grants both read and write permissions to the current user (if authenticated). This can be disabled by setting `grant_permissions: false`. This feature only works when the client is authenticated with a `user_id`.
 
 ### Store Events
 
@@ -157,7 +171,22 @@ response = client.replay(
 ```ruby
 # Execute any command string directly
 response = client.execute("QUERY order_created WHERE amount > 100 LIMIT 10")
-response = client.execute("PING")
+# Ping the server to check availability
+# Returns error if server is unreachable or not responding correctly
+result = client.ping
+if result[:success]
+  puts "Server is available"
+else
+  puts "Server unavailable: #{result[:error].message}"
+end
+
+# Or use the raising version
+begin
+  client.ping!
+  puts "Server is available"
+rescue SnelDB::ConnectionError => e
+  puts "Server unavailable: #{e.message}"
+end
 response = client.execute("FLUSH")
 ```
 
@@ -177,6 +206,15 @@ end
 
 # Create a user with a specific key
 client.create_user(user_id: "new_user", secret_key: "my_secret_key")
+
+# Create a user with roles
+client.create_user(user_id: "admin_user", roles: ["admin"])
+
+# Create a user with multiple roles
+client.create_user(user_id: "editor_user", roles: ["editor", "read-only"])
+
+# Create a user with key and roles
+client.create_user(user_id: "service_account", secret_key: "my_secret_key", roles: ["write-only"])
 
 # List all users
 users = client.list_users
@@ -520,7 +558,7 @@ The client supports all SnelDB commands:
 
 ### System Commands
 - `FLUSH` - Flush memtable to disk
-- `PING` - Health check
+- `PING` - Health check and server availability verification (raises ConnectionError if server is unreachable)
 - `BATCH` - Execute multiple commands in a batch
 - `COMPARE` - Compare multiple queries
 
@@ -542,6 +580,66 @@ The client supports all SnelDB commands:
 - `AUTH` - Authenticate and get session token
 
 For detailed command syntax, see the [SnelDB documentation](https://sneldb.com/commands.html).
+
+## Examples
+
+The gem includes several example files demonstrating different use cases:
+
+### Basic Usage
+
+See `examples/basic_usage.rb` for a simple example covering:
+- Client initialization
+- Event definition
+- Storing events
+- Querying events
+- Error handling
+
+### Test Scenarios
+
+See `examples/test_scenarios.rb` for comprehensive test scenarios including:
+- Server availability checks with `ping`
+- User creation with roles
+- Permission management
+- Query operations
+
+### Real-World Scenario
+
+See `examples/realworld_scenario.rb` for a complete end-to-end example demonstrating:
+
+1. **TCP Connection**: Connecting to SnelDB via TCP as an admin user
+2. **Server Availability**: Using `ping` to verify server availability
+3. **Authentication**: Establishing a session token for TCP connections
+4. **User Management**: Creating a read-only user with roles
+5. **Event Definition**: Defining event types with automatic permission granting
+6. **Permission Management**: Granting read permissions to the read-only user
+7. **Event Storage**: Storing sample events as the admin user
+8. **Read-Only Operations**: Switching to the read-only user and:
+   - Querying events
+   - Replaying events for a specific context
+   - Demonstrating read-only restrictions (cannot define schemas or store events)
+
+This example demonstrates:
+- TCP transport usage
+- Role-based access control (RBAC)
+- Fine-grained permissions
+- Multi-user workflows
+- Error handling for permission violations
+
+To run the real-world scenario:
+
+```bash
+# Make sure SnelDB server is running on tcp://localhost:7171
+ruby examples/realworld_scenario.rb
+```
+
+The example will:
+- Connect as admin via TCP
+- Create a read-only user with the `read-only` role
+- Define event types (automatically granting permissions to admin)
+- Grant read permissions to the read-only user
+- Store sample events
+- Switch to the read-only user and perform queries/replays
+- Demonstrate that read-only users cannot define schemas or store events
 
 ## Development
 

@@ -9,7 +9,18 @@ client = SnelDB::Client.new(
   secret_key: "your_secret_key"  # Optional
 )
 
+# Check server availability before proceeding
+puts "Checking server availability..."
+ping_result = client.ping
+if ping_result[:success]
+  puts "✅ Server is available"
+else
+  puts "❌ Server unavailable: #{ping_result[:error].message}"
+  exit 1
+end
+
 # Define a schema
+# By default, automatically grants read and write permissions to the current user
 puts "Defining schema..."
 client.define(
   event_type: "order_created",
@@ -19,7 +30,15 @@ client.define(
     "currency" => "string",
     "created_at" => "datetime"
   }
+  # grant_permissions: true is the default - automatically grants permissions
 )
+
+# To disable automatic permission granting:
+# client.define(
+#   event_type: "order_created",
+#   fields: { "id" => "int", "amount" => "float" },
+#   grant_permissions: false
+# )
 
 # Store an event
 puts "Storing event..."
@@ -47,10 +66,22 @@ puts "Replaying events..."
 response = client.replay(context_id: "customer-123")
 puts "Replay result: #{response}"
 
-# Ping
+# Ping server to check availability
 puts "Pinging server..."
-response = client.ping
-puts "Ping result: #{response}"
+ping_result = client.ping
+if ping_result[:success]
+  puts "✅ Server is responding correctly"
+else
+  puts "❌ Server check failed: #{ping_result[:error].message}"
+end
+
+# Or use the raising version:
+begin
+  client.ping!
+  puts "✅ Server is available"
+rescue SnelDB::ConnectionError => e
+  puts "❌ Server unavailable: #{e.message}"
+end
 
 # User Management (requires admin authentication)
 # First, ensure you're authenticated as admin
@@ -69,6 +100,29 @@ if result[:success]
   result[:data].each { |line| puts line[:raw] }
 else
   puts "Failed to create user: #{result[:error]}"
+end
+
+# Create a user with roles
+puts "Creating user with roles..."
+result = admin_client.create_user(
+  user_id: "editor_user",
+  roles: ["editor", "read-only"]
+)
+if result[:success]
+  puts "User with roles created successfully"
+  result[:data].each { |line| puts line[:raw] }
+end
+
+# Create a user with custom key and roles
+puts "Creating user with key and roles..."
+result = admin_client.create_user(
+  user_id: "service_account",
+  secret_key: "custom-secret-key-123",
+  roles: ["write-only"]
+)
+if result[:success]
+  puts "User with key and roles created successfully"
+  result[:data].each { |line| puts line[:raw] }
 end
 
 # List all users

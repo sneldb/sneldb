@@ -31,13 +31,16 @@ end
 
 # Example 3: Use initialized client
 # After initialization, you can use the client normally
+# Note: define() automatically grants read and write permissions to the current user
 client.define(
   event_type: "order_created",
   fields: {
     "id" => "int",
     "amount" => "float"
   }
+  # grant_permissions: true is the default
 )
 
 puts "Schema defined successfully!"
+puts "Note: Permissions were automatically granted to the current user"
 

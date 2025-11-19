@@ -220,6 +220,42 @@ fn test_parse_command_ping() {
     assert_eq!(command, Command::Ping);
 }
 
+#[tokio::test]
+async fn test_dispatch_ping() {
+    init_for_tests();
+
+    let (_shard_manager, registry, _auth_manager, _temp_dir) = create_test_components().await;
+    let cmd = Command::Ping;
+
+    let (mut reader, mut writer) = duplex(1024);
+
+    dispatch_command(
+        &cmd,
+        &mut writer,
+        &_shard_manager,
+        &registry,
+        None, // Ping doesn't require auth manager
+        None, // Ping doesn't require user_id
+        &UnixRenderer,
+    )
+    .await
+    .expect("Ping dispatch should succeed");
+
+    // Close write end
+    drop(writer);
+
+    // Read response
+    let mut response = Vec::new();
+    reader.read_to_end(&mut response).await.expect("Should read response");
+
+    let response_str = String::from_utf8(response).expect("Response should be valid UTF-8");
+    assert!(
+        response_str.contains("PONG") || response_str.contains("pong"),
+        "Response should contain PONG, got: {}",
+        response_str
+    );
+}
+
 #[test]
 fn test_parse_command_flush() {
     let input = "FLUSH";
