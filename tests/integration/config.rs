@@ -34,7 +34,6 @@ pub struct QueryConfig {
     pub zone_index_cache_max_entries: usize,
     pub column_block_cache_max_bytes: usize,
     pub zone_surf_cache_max_bytes: usize,
-    pub streaming_enabled: bool,
 }
 #[derive(Serialize, Deserialize)]
 pub struct TimeConfig {
@@ -134,7 +133,6 @@ fn default_test_config(paths: &TestPaths) -> TestConfig {
             zone_index_cache_max_entries: 1024,
             column_block_cache_max_bytes: 268435456,
             zone_surf_cache_max_bytes: 104857600,
-            streaming_enabled: false,
         },
         wal: WalConfig {
             enabled: true,

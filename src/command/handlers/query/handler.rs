@@ -11,8 +11,7 @@ use crate::shared::response::render::Renderer;
 use crate::shared::response::{Response, StatusCode};
 
 use super::orchestrator::QueryExecutionPipeline;
-use super::response::QueryResponseFormatter;
-use super::streaming::{QueryResponseWriter, QueryStreamingConfig};
+use super::streaming::QueryResponseWriter;
 
 use tokio::sync::RwLock;
 use tracing::{debug, warn};
@@ -129,98 +128,50 @@ impl<'a, W: AsyncWrite + Unpin> QueryCommandHandler<'a, W> {
         let limit_value = *limit;
         let offset_value = *offset;
 
-        // Aggregate queries must use streaming path - fail early if streaming is disabled
-        if let Command::Query { aggs: Some(_), .. } = self.command {
-            if !QueryStreamingConfig::enabled() {
-                return self
-                    .write_error(
-                        StatusCode::InternalError,
-                        "Aggregate queries require streaming execution (streaming is disabled)",
-                    )
-                    .await;
+        match pipeline.execute_streaming().await {
+            Ok(Some(stream)) => {
+                // For sequence queries, the limit is already applied at the sequence matcher level
+                // (limiting sequences, not events). We should not apply it again here to events.
+                // For ordered queries, limit and offset are already applied in the flow merger (OrderedStreamMerger),
+                // so we should not apply them again in QueryResponseWriter to avoid double-application.
+                // For unordered queries, limit and offset need to be applied in QueryResponseWriter.
+                let (response_limit, response_offset) = if pipeline.is_sequence_query() {
+                    (None, None) // Sequence queries handle limits at matcher level
+                } else if let Command::Query {
+                    order_by: Some(_), ..
+                } = self.command
+                {
+                    (None, None) // Offset and limit already applied in flow merger for ordered queries
+                } else {
+                    (limit_value, offset_value) // Apply limit and offset in response writer for unordered queries
+                };
+                let response_writer = QueryResponseWriter::new(
+                    self.writer,
+                    self.renderer,
+                    stream.schema(),
+                    response_limit,
+                    response_offset,
+                );
+                response_writer.write(stream).await
             }
-        }
-
-        if QueryStreamingConfig::enabled() && pipeline.streaming_supported() {
-            match pipeline.execute_streaming().await {
-                Ok(Some(stream)) => {
-                    // For sequence queries, the limit is already applied at the sequence matcher level
-                    // (limiting sequences, not events). We should not apply it again here to events.
-                    // For ordered queries, limit and offset are already applied in the flow merger (OrderedStreamMerger),
-                    // so we should not apply them again in QueryResponseWriter to avoid double-application.
-                    // For unordered queries, limit and offset need to be applied in QueryResponseWriter.
-                    let (response_limit, response_offset) = if pipeline.is_sequence_query() {
-                        (None, None) // Sequence queries handle limits at matcher level
-                    } else if let Command::Query {
-                        order_by: Some(_), ..
-                    } = self.command
-                    {
-                        (None, None) // Offset and limit already applied in flow merger for ordered queries
-                    } else {
-                        (limit_value, offset_value) // Apply limit and offset in response writer for unordered queries
-                    };
-                    let response_writer = QueryResponseWriter::new(
-                        self.writer,
-                        self.renderer,
-                        stream.schema(),
-                        response_limit,
-                        response_offset,
-                    );
-                    return response_writer.write(stream).await;
-                }
-                Ok(None) => {
-                    // Streaming not available - check if this is an aggregate query
-                    if let Command::Query { aggs: Some(_), .. } = self.command {
-                        return self
-                            .write_error(
-                                StatusCode::InternalError,
-                                "Aggregate queries require streaming execution",
-                            )
-                            .await;
-                    }
-                }
-                Err(error) => {
-                    // Check if this is a validation error (WHERE clause ambiguity)
-                    // Validation errors should return BadRequest, not InternalError
-                    if error.contains("WHERE clause validation failed")
-                        || error.contains("Ambiguous field")
-                    {
-                        warn!(
-                            target: "sneldb::query",
-                            error = %error,
-                            "Query validation failed"
-                        );
-                        return self.write_error(StatusCode::BadRequest, &error).await;
-                    }
-                    // For aggregate queries, don't fall back to batch - fail fast
-                    if let Command::Query { aggs: Some(_), .. } = self.command {
-                        warn!(
-                            target: "sneldb::query",
-                            error = %error,
-                            "Streaming execution failed for aggregate query"
-                        );
-                        return self
-                            .write_error(
-                                StatusCode::InternalError,
-                                &format!("Aggregate query failed: {error}"),
-                            )
-                            .await;
-                    }
+            Ok(None) => {
+                // This branch is unreachable - execute_streaming() always returns Ok(Some(stream))
+                // The return type includes Option for historical reasons, but streaming is always available.
+                unreachable!("execute_streaming() always returns Some(stream)")
+            }
+            Err(error) => {
+                // Check if this is a validation error (WHERE clause ambiguity)
+                // Validation errors should return BadRequest, not InternalError
+                if error.contains("WHERE clause validation failed")
+                    || error.contains("Ambiguous field")
+                {
                     warn!(
                         target: "sneldb::query",
                         error = %error,
-                        "Streaming execution failed, falling back to buffered"
+                        "Query validation failed"
                     );
+                    return self.write_error(StatusCode::BadRequest, &error).await;
                 }
-            }
-        }
-
-        // Only create formatter when we actually need it (non-streaming path)
-        // Aggregate queries should never reach here - they're rejected above
-        let mut formatter = QueryResponseFormatter::new(self.renderer);
-        match pipeline.execute().await {
-            Ok(result) => formatter.write(self.writer, result).await,
-            Err(error) => {
                 warn!(
                     target: "sneldb::query",
                     error = %error,

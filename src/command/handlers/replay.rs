@@ -1,16 +1,21 @@
+use crate::command::handlers::query::QueryExecutionPipeline;
+use crate::command::handlers::query::QueryResponseWriter;
 use crate::command::types::Command;
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
-use crate::engine::shard::message::ShardMessage;
-use crate::engine::types::ScalarValue;
 use crate::shared::response::render::Renderer;
 use crate::shared::response::{Response, StatusCode};
-use serde_json::{Value, json};
 use std::sync::Arc;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
-use tokio::sync::{RwLock, mpsc::channel};
+use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
+/// Handles REPLAY commands by converting them to streaming QUERY commands.
+///
+/// REPLAY uses the same streaming infrastructure as QUERY, which provides:
+/// - Memory efficiency (no buffering entire result set)
+/// - Backpressure support
+/// - Incremental response delivery
 pub async fn handle<W: AsyncWrite + Unpin>(
     cmd: &Command,
     shard_manager: &ShardManager,
@@ -38,75 +43,69 @@ pub async fn handle<W: AsyncWrite + Unpin>(
 
     debug!(
         target: "sneldb::replay",
-        event_type,
+        event_type = event_type.as_deref().unwrap_or("*"),
         context_id,
         since = ?since,
-        "Dispatching Replay command to responsible shard"
+        "Processing Replay command via streaming query path"
     );
 
-    let shard = shard_manager.get_shard(context_id);
-    info!(
-        target: "sneldb::replay",
-        shard_id = shard.id,
-        "Sending Replay to shard"
+    // Convert REPLAY to QUERY command
+    let query_cmd = match cmd.to_query_command() {
+        Some(q) => q,
+        None => {
+            warn!(target: "sneldb::replay", "Failed to convert Replay to Query command");
+            let resp = Response::error(StatusCode::InternalError, "Failed to process Replay command");
+            return writer.write_all(&renderer.render(&resp)).await;
+        }
+    };
+
+    // Create query execution pipeline with the converted command
+    let pipeline = QueryExecutionPipeline::new(
+        &query_cmd,
+        shard_manager,
+        Arc::clone(registry),
     );
 
-    let (tx, mut rx) = channel(4096);
-    let tx_clone = tx.clone();
+    // Execute using streaming path
+    match pipeline.execute_streaming().await {
+        Ok(Some(stream)) => {
+            info!(
+                target: "sneldb::replay",
+                context_id,
+                "Streaming replay results"
+            );
 
-    tokio::spawn(async {
-        tokio::task::yield_now().await;
-    });
-
-    let _ = shard
-        .tx
-        .send(ShardMessage::Replay(
-            cmd.clone(),
-            tx_clone,
-            Arc::clone(registry),
-        ))
-        .await;
-
-    drop(tx);
-
-    let mut all_results = vec![];
-    while let Some(received) = rx.recv().await {
-        all_results.extend(received);
-    }
-
-    if all_results.is_empty() {
-        info!(
-            target: "sneldb::replay",
-            context_id,
-            "Replay returned no results"
-        );
-        let resp = Response::ok_lines(vec!["No matching events found".to_string()]);
-        return writer.write_all(&renderer.render(&resp)).await;
-    } else {
-        let count = all_results.len();
-        info!(
-            target: "sneldb::replay",
-            context_id,
-            result_count = count,
-            "Replay returned results"
-        );
-
-        // Convert events to ScalarValue - serialize each event as JSON string
-        let scalar_rows: Vec<ScalarValue> = all_results
-            .into_iter()
-            .map(|event| {
-                let mut obj = serde_json::Map::new();
-                obj.insert("context_id".to_string(), json!(event.context_id));
-                obj.insert("event_type".to_string(), json!(event.event_type));
-                obj.insert("timestamp".to_string(), json!(event.timestamp));
-                obj.insert("payload".to_string(), event.payload_as_json());
-                let json_value = Value::Object(obj);
-                // Convert JSON Value to ScalarValue
-                ScalarValue::from(json_value)
-            })
-            .collect();
-
-        let resp = Response::ok_scalar_array(scalar_rows, count);
-        writer.write_all(&renderer.render(&resp)).await
+            // Use QueryResponseWriter to stream results incrementally
+            // No limit/offset for replay - return all matching events
+            let response_writer = QueryResponseWriter::new(
+                writer,
+                renderer,
+                stream.schema(),
+                None,  // No limit
+                None,  // No offset
+            );
+            response_writer.write(stream).await
+        }
+        Ok(None) => {
+            warn!(target: "sneldb::replay", "Streaming not available for Replay");
+            let resp = Response::error(
+                StatusCode::InternalError,
+                "Replay requires streaming execution"
+            );
+            writer.write_all(&renderer.render(&resp)).await
+        }
+        Err(error) => {
+            warn!(
+                target: "sneldb::replay",
+                error = %error,
+                context_id,
+                "Replay execution failed"
+            );
+            let resp = Response::error(
+                StatusCode::InternalError,
+                &format!("Replay failed: {error}")
+            );
+            writer.write_all(&renderer.render(&resp)).await
+        }
     }
 }

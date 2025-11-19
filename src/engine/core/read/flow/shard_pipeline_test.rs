@@ -563,6 +563,119 @@ async fn memtable_flow_with_return_fields_projection() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn memtable_flow_with_wildcard_event_type_and_return_fields() {
+    // Test that wildcard event_type with return_fields correctly includes
+    // only the specified fields from all schemas
+    let registry = SchemaRegistryFactory::new();
+
+    // Define multiple event types with different fields
+    registry
+        .define_with_fields("event1", &[("field1", "string"), ("field2", "int")])
+        .await
+        .unwrap();
+    registry
+        .define_with_fields("event2", &[("field2", "int"), ("field3", "bool")])
+        .await
+        .unwrap();
+    registry
+        .define_with_fields("event3", &[("field1", "string"), ("field4", "float")])
+        .await
+        .unwrap();
+
+    // Query with wildcard event_type and return_fields
+    let command = CommandFactory::query()
+        .with_event_type("*")
+        .with_return_fields(vec!["field1", "field2"])
+        .create();
+
+    let plan = QueryPlanFactory::new()
+        .with_command(command)
+        .with_registry(registry.registry())
+        .create()
+        .await;
+
+    // Create events of different types
+    let events = vec![
+        EventFactory::new()
+            .with("context_id", "ctx1")
+            .with("timestamp", 10)
+            .with("event_type", "event1")
+            .with(
+                "payload",
+                json!({"field1": "value1", "field2": 100, "unused": "x"}),
+            )
+            .create(),
+        EventFactory::new()
+            .with("context_id", "ctx1")
+            .with("timestamp", 11)
+            .with("event_type", "event2")
+            .with(
+                "payload",
+                json!({"field2": 200, "field3": true, "unused": "y"}),
+            )
+            .create(),
+        EventFactory::new()
+            .with("context_id", "ctx1")
+            .with("timestamp", 12)
+            .with("event_type", "event3")
+            .with(
+                "payload",
+                json!({"field1": "value3", "field4": 3.14, "unused": "z"}),
+            )
+            .create(),
+    ];
+
+    let memtable = MemTableFactory::new().with_events(events).create().unwrap();
+    let ctx = create_flow_context();
+
+    let handle = build_memtable_flow(
+        Arc::new(plan),
+        Some(Arc::new(memtable)),
+        Vec::new(),
+        Arc::clone(&ctx),
+        None,
+    )
+    .await
+    .unwrap();
+
+    // Verify schema only contains core fields + RETURN fields
+    let column_names: Vec<String> = handle
+        .schema
+        .columns()
+        .iter()
+        .map(|c| c.name.clone())
+        .collect();
+
+    // Core fields should be present
+    assert!(column_names.contains(&"context_id".to_string()));
+    assert!(column_names.contains(&"event_type".to_string()));
+    assert!(column_names.contains(&"timestamp".to_string()));
+    assert!(column_names.contains(&"event_id".to_string()));
+
+    // RETURN fields should be present (from all schemas)
+    assert!(column_names.contains(&"field1".to_string()));
+    assert!(column_names.contains(&"field2".to_string()));
+
+    // Non-RETURN payload fields should NOT be present
+    assert!(!column_names.contains(&"field3".to_string()));
+    assert!(!column_names.contains(&"field4".to_string()));
+    assert!(!column_names.contains(&"unused".to_string()));
+
+    // Verify data flows through correctly
+    let mut receiver = handle.receiver;
+    let mut batches = Vec::new();
+    while let Some(batch) = receiver.recv().await {
+        batches.push(batch);
+    }
+
+    assert!(!batches.is_empty());
+
+    // Verify that batches contain the correct columns
+    let first_batch = &batches[0];
+    assert_eq!(first_batch.schema().column_count(), 6); // 4 core + 2 return fields
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn memtable_flow_with_empty_return_fields() {
     let registry = SchemaRegistryFactory::new();
     registry

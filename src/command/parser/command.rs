@@ -32,7 +32,7 @@ pub fn parse_command(input: &str) -> Result<Command, ParseError> {
         }
         Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("FIND") => commands::query::parse(input),
         Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("REPLAY") => {
-            commands::replay::parse(&tokens)
+            commands::replay::parse(input)
         }
         Some(Token::Word(cmd)) if cmd.eq_ignore_ascii_case("BATCH") => {
             commands::batch::parse(&tokens)

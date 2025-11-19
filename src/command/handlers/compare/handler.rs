@@ -10,7 +10,7 @@ use crate::shared::response::render::Renderer;
 use crate::shared::response::{Response, StatusCode};
 
 use super::orchestrator::ComparisonExecutionPipeline;
-use crate::command::handlers::query::{QueryResponseWriter, QueryStreamingConfig};
+use crate::command::handlers::query::QueryResponseWriter;
 
 use tokio::sync::RwLock;
 use tracing::{debug, warn};
@@ -67,16 +67,6 @@ impl<'a, W: AsyncWrite + Unpin> ComparisonCommandHandler<'a, W> {
             query_count = queries.len(),
             "Dispatching Comparison command to pipeline"
         );
-
-        // Comparison queries require streaming
-        if !QueryStreamingConfig::enabled() {
-            return self
-                .write_error(
-                    StatusCode::InternalError,
-                    "Comparison queries require streaming execution (streaming is disabled)",
-                )
-                .await;
-        }
 
         let pipeline = ComparisonExecutionPipeline::new(
             queries,

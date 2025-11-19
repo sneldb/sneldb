@@ -112,3 +112,33 @@ async fn payload_fields_missing_schema_returns_empty() {
     let fields = ctx.payload_fields().await;
     assert!(fields.is_empty());
 }
+
+#[tokio::test]
+async fn payload_fields_wildcard_includes_all_schemas() {
+    let schema_factory = SchemaRegistryFactory::new();
+    let registry = schema_factory.registry();
+    schema_factory
+        .define_with_fields("event1", &[("field1", "string"), ("field2", "int")])
+        .await
+        .unwrap();
+    schema_factory
+        .define_with_fields("event2", &[("field2", "int"), ("field3", "bool")])
+        .await
+        .unwrap();
+
+    let cmd = CommandFactory::query().with_event_type("*").create();
+    let plan = QueryPlanFactory::new()
+        .with_command(cmd)
+        .with_registry(Arc::clone(&registry))
+        .with_segment_base_dir(tempdir().unwrap().path())
+        .create()
+        .await;
+
+    let ctx = ProjectionContext::new(&plan);
+    let fields = ctx.payload_fields().await;
+    // Should include all unique fields from all schemas: field1, field2, field3
+    assert_eq!(fields.len(), 3);
+    assert!(fields.contains(&"field1".to_string()));
+    assert!(fields.contains(&"field2".to_string()));
+    assert!(fields.contains(&"field3".to_string()));
+}
