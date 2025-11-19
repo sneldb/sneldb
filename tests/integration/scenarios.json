@@ -25,8 +25,6 @@
         "value": [
           "color",
           "price",
-          "25",
-          "50",
           "red",
           "blue"
         ]
@@ -418,9 +416,6 @@
           "android",
           "web",
           "alice",
-          "\"type\":\"schema\"",
-          "\"type\":\"batch\"",
-          "\"type\":\"end\"",
           "\"row_count\":2"
         ]
       },

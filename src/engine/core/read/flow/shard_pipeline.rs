@@ -50,14 +50,27 @@ fn compute_return_projection(
     ];
 
     // Get payload fields from schema
-    let payload_fields: Vec<String> = registry
-        .get(event_type)
-        .map(|schema| {
-            let mut fields: Vec<String> = schema.fields().cloned().collect();
-            fields.sort();
-            fields
-        })
-        .unwrap_or_default();
+    // Handle wildcard event_type by collecting fields from all schemas
+    let payload_fields: Vec<String> = if event_type == "*" {
+        let mut all_fields: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for schema in registry.get_all().values() {
+            for field in schema.fields() {
+                all_fields.insert(field.clone());
+            }
+        }
+        let mut fields: Vec<String> = all_fields.into_iter().collect();
+        fields.sort();
+        fields
+    } else {
+        registry
+            .get(event_type)
+            .map(|schema| {
+                let mut fields: Vec<String> = schema.fields().cloned().collect();
+                fields.sort();
+                fields
+            })
+            .unwrap_or_default()
+    };
 
     let payload_set: std::collections::HashSet<String> = payload_fields.iter().cloned().collect();
 
