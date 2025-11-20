@@ -30,21 +30,9 @@ impl ShardManager {
             let shard_wal_dir = wal_dir.join(format!("shard-{id}"));
 
             // Spawn shard and get its shared coordination state
+            // Note: Flush management is handled internally by FlushManager within ShardContext
             let (shard, shared_state) =
                 Shard::spawn(id, shard_base_dir.clone(), shard_wal_dir).await;
-
-            // Spawn flush worker with the shard's coordination lock
-            let flush_worker = FlushWorker::new(
-                id,
-                shard_base_dir.clone(),
-                Arc::clone(&shared_state.flush_lock),
-                Arc::clone(&shared_state.segment_ids),
-            );
-            tokio::spawn(async move {
-                if let Err(e) = flush_worker.run(flush_rx).await {
-                    error!(target: "shard::manager", shard_id = id, "Flush worker crashed: {e}");
-                }
-            });
 
             // Start background compactor
             start_background_compactor(

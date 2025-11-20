@@ -36,12 +36,17 @@ async fn test_flush_worker_processes_memtable() {
     let segment_id = 3;
 
     let segment_ids = Arc::new(RwLock::new(vec![]));
+    let lifecycle = Arc::new(SegmentLifecycleTracker::new());
 
     // Spawn FlushWorker
     let flush_lock = std::sync::Arc::new(tokio::sync::Mutex::new(()));
-    let worker = FlushWorker::new(0, base_path.clone(), flush_lock, Arc::clone(&segment_ids));
-    let lifecycle = Arc::new(SegmentLifecycleTracker::new());
-    let worker = FlushWorker::new(0, base_path.clone(), flush_lock, Arc::clone(&lifecycle));
+    let worker = FlushWorker::new(
+        0,
+        base_path.clone(),
+        flush_lock,
+        Arc::clone(&segment_ids),
+        Arc::clone(&lifecycle),
+    );
     tokio::spawn(async move {
         worker.run(rx).await.expect("Worker run failed");
     });
