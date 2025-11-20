@@ -16,7 +16,7 @@ use crate::test_helpers::factories::{
 };
 
 #[tokio::test]
-async fn builder_returns_empty_when_event_type_missing_uid() {
+async fn builder_returns_all_zones_when_event_type_missing_uid() {
     let tmp = tempdir().unwrap();
     let registry = SchemaRegistryFactory::new().registry();
 
@@ -44,9 +44,11 @@ async fn builder_returns_empty_when_event_type_missing_uid() {
 
     let selector = ZoneSelectorBuilder::new(ctx).build();
     let zones = selector.select_for_segment("seg1");
-    assert!(
-        zones.is_empty(),
-        "expected no zones for missing uid on event_type"
+    let expected = CandidateZone::create_all_zones_for_segment("seg1");
+    assert_eq!(
+        zones.len(),
+        expected.len(),
+        "expected all zones for missing uid on event_type"
     );
 }
 

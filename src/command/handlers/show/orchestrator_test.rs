@@ -14,9 +14,15 @@ use crate::engine::materialize::{
 };
 use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
+use crate::engine::shard::message::ShardMessage;
+use crate::engine::shard::types::Shard;
 use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::command_factory::CommandFactory;
 use serde_json::json;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use tokio::sync::{Notify, mpsc};
+use tokio::time::Duration;
 
 struct StubGateway;
 
@@ -28,6 +34,12 @@ impl CatalogGateway for StubGateway {
 
 fn make_context() -> (ShowContext<'static>, tempfile::TempDir) {
     let shard_manager = Box::leak(Box::new(ShardManager { shards: Vec::new() }));
+    make_context_with_manager(shard_manager)
+}
+
+fn make_context_with_manager(
+    shard_manager: &'static ShardManager,
+) -> (ShowContext<'static>, tempfile::TempDir) {
     let temp_dir = tempfile::tempdir().expect("tempdir");
     let registry =
         SchemaRegistry::new_with_path(temp_dir.path().join("schemas.bin")).expect("registry");
@@ -148,4 +160,74 @@ fn build_outcome_updates_entry_metrics() {
     assert_eq!(updated.row_count, 1);
     assert_eq!(updated.delta_rows_appended, 1);
     assert!(updated.high_water_mark.is_some());
+}
+
+#[tokio::test]
+async fn flush_pending_writes_propagates_errors() {
+    let (tx, rx) = mpsc::channel(1);
+    drop(rx);
+
+    let shard = Shard {
+        id: 0,
+        tx,
+        base_dir: PathBuf::new(),
+    };
+    let shard_manager = Box::leak(Box::new(ShardManager {
+        shards: vec![shard],
+    }));
+    let (context, _temp_dir) = make_context_with_manager(shard_manager);
+    let pipeline = ShowExecutionPipeline::new_with_gateway(context, StubGateway);
+
+    let err = pipeline
+        .test_flush_pending_writes()
+        .await
+        .expect_err("flush should fail");
+    assert!(
+        err.message().contains("Failed to flush shards"),
+        "unexpected error message: {}",
+        err.message()
+    );
+}
+
+#[tokio::test]
+async fn flush_pending_writes_waits_for_completion() {
+    let (tx, mut rx) = mpsc::channel(1);
+    let notify = Arc::new(Notify::new());
+    let flush_count = Arc::new(AtomicUsize::new(0));
+
+    let notify_listener = Arc::clone(&notify);
+    let counter = Arc::clone(&flush_count);
+    tokio::spawn(async move {
+        if let Some(message) = rx.recv().await {
+            if let ShardMessage::Flush { completion, .. } = message {
+                counter.fetch_add(1, Ordering::SeqCst);
+                notify_listener.notified().await;
+                let _ = completion.send(Ok(()));
+            }
+        }
+    });
+
+    let shard = Shard {
+        id: 0,
+        tx,
+        base_dir: PathBuf::new(),
+    };
+    let shard_manager = Box::leak(Box::new(ShardManager {
+        shards: vec![shard],
+    }));
+
+    let (context, _temp_dir) = make_context_with_manager(shard_manager);
+    let pipeline = ShowExecutionPipeline::new_with_gateway(context, StubGateway);
+
+    let flush_future = pipeline.test_flush_pending_writes();
+    tokio::pin!(flush_future);
+
+    let pending = tokio::time::timeout(Duration::from_millis(25), flush_future.as_mut()).await;
+    assert!(pending.is_err(), "flush completed before notify");
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    assert_eq!(flush_count.load(Ordering::SeqCst), 1, "flush not invoked");
+
+    notify.notify_one();
+
+    flush_future.await.expect("flush should succeed");
 }
