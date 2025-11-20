@@ -65,7 +65,7 @@ async fn test_insert_and_maybe_flush_e2e() {
     let flushed_segments = ctx.segment_ids.read().unwrap();
     assert_eq!(flushed_segments.len(), 1);
 
-    // Wait for flush to complete
+    // Wait for flush and verification to complete
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Verify segment directory created

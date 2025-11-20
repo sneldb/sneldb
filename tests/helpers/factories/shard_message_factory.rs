@@ -4,7 +4,7 @@ use crate::engine::core::read::flow::shard_pipeline::ShardFlowHandle;
 use crate::engine::schema::registry::SchemaRegistry;
 use crate::engine::shard::message::ShardMessage;
 use std::sync::Arc;
-use tokio::sync::{oneshot, RwLock};
+use tokio::sync::{RwLock, oneshot};
 
 pub struct ShardMessageFactory {
     registry: Arc<RwLock<SchemaRegistry>>,

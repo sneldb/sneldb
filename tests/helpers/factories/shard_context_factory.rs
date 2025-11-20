@@ -1,13 +1,12 @@
 use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
 use crate::engine::core::segment::range_allocator::RangeAllocator;
-use crate::engine::core::{EventIdGenerator, FlushManager, MemTable, WalHandle};
-use crate::engine::errors::StoreError;
-use crate::engine::schema::registry::SchemaRegistry;
+use crate::engine::core::{
+    EventIdGenerator, FlushManager, MemTable, SegmentLifecycleTracker, WalHandle,
+};
 use crate::engine::shard::context::ShardContext;
 use crate::shared::config::CONFIG;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
-use tokio::sync::mpsc;
 
 /// A test factory for creating ShardContext with default or customized parameters.
 pub struct ShardContextFactory {
@@ -56,14 +55,6 @@ impl ShardContextFactory {
             .unwrap_or_else(|| tempdir.path().to_path_buf());
         let wal_dir = self.wal_dir.unwrap_or_else(|| tempdir.path().to_path_buf());
 
-        let (flush_sender, _rx) = mpsc::channel::<(
-            u64,
-            MemTable,
-            Arc<tokio::sync::RwLock<SchemaRegistry>>,
-            Arc<tokio::sync::Mutex<MemTable>>,
-            Option<tokio::sync::oneshot::Sender<Result<(), StoreError>>>,
-        )>(8);
-
         let wal_handle = WalHandle::new(self.id, &wal_dir).expect("Failed to create WAL writer");
         let wal = Arc::new(
             wal_handle
@@ -73,11 +64,13 @@ impl ShardContextFactory {
 
         let segment_ids = Arc::new(RwLock::new(vec![]));
         let flush_coordination_lock = Arc::new(tokio::sync::Mutex::new(()));
+        let segment_lifecycle = Arc::new(SegmentLifecycleTracker::new());
         let flush_manager = FlushManager::new(
             self.id,
             base_dir.clone(),
             Arc::clone(&segment_ids),
             Arc::clone(&flush_coordination_lock),
+            Arc::clone(&segment_lifecycle),
         );
 
         // Seed allocator from existing ids (if any)
@@ -90,7 +83,6 @@ impl ShardContextFactory {
             id: self.id,
             memtable: MemTable::new(self.capacity),
             passive_buffers: Arc::new(PassiveBufferSet::new(8)),
-            flush_sender,
             segment_id: 0,
             next_l0_id,
             allocator,
@@ -102,6 +94,7 @@ impl ShardContextFactory {
             wal: Some(wal),
             flush_manager,
             flush_coordination_lock,
+            segment_lifecycle,
             event_id_gen: EventIdGenerator::new(),
         };
 

@@ -1,4 +1,4 @@
-use crate::engine::core::{FlushManager, SegmentIndex, ZoneMeta};
+use crate::engine::core::{FlushManager, SegmentIndex, SegmentLifecycleTracker, ZoneMeta};
 use crate::test_helpers::factories::{EventFactory, MemTableFactory, SchemaRegistryFactory};
 use std::sync::{Arc, RwLock};
 use tempfile::tempdir;
@@ -35,11 +35,13 @@ async fn test_flush_manager_queues_and_flushes_memtable() {
 
     // Create FlushManager
     let flush_lock = Arc::new(tokio::sync::Mutex::new(()));
+    let lifecycle = Arc::new(SegmentLifecycleTracker::new());
     let manager = FlushManager::new(
         shard_id,
         base_dir.clone(),
         Arc::clone(&segment_ids),
         flush_lock,
+        lifecycle,
     );
 
     // Act: queue for flush
