@@ -118,13 +118,30 @@ impl<'a> ZoneSelectorBuilder<'a> {
                                 });
                             }
                         }
-                        Box::new(AllZonesSelector {})
+                        self.fallback_all_zones_selector()
                     }
-                    _ => Box::new(AllZonesSelector {}),
+                    _ => self.fallback_all_zones_selector(),
                 }
             }
             _ => Box::new(self.make_field_selector(artifacts)),
         }
+    }
+
+    fn fallback_all_zones_selector(&self) -> Box<dyn ZoneSelector + 'a> {
+        if let Ok(reg) = self.inputs.query_plan.registry.try_read() {
+            let uids: Vec<String> = reg
+                .get_all()
+                .keys()
+                .filter_map(|event_type| reg.get_uid(event_type))
+                .collect();
+            if !uids.is_empty() {
+                return Box::new(MultiUidAllZonesSelector {
+                    base_dir: self.inputs.base_dir,
+                    uids,
+                });
+            }
+        }
+        Box::new(AllZonesSelector {})
     }
 }
 
@@ -150,5 +167,27 @@ struct EmptySelector {}
 impl ZoneSelector for EmptySelector {
     fn select_for_segment(&self, _segment_id: &str) -> Vec<CandidateZone> {
         Vec::new()
+    }
+}
+
+struct MultiUidAllZonesSelector<'a> {
+    base_dir: &'a std::path::PathBuf,
+    uids: Vec<String>,
+}
+
+impl<'a> ZoneSelector for MultiUidAllZonesSelector<'a> {
+    fn select_for_segment(&self, segment_id: &str) -> Vec<CandidateZone> {
+        let mut zones = Vec::new();
+        for uid in &self.uids {
+            zones.extend(
+                CandidateZone::create_all_zones_for_segment_from_meta(
+                    self.base_dir,
+                    segment_id,
+                    uid,
+                )
+                .into_iter(),
+            );
+        }
+        CandidateZone::uniq(zones)
     }
 }
