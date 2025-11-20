@@ -264,6 +264,95 @@ async fn builder_event_type_wildcard_scans_all_known_uids() {
 }
 
 #[tokio::test]
+async fn builder_timestamp_fallback_scans_all_known_uids() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp = tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let segment_dir = shard_dir.join("00000");
+    std::fs::create_dir_all(&segment_dir).unwrap();
+
+    let registry_factory = SchemaRegistryFactory::new();
+    let registry = registry_factory.registry();
+    let event_type = "login_ts";
+    registry_factory
+        .define_with_fields(event_type, &[("device", "string")])
+        .await
+        .unwrap();
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+
+    let events = vec![
+        EventFactory::new()
+            .with("event_type", event_type)
+            .with("context_id", "alice")
+            .with("device", "android")
+            .create(),
+        EventFactory::new()
+            .with("event_type", event_type)
+            .with("context_id", "alice")
+            .with("device", "web")
+            .create(),
+    ];
+    let memtable = MemTableFactory::new()
+        .with_capacity(2)
+        .with_events(events)
+        .create()
+        .unwrap();
+    Flusher::new(
+        memtable,
+        0,
+        &segment_dir,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
+
+    let command = CommandFactory::query()
+        .with_event_type("*")
+        .with_context_id("alice")
+        .create();
+    let plan = QueryPlanFactory::new()
+        .with_command(command)
+        .with_registry(Arc::clone(&registry))
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["00000".into()])
+        .create()
+        .await;
+
+    let timestamp_filter = plan
+        .filter_groups
+        .iter()
+        .find(|fg| fg.column() == Some("timestamp"))
+        .expect("timestamp filter present");
+
+    let ctx = SelectionContext {
+        plan: timestamp_filter,
+        query_plan: &plan,
+        base_dir: &plan.segment_base_dir,
+        caches: None,
+    };
+
+    let selector = ZoneSelectorBuilder::new(ctx).build();
+    let zones = selector.select_for_segment("00000");
+
+    let expected = CandidateZone::create_all_zones_for_segment_from_meta(
+        &plan.segment_base_dir,
+        "00000",
+        &uid,
+    );
+
+    assert_eq!(
+        zones.len(),
+        expected.len(),
+        "timestamp fallback should scan all zones when uid is missing"
+    );
+    assert!(!zones.is_empty());
+}
+
+#[tokio::test]
 async fn builder_returns_field_selector_for_regular_column() {
     let tmp = tempdir().unwrap();
     let registry_fac = SchemaRegistryFactory::new();

@@ -160,7 +160,13 @@ async fn test_flush_worker_skips_cleanup_for_empty_memtable() {
     // Spawn FlushWorker
     let flush_lock = std::sync::Arc::new(tokio::sync::Mutex::new(()));
     let lifecycle = Arc::new(SegmentLifecycleTracker::new());
-    let worker = FlushWorker::new(1, base_path.clone(), flush_lock, Arc::clone(&segment_ids), Arc::clone(&lifecycle));
+    let worker = FlushWorker::new(
+        1,
+        base_path.clone(),
+        flush_lock,
+        Arc::clone(&segment_ids),
+        Arc::clone(&lifecycle),
+    );
     tokio::spawn(async move {
         worker.run(rx).await.expect("Worker run failed");
     });

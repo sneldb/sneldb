@@ -36,6 +36,7 @@ async fn xor_eq_uses_zxf_to_narrow_zones() {
         .define_with_fields(event_type, &[("context_id", "string"), ("key", "string")])
         .await
         .unwrap();
+    let uid = registry.read().await.get_uid(event_type).unwrap();
 
     // seg1 zone 0 has key = "a", seg2 zone 0 has key = "b"
     {
@@ -134,6 +135,93 @@ async fn xor_eq_uses_zxf_to_narrow_zones() {
     let selector_fs = ZoneSelectorBuilder::new(ctx_fs).build();
     let out1_fs = selector_fs.select_for_segment("001");
     assert!(!out1_fs.is_empty());
+}
+
+#[tokio::test]
+async fn timestamp_filter_falls_back_when_uid_missing() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp = tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let segment_dir = shard_dir.join("00000");
+    std::fs::create_dir_all(&segment_dir).unwrap();
+
+    let registry_factory = SchemaRegistryFactory::new();
+    let registry = registry_factory.registry();
+    let event_type = "ts_fallback_evt";
+    registry_factory
+        .define_with_fields(event_type, &[("device", "string")])
+        .await
+        .unwrap();
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+
+    let events = vec![
+        EventFactory::new()
+            .with("event_type", event_type)
+            .with("context_id", "alice")
+            .with("device", "android")
+            .create(),
+        EventFactory::new()
+            .with("event_type", event_type)
+            .with("context_id", "alice")
+            .with("device", "web")
+            .create(),
+    ];
+    let memtable = MemTableFactory::new()
+        .with_capacity(2)
+        .with_events(events)
+        .create()
+        .unwrap();
+    Flusher::new(
+        memtable,
+        0,
+        &segment_dir,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
+
+    let command = CommandFactory::query()
+        .with_event_type("*")
+        .with_context_id("alice")
+        .create();
+    let qplan = QueryPlanFactory::new()
+        .with_command(command)
+        .with_registry(Arc::clone(&registry))
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["00000".into()])
+        .create()
+        .await;
+
+    let timestamp_filter = qplan
+        .filter_groups
+        .iter()
+        .find(|fg| fg.column() == Some("timestamp"))
+        .expect("timestamp filter present");
+
+    let ctx = SelectionContext {
+        plan: timestamp_filter,
+        query_plan: &qplan,
+        base_dir: &shard_dir,
+        caches: None,
+    };
+    let selector = ZoneSelectorBuilder::new(ctx).build();
+    let zones = selector.select_for_segment("00000");
+
+    let expected = CandidateZone::create_all_zones_for_segment_from_meta(
+        &shard_dir,
+        "00000",
+        &uid,
+    );
+    assert_eq!(
+        zones.len(),
+        expected.len(),
+        "missing uid on timestamp filter should fall back to all zones"
+    );
+    assert!(!zones.is_empty());
 }
 
 #[tokio::test]
@@ -496,7 +584,7 @@ async fn returns_all_zones_when_value_missing() {
 }
 
 #[tokio::test]
-async fn returns_empty_when_uid_missing() {
+async fn falls_back_when_uid_missing() {
     use crate::logging::init_for_tests;
     init_for_tests();
 
@@ -553,7 +641,14 @@ async fn returns_empty_when_uid_missing() {
     };
     let sel = ZoneSelectorBuilder::new(ctx).build();
     let zones = sel.select_for_segment("001");
-    assert!(zones.is_empty());
+    let expected =
+        CandidateZone::create_all_zones_for_segment_from_meta(&shard_dir, "001", &uid);
+    assert_eq!(
+        zones.len(),
+        expected.len(),
+        "missing uid should return all zones via fallback"
+    );
+    assert!(!zones.is_empty());
 }
 
 #[tokio::test]

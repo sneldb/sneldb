@@ -23,7 +23,7 @@ impl<'a> FieldSelector<'a> {}
 
 impl<'a> ZoneSelector for FieldSelector<'a> {
     fn select_for_segment(&self, segment_id: &str) -> Vec<CandidateZone> {
-        let (uid, column, value, operation, index_strategy) = match self.plan {
+        let (uid_opt, column, value, operation, index_strategy) = match self.plan {
             FilterGroup::Filter {
                 uid,
                 column,
@@ -41,8 +41,9 @@ impl<'a> ZoneSelector for FieldSelector<'a> {
             _ => return Vec::new(), // Only single filters supported
         };
 
-        let Some(uid) = uid else {
-            return Vec::new();
+        let uid = match uid_opt {
+            Some(uid) => uid.as_str(),
+            None => return self.fallback_zones_for_segment(segment_id),
         };
         if value.is_none() {
             return CandidateZone::create_all_zones_for_segment_from_meta_cached(
@@ -137,5 +138,30 @@ impl<'a> ZoneSelector for FieldSelector<'a> {
         }
 
         candidate_zones
+    }
+}
+
+impl<'a> FieldSelector<'a> {
+    fn fallback_zones_for_segment(&self, segment_id: &str) -> Vec<CandidateZone> {
+        if let Ok(reg) = self.qplan.registry.try_read() {
+            let mut zones = Vec::new();
+            for event_type in reg.get_all().keys() {
+                if let Some(uid) = reg.get_uid(event_type) {
+                    zones.extend(
+                        CandidateZone::create_all_zones_for_segment_from_meta_cached(
+                            &self.qplan.segment_base_dir,
+                            segment_id,
+                            uid.as_str(),
+                            self.caches,
+                        )
+                        .into_iter(),
+                    );
+                }
+            }
+            if !zones.is_empty() {
+                return CandidateZone::uniq(zones);
+            }
+        }
+        CandidateZone::create_all_zones_for_segment(segment_id)
     }
 }
