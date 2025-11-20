@@ -32,7 +32,12 @@ impl FlushManager {
         let (tx, rx) = tokio::sync::mpsc::channel(4096);
 
         // Spawn the flush worker task
-        let worker = FlushWorker::new(shard_id, base_dir.clone(), flush_coordination_lock);
+        let worker = FlushWorker::new(
+            shard_id,
+            base_dir.clone(),
+            flush_coordination_lock,
+            Arc::clone(&segment_ids),
+        );
 
         let worker_handle = tokio::spawn(async move {
             let result = worker.run(rx).await;
@@ -128,10 +133,6 @@ impl FlushManager {
             })?;
 
         let segment_name = format!("{:05}", segment_id);
-        {
-            let mut segs = self.segment_ids.write().unwrap();
-            segs.push(segment_name.clone());
-        }
 
         info!(
             target: "sneldb::flush",
@@ -139,13 +140,6 @@ impl FlushManager {
             segment_id,
             "MemTable queued for flush to segment '{}'",
             segment_name
-        );
-
-        debug!(
-            target: "sneldb::flush",
-            shard_id = self.shard_id,
-            segment_ids = ?self.segment_ids.read().unwrap(),
-            "Updated segment list"
         );
 
         Ok(())

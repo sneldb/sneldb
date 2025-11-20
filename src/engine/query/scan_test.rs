@@ -8,7 +8,6 @@ use tokio::time::timeout;
 
 use crate::engine::core::MemTable;
 use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
-use crate::engine::errors::QueryExecutionError;
 use crate::engine::query::scan::scan;
 use crate::test_helpers::factories::{
     CommandFactory, EventFactory, MemTableFactory, SchemaRegistryFactory,

@@ -160,7 +160,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
                 // If both are false, create explicit denial PermissionSet to override role
                 // Otherwise, update with reduced permissions
                 let result = auth_manager
-                        .grant_permission(user_id, event_type, new_perms)
+                    .grant_permission(user_id, event_type, new_perms)
                     .await;
 
                 match result {

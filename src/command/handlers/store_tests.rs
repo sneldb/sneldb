@@ -4,7 +4,7 @@ use crate::engine::auth::AuthManager;
 use crate::engine::shard::manager::ShardManager;
 use crate::shared::response::JsonRenderer;
 use crate::test_helpers::factories::{CommandFactory, SchemaRegistryFactory};
-use serde_json::{json, Value as JsonValue};
+use serde_json::{Value as JsonValue, json};
 use std::sync::Arc;
 use tempfile::tempdir;
 use tokio::io::{AsyncReadExt, duplex};
@@ -238,7 +238,11 @@ async fn test_store_handle_valid_event_is_routed() {
             }
         }
     }
-    assert!(found_id, "Should find stored event with id=123. Rows: {:?}, Columns: {:?}", rows, column_names);
+    assert!(
+        found_id,
+        "Should find stored event with id=123. Rows: {:?}, Columns: {:?}",
+        rows, column_names
+    );
 }
 
 #[tokio::test]

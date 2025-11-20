@@ -1,6 +1,6 @@
 use crate::engine::core::{FlushWorker, SegmentIndex, ZoneMeta};
 use crate::test_helpers::factories::{EventFactory, MemTableFactory, SchemaRegistryFactory};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use tempfile::tempdir;
 use tokio::sync::{mpsc, oneshot};
 
@@ -35,9 +35,11 @@ async fn test_flush_worker_processes_memtable() {
     let (tx, rx) = mpsc::channel(10);
     let segment_id = 3;
 
+    let segment_ids = Arc::new(RwLock::new(vec![]));
+
     // Spawn FlushWorker
     let flush_lock = std::sync::Arc::new(tokio::sync::Mutex::new(()));
-    let worker = FlushWorker::new(0, base_path.clone(), flush_lock);
+    let worker = FlushWorker::new(0, base_path.clone(), flush_lock, Arc::clone(&segment_ids));
     tokio::spawn(async move {
         worker.run(rx).await.expect("Worker run failed");
     });
@@ -77,6 +79,10 @@ async fn test_flush_worker_processes_memtable() {
         "00003",
         "Segment label mismatch"
     );
+
+    // Shared segment_ids should reflect the flushed segment
+    let ids = segment_ids.read().unwrap().clone();
+    assert_eq!(ids, vec!["00003"]);
 }
 
 #[tokio::test]
@@ -134,6 +140,7 @@ async fn test_flush_worker_skips_cleanup_for_empty_memtable() {
     // Channel for flush worker
     let (tx, rx) = mpsc::channel(10);
     let segment_id = 5;
+    let segment_ids = Arc::new(RwLock::new(vec![]));
 
     // Create the passive memtable Arc that will be passed to the flush worker
     // This is the same Arc that the flush worker will operate on
@@ -141,7 +148,7 @@ async fn test_flush_worker_skips_cleanup_for_empty_memtable() {
 
     // Spawn FlushWorker
     let flush_lock = std::sync::Arc::new(tokio::sync::Mutex::new(()));
-    let worker = FlushWorker::new(1, base_path.clone(), flush_lock);
+    let worker = FlushWorker::new(1, base_path.clone(), flush_lock, Arc::clone(&segment_ids));
     tokio::spawn(async move {
         worker.run(rx).await.expect("Worker run failed");
     });
@@ -216,4 +223,7 @@ async fn test_flush_worker_skips_cleanup_for_empty_memtable() {
         event_contexts, expected_contexts,
         "Passive memtable should still contain its original events"
     );
+
+    // No new segment IDs should be recorded for empty flushes
+    assert!(segment_ids.read().unwrap().is_empty());
 }

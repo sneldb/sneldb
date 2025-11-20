@@ -246,7 +246,10 @@ async fn test_dispatch_ping() {
 
     // Read response
     let mut response = Vec::new();
-    reader.read_to_end(&mut response).await.expect("Should read response");
+    reader
+        .read_to_end(&mut response)
+        .await
+        .expect("Should read response");
 
     let response_str = String::from_utf8(response).expect("Response should be valid UTF-8");
     assert!(

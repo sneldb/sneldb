@@ -63,7 +63,8 @@ mod store_tests {
         let input =
             r#"STORE order_created FOR user-9 PAYLOAD { "details": { "product": "book" } }"#;
 
-        let command = store::parse_peg(input).expect("Failed to parse STORE command with nested JSON");
+        let command =
+            store::parse_peg(input).expect("Failed to parse STORE command with nested JSON");
 
         assert_eq!(
             command,

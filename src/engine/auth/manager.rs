@@ -310,16 +310,16 @@ impl AuthManager {
     /// Returns None if token is invalid, expired, or user is inactive.
     pub async fn validate_session_token(&self, token: &str) -> Option<String> {
         let session = {
-        let store = self.session_store.read().await;
+            let store = self.session_store.read().await;
             match store.get(token) {
                 Some(s) => s.clone(),
-            None => {
-                tracing::warn!(
-                    target: "sneldb::auth",
-                    token_len = token.len(),
-                    "Token not found in session store"
-                );
-                return None;
+                None => {
+                    tracing::warn!(
+                        target: "sneldb::auth",
+                        token_len = token.len(),
+                        "Token not found in session store"
+                    );
+                    return None;
                 }
             }
         };

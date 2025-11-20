@@ -1,5 +1,4 @@
 use crate::engine::shard::ShardManager;
-use crate::engine::types::ScalarValue;
 use crate::test_helpers::factories::{
     CommandFactory, EventFactory, SchemaRegistryFactory, ShardMessageFactory,
 };

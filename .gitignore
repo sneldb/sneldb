@@ -15,4 +15,5 @@
 flamegraph*
 /scripts/*
 tmp*
+/clients/javascript/node_modules
 .sneldb_history

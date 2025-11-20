@@ -5,7 +5,7 @@ use crate::engine::core::segment::segment_id::SegmentId;
 use crate::engine::errors::StoreError;
 use crate::engine::schema::registry::SchemaRegistry;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use tokio::sync::{Mutex, RwLock as TokioRwLock, mpsc::Receiver, oneshot};
 use tracing::{debug, error, info};
 
@@ -14,6 +14,7 @@ pub struct FlushWorker {
     shard_id: usize,
     base_dir: PathBuf,
     flush_coordination_lock: Arc<Mutex<()>>,
+    segment_ids: Arc<RwLock<Vec<String>>>,
 }
 
 impl FlushWorker {
@@ -22,11 +23,13 @@ impl FlushWorker {
         shard_id: usize,
         base_dir: PathBuf,
         flush_coordination_lock: Arc<Mutex<()>>,
+        segment_ids: Arc<RwLock<Vec<String>>>,
     ) -> Self {
         Self {
             shard_id,
             base_dir,
             flush_coordination_lock,
+            segment_ids,
         }
     }
 
@@ -48,6 +51,7 @@ impl FlushWorker {
             let segment_dir = SegmentId::from(segment_id as u32).join_dir(&self.base_dir);
             let shard_id = self.shard_id;
             let flush_coord_lock = Arc::clone(&self.flush_coordination_lock);
+            let segment_ids = Arc::clone(&self.segment_ids);
 
             let flush_task = tokio::spawn(async move {
                 // Check if memtable is empty before flushing
@@ -97,6 +101,22 @@ impl FlushWorker {
                                 segment_id,
                                 "Flush succeeded"
                             );
+
+                            // Only update segment_ids after successful flush that created files
+                            let segment_name = format!("{:05}", segment_id);
+                            {
+                                let mut segs = segment_ids.write().unwrap();
+                                if !segs.contains(&segment_name) {
+                                    segs.push(segment_name.clone());
+                                    debug!(
+                                        target: "sneldb::flush",
+                                        shard_id,
+                                        segment_id,
+                                        "Added segment '{}' to segment_ids list",
+                                        segment_name
+                                    );
+                                }
+                            }
 
                             debug!(
                                 target: "sneldb::flush",

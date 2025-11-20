@@ -44,7 +44,8 @@ impl<'a> ProjectionContext<'a> {
 
         // Handle wildcard event_type by collecting fields from all schemas
         if self.plan.event_type() == "*" {
-            let mut all_fields: std::collections::HashSet<String> = std::collections::HashSet::new();
+            let mut all_fields: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
             for schema in registry.get_all().values() {
                 for field in schema.fields() {
                     all_fields.insert(field.clone());

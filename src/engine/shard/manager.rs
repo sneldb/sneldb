@@ -39,6 +39,7 @@ impl ShardManager {
                 id,
                 shard_base_dir.clone(),
                 Arc::clone(&shared_state.flush_lock),
+                Arc::clone(&shared_state.segment_ids),
             );
             tokio::spawn(async move {
                 if let Err(e) = flush_worker.run(flush_rx).await {

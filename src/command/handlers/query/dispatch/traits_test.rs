@@ -1,5 +1,5 @@
-use super::traits::StreamingDispatch;
 use super::StreamingShardDispatcher;
+use super::traits::StreamingDispatch;
 use crate::command::handlers::query::context::QueryContext;
 use crate::command::handlers::query::planner::PlanOutcome;
 use crate::command::types::Command;

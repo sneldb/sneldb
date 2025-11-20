@@ -208,7 +208,9 @@ pub fn run_scenario(scenario: &TestScenario) {
                             );
                             processed_cmd = format!("{}:{}:{}", user_id, signature, command_part);
                         } else {
-                            debug!("Command has user_id= but no signature=, skipping auth conversion");
+                            debug!(
+                                "Command has user_id= but no signature=, skipping auth conversion"
+                            );
                         }
                     }
                 }
@@ -238,7 +240,9 @@ pub fn run_scenario(scenario: &TestScenario) {
 
         let mut response_buf = [0u8; 4096];
         // Try to read response (non-blocking check)
-        stream.set_read_timeout(Some(std::time::Duration::from_millis(100))).ok();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_millis(100)))
+            .ok();
         if let Ok(n) = stream.read(&mut response_buf) {
             if n > 0 {
                 let response = String::from_utf8_lossy(&response_buf[..n]);
@@ -254,8 +258,12 @@ pub fn run_scenario(scenario: &TestScenario) {
                                 // Extract user_id from AUTH command: "AUTH user_id:signature"
                                 if let Some(colon_pos) = processed_cmd.find(':') {
                                     let user_id = processed_cmd[5..colon_pos].trim(); // Skip "AUTH "
-                                    extracted_tokens.insert(user_id.to_string(), token_part.to_string());
-                                    debug!("Extracted token for user '{}': {}", user_id, token_part);
+                                    extracted_tokens
+                                        .insert(user_id.to_string(), token_part.to_string());
+                                    debug!(
+                                        "Extracted token for user '{}': {}",
+                                        user_id, token_part
+                                    );
                                 }
                             }
                         }
