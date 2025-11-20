@@ -52,24 +52,21 @@ impl<'a> ZoneSelectorBuilder<'a> {
         let column = self.inputs.plan.column().unwrap_or("");
         match column {
             "event_type" => {
-                let uid = self
-                    .inputs
-                    .plan
-                    .value()
-                    .and_then(|v| v.as_str())
-                    .and_then(|_| {
-                        // Get uid from FilterGroup
-                        match self.inputs.plan {
-                            FilterGroup::Filter { uid, .. } => uid.as_deref(),
-                            _ => None,
-                        }
-                    });
+                let raw_value = self.inputs.plan.value().and_then(|v| v.as_str());
+
+                // Wildcard or missing event_type -> scan everything.
+                if matches!(raw_value, Some("*") | None) {
+                    return self.fallback_all_zones_selector();
+                }
+
+                let uid = match self.inputs.plan {
+                    FilterGroup::Filter { uid, .. } => uid.as_deref(),
+                    _ => None,
+                };
                 let Some(uid) = uid else {
-                    return Box::new(EmptySelector {});
+                    return self.fallback_all_zones_selector();
                 };
-                let Some(event_type) = self.inputs.plan.value().and_then(|v| v.as_str()) else {
-                    return Box::new(EmptySelector {});
-                };
+                let event_type = raw_value.unwrap();
                 let context_id = self
                     .inputs
                     .query_plan
@@ -160,13 +157,6 @@ struct AllZonesSelectorMeta<'a> {
 impl<'a> ZoneSelector for AllZonesSelectorMeta<'a> {
     fn select_for_segment(&self, segment_id: &str) -> Vec<CandidateZone> {
         CandidateZone::create_all_zones_for_segment_from_meta(self.base_dir, segment_id, &self.uid)
-    }
-}
-
-struct EmptySelector {}
-impl ZoneSelector for EmptySelector {
-    fn select_for_segment(&self, _segment_id: &str) -> Vec<CandidateZone> {
-        Vec::new()
     }
 }
 
