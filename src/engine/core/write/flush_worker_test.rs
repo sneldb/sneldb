@@ -1,4 +1,4 @@
-use crate::engine::core::{FlushWorker, SegmentIndex, ZoneMeta};
+use crate::engine::core::{FlushWorker, SegmentIndex, SegmentLifecycleTracker, ZoneMeta};
 use crate::test_helpers::factories::{EventFactory, MemTableFactory, SchemaRegistryFactory};
 use std::sync::{Arc, RwLock};
 use tempfile::tempdir;
@@ -40,6 +40,8 @@ async fn test_flush_worker_processes_memtable() {
     // Spawn FlushWorker
     let flush_lock = std::sync::Arc::new(tokio::sync::Mutex::new(()));
     let worker = FlushWorker::new(0, base_path.clone(), flush_lock, Arc::clone(&segment_ids));
+    let lifecycle = Arc::new(SegmentLifecycleTracker::new());
+    let worker = FlushWorker::new(0, base_path.clone(), flush_lock, Arc::clone(&lifecycle));
     tokio::spawn(async move {
         worker.run(rx).await.expect("Worker run failed");
     });
@@ -83,6 +85,10 @@ async fn test_flush_worker_processes_memtable() {
     // Shared segment_ids should reflect the flushed segment
     let ids = segment_ids.read().unwrap().clone();
     assert_eq!(ids, vec!["00003"]);
+    assert!(
+        !lifecycle.can_clear_passive(segment_id).await,
+        "Lifecycle entry should be cleared after successful flush"
+    );
 }
 
 #[tokio::test]
@@ -148,7 +154,8 @@ async fn test_flush_worker_skips_cleanup_for_empty_memtable() {
 
     // Spawn FlushWorker
     let flush_lock = std::sync::Arc::new(tokio::sync::Mutex::new(()));
-    let worker = FlushWorker::new(1, base_path.clone(), flush_lock, Arc::clone(&segment_ids));
+    let lifecycle = Arc::new(SegmentLifecycleTracker::new());
+    let worker = FlushWorker::new(1, base_path.clone(), flush_lock, Arc::clone(&segment_ids), Arc::clone(&lifecycle));
     tokio::spawn(async move {
         worker.run(rx).await.expect("Worker run failed");
     });
@@ -226,4 +233,8 @@ async fn test_flush_worker_skips_cleanup_for_empty_memtable() {
 
     // No new segment IDs should be recorded for empty flushes
     assert!(segment_ids.read().unwrap().is_empty());
+    assert!(
+        !lifecycle.can_clear_passive(segment_id).await,
+        "Lifecycle tracker should not register empty flushes"
+    );
 }
