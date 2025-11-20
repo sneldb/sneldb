@@ -20,7 +20,7 @@ event_per_zone = 8000
 compaction_interval = 600
 sys_io_threshold = 100
 sys_memory_threshold_mb = 512
-max_inflight_passives = 32
+max_inflight_passives = 128
 segments_per_merge = 8
 compaction_max_shard_concurrency = 2
 system_info_refresh_interval = 30
@@ -58,8 +58,8 @@ initial_admin_key = "admin-key-123"
 
 [logging]
 log_dir = "../data/logs"
-stdout_level = "debug"
-file_level = "debug"
+stdout_level = "error"
+file_level = "error"
 
 [query]
 zone_index_cache_max_entries = 60000

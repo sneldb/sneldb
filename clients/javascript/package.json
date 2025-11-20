@@ -1,0 +1,44 @@
+{
+  "name": "@sneldb/javascript-client",
+  "version": "0.1.0",
+  "description": "Isomorphic JavaScript client for SnelDB (HTTP/WebSocket)",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [
+    "sneldb",
+    "database",
+    "client",
+    "websocket",
+    "http"
+  ],
+  "author": "SnelDB",
+  "license": "MIT",
+  "dependencies": {
+    "@noble/hashes": "^1.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/ws": "^8.5.10",
+    "tsup": "^8.0.1",
+    "typescript": "^5.5.4",
+    "vitest": "^1.6.0"
+  }
+}
