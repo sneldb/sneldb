@@ -15,4 +15,26 @@
 flamegraph*
 /scripts/*
 tmp*
+
+/clients/javascript/node_modules
 .sneldb_history
+
+# Python dev artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.eggs/
+.coverage
+.venv/
+clients/python/.venv/
+
+# Node / package locks
+node_modules/
+
+# Editor caches
+.idea/
+.vscode/*
+!.vscode/settings.json
