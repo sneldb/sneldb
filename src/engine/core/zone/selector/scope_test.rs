@@ -3,11 +3,19 @@ use crate::engine::core::Flusher;
 use crate::test_helpers::factories::{
     CommandFactory, EventFactory, MemTableFactory, QueryPlanFactory, SchemaRegistryFactory,
 };
-use std::sync::Arc;
+use std::sync::{Arc, Once};
 use tempfile::tempdir;
+
+fn ensure_test_config() {
+    static INIT: Once = Once::new();
+    INIT.call_once(|| unsafe {
+        std::env::set_var("SNELDB_CONFIG", "config/test.toml");
+    });
+}
 
 #[tokio::test]
 async fn wildcard_scope_returns_zones_even_without_uid_override() {
+    ensure_test_config();
     let tmp = tempdir().unwrap();
     let shard_dir = tmp.path().join("shard-0");
     let segment_dir = shard_dir.join("00000");
@@ -65,6 +73,7 @@ async fn wildcard_scope_returns_zones_even_without_uid_override() {
 
 #[tokio::test]
 async fn uid_override_prefers_specific_event_type() {
+    ensure_test_config();
     let tmp = tempdir().unwrap();
     let shard_dir = tmp.path().join("shard-0");
     let segment_dir = shard_dir.join("00001");
@@ -124,5 +133,37 @@ async fn uid_override_prefers_specific_event_type() {
         zones.len(),
         2,
         "uid override should honor per-event-type metadata"
+    );
+}
+
+#[tokio::test]
+async fn specific_scope_skips_segments_without_uid() {
+    ensure_test_config();
+    let tmp = tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let segment_dir = shard_dir.join("00002");
+    std::fs::create_dir_all(&segment_dir).unwrap();
+
+    let registry_factory = SchemaRegistryFactory::new();
+    let registry = registry_factory.registry();
+    let event_type = "login_missing";
+    registry_factory
+        .define_with_fields(event_type, &[("device", "string")])
+        .await
+        .unwrap();
+
+    let command = CommandFactory::query().with_event_type(event_type).create();
+    let plan = QueryPlanFactory::new()
+        .with_command(command)
+        .with_registry(Arc::clone(&registry))
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["00002".into()])
+        .create()
+        .await;
+
+    let zones = collect_zones_for_scope(&plan, None, "00002", None);
+    assert!(
+        zones.is_empty(),
+        "segments lacking the uid should be skipped instead of returning placeholder zones"
     );
 }

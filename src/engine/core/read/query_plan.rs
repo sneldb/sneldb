@@ -11,6 +11,7 @@ use crate::engine::core::read::projection::ProjectionPlanner;
 use crate::engine::schema::registry::SchemaRegistry;
 use crate::engine::types::ScalarValue;
 use std::collections::HashMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -326,5 +327,22 @@ impl QueryPlan {
             .as_ref()
             .map(|tracker| tracker.contains(segment_id))
             .unwrap_or(false)
+    }
+
+    /// Returns true if the given segment is expected to contain data for the provided uid.
+    pub fn segment_maybe_contains_uid(&self, segment_id: &str, uid: &str) -> bool {
+        if self.index_registry.has_catalog(segment_id) {
+            return true;
+        }
+
+        if self.is_segment_inflight(segment_id) {
+            return true;
+        }
+
+        let zones_path = self
+            .segment_base_dir
+            .join(segment_id)
+            .join(format!("{}.zones", uid));
+        fs::metadata(zones_path).is_ok()
     }
 }

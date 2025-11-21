@@ -1,8 +1,7 @@
-use std::sync::Arc;
+use std::sync::{Arc, Once};
 
 use tempfile::tempdir;
 
-use crate::engine::core::zone::candidate_zone::CandidateZone;
 use crate::engine::core::zone::selector::index_selector::{IndexZoneSelector, MissingIndexPolicy};
 use crate::engine::core::zone::selector::selector_kind::ZoneSelector;
 use crate::engine::core::zone::zone_artifacts::ZoneArtifacts;
@@ -14,8 +13,16 @@ use crate::test_helpers::factories::query_plan_factory::QueryPlanFactory;
 use crate::test_helpers::factories::schema_factory::SchemaRegistryFactory;
 use crate::test_helpers::factories::zone_index_factory::ZoneIndexFactory;
 
+fn ensure_test_config() {
+    static INIT: Once = Once::new();
+    INIT.call_once(|| unsafe {
+        std::env::set_var("SNELDB_CONFIG", "config/test.toml");
+    });
+}
+
 #[tokio::test]
 async fn index_selector_no_context_returns_all_zones_on_missing_index() {
+    ensure_test_config();
     let tmp = tempdir().unwrap();
     let seg1 = tmp.path().join("seg1");
     std::fs::create_dir_all(&seg1).unwrap();
@@ -29,6 +36,19 @@ async fn index_selector_no_context_returns_all_zones_on_missing_index() {
         .await
         .unwrap();
     let uid = registry.read().await.get_uid(event_type).unwrap();
+
+    // Ensure zone metadata exists so the selector knows this segment holds the UID.
+    let metas = vec![ZoneMeta {
+        zone_id: 0,
+        uid: uid.clone(),
+        segment_id: 0,
+        start_row: 0,
+        end_row: 0,
+        timestamp_min: 0,
+        timestamp_max: 0,
+        created_at: 0,
+    }];
+    ZoneMeta::save(&uid, &metas, &seg1).unwrap();
 
     // Plan
     let command = CommandFactory::query().with_event_type(event_type).create();
@@ -52,13 +72,60 @@ async fn index_selector_no_context_returns_all_zones_on_missing_index() {
     };
 
     let zones = selector.select_for_segment("seg1");
-    let all_zones = CandidateZone::create_all_zones_for_segment("seg1");
-    assert_eq!(zones.len(), all_zones.len());
+    assert_eq!(
+        zones.len(),
+        metas.len(),
+        "fallback should return the real zone count from metadata"
+    );
     assert!(zones.iter().all(|z| z.segment_id == "seg1"));
 }
 
 #[tokio::test]
+async fn index_selector_skips_segments_without_uid() {
+    ensure_test_config();
+    let tmp = tempdir().unwrap();
+    let seg1 = tmp.path().join("seg1");
+    std::fs::create_dir_all(&seg1).unwrap();
+
+    let registry_fac = SchemaRegistryFactory::new();
+    let registry = registry_fac.registry();
+    let event_type = "ev_missing_uid";
+    registry_fac
+        .define_with_fields(event_type, &[("id", "u64")])
+        .await
+        .unwrap();
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+
+    let command = CommandFactory::query().with_event_type(event_type).create();
+    let plan = QueryPlanFactory::new()
+        .with_command(command)
+        .with_registry(Arc::clone(&registry))
+        .with_segment_base_dir(tmp.path())
+        .with_segment_ids(vec!["seg1".into()])
+        .create()
+        .await;
+
+    let artifacts = ZoneArtifacts::new(&plan.segment_base_dir, None);
+    let selector = IndexZoneSelector {
+        plan: &plan,
+        caches: None,
+        artifacts,
+        policy: MissingIndexPolicy::AllZonesIfNoContext,
+        uid: &uid,
+        event_type,
+        context_id: None,
+    };
+
+    let zones = selector.select_for_segment("seg1");
+    assert!(
+        zones.is_empty(),
+        "Segments without the requested uid should be skipped entirely"
+    );
+}
+
+#[tokio::test]
 async fn index_selector_aggregates_zones_from_index() {
+    ensure_test_config();
     let tmp = tempdir().unwrap();
     let seg1 = tmp.path().join("seg1");
     std::fs::create_dir_all(&seg1).unwrap();
@@ -116,6 +183,7 @@ async fn index_selector_aggregates_zones_from_index() {
 
 #[tokio::test]
 async fn index_selector_context_uses_index_when_present() {
+    ensure_test_config();
     let tmp = tempdir().unwrap();
     let seg1 = tmp.path().join("seg1");
     std::fs::create_dir_all(&seg1).unwrap();
@@ -168,6 +236,7 @@ async fn index_selector_context_uses_index_when_present() {
 
 #[tokio::test]
 async fn index_selector_keeps_segment_when_high_water_timestamp_present() {
+    ensure_test_config();
     let tmp = tempdir().unwrap();
     let seg1 = tmp.path().join("seg1");
     std::fs::create_dir_all(&seg1).unwrap();

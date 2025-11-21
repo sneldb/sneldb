@@ -4,6 +4,7 @@ use crate::engine::core::zone::{zone_artifacts::ZoneArtifacts, zone_meta::ZoneMe
 use crate::engine::core::{CandidateZone, QueryCaches, QueryPlan};
 use std::path::Path;
 use std::time::UNIX_EPOCH;
+use tracing::{debug, error};
 
 #[derive(Debug)]
 pub enum MissingIndexPolicy {
@@ -56,7 +57,26 @@ impl<'a> ZoneSelector for IndexZoneSelector<'a> {
         let mut candidate_zones = match self.artifacts.load_zone_index(segment_id, self.uid) {
             Ok(index) => index.find_candidate_zones(self.event_type, self.context_id, segment_id),
             Err(err) => {
-                tracing::error!(target: "sneldb::query", %segment_id, uid = %self.uid, error = %err, policy = ?self.policy, context_id = ?self.context_id, "Failed to load ZoneIndex; applying missing-index policy");
+                if !self.plan.segment_maybe_contains_uid(segment_id, self.uid) {
+                    debug!(
+                        target: "sneldb::query",
+                        %segment_id,
+                        uid = %self.uid,
+                        error = %err,
+                        "Zone index missing for unrelated segment; skipping"
+                    );
+                    return Vec::new();
+                }
+
+                error!(
+                    target: "sneldb::query",
+                    %segment_id,
+                    uid = %self.uid,
+                    error = %err,
+                    policy = ?self.policy,
+                    context_id = ?self.context_id,
+                    "Failed to load ZoneIndex; applying missing-index policy"
+                );
                 match self.policy {
                     MissingIndexPolicy::AllZonesIfNoContext => match self.context_id {
                         Some(_) => vec![],

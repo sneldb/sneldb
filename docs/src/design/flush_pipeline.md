@@ -94,6 +94,16 @@ Every event that lands in SnelDB takes a short trip: it is accepted into memory,
 - `FlushProgress` ensures explicit waits and user-facing commands can deterministically block on flushes without busy-looping or issuing redundant work.
 - `SegmentLifecycleTracker` is the guardrail that keeps passive buffers alive until their on-disk counterparts are proven good.
 
+## 7. Reader-side guards while indexes settle
+
+Once the writer path is safe, we still need to shield queries from “half-published” segments:
+
+- **InflightSegments** – every segment ID goes into an inflight tracker the moment it’s queued for flush and drops out only after verification. Zone planning merges these inflight IDs with the published `segment_ids` list so readers don’t miss freshly flushed data.
+- **UID-aware fallbacks** – selectors (`collect_zones_for_scope`, `FieldSelector`, `IndexZoneSelector`) now check whether a segment actually hosts the requested event-type UID (via index catalogs, `.zones` metadata, or inflight status) before falling back to “scan all zones”. Segments that never contained that UID are skipped entirely; they no longer fabricate empty candidate zones that lead to `row_count: 0`.
+- **Targeted full scans** – when an index file is genuinely missing for a *real* segment (e.g., the flush is still writing `.idx`), we still honor the configured `MissingIndexPolicy`, but only after the UID check passes. This keeps the safety net for in-progress flushes without paying the cost on unrelated shards.
+
+Together these guards mean readers either (a) see the verified files, (b) rely on the passive buffer via inflight detection, or (c) briefly scan real zones for that UID. They never waste work hydrating segments that could not possibly contain the event type.
+
 ## Mental model
 
 Think of each memtable rotation as handing a “package” plus a numbered receipt to the flush conveyor belt. The worker assembles the package, checks it, places it on the shelf (segment_ids), cleans the workbench (WAL), and finally stamps the receipt as done. Any customer (SHOW) can walk up to the desk, note the latest receipt number, and wait until all packages up to that number are on the shelf. New packages keep flowing without blocking anyone.
