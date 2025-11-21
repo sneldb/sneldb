@@ -253,6 +253,16 @@ impl FilterGroupBuilder {
         event_type_uid: &Option<String>,
         unique_filters: &mut HashMap<String, FilterGroup>,
     ) {
+        if event_type == "*" {
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                debug!(
+                    target: "query::filter",
+                    "Skipping event_type filter for wildcard *"
+                );
+            }
+            return;
+        }
+
         if tracing::enabled!(tracing::Level::DEBUG) {
             debug!(target: "query::filter", value = %event_type, "Adding event_type filter");
         }
