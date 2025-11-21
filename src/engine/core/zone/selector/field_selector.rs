@@ -1,3 +1,4 @@
+use super::scope::collect_zones_for_scope;
 use crate::engine::core::filter::filter_group::FilterGroup;
 use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::engine::core::zone::selector::pruner::enum_pruner::EnumPruner;
@@ -41,17 +42,13 @@ impl<'a> ZoneSelector for FieldSelector<'a> {
             _ => return Vec::new(), // Only single filters supported
         };
 
-        let uid = match uid_opt {
-            Some(uid) => uid.as_str(),
-            None => return self.fallback_zones_for_segment(segment_id),
-        };
+        let uid_str = uid_opt.map(|uid| uid.as_str());
+        if uid_str.is_none() {
+            return collect_zones_for_scope(self.qplan, self.caches, segment_id, None);
+        }
+        let uid = uid_str.unwrap();
         if value.is_none() {
-            return CandidateZone::create_all_zones_for_segment_from_meta_cached(
-                &self.qplan.segment_base_dir,
-                segment_id,
-                uid,
-                self.caches,
-            );
+            return collect_zones_for_scope(self.qplan, self.caches, segment_id, Some(uid));
         }
 
         let args = PruneArgs {
@@ -111,18 +108,12 @@ impl<'a> ZoneSelector for FieldSelector<'a> {
                     }
                 }
                 IndexStrategy::FullScan => {
-                    // For FullScan, return all zones (will be filtered by materialization pruner if needed)
-                    candidate_zones = CandidateZone::create_all_zones_for_segment_from_meta_cached(
-                        &self.qplan.segment_base_dir,
-                        segment_id,
-                        uid,
-                        self.caches,
-                    );
+                    candidate_zones =
+                        collect_zones_for_scope(self.qplan, self.caches, segment_id, Some(uid));
                 }
             }
         } else {
-            // No explicit strategy, return empty
-            return Vec::new();
+            return collect_zones_for_scope(self.qplan, self.caches, segment_id, Some(uid));
         }
 
         // Apply materialization pruning if materialization_created_at is set in query metadata
@@ -141,27 +132,4 @@ impl<'a> ZoneSelector for FieldSelector<'a> {
     }
 }
 
-impl<'a> FieldSelector<'a> {
-    fn fallback_zones_for_segment(&self, segment_id: &str) -> Vec<CandidateZone> {
-        if let Ok(reg) = self.qplan.registry.try_read() {
-            let mut zones = Vec::new();
-            for event_type in reg.get_all().keys() {
-                if let Some(uid) = reg.get_uid(event_type) {
-                    zones.extend(
-                        CandidateZone::create_all_zones_for_segment_from_meta_cached(
-                            &self.qplan.segment_base_dir,
-                            segment_id,
-                            uid.as_str(),
-                            self.caches,
-                        )
-                        .into_iter(),
-                    );
-                }
-            }
-            if !zones.is_empty() {
-                return CandidateZone::uniq(zones);
-            }
-        }
-        CandidateZone::create_all_zones_for_segment(segment_id)
-    }
-}
+impl<'a> FieldSelector<'a> {}

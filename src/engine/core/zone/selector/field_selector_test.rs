@@ -220,6 +220,90 @@ async fn timestamp_filter_falls_back_when_uid_missing() {
 }
 
 #[tokio::test]
+async fn falls_back_to_full_scan_when_strategy_missing() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp = tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let segment_dir = shard_dir.join("00000");
+    std::fs::create_dir_all(&segment_dir).unwrap();
+
+    let registry_factory = SchemaRegistryFactory::new();
+    let registry = registry_factory.registry();
+    let event_type = "login";
+    registry_factory
+        .define_with_fields(event_type, &[("device", "string")])
+        .await
+        .unwrap();
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+
+    let events = vec![
+        EventFactory::new()
+            .with("event_type", event_type)
+            .with("context_id", "alice")
+            .with("device", "android")
+            .create(),
+        EventFactory::new()
+            .with("event_type", event_type)
+            .with("context_id", "alice")
+            .with("device", "web")
+            .create(),
+    ];
+    let memtable = MemTableFactory::new()
+        .with_capacity(2)
+        .with_events(events)
+        .create()
+        .unwrap();
+    Flusher::new(
+        memtable,
+        0,
+        &segment_dir,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
+
+    let command = CommandFactory::query()
+        .with_event_type(event_type)
+        .with_context_id("alice")
+        .create();
+    let qplan = QueryPlanFactory::new()
+        .with_command(command)
+        .with_registry(Arc::clone(&registry))
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["00000".into()])
+        .create()
+        .await;
+
+    let filter = FilterGroupFactory::new()
+        .with_column("context_id")
+        .with_operation(CompareOp::Eq)
+        .with_uid(&uid)
+        .with_value(json!("alice"))
+        .create();
+
+    let ctx = SelectionContext {
+        plan: &filter,
+        query_plan: &qplan,
+        base_dir: &shard_dir,
+        caches: None,
+    };
+    let selector = ZoneSelectorBuilder::new(ctx).build();
+    let zones = selector.select_for_segment("00000");
+
+    let expected = CandidateZone::create_all_zones_for_segment_from_meta(&shard_dir, "00000", &uid);
+    assert_eq!(
+        zones.len(),
+        expected.len(),
+        "missing strategy should fall back to full scan"
+    );
+    assert!(!zones.is_empty());
+}
+
+#[tokio::test]
 async fn range_pruner_uses_zonesurf_for_gt_and_lte() {
     use crate::logging::init_for_tests;
     init_for_tests();
@@ -711,7 +795,14 @@ async fn xor_pruner_skips_on_neq_operation() {
     };
     let sel = ZoneSelectorBuilder::new(ctx).build();
     let zones = sel.select_for_segment("001");
-    assert!(zones.is_empty());
+    assert!(
+        !zones.is_empty(),
+        "neq should fall back to scanning the entire segment"
+    );
+    assert!(
+        zones.iter().all(|z| z.segment_id == "001"),
+        "fallback must still honor the target segment"
+    );
 }
 
 #[tokio::test]

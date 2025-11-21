@@ -1,6 +1,7 @@
 use crate::command::types::CompareOp;
 use crate::engine::core::filter::filter_group::FilterGroup;
 use crate::engine::core::read::catalog::{IndexKind, IndexRegistry};
+use crate::engine::core::read::event_scope::EventScope;
 use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::engine::schema::{FieldType, registry::SchemaRegistry};
 use std::sync::Arc;
@@ -9,19 +10,19 @@ use tokio::sync::RwLock;
 pub struct IndexPlanner<'a> {
     pub registry: &'a Arc<RwLock<SchemaRegistry>>,
     pub index_registry: &'a IndexRegistry,
-    pub event_type_uid: Option<String>,
+    pub event_scope: &'a EventScope,
 }
 
 impl<'a> IndexPlanner<'a> {
     pub fn new(
         registry: &'a Arc<RwLock<SchemaRegistry>>,
         index_registry: &'a IndexRegistry,
-        event_type_uid: Option<String>,
+        event_scope: &'a EventScope,
     ) -> Self {
         Self {
             registry,
             index_registry,
-            event_type_uid,
+            event_scope,
         }
     }
 
@@ -43,6 +44,12 @@ impl<'a> IndexPlanner<'a> {
             return strategy.clone();
         }
         let field = column;
+        if self.event_scope.is_wildcard() {
+            return IndexStrategy::FullScan;
+        }
+        let Some(uid_ref) = self.event_scope.primary_uid() else {
+            return IndexStrategy::FullScan;
+        };
         // If no catalog for this segment, avoid choosing any index to prevent fs probing
         if !self.index_registry.has_catalog(segment_id) {
             return IndexStrategy::FullScan;
@@ -53,23 +60,19 @@ impl<'a> IndexPlanner<'a> {
             if field == "timestamp" {
                 true
             } else {
-                if let Some(uid) = &self.event_type_uid {
-                    self.registry
-                        .read()
-                        .await
-                        .get_schema_by_uid(uid)
-                        .and_then(|s| s.field_type(&field).cloned())
-                        .map(|ft| match ft {
-                            FieldType::Timestamp | FieldType::Date => true,
-                            FieldType::Optional(inner) => {
-                                matches!(*inner, FieldType::Timestamp | FieldType::Date)
-                            }
-                            _ => false,
-                        })
-                        .unwrap_or(false)
-                } else {
-                    false
-                }
+                self.registry
+                    .read()
+                    .await
+                    .get_schema_by_uid(uid_ref)
+                    .and_then(|s| s.field_type(&field).cloned())
+                    .map(|ft| match ft {
+                        FieldType::Timestamp | FieldType::Date => true,
+                        FieldType::Optional(inner) => {
+                            matches!(*inner, FieldType::Timestamp | FieldType::Date)
+                        }
+                        _ => false,
+                    })
+                    .unwrap_or(false)
             }
         };
         if is_temporal {
@@ -86,11 +89,11 @@ impl<'a> IndexPlanner<'a> {
         }
 
         // Enum
-        let is_enum = if let Some(uid) = &self.event_type_uid {
-            self.registry.read().await.is_enum_field_by_uid(uid, &field)
-        } else {
-            false
-        };
+        let is_enum = self
+            .registry
+            .read()
+            .await
+            .is_enum_field_by_uid(uid_ref, &field);
         if is_enum && kinds.contains(IndexKind::ENUM_BITMAP) {
             return IndexStrategy::EnumBitmap { field };
         }

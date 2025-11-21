@@ -1,4 +1,3 @@
-use crate::engine::core::CandidateZone;
 use crate::engine::core::filter::filter_group::FilterGroup;
 use crate::engine::core::zone::selector::field_selector::FieldSelector;
 use crate::engine::core::zone::selector::index_selector::{IndexZoneSelector, MissingIndexPolicy};
@@ -6,9 +5,11 @@ use crate::engine::core::zone::selector::pruner::enum_pruner::EnumPruner;
 use crate::engine::core::zone::selector::pruner::range_pruner::RangePruner;
 use crate::engine::core::zone::selector::pruner::temporal_pruner::TemporalPruner;
 use crate::engine::core::zone::selector::pruner::xor_pruner::XorPruner;
+use crate::engine::core::zone::selector::scope::collect_zones_for_scope;
 use crate::engine::core::zone::selector::selection_context::SelectionContext;
 use crate::engine::core::zone::selector::selector_kind::ZoneSelector;
 use crate::engine::core::zone::zone_artifacts::ZoneArtifacts;
+use crate::engine::core::{CandidateZone, QueryCaches, QueryPlan};
 
 pub struct ZoneSelectorBuilder<'a> {
     inputs: SelectionContext<'a>,
@@ -106,14 +107,14 @@ impl<'a> ZoneSelectorBuilder<'a> {
                         context_id,
                     }),
                     (None, Some(et)) => {
-                        // Resolve uid from registry for event_type and return all zones via metadata
-                        if let Ok(reg) = self.inputs.query_plan.registry.try_read() {
-                            if let Some(uid) = reg.get_uid(et) {
-                                return Box::new(AllZonesSelectorMeta {
-                                    base_dir: self.inputs.base_dir,
-                                    uid: uid.to_string(),
-                                });
-                            }
+                        if let Some(scope_uid) = self
+                            .inputs
+                            .query_plan
+                            .event_scope()
+                            .uid_for(et)
+                            .map(|u| u.to_string())
+                        {
+                            return self.scoped_selector(Some(scope_uid));
                         }
                         self.fallback_all_zones_selector()
                     }
@@ -125,59 +126,26 @@ impl<'a> ZoneSelectorBuilder<'a> {
     }
 
     fn fallback_all_zones_selector(&self) -> Box<dyn ZoneSelector + 'a> {
-        if let Ok(reg) = self.inputs.query_plan.registry.try_read() {
-            let uids: Vec<String> = reg
-                .get_all()
-                .keys()
-                .filter_map(|event_type| reg.get_uid(event_type))
-                .collect();
-            if !uids.is_empty() {
-                return Box::new(MultiUidAllZonesSelector {
-                    base_dir: self.inputs.base_dir,
-                    uids,
-                });
-            }
-        }
-        Box::new(AllZonesSelector {})
+        self.scoped_selector(None)
+    }
+
+    fn scoped_selector(&self, uid_hint: Option<String>) -> Box<dyn ZoneSelector + 'a> {
+        Box::new(ScopedAllZonesSelector {
+            plan: self.inputs.query_plan,
+            caches: self.inputs.caches,
+            uid_hint,
+        })
     }
 }
 
-struct AllZonesSelector {}
-impl ZoneSelector for AllZonesSelector {
-    fn select_for_segment(&self, segment_id: &str) -> Vec<CandidateZone> {
-        // Fallback: no uid/event_type to resolve metadata; return configured fill_factor zones
-        CandidateZone::create_all_zones_for_segment(segment_id)
-    }
+struct ScopedAllZonesSelector<'a> {
+    plan: &'a QueryPlan,
+    caches: Option<&'a QueryCaches>,
+    uid_hint: Option<String>,
 }
 
-struct AllZonesSelectorMeta<'a> {
-    base_dir: &'a std::path::PathBuf,
-    uid: String,
-}
-impl<'a> ZoneSelector for AllZonesSelectorMeta<'a> {
+impl<'a> ZoneSelector for ScopedAllZonesSelector<'a> {
     fn select_for_segment(&self, segment_id: &str) -> Vec<CandidateZone> {
-        CandidateZone::create_all_zones_for_segment_from_meta(self.base_dir, segment_id, &self.uid)
-    }
-}
-
-struct MultiUidAllZonesSelector<'a> {
-    base_dir: &'a std::path::PathBuf,
-    uids: Vec<String>,
-}
-
-impl<'a> ZoneSelector for MultiUidAllZonesSelector<'a> {
-    fn select_for_segment(&self, segment_id: &str) -> Vec<CandidateZone> {
-        let mut zones = Vec::new();
-        for uid in &self.uids {
-            zones.extend(
-                CandidateZone::create_all_zones_for_segment_from_meta(
-                    self.base_dir,
-                    segment_id,
-                    uid,
-                )
-                .into_iter(),
-            );
-        }
-        CandidateZone::uniq(zones)
+        collect_zones_for_scope(self.plan, self.caches, segment_id, self.uid_hint.as_deref())
     }
 }

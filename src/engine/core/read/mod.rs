@@ -1,6 +1,7 @@
 pub mod aggregate;
 pub mod cache;
 pub mod catalog;
+pub mod event_scope;
 pub mod event_sorter;
 pub mod execution_step;
 pub mod field_comparator;
@@ -19,6 +20,8 @@ pub mod segment_query_runner;
 pub mod sequence;
 pub mod sink;
 
+#[cfg(test)]
+mod event_scope_test;
 #[cfg(test)]
 mod event_sorter_test;
 #[cfg(test)]

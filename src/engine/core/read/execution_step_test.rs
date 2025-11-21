@@ -158,12 +158,17 @@ async fn execution_step_respects_provided_segment_subset() {
     assert!(step.candidate_zones.iter().all(|z| z.segment_id == "seg1"));
 
     // Only seg2 yields none
-    let f2 = FilterGroupFactory::new()
+    let mut f2 = FilterGroupFactory::new()
         .with_column("plan")
         .with_operation(CompareOp::Eq)
         .with_value(json!("yes"))
         .with_uid(&uid)
         .create();
+    if let Some(strategy) = f2.index_strategy_mut() {
+        *strategy = Some(IndexStrategy::XorPresence {
+            field: "plan".to_string(),
+        });
+    }
     let mut step2 = ExecutionStep::new(f2, &plan);
     step2.get_candidate_zones_with_segments(None, &["seg2".into()]);
     assert!(step2.candidate_zones.is_empty());
