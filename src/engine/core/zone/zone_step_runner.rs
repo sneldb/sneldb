@@ -41,8 +41,8 @@ impl<'a> ZoneStepRunner<'a> {
                 tracing::debug!(
                     target: "sneldb::zone_runner",
                     inflight_count = inflight.len(),
-                    segment_ids = ?inflight,
-                    full_segments = ?full_segments,
+                    inflight_segments = ?inflight,
+                    merged_segments = ?full_segments,
                     "Merged inflight segments into query plan"
                 );
             }
@@ -66,6 +66,15 @@ impl<'a> ZoneStepRunner<'a> {
                 subset
             } else if allow_prune {
                 if pos == 0 {
+                    if tracing::enabled!(tracing::Level::DEBUG) {
+                        tracing::debug!(
+                            target: "sneldb::zone_runner",
+                            step_idx = idx,
+                            step_pos = pos,
+                            segments = ?full_segments,
+                            "First prunable step using full segment list"
+                        );
+                    }
                     full_segments.clone()
                 } else {
                     pruned.clone().unwrap_or_else(|| full_segments.clone())
@@ -77,6 +86,19 @@ impl<'a> ZoneStepRunner<'a> {
             let step_start = std::time::Instant::now();
             step.get_candidate_zones_with_segments(self.caches, &segments);
             let zones = std::mem::take(&mut step.candidate_zones);
+            if tracing::enabled!(tracing::Level::DEBUG) && !zones.is_empty() {
+                let segs: std::collections::HashSet<&str> =
+                    zones.iter().map(|z| z.segment_id.as_str()).collect();
+                tracing::debug!(
+                    target: "sneldb::zone_runner",
+                    step_idx = idx,
+                    step_pos = pos,
+                    zones_found = zones.len(),
+                    segments_examined = segments.len(),
+                    segment_sources = ?segs,
+                    "Execution step produced candidate zones"
+                );
+            }
             let step_time = step_start.elapsed();
 
             // Log slow steps when they find no zones (indicates expensive work for no result)
