@@ -195,8 +195,7 @@ mod replay_tests {
     fn test_parse_replay_with_return_mixed_whitespace_and_quotes() {
         let input = r#"REPLAY order_created FOR user-123 RETURN [ name , "country" , plan ]"#;
 
-        let command =
-            replay::parse(input).expect("Failed to parse REPLAY with mixed RETURN list");
+        let command = replay::parse(input).expect("Failed to parse REPLAY with mixed RETURN list");
 
         assert_eq!(
             command,

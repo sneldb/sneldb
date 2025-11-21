@@ -97,11 +97,7 @@ enum Clause {
     Using(String),
 }
 
-fn build_command(
-    event_type: Option<&str>,
-    context_id: String,
-    clauses: Vec<Clause>,
-) -> Command {
+fn build_command(event_type: Option<&str>, context_id: String, clauses: Vec<Clause>) -> Command {
     let mut since = None;
     let mut return_fields = None;
     let mut time_field = None;

@@ -29,7 +29,25 @@ impl<'a> ZoneStepRunner<'a> {
         let mut pruned: Option<Vec<String>> = None;
 
         // Full segment list to use before pruning exists
-        let full_segments: Vec<String> = self._plan.segment_ids.read().unwrap().clone();
+        let mut full_segments: Vec<String> = self._plan.segment_ids.read().unwrap().clone();
+        if let Some(tracker) = self._plan.inflight_segments() {
+            let inflight = tracker.snapshot();
+            for seg in &inflight {
+                if !full_segments.contains(seg) {
+                    full_segments.push(seg.clone());
+                }
+            }
+            if tracing::enabled!(tracing::Level::DEBUG) && !inflight.is_empty() {
+                let merged_segments = full_segments.clone();
+                tracing::debug!(
+                    target: "sneldb::zone_runner",
+                    inflight_count = inflight.len(),
+                    inflight_segments = ?inflight,
+                    merged_segments = ?merged_segments,
+                    "Merged inflight segments into query plan"
+                );
+            }
+        }
 
         // Decide if pruning is allowed: only when op is AND and the first planned step is context_id
         let op = LogicalOp::from_expr(self._plan.where_clause());
@@ -48,8 +66,20 @@ impl<'a> ZoneStepRunner<'a> {
             let segments: Vec<String> = if let Some(subset) = maybe_subset {
                 subset
             } else if allow_prune {
-                // Use pruned list if already computed; otherwise use full list for the first step
-                pruned.clone().unwrap_or_else(|| full_segments.clone())
+                if pos == 0 {
+                    if tracing::enabled!(tracing::Level::DEBUG) {
+                        tracing::debug!(
+                            target: "sneldb::zone_runner",
+                            step_idx = idx,
+                            step_pos = pos,
+                            segments = ?full_segments,
+                            "First prunable step using full segment list"
+                        );
+                    }
+                    full_segments.clone()
+                } else {
+                    pruned.clone().unwrap_or_else(|| full_segments.clone())
+                }
             } else {
                 full_segments.clone()
             };
@@ -57,6 +87,19 @@ impl<'a> ZoneStepRunner<'a> {
             let step_start = std::time::Instant::now();
             step.get_candidate_zones_with_segments(self.caches, &segments);
             let zones = std::mem::take(&mut step.candidate_zones);
+            if tracing::enabled!(tracing::Level::DEBUG) && !zones.is_empty() {
+                let segs: std::collections::HashSet<&str> =
+                    zones.iter().map(|z| z.segment_id.as_str()).collect();
+                tracing::debug!(
+                    target: "sneldb::zone_runner",
+                    step_idx = idx,
+                    step_pos = pos,
+                    zones_found = zones.len(),
+                    segments_examined = segments.len(),
+                    segment_sources = ?segs,
+                    "Execution step produced candidate zones"
+                );
+            }
             let step_time = step_start.elapsed();
 
             // Log slow steps when they find no zones (indicates expensive work for no result)

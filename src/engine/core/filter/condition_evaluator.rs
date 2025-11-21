@@ -103,12 +103,20 @@ impl ConditionEvaluator {
                 }
             }
 
-            let event_count = zone.values.values().next().map(|v| v.len()).unwrap_or(0);
+            let accessor = PreparedAccessor::new(&zone.values);
+            let event_count = accessor.event_count();
             if event_count == 0 {
+                if tracing::enabled!(tracing::Level::DEBUG) && !zone.values.is_empty() {
+                    tracing::debug!(
+                        target: "sneldb::condition_eval",
+                        zone_id = zone.zone_id,
+                        segment_id = %zone.segment_id,
+                        column_count = zone.values.len(),
+                        "Skipping zone because hydrated columns are empty"
+                    );
+                }
                 continue;
             }
-
-            let accessor = PreparedAccessor::new(&zone.values);
             if self.has_numeric_conditions() {
                 accessor.warm_numeric_cache(&self.numeric_fields);
             }

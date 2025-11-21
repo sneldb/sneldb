@@ -1,11 +1,12 @@
 use crate::engine::core::segment::segment_id::SegmentId;
 use crate::engine::core::{
-    Flusher, MemTable, SegmentLifecycleTracker, SegmentVerifier, WalCleaner,
+    Flusher, InflightSegments, MemTable, SegmentLifecycleTracker, SegmentVerifier, WalCleaner,
 };
 use crate::engine::errors::StoreError;
 use crate::engine::schema::registry::SchemaRegistry;
+use crate::engine::shard::flush_progress::FlushProgress;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use tokio::sync::{Mutex, RwLock as TokioRwLock, mpsc::Receiver, oneshot};
 use tracing::{debug, error, info, warn};
 
@@ -17,7 +18,10 @@ pub struct FlushWorker {
     shard_id: usize,
     base_dir: PathBuf,
     flush_coordination_lock: Arc<Mutex<()>>,
+    segment_ids: Arc<RwLock<Vec<String>>>,
     segment_lifecycle: Arc<SegmentLifecycleTracker>,
+    flush_progress: Arc<FlushProgress>,
+    inflight_segments: InflightSegments,
 }
 
 impl FlushWorker {
@@ -26,13 +30,19 @@ impl FlushWorker {
         shard_id: usize,
         base_dir: PathBuf,
         flush_coordination_lock: Arc<Mutex<()>>,
+        segment_ids: Arc<RwLock<Vec<String>>>,
         segment_lifecycle: Arc<SegmentLifecycleTracker>,
+        flush_progress: Arc<FlushProgress>,
+        inflight_segments: InflightSegments,
     ) -> Self {
         Self {
             shard_id,
             base_dir,
             flush_coordination_lock,
+            segment_ids,
             segment_lifecycle,
+            flush_progress,
+            inflight_segments,
         }
     }
 
@@ -44,29 +54,35 @@ impl FlushWorker {
             MemTable,
             Arc<TokioRwLock<SchemaRegistry>>,
             Arc<tokio::sync::Mutex<MemTable>>,
+            u64,
             Option<oneshot::Sender<Result<(), StoreError>>>,
         )>,
     ) -> Result<(), StoreError> {
-        while let Some((segment_id, memtable, registry, passive_memtable, completion)) =
+        while let Some((segment_id, memtable, registry, passive_memtable, flush_id, completion)) =
             rx.recv().await
         {
+            let inflight_guard = self.inflight_segments.guard(format!("{:05}", segment_id));
             let segment_dir = SegmentId::from(segment_id as u32).join_dir(&self.base_dir);
             let shard_id = self.shard_id;
             let flush_coord_lock = Arc::clone(&self.flush_coordination_lock);
+            let segment_ids = Arc::clone(&self.segment_ids);
             let lifecycle = Arc::clone(&self.segment_lifecycle);
             let base_dir = self.base_dir.clone();
 
             let flush_task = tokio::spawn(async move {
+                let _inflight_guard = inflight_guard;
                 let was_empty = memtable.is_empty();
 
-                info!(
-                    target: "sneldb::flush",
-                    shard_id,
-                    segment_id,
-                    path = ?segment_dir,
-                    empty = was_empty,
-                    "Starting flush"
-                );
+                if tracing::enabled!(tracing::Level::INFO) {
+                    info!(
+                        target: "sneldb::flush",
+                        shard_id,
+                        segment_id,
+                        path = ?segment_dir,
+                        empty = was_empty,
+                        "Starting flush"
+                    );
+                }
 
                 let track_lifecycle = !was_empty;
                 if track_lifecycle {
@@ -97,21 +113,25 @@ impl FlushWorker {
                     }
                     Ok(()) => {
                         if was_empty {
-                            debug!(
-                                target: "sneldb::flush",
-                                shard_id,
-                                segment_id,
-                                "Flush skipped (empty memtable)"
-                            );
+                            if tracing::enabled!(tracing::Level::DEBUG) {
+                                debug!(
+                                    target: "sneldb::flush",
+                                    shard_id,
+                                    segment_id,
+                                    "Flush skipped (empty memtable)"
+                                );
+                            }
                             return flush_result;
                         }
 
-                        info!(
-                            target: "sneldb::flush",
-                            shard_id,
-                            segment_id,
-                            "Flush completed, verifying segment queryability"
-                        );
+                        if tracing::enabled!(tracing::Level::INFO) {
+                            info!(
+                                target: "sneldb::flush",
+                                shard_id,
+                                segment_id,
+                                "Flush completed, verifying segment queryability"
+                            );
+                        }
 
                         // Mark as written to disk
                         if track_lifecycle {
@@ -138,25 +158,47 @@ impl FlushWorker {
                             return flush_result;
                         }
 
+                        // Only update segment_ids after successful verification
+                        let segment_name = format!("{:05}", segment_id);
+                        {
+                            let mut segs = segment_ids.write().unwrap();
+                            if !segs.contains(&segment_name) {
+                                segs.push(segment_name.clone());
+                                if tracing::enabled!(tracing::Level::DEBUG) {
+                                    debug!(
+                                        target: "sneldb::flush",
+                                        shard_id,
+                                        segment_id,
+                                        "Added segment '{}' to segment_ids list",
+                                        segment_name
+                                    );
+                                }
+                            }
+                        }
+
                         // Mark as verified and clear passive buffer
                         if track_lifecycle {
                             lifecycle.mark_verified(segment_id).await;
 
                             if let Some(passive) = lifecycle.clear_and_complete(segment_id).await {
                                 passive.lock().await.flush();
-                                debug!(
-                                    target: "sneldb::flush",
-                                    shard_id,
-                                    segment_id,
-                                    "Passive buffer cleared after verification"
-                                );
+                                if tracing::enabled!(tracing::Level::DEBUG) {
+                                    debug!(
+                                        target: "sneldb::flush",
+                                        shard_id,
+                                        segment_id,
+                                        "Passive buffer cleared after verification"
+                                    );
+                                }
                             } else {
-                                warn!(
-                                    target: "sneldb::flush",
-                                    shard_id,
-                                    segment_id,
-                                    "Passive buffer missing when attempting to clear after verification"
-                                );
+                                if tracing::enabled!(tracing::Level::WARN) {
+                                    warn!(
+                                        target: "sneldb::flush",
+                                        shard_id,
+                                        segment_id,
+                                        "Passive buffer missing when attempting to clear after verification"
+                                    );
+                                }
                             }
                         }
 
@@ -164,12 +206,14 @@ impl FlushWorker {
                         // PassiveBufferSet::non_empty() in subsequent queries
 
                         // Clean up WAL files
-                        debug!(
-                            target: "sneldb::flush",
-                            shard_id,
-                            wal_cutoff = segment_id + 1,
-                            "Cleaning up WAL files"
-                        );
+                        if tracing::enabled!(tracing::Level::DEBUG) {
+                            debug!(
+                                target: "sneldb::flush",
+                                shard_id,
+                                wal_cutoff = segment_id + 1,
+                                "Cleaning up WAL files"
+                            );
+                        }
                         let cleaner = WalCleaner::new(shard_id);
                         cleaner.cleanup_up_to(segment_id + 1);
                     }
@@ -196,6 +240,8 @@ impl FlushWorker {
                     ))
                 }
             };
+
+            self.flush_progress.mark_completed(flush_id);
 
             // Always send completion signal, even on error/panic
             if let Some(completion) = completion {

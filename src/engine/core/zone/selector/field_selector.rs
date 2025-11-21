@@ -1,3 +1,4 @@
+use super::scope::collect_zones_for_scope;
 use crate::engine::core::filter::filter_group::FilterGroup;
 use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::engine::core::zone::selector::pruner::enum_pruner::EnumPruner;
@@ -8,6 +9,7 @@ use crate::engine::core::zone::selector::pruner::xor_pruner::XorPruner;
 use crate::engine::core::zone::selector::pruner::{PruneArgs, ZonePruner};
 use crate::engine::core::zone::selector::selector_kind::ZoneSelector;
 use crate::engine::core::{CandidateZone, QueryCaches, QueryPlan};
+use tracing::debug;
 
 pub struct FieldSelector<'a> {
     pub plan: &'a FilterGroup,
@@ -23,7 +25,7 @@ impl<'a> FieldSelector<'a> {}
 
 impl<'a> ZoneSelector for FieldSelector<'a> {
     fn select_for_segment(&self, segment_id: &str) -> Vec<CandidateZone> {
-        let (uid, column, value, operation, index_strategy) = match self.plan {
+        let (uid_opt, column, value, operation, index_strategy) = match self.plan {
             FilterGroup::Filter {
                 uid,
                 column,
@@ -41,16 +43,13 @@ impl<'a> ZoneSelector for FieldSelector<'a> {
             _ => return Vec::new(), // Only single filters supported
         };
 
-        let Some(uid) = uid else {
-            return Vec::new();
-        };
+        let uid_str = uid_opt.map(|uid| uid.as_str());
+        if uid_str.is_none() {
+            return collect_zones_for_scope(self.qplan, self.caches, segment_id, None);
+        }
+        let uid = uid_str.unwrap();
         if value.is_none() {
-            return CandidateZone::create_all_zones_for_segment_from_meta_cached(
-                &self.qplan.segment_base_dir,
-                segment_id,
-                uid,
-                self.caches,
-            );
+            return collect_zones_for_scope(self.qplan, self.caches, segment_id, Some(uid));
         }
 
         let args = PruneArgs {
@@ -98,6 +97,15 @@ impl<'a> ZoneSelector for FieldSelector<'a> {
                 IndexStrategy::ZoneXorIndex { .. } => {
                     if let Some(z) = self.xor_pruner.apply_zone_index_only(&args) {
                         candidate_zones = z;
+                    } else if self.qplan.is_segment_inflight(segment_id) {
+                        debug!(
+                            target: "sneldb::query",
+                            segment = %segment_id,
+                            column = %column,
+                            "Zone XOR index unavailable while flush is in-flight; falling back to metadata scan"
+                        );
+                        candidate_zones =
+                            collect_zones_for_scope(self.qplan, self.caches, segment_id, Some(uid));
                     } else {
                         return Vec::new();
                     }
@@ -110,27 +118,41 @@ impl<'a> ZoneSelector for FieldSelector<'a> {
                     }
                 }
                 IndexStrategy::FullScan => {
-                    // For FullScan, return all zones (will be filtered by materialization pruner if needed)
-                    candidate_zones = CandidateZone::create_all_zones_for_segment_from_meta_cached(
-                        &self.qplan.segment_base_dir,
-                        segment_id,
-                        uid,
-                        self.caches,
-                    );
+                    candidate_zones =
+                        collect_zones_for_scope(self.qplan, self.caches, segment_id, Some(uid));
                 }
             }
         } else {
-            // No explicit strategy, return empty
-            return Vec::new();
+            return collect_zones_for_scope(self.qplan, self.caches, segment_id, Some(uid));
         }
 
         // Apply materialization pruning if materialization_created_at is set in query metadata
         if let Some(created_at_str) = self.qplan.metadata.get("materialization_created_at") {
             if let Ok(materialization_created_at) = created_at_str.parse::<u64>() {
+                let high_water_ts = self
+                    .qplan
+                    .metadata
+                    .get("materialization_high_water_ts")
+                    .and_then(|value| value.parse::<u64>().ok());
+                if high_water_ts.is_none()
+                    && self
+                        .qplan
+                        .metadata
+                        .contains_key("materialization_high_water_ts")
+                    && tracing::enabled!(tracing::Level::DEBUG)
+                {
+                    debug!(
+                        target: "sneldb::materialization_pruner",
+                        segment = %segment_id,
+                        column = %column,
+                        "Unable to parse materialization_high_water_ts metadata; falling back to created_at comparison"
+                    );
+                }
                 let pruner = MaterializationPruner::new(
                     &self.qplan.segment_base_dir,
                     self.caches,
                     materialization_created_at,
+                    high_water_ts,
                 );
                 candidate_zones = pruner.apply(&candidate_zones, uid);
             }
@@ -139,3 +161,5 @@ impl<'a> ZoneSelector for FieldSelector<'a> {
         candidate_zones
     }
 }
+
+impl<'a> FieldSelector<'a> {}

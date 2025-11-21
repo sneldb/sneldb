@@ -91,7 +91,7 @@ impl ColumnarGrouper {
             .map(|zones| {
                 zones
                     .iter()
-                    .map(|zone| zone.values.values().next().map(|v| v.len()).unwrap_or(0))
+                    .map(|zone| PreparedAccessor::new(&zone.values).event_count())
                     .sum::<usize>()
             })
             .sum();

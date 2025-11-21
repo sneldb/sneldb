@@ -24,6 +24,7 @@ use super::errors::{ShowError, ShowResult};
 use super::result::ShowRefreshOutcome;
 use super::store::StoredFrameStreamer;
 use super::streaming::ShowResponseWriter;
+use tracing::debug;
 
 pub struct ShowExecutionPipeline<'a, G: CatalogGateway> {
     context: ShowContext<'a>,
@@ -106,6 +107,7 @@ impl<'a, G: CatalogGateway> ShowExecutionPipeline<'a, G> {
         let entry = catalog_handle.fetch(self.context.alias())?;
 
         self.ensure_schema_present(&entry)?;
+        self.wait_for_inflight_flushes().await?;
 
         let schema = SchemaBuilder::build(&entry)?;
         let timestamp_column = self.timestamp_column(&entry);
@@ -135,6 +137,14 @@ impl<'a, G: CatalogGateway> ShowExecutionPipeline<'a, G> {
         metadata.insert(
             "materialization_created_at".to_string(),
             entry.created_at.to_string(),
+        );
+        metadata.insert(
+            "materialization_high_water_ts".to_string(),
+            initial_high_water.timestamp.to_string(),
+        );
+        metadata.insert(
+            "materialization_high_water_event_id".to_string(),
+            initial_high_water.event_id.to_string(),
         );
 
         let delta_command = self.build_delta_command(&entry)?;
@@ -209,6 +219,43 @@ impl<'a, G: CatalogGateway> ShowExecutionPipeline<'a, G> {
         );
 
         Ok(())
+    }
+
+    async fn wait_for_inflight_flushes(&self) -> ShowResult<()> {
+        debug!(
+            target: "sneldb::show",
+            alias = self.context.alias(),
+            "Waiting for in-flight shard flushes before SHOW"
+        );
+
+        let errors = self
+            .context
+            .shard_manager()
+            .wait_for_flush_completion()
+            .await;
+
+        if errors.is_empty() {
+            debug!(
+                target: "sneldb::show",
+                alias = self.context.alias(),
+                "Shard flush wait completed"
+            );
+            Ok(())
+        } else {
+            let joined = errors
+                .into_iter()
+                .map(|(id, err)| format!("shard {id}: {err}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            Err(ShowError::new(format!(
+                "Failed to wait for shard flushes before SHOW: {joined}"
+            )))
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn test_wait_for_inflight_flushes(&self) -> ShowResult<()> {
+        self.wait_for_inflight_flushes().await
     }
 
     fn ensure_schema_present(&self, entry: &MaterializationEntry) -> ShowResult<()> {

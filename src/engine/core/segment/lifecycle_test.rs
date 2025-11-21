@@ -125,7 +125,10 @@ async fn test_mark_operations_on_nonexistent_segment_dont_panic() {
 async fn test_clear_and_complete_returns_none_for_nonexistent() {
     let tracker = SegmentLifecycleTracker::new();
     let result = tracker.clear_and_complete(999).await;
-    assert!(result.is_none(), "Should return None for non-existent segment");
+    assert!(
+        result.is_none(),
+        "Should return None for non-existent segment"
+    );
 }
 
 #[tokio::test]
@@ -151,7 +154,10 @@ async fn test_concurrent_operations_on_different_segments() {
 
     for handle in handles {
         let result = handle.await.unwrap();
-        assert!(result, "All segments should be clearable after verification");
+        assert!(
+            result,
+            "All segments should be clearable after verification"
+        );
     }
 }
 
@@ -160,10 +166,7 @@ async fn test_passive_buffer_reference_preserved_until_clear() {
     let tracker = SegmentLifecycleTracker::new();
 
     let events = crate::test_helpers::factories::EventFactory::new().create_list(3);
-    let memtable = MemTableFactory::new()
-        .with_events(events)
-        .create()
-        .unwrap();
+    let memtable = MemTableFactory::new().with_events(events).create().unwrap();
     let passive = Arc::new(Mutex::new(memtable));
     let segment_id = 50;
 
@@ -187,11 +190,7 @@ async fn test_passive_buffer_reference_preserved_until_clear() {
     // Verify we can still access the events through returned Arc
     let returned = cleared_buffer.unwrap();
     let guard = returned.lock().await;
-    assert_eq!(
-        guard.len(),
-        3,
-        "Returned buffer should still have 3 events"
-    );
+    assert_eq!(guard.len(), 3, "Returned buffer should still have 3 events");
 }
 
 #[tokio::test]
@@ -217,4 +216,3 @@ async fn test_rapid_register_and_clear_sequence() {
         );
     }
 }
-

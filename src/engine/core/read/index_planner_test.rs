@@ -1,6 +1,7 @@
 use crate::command::types::CompareOp;
 use crate::engine::core::filter::filter_group::FilterGroup;
 use crate::engine::core::read::catalog::{IndexKind, IndexRegistry, SegmentIndexCatalog};
+use crate::engine::core::read::event_scope::EventScope;
 use crate::engine::core::read::index_planner::IndexPlanner;
 use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::engine::schema::registry::{MiniSchema, SchemaRegistry};
@@ -48,7 +49,11 @@ async fn planner_fullscan_when_no_catalog_for_segment() {
     let (registry, uid) = make_registry_with_schema(path, "ev");
 
     let index_registry = IndexRegistry::new();
-    let planner = IndexPlanner::new(&registry, &index_registry, Some(uid));
+    let scope = EventScope::Specific {
+        event_type: "ev".to_string(),
+        uid: Some(uid),
+    };
+    let planner = IndexPlanner::new(&registry, &index_registry, &scope);
 
     let fp = FilterGroup::Filter {
         column: "id".to_string(),
@@ -70,7 +75,11 @@ async fn planner_temporal_eq_and_range_for_timestamp() {
 
     let mut idx = IndexRegistry::new();
     idx.insert_catalog(make_catalog(&uid, "S1", |_| {}));
-    let planner = IndexPlanner::new(&registry, &idx, Some(uid.clone()));
+    let scope = EventScope::Specific {
+        event_type: "ev".to_string(),
+        uid: Some(uid.clone()),
+    };
+    let planner = IndexPlanner::new(&registry, &idx, &scope);
 
     let fp_eq = FilterGroup::Filter {
         column: "timestamp".to_string(),
@@ -103,7 +112,11 @@ async fn planner_temporal_for_non_timestamp_field_uses_schema() {
 
     let mut idx = IndexRegistry::new();
     idx.insert_catalog(make_catalog(&uid, "S1", |_| {}));
-    let planner = IndexPlanner::new(&registry, &idx, Some(uid.clone()));
+    let scope = EventScope::Specific {
+        event_type: "ev".to_string(),
+        uid: Some(uid.clone()),
+    };
+    let planner = IndexPlanner::new(&registry, &idx, &scope);
 
     let fp = FilterGroup::Filter {
         column: "created_at".to_string(),
@@ -127,7 +140,11 @@ async fn planner_enum_bitmap_when_available() {
     idx.insert_catalog(make_catalog(&uid, "S1", |c| {
         c.set_field_kind("kind", IndexKind::ENUM_BITMAP);
     }));
-    let planner = IndexPlanner::new(&registry, &idx, Some(uid.clone()));
+    let scope = EventScope::Specific {
+        event_type: "ev".to_string(),
+        uid: Some(uid.clone()),
+    };
+    let planner = IndexPlanner::new(&registry, &idx, &scope);
 
     let fp = FilterGroup::Filter {
         column: "kind".to_string(),
@@ -151,7 +168,11 @@ async fn planner_range_prefers_surf_when_available() {
     idx.insert_catalog(make_catalog(&uid, "S1", |c| {
         c.set_field_kind("id", IndexKind::ZONE_SURF);
     }));
-    let planner = IndexPlanner::new(&registry, &idx, Some(uid.clone()));
+    let scope = EventScope::Specific {
+        event_type: "ev".to_string(),
+        uid: Some(uid.clone()),
+    };
+    let planner = IndexPlanner::new(&registry, &idx, &scope);
 
     let fp = FilterGroup::Filter {
         column: "id".to_string(),
@@ -179,7 +200,11 @@ async fn planner_equality_prefers_zxf_then_xf_then_fullscan() {
             IndexKind::ZONE_XOR_INDEX | IndexKind::XOR_FIELD_FILTER,
         );
     }));
-    let planner = IndexPlanner::new(&registry, &idx, Some(uid.clone()));
+    let scope = EventScope::Specific {
+        event_type: "ev".to_string(),
+        uid: Some(uid.clone()),
+    };
+    let planner = IndexPlanner::new(&registry, &idx, &scope);
     let fp = FilterGroup::Filter {
         column: "id".to_string(),
         operation: Some(CompareOp::Eq),
@@ -196,14 +221,18 @@ async fn planner_equality_prefers_zxf_then_xf_then_fullscan() {
     idx2.insert_catalog(make_catalog(&uid, "S2", |c| {
         c.set_field_kind("id", IndexKind::XOR_FIELD_FILTER);
     }));
-    let planner2 = IndexPlanner::new(&registry, &idx2, Some(uid.clone()));
+    let scope = EventScope::Specific {
+        event_type: "ev".to_string(),
+        uid: Some(uid.clone()),
+    };
+    let planner2 = IndexPlanner::new(&registry, &idx2, &scope);
     let s2 = planner2.choose(&fp, "S2").await;
     assert!(matches!(s2, IndexStrategy::XorPresence { .. }));
 
     // With none
     let mut idx3 = IndexRegistry::new();
     idx3.insert_catalog(make_catalog(&uid, "S3", |_c| {}));
-    let planner3 = IndexPlanner::new(&registry, &idx3, Some(uid.clone()));
+    let planner3 = IndexPlanner::new(&registry, &idx3, &scope);
     let s3 = planner3.choose(&fp, "S3").await;
     assert!(matches!(s3, IndexStrategy::FullScan));
 }

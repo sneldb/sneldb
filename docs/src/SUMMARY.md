@@ -29,6 +29,7 @@
 
   - [Overview](./design/overview.md)
   - [Storage Engine](./design/storage_engine.md)
+  - [Flush Pipeline](./design/flush_pipeline.md)
   - [Query and Replay](./design/query_replay.md)
   - [Filter Architecture and Zone Collection](./design/filter_architecture.md)
   - [Streaming Query Flow](./design/streaming_flow.md)

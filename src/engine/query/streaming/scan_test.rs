@@ -71,6 +71,7 @@ async fn streaming_scan_emits_memtable_rows() {
         &segment_ids,
         &memtable,
         &passive_buffers,
+        None,
     )
     .await
     .expect("streaming scan init");
@@ -141,6 +142,7 @@ async fn streaming_scan_supports_aggregate_queries() {
         &segment_ids,
         &memtable,
         &passive_buffers,
+        None,
     )
     .await;
 

@@ -1,6 +1,6 @@
 use crate::command::types::Command;
-use crate::shared::response::render::Renderer;
 use crate::shared::response::Response;
+use crate::shared::response::render::Renderer;
 use tokio::io::AsyncWrite;
 use tokio::io::AsyncWriteExt;
 use tracing::debug;
@@ -17,4 +17,3 @@ pub async fn handle<W: AsyncWrite + Unpin>(
     writer.flush().await?;
     Ok(())
 }
-

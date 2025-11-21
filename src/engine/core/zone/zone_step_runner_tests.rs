@@ -1,8 +1,8 @@
 use crate::command::types::{CompareOp, Expr};
-use crate::engine::core::ExecutionStep;
 use crate::engine::core::zone::{
     zone_step_planner::ZoneStepPlanner, zone_step_runner::ZoneStepRunner,
 };
+use crate::engine::core::{ExecutionStep, InflightSegments};
 use crate::test_helpers::factories::{
     CommandFactory, FilterGroupFactory, QueryPlanFactory, SchemaRegistryFactory,
 };
@@ -287,4 +287,62 @@ async fn runner_pruned_empty_first_step_still_executes_following_steps() {
     assert_eq!(zones.len(), 2);
     // Pruned is Some (derived), but likely empty or small; we don't assert its content
     assert!(pruned.is_some());
+}
+
+#[tokio::test]
+// Inflight segments are included even if not yet in segment_ids
+async fn runner_includes_inflight_segments() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let schema = SchemaRegistryFactory::new();
+    let registry = schema.registry();
+    let event_type = "evt";
+    schema
+        .define_with_fields(event_type, &[("context_id", "string")])
+        .await
+        .unwrap();
+
+    let command = CommandFactory::query().with_event_type(event_type).create();
+
+    let inflight = {
+        let tracker = InflightSegments::new();
+        tracker.insert("00001");
+        tracker
+    };
+
+    let plan = QueryPlanFactory::new()
+        .with_command(command)
+        .with_registry(Arc::clone(&registry))
+        .with_segment_base_dir(std::env::temp_dir())
+        .with_segment_ids(vec!["00000".into()])
+        .with_inflight_segments(inflight)
+        .create()
+        .await;
+
+    let uid = plan.event_type_uid().await.expect("uid");
+    let filter = FilterGroupFactory::new()
+        .with_column("event_type")
+        .with_operation(CompareOp::Eq)
+        .with_value(json!(event_type))
+        .with_uid(&uid)
+        .create();
+
+    let mut steps = vec![ExecutionStep::new(filter, &plan)];
+    let planner = ZoneStepPlanner::new(&plan);
+    let order = planner.plan(&steps);
+
+    let runner = ZoneStepRunner::new(&plan);
+    let (zones, _) = runner.run(&mut steps, &order);
+    let first_step_zones = &zones[0];
+    let segments_seen: std::collections::HashSet<&str> = first_step_zones
+        .iter()
+        .map(|z| z.segment_id.as_str())
+        .collect();
+
+    assert!(
+        segments_seen.contains("00001"),
+        "expected inflight segment '00001' to be inspected, saw: {:?}",
+        segments_seen
+    );
 }

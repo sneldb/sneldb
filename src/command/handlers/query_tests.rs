@@ -2548,7 +2548,7 @@ async fn test_query_order_by_limit_with_large_dataset() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let (rows_vec, _, _column_names) = parse_streaming_response(&body);
     let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 1, "Should return exactly 1 row");
 
@@ -2653,7 +2653,7 @@ async fn test_query_order_by_limit_with_large_dataset() {
     let mut buf = vec![0; 16384];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let (rows_vec, _, _column_names) = parse_streaming_response(&body);
     let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 42, "LIMIT must work without ORDER BY");
 }
@@ -2989,7 +2989,7 @@ async fn test_query_with_datetime_field_and_limit() {
     let mut buf = vec![0; 16384];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let (rows_vec, _, _column_names) = parse_streaming_response(&body);
     let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 15, "LIMIT must work without ORDER BY");
 
@@ -3003,7 +3003,7 @@ async fn test_query_with_datetime_field_and_limit() {
     let mut buf = vec![0; 8192];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let (rows_vec, _, _column_names) = parse_streaming_response(&body);
     let rows: &Vec<Vec<JsonValue>> = &rows_vec;
     assert_eq!(rows.len(), 1, "Should return exactly 1 row");
 }
@@ -6396,7 +6396,7 @@ async fn test_query_in_operator_with_or() {
     let mut buf = vec![0; 4096];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let (rows_vec, _, _column_names) = parse_streaming_response(&body);
     let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     // Should return rows where id IN (1,2,3) OR category = "B"
@@ -6632,7 +6632,7 @@ async fn test_query_parentheses_simple() {
     let mut buf = vec![0; 4096];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let (rows_vec, _, _column_names) = parse_streaming_response(&body);
     let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     assert_eq!(rows.len(), 3, "Should return 3 active rows");
@@ -6708,7 +6708,7 @@ async fn test_query_parentheses_with_and() {
     let mut buf = vec![0; 4096];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let (rows_vec, _, _column_names) = parse_streaming_response(&body);
     let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     // Should match: id IN (1,2,3) AND category IN (A,B) = (1,A), (2,A), (3,B)
@@ -6778,7 +6778,7 @@ async fn test_query_parentheses_nested() {
     let mut buf = vec![0; 4096];
     let n = reader.read(&mut buf).await.unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    let (rows_vec, _, column_names) = parse_streaming_response(&body);
+    let (rows_vec, _, _column_names) = parse_streaming_response(&body);
     let rows: &Vec<Vec<JsonValue>> = &rows_vec;
 
     // Should match: (1,A), (2,A), (3,B), (4,B) = 4 rows

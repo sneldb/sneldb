@@ -1,3 +1,4 @@
+pub mod inflight;
 pub mod lifecycle;
 pub mod range_allocator;
 pub mod segment_id;
@@ -6,6 +7,8 @@ pub mod segment_index;
 pub mod segment_index_builder;
 pub mod verifier;
 
+#[cfg(test)]
+mod inflight_test;
 #[cfg(test)]
 mod lifecycle_test;
 #[cfg(test)]

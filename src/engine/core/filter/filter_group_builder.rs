@@ -253,6 +253,16 @@ impl FilterGroupBuilder {
         event_type_uid: &Option<String>,
         unique_filters: &mut HashMap<String, FilterGroup>,
     ) {
+        if event_type == "*" {
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                debug!(
+                    target: "query::filter",
+                    "Skipping event_type filter for wildcard *"
+                );
+            }
+            return;
+        }
+
         if tracing::enabled!(tracing::Level::DEBUG) {
             debug!(target: "query::filter", value = %event_type, "Adding event_type filter");
         }
@@ -271,14 +281,16 @@ impl FilterGroupBuilder {
         event_type_uid: &Option<String>,
         unique_filters: &mut HashMap<String, FilterGroup>,
     ) {
+        let Some(value) = context_id.as_ref() else {
+            return;
+        };
         if tracing::enabled!(tracing::Level::DEBUG) {
             debug!(target: "query::filter", value = ?context_id, "Adding context_id filter");
         }
-        let value = context_id.as_ref().map(|id| ScalarValue::Utf8(id.clone()));
         let filter = FilterGroup::new_filter(
             "context_id".to_string(),
             Some(CompareOp::Eq),
-            value,
+            Some(ScalarValue::Utf8(value.clone())),
             event_type_uid.clone(),
         );
         unique_filters.insert("context_id".to_string(), filter);

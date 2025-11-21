@@ -3702,12 +3702,10 @@
       "DEFINE payment_failed FIELDS { \"user_id\": \"string\", \"attempt\": \"int\" }",
       "DEFINE order_created FIELDS { \"order_id\": \"int\", \"user_id\": \"string\" }",
       "STORE payment_failed FOR u1 PAYLOAD {\"user_id\":\"u1\",\"attempt\":1}",
-      "SLEEP 1000",
       "STORE payment_failed FOR u1 PAYLOAD {\"user_id\":\"u1\",\"attempt\":2}",
       "SLEEP 1000",
       "STORE order_created FOR u1 PAYLOAD {\"order_id\":1,\"user_id\":\"u1\"}",
       "STORE order_created FOR u2 PAYLOAD {\"order_id\":2,\"user_id\":\"u2\"}",
-      "FLUSH",
       "QUERY order_created PRECEDED BY payment_failed LINKED BY user_id"
     ],
     "matchers": [
@@ -3744,7 +3742,7 @@
       "STORE page_view FOR u3 PAYLOAD {\"page\":\"/checkout\",\"user_id\":\"u3\"}",
       "SLEEP 1000",
       "STORE order_created FOR u3 PAYLOAD {\"order_id\":3,\"user_id\":\"u3\"}",
-      "FLUSH",
+      "SLEEP 1000",
       "QUERY page_view FOLLOWED BY order_created LINKED BY user_id WHERE page_view.page=\"/checkout\" LIMIT 2"
     ],
     "matchers": [
@@ -4215,7 +4213,6 @@
       "STORE in_not FOR n3 PAYLOAD {\"id\":3}",
       "STORE in_not FOR n4 PAYLOAD {\"id\":4}",
       "STORE in_not FOR n5 PAYLOAD {\"id\":5}",
-      "FLUSH",
       "QUERY in_not WHERE NOT id IN (2, 4, 6)"
     ],
     "matchers": [

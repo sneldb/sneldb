@@ -1,14 +1,17 @@
 use crate::command::types::{Command, CompareOp, Expr, OrderSpec};
+use crate::engine::core::InflightSegments;
 use crate::engine::core::filter::filter_group::FilterGroup;
 use crate::engine::core::filter::filter_group_builder::FilterGroupBuilder;
 use crate::engine::core::read::aggregate::plan::AggregatePlan;
 use crate::engine::core::read::cache::GlobalIndexCatalogCache;
 use crate::engine::core::read::catalog::IndexRegistry;
+use crate::engine::core::read::event_scope::EventScope;
 use crate::engine::core::read::index_planner::IndexPlanner;
 use crate::engine::core::read::projection::ProjectionPlanner;
 use crate::engine::schema::registry::SchemaRegistry;
 use crate::engine::types::ScalarValue;
 use std::collections::HashMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -26,6 +29,8 @@ pub struct QueryPlan {
     pub segment_ids: Arc<std::sync::RwLock<Vec<String>>>,
     pub aggregate_plan: Option<AggregatePlan>,
     pub index_registry: IndexRegistry,
+    event_scope: EventScope,
+    inflight_segments: Option<InflightSegments>,
 }
 
 impl QueryPlan {
@@ -35,6 +40,7 @@ impl QueryPlan {
         registry: &Arc<RwLock<SchemaRegistry>>,
         segment_base_dir: &Path,
         segment_ids: &Arc<std::sync::RwLock<Vec<String>>>,
+        inflight_segments: Option<InflightSegments>,
     ) -> Option<Self> {
         match &command {
             Command::Query {
@@ -42,8 +48,15 @@ impl QueryPlan {
                 event_type,
                 ..
             } => {
+                let event_scope = {
+                    let guard = registry.read().await;
+                    EventScope::from_command(event_type, &guard)
+                };
+                let event_type_uid = match &event_scope {
+                    EventScope::Specific { uid, .. } => uid.clone(),
+                    EventScope::Wildcard { .. } => None,
+                };
                 // Build FilterGroup from WHERE clause to preserve logical structure
-                let event_type_uid = registry.read().await.get_uid(event_type).clone();
                 let filter_group = where_clause
                     .as_ref()
                     .and_then(|expr| FilterGroupBuilder::build(expr, &event_type_uid));
@@ -104,6 +117,8 @@ impl QueryPlan {
                     segment_ids: Arc::clone(segment_ids),
                     aggregate_plan,
                     index_registry: IndexRegistry::new(),
+                    event_scope,
+                    inflight_segments,
                 };
                 // Preload catalogs for discovered segments (best-effort)
                 if let Some(uid) = plan.event_type_uid().await {
@@ -122,21 +137,20 @@ impl QueryPlan {
                         .find(|s| plan.index_registry.available_global(s).bits() != 0)
                         .or_else(|| segs.first());
                     if let Some(rep) = rep_seg {
-                        let planner = IndexPlanner::new(
-                            &plan.registry,
-                            &plan.index_registry,
-                            Some(uid.clone()),
-                        );
-                        for fg in &mut plan.filter_groups {
+                        let scope_clone = plan.event_scope.clone();
+                        let planner =
+                            IndexPlanner::new(&plan.registry, &plan.index_registry, &scope_clone);
+                        let mut filters = std::mem::take(&mut plan.filter_groups);
+                        for fg in &mut filters {
                             let strat = planner.choose(fg, rep).await;
                             if let Some(strategy_mut) = fg.index_strategy_mut() {
                                 *strategy_mut = Some(strat);
                             }
                         }
-                        // Sync strategies from flat list to tree to keep them in sync
                         if let Some(ref mut filter_group) = plan.filter_group {
-                            filter_group.sync_index_strategies_from(&plan.filter_groups);
+                            filter_group.sync_index_strategies_from(&filters);
                         }
+                        plan.filter_groups = filters;
                     }
                 }
                 Some(plan)
@@ -235,29 +249,30 @@ impl QueryPlan {
     }
 
     pub async fn event_type_uid(&self) -> Option<String> {
-        let guard = self.registry.read().await;
-        let uid = guard.get_uid(self.event_type());
-        if uid.is_none() {
-            if tracing::enabled!(tracing::Level::DEBUG) {
-                tracing::debug!(
-                    target: "sneldb::query_plan",
-                    event_type = %self.event_type(),
-                    "UID not found in schema registry"
-                );
-            }
+        match &self.event_scope {
+            EventScope::Specific { uid: Some(uid), .. } => Some(uid.clone()),
+            _ => None,
         }
-        uid
     }
 
     pub async fn build(command: &Command, registry: Arc<RwLock<SchemaRegistry>>) -> Self {
+        let event_scope = match command {
+            Command::Query { event_type, .. } => {
+                let guard = registry.read().await;
+                EventScope::from_command(event_type, &guard)
+            }
+            _ => EventScope::Specific {
+                event_type: String::new(),
+                uid: None,
+            },
+        };
+
         // Build FilterGroup from WHERE clause if present
-        let filter_group = if let Command::Query {
-            where_clause,
-            event_type,
-            ..
-        } = command
-        {
-            let event_type_uid = registry.read().await.get_uid(event_type).clone();
+        let filter_group = if let Command::Query { where_clause, .. } = command {
+            let event_type_uid = match &event_scope {
+                EventScope::Specific { uid, .. } => uid.clone(),
+                EventScope::Wildcard { .. } => None,
+            };
             where_clause
                 .as_ref()
                 .and_then(|expr| FilterGroupBuilder::build(expr, &event_type_uid))
@@ -290,6 +305,44 @@ impl QueryPlan {
             segment_ids: Arc::new(std::sync::RwLock::new(Vec::new())),
             aggregate_plan,
             index_registry: IndexRegistry::new(),
+            event_scope,
+            inflight_segments: None,
         }
+    }
+
+    pub fn event_scope(&self) -> &EventScope {
+        &self.event_scope
+    }
+
+    pub fn set_inflight_segments(&mut self, tracker: Option<InflightSegments>) {
+        self.inflight_segments = tracker;
+    }
+
+    pub fn inflight_segments(&self) -> Option<&InflightSegments> {
+        self.inflight_segments.as_ref()
+    }
+
+    pub fn is_segment_inflight(&self, segment_id: &str) -> bool {
+        self.inflight_segments
+            .as_ref()
+            .map(|tracker| tracker.contains(segment_id))
+            .unwrap_or(false)
+    }
+
+    /// Returns true if the given segment is expected to contain data for the provided uid.
+    pub fn segment_maybe_contains_uid(&self, segment_id: &str, uid: &str) -> bool {
+        if self.index_registry.has_catalog(segment_id) {
+            return true;
+        }
+
+        if self.is_segment_inflight(segment_id) {
+            return true;
+        }
+
+        let zones_path = self
+            .segment_base_dir
+            .join(segment_id)
+            .join(format!("{}.zones", uid));
+        fs::metadata(zones_path).is_ok()
     }
 }

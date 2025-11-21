@@ -3,6 +3,7 @@ use crate::engine::core::filter::filter_group::{FilterGroup, FilterPriority};
 use crate::engine::core::filter::filter_group_builder::FilterGroupBuilder;
 use crate::engine::core::filter::in_expansion::InExpansion;
 use crate::engine::types::ScalarValue;
+use crate::test_helpers::factories::{CommandFactory, SchemaRegistryFactory};
 use serde_json::json;
 
 /// Helper function to extract all individual filters from a FilterGroup tree
@@ -344,6 +345,53 @@ fn build_compare_with_context_id_field_has_priority_0() {
         }
         _ => panic!("Expected Filter variant"),
     }
+}
+
+#[tokio::test]
+async fn build_all_skips_context_filter_when_none() {
+    let registry_factory = SchemaRegistryFactory::new();
+    let registry = registry_factory.registry();
+    registry_factory
+        .define_with_fields("evt", &[("field", "string")])
+        .await
+        .unwrap();
+
+    let command = CommandFactory::query().with_event_type("evt").create();
+    let filters = FilterGroupBuilder::build_all(&command, &registry).await;
+
+    let has_context = filters.iter().any(|f| match f {
+        FilterGroup::Filter { column, .. } if column == "context_id" => true,
+        _ => false,
+    });
+    assert!(
+        !has_context,
+        "context_id filter should not be created when command lacks a context_id"
+    );
+}
+
+#[tokio::test]
+async fn build_all_skips_event_type_filter_for_wildcard() {
+    let registry_factory = SchemaRegistryFactory::new();
+    let registry = registry_factory.registry();
+    registry_factory
+        .define_with_fields("login", &[("device", "string")])
+        .await
+        .unwrap();
+
+    let command = CommandFactory::query()
+        .with_event_type("*")
+        .with_context_id("alice")
+        .create();
+    let filters = FilterGroupBuilder::build_all(&command, &registry).await;
+
+    let has_event_type = filters.iter().any(|f| match f {
+        FilterGroup::Filter { column, .. } if column == "event_type" => true,
+        _ => false,
+    });
+    assert!(
+        !has_event_type,
+        "wildcard event_type should not produce an equality filter"
+    );
 }
 
 #[test]

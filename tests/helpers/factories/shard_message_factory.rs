@@ -53,4 +53,9 @@ impl ShardMessageFactory {
         let (tx, rx) = oneshot::channel();
         (ShardMessage::Shutdown { completion: tx }, rx)
     }
+
+    pub fn await_flush(&self) -> (ShardMessage, oneshot::Receiver<Result<(), String>>) {
+        let (tx, rx) = oneshot::channel();
+        (ShardMessage::AwaitFlush { completion: tx }, rx)
+    }
 }

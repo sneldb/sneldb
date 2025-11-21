@@ -54,17 +54,16 @@ pub async fn handle<W: AsyncWrite + Unpin>(
         Some(q) => q,
         None => {
             warn!(target: "sneldb::replay", "Failed to convert Replay to Query command");
-            let resp = Response::error(StatusCode::InternalError, "Failed to process Replay command");
+            let resp = Response::error(
+                StatusCode::InternalError,
+                "Failed to process Replay command",
+            );
             return writer.write_all(&renderer.render(&resp)).await;
         }
     };
 
     // Create query execution pipeline with the converted command
-    let pipeline = QueryExecutionPipeline::new(
-        &query_cmd,
-        shard_manager,
-        Arc::clone(registry),
-    );
+    let pipeline = QueryExecutionPipeline::new(&query_cmd, shard_manager, Arc::clone(registry));
 
     // Execute using streaming path
     match pipeline.execute_streaming().await {
@@ -81,8 +80,8 @@ pub async fn handle<W: AsyncWrite + Unpin>(
                 writer,
                 renderer,
                 stream.schema(),
-                None,  // No limit
-                None,  // No offset
+                None, // No limit
+                None, // No offset
             );
             response_writer.write(stream).await
         }
@@ -90,7 +89,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
             warn!(target: "sneldb::replay", "Streaming not available for Replay");
             let resp = Response::error(
                 StatusCode::InternalError,
-                "Replay requires streaming execution"
+                "Replay requires streaming execution",
             );
             writer.write_all(&renderer.render(&resp)).await
         }
@@ -103,7 +102,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
             );
             let resp = Response::error(
                 StatusCode::InternalError,
-                &format!("Replay failed: {error}")
+                &format!("Replay failed: {error}"),
             );
             writer.write_all(&renderer.render(&resp)).await
         }

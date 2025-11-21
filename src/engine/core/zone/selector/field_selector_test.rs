@@ -1,16 +1,17 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use serde_json::json;
 use tempfile::tempdir;
 
-use crate::command::types::CompareOp;
-use crate::engine::core::Flusher;
+use crate::command::types::{Command, CompareOp, Expr};
 use crate::engine::core::ZoneMeta;
 use crate::engine::core::read::cache::QueryCaches;
 use crate::engine::core::read::index_strategy::IndexStrategy;
 use crate::engine::core::zone::candidate_zone::CandidateZone;
 use crate::engine::core::zone::selector::builder::ZoneSelectorBuilder;
 use crate::engine::core::zone::selector::selection_context::SelectionContext;
+use crate::engine::core::{Flusher, InflightSegments};
 use crate::engine::schema::{EnumType, FieldType};
 use crate::test_helpers::factories::{
     CommandFactory, EventFactory, FilterGroupFactory, MemTableFactory, QueryPlanFactory,
@@ -36,7 +37,6 @@ async fn xor_eq_uses_zxf_to_narrow_zones() {
         .define_with_fields(event_type, &[("context_id", "string"), ("key", "string")])
         .await
         .unwrap();
-
     // seg1 zone 0 has key = "a", seg2 zone 0 has key = "b"
     {
         let e1 = EventFactory::new()
@@ -99,7 +99,9 @@ async fn xor_eq_uses_zxf_to_narrow_zones() {
     let qplan = QueryPlanFactory::new()
         .with_registry(Arc::clone(&registry))
         .with_command(command)
-        .build()
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["001".into(), "002".into()])
+        .create()
         .await;
 
     let ctx = SelectionContext {
@@ -134,6 +136,173 @@ async fn xor_eq_uses_zxf_to_narrow_zones() {
     let selector_fs = ZoneSelectorBuilder::new(ctx_fs).build();
     let out1_fs = selector_fs.select_for_segment("001");
     assert!(!out1_fs.is_empty());
+}
+
+#[tokio::test]
+async fn timestamp_filter_falls_back_when_uid_missing() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp = tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let segment_dir = shard_dir.join("00000");
+    std::fs::create_dir_all(&segment_dir).unwrap();
+
+    let registry_factory = SchemaRegistryFactory::new();
+    let registry = registry_factory.registry();
+    let event_type = "ts_fallback_evt";
+    registry_factory
+        .define_with_fields(event_type, &[("device", "string")])
+        .await
+        .unwrap();
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+
+    let events = vec![
+        EventFactory::new()
+            .with("event_type", event_type)
+            .with("context_id", "alice")
+            .with("device", "android")
+            .create(),
+        EventFactory::new()
+            .with("event_type", event_type)
+            .with("context_id", "alice")
+            .with("device", "web")
+            .create(),
+    ];
+    let memtable = MemTableFactory::new()
+        .with_capacity(2)
+        .with_events(events)
+        .create()
+        .unwrap();
+    Flusher::new(
+        memtable,
+        0,
+        &segment_dir,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
+
+    let command = CommandFactory::query()
+        .with_event_type("*")
+        .with_context_id("alice")
+        .create();
+    let qplan = QueryPlanFactory::new()
+        .with_command(command)
+        .with_registry(Arc::clone(&registry))
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["00000".into()])
+        .create()
+        .await;
+
+    let timestamp_filter = qplan
+        .filter_groups
+        .iter()
+        .find(|fg| fg.column() == Some("timestamp"))
+        .expect("timestamp filter present");
+
+    let ctx = SelectionContext {
+        plan: timestamp_filter,
+        query_plan: &qplan,
+        base_dir: &shard_dir,
+        caches: None,
+    };
+    let selector = ZoneSelectorBuilder::new(ctx).build();
+    let zones = selector.select_for_segment("00000");
+
+    let expected = CandidateZone::create_all_zones_for_segment_from_meta(&shard_dir, "00000", &uid);
+    assert_eq!(
+        zones.len(),
+        expected.len(),
+        "missing uid on timestamp filter should fall back to all zones"
+    );
+    assert!(!zones.is_empty());
+}
+
+#[tokio::test]
+async fn falls_back_to_full_scan_when_strategy_missing() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp = tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let segment_dir = shard_dir.join("00000");
+    std::fs::create_dir_all(&segment_dir).unwrap();
+
+    let registry_factory = SchemaRegistryFactory::new();
+    let registry = registry_factory.registry();
+    let event_type = "login";
+    registry_factory
+        .define_with_fields(event_type, &[("device", "string")])
+        .await
+        .unwrap();
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+
+    let events = vec![
+        EventFactory::new()
+            .with("event_type", event_type)
+            .with("context_id", "alice")
+            .with("device", "android")
+            .create(),
+        EventFactory::new()
+            .with("event_type", event_type)
+            .with("context_id", "alice")
+            .with("device", "web")
+            .create(),
+    ];
+    let memtable = MemTableFactory::new()
+        .with_capacity(2)
+        .with_events(events)
+        .create()
+        .unwrap();
+    Flusher::new(
+        memtable,
+        0,
+        &segment_dir,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
+
+    let command = CommandFactory::query()
+        .with_event_type(event_type)
+        .with_context_id("alice")
+        .create();
+    let qplan = QueryPlanFactory::new()
+        .with_command(command)
+        .with_registry(Arc::clone(&registry))
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["00000".into()])
+        .create()
+        .await;
+
+    let filter = FilterGroupFactory::new()
+        .with_column("context_id")
+        .with_operation(CompareOp::Eq)
+        .with_uid(&uid)
+        .with_value(json!("alice"))
+        .create();
+
+    let ctx = SelectionContext {
+        plan: &filter,
+        query_plan: &qplan,
+        base_dir: &shard_dir,
+        caches: None,
+    };
+    let selector = ZoneSelectorBuilder::new(ctx).build();
+    let zones = selector.select_for_segment("00000");
+
+    let expected = CandidateZone::create_all_zones_for_segment_from_meta(&shard_dir, "00000", &uid);
+    assert_eq!(
+        zones.len(),
+        expected.len(),
+        "missing strategy should fall back to full scan"
+    );
+    assert!(!zones.is_empty());
 }
 
 #[tokio::test]
@@ -393,7 +562,9 @@ async fn enum_pruner_respects_eq_and_neq() {
     let q = QueryPlanFactory::new()
         .with_registry(Arc::clone(&registry))
         .with_command(cmd)
-        .build()
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["001".into()])
+        .create()
         .await;
     let ctx = SelectionContext {
         plan: &f_eq,
@@ -480,8 +651,15 @@ async fn returns_all_zones_when_value_missing() {
     let q = QueryPlanFactory::new()
         .with_registry(Arc::clone(&registry))
         .with_command(cmd)
-        .build()
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["001".into()])
+        .create()
         .await;
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+    assert!(
+        q.segment_maybe_contains_uid("001", &uid),
+        "test setup should register zones for uid"
+    );
     let ctx = SelectionContext {
         plan: &filter,
         query_plan: &q,
@@ -491,12 +669,12 @@ async fn returns_all_zones_when_value_missing() {
     let sel = ZoneSelectorBuilder::new(ctx).build();
     let zones = sel.select_for_segment("001");
 
-    let all = CandidateZone::create_all_zones_for_segment("001");
+    let all = CandidateZone::create_all_zones_for_segment_from_meta(&shard_dir, "001", &uid);
     assert_eq!(zones.len(), all.len());
 }
 
 #[tokio::test]
-async fn returns_empty_when_uid_missing() {
+async fn falls_back_when_uid_missing() {
     use crate::logging::init_for_tests;
     init_for_tests();
 
@@ -539,12 +717,19 @@ async fn returns_empty_when_uid_missing() {
         .with_column("key")
         .with_value(json!("x"))
         .create();
+    let uid = registry.read().await.get_uid(event_type).unwrap();
     let cmd = CommandFactory::query().with_event_type(event_type).create();
     let q = QueryPlanFactory::new()
         .with_registry(Arc::clone(&registry))
         .with_command(cmd)
-        .build()
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["001".into()])
+        .create()
         .await;
+    assert!(
+        q.segment_maybe_contains_uid("001", &uid),
+        "test setup should register zones for uid"
+    );
     let ctx = SelectionContext {
         plan: &filter,
         query_plan: &q,
@@ -553,7 +738,18 @@ async fn returns_empty_when_uid_missing() {
     };
     let sel = ZoneSelectorBuilder::new(ctx).build();
     let zones = sel.select_for_segment("001");
-    assert!(zones.is_empty());
+    let expected = CandidateZone::create_all_zones_for_segment_from_meta(&shard_dir, "001", &uid);
+    let zone_keys: HashSet<(String, u32)> = zones
+        .iter()
+        .map(|z| (z.segment_id.clone(), z.zone_id))
+        .collect();
+    assert!(
+        expected
+            .iter()
+            .all(|exp| zone_keys.contains(&(exp.segment_id.clone(), exp.zone_id))),
+        "fallback should include all zones from the matching uid"
+    );
+    assert!(!zones.is_empty());
 }
 
 #[tokio::test]
@@ -606,7 +802,9 @@ async fn xor_pruner_skips_on_neq_operation() {
     let q = QueryPlanFactory::new()
         .with_registry(Arc::clone(&registry))
         .with_command(cmd)
-        .build()
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["001".into()])
+        .create()
         .await;
     let ctx = SelectionContext {
         plan: &filter,
@@ -616,7 +814,114 @@ async fn xor_pruner_skips_on_neq_operation() {
     };
     let sel = ZoneSelectorBuilder::new(ctx).build();
     let zones = sel.select_for_segment("001");
-    assert!(zones.is_empty());
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+    let expected = CandidateZone::create_all_zones_for_segment_from_meta(&shard_dir, "001", &uid);
+    assert_eq!(
+        zones.len(),
+        expected.len(),
+        "neq fallback should return all zones for the matching uid"
+    );
+    assert!(zones.iter().all(|z| z.segment_id == "001"));
+}
+
+#[tokio::test]
+async fn zone_xor_missing_falls_back_when_segment_inflight() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp = tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let seg = shard_dir.join("00000");
+    std::fs::create_dir_all(&seg).unwrap();
+
+    let reg_fac = SchemaRegistryFactory::new();
+    let registry = reg_fac.registry();
+    let event_type = "xor_inflight";
+    reg_fac
+        .define_with_fields(event_type, &[("context_id", "string"), ("key", "string")])
+        .await
+        .unwrap();
+
+    let event = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctx")
+        .with("payload", json!({"key": "present"}))
+        .create();
+    let mem = MemTableFactory::new()
+        .with_capacity(1)
+        .with_events(vec![event])
+        .create()
+        .unwrap();
+    Flusher::new(
+        mem,
+        0,
+        &seg,
+        registry.clone(),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
+
+    // Remove the .zxf file to emulate a reader racing with flush completion.
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+    let zxf_path = seg.join(format!("{}_{}.zxf", uid, "key"));
+    std::fs::remove_file(&zxf_path).expect("remove zxf");
+
+    let inflight = InflightSegments::new();
+    let mut cmd = CommandFactory::query().with_event_type(event_type).create();
+    // Force WHERE key = "present" so the planner assigns ZoneXorIndex
+    if let Command::Query { where_clause, .. } = &mut cmd {
+        *where_clause = Some(Expr::Compare {
+            field: "key".into(),
+            op: CompareOp::Eq,
+            value: json!("present"),
+        });
+    }
+
+    let q = QueryPlanFactory::new()
+        .with_registry(Arc::clone(&registry))
+        .with_command(cmd.clone())
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["00000".to_string()])
+        .with_inflight_segments(inflight.clone())
+        .create()
+        .await;
+
+    let mut filter = FilterGroupFactory::new()
+        .with_column("key")
+        .with_operation(CompareOp::Eq)
+        .with_uid(&uid)
+        .with_value(json!("present"))
+        .create();
+    if let Some(strategy) = filter.index_strategy_mut() {
+        *strategy = Some(IndexStrategy::ZoneXorIndex {
+            field: "key".to_string(),
+        });
+    }
+
+    let ctx = SelectionContext {
+        plan: &filter,
+        query_plan: &q,
+        base_dir: &shard_dir,
+        caches: None,
+    };
+    let selector = ZoneSelectorBuilder::new(ctx).build();
+
+    let guard = inflight.guard("00000");
+    let zones = selector.select_for_segment("00000");
+    assert!(
+        !zones.is_empty(),
+        "in-flight segments should fall back to metadata when zxf is missing"
+    );
+    drop(guard);
+
+    // Once the segment is no longer in-flight we should revert to the stricter behavior.
+    let zones_after = selector.select_for_segment("00000");
+    assert!(
+        zones_after.is_empty(),
+        "without inflight marker the missing zxf should result in no candidates"
+    );
 }
 
 #[tokio::test]
@@ -1108,7 +1413,7 @@ async fn materialization_pruner_filters_zones_created_before_materialization() {
         .with_command(cmd)
         .with_segment_base_dir(&shard_dir)
         .with_segment_ids(vec!["001".to_string()])
-        .build()
+        .create()
         .await;
     q.set_metadata(
         "materialization_created_at".to_string(),
@@ -1198,7 +1503,7 @@ async fn materialization_pruner_no_filter_when_metadata_missing() {
         .with_command(cmd)
         .with_segment_base_dir(&shard_dir)
         .with_segment_ids(vec!["001".to_string()])
-        .build()
+        .create()
         .await;
 
     let mut filter = FilterGroupFactory::new()
@@ -1283,7 +1588,7 @@ async fn materialization_pruner_filters_zones_with_equal_created_at() {
         .with_command(cmd)
         .with_segment_base_dir(&shard_dir)
         .with_segment_ids(vec!["001".to_string()])
-        .build()
+        .create()
         .await;
     q.set_metadata(
         "materialization_created_at".to_string(),

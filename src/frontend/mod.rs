@@ -2,8 +2,8 @@ pub mod context;
 pub mod http;
 pub mod server_state;
 pub mod tcp;
-pub mod ws;
 pub mod unix;
+pub mod ws;
 
 #[cfg(test)]
 mod server_state_test;

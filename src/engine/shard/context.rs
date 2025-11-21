@@ -1,9 +1,10 @@
 use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
 use crate::engine::core::segment::range_allocator::RangeAllocator;
 use crate::engine::core::{
-    Event, EventId, EventIdGenerator, FlushManager, MemTable, SegmentIdLoader,
+    Event, EventId, EventIdGenerator, FlushManager, InflightSegments, MemTable, SegmentIdLoader,
     SegmentLifecycleTracker, WalHandle, WalRecovery,
 };
+use crate::engine::shard::flush_progress::FlushProgress;
 use crate::shared::config::CONFIG;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -32,6 +33,7 @@ pub struct ShardContext {
     pub flush_count: usize,
     pub wal: Option<Arc<WalHandle>>,
     pub flush_manager: FlushManager,
+    pub flush_progress: Arc<FlushProgress>,
 
     // Flush coordination - prevents concurrent segment index updates
     pub flush_coordination_lock: Arc<Mutex<()>>,
@@ -39,6 +41,7 @@ pub struct ShardContext {
     // Segment lifecycle tracking for passive buffer management
     pub segment_lifecycle: Arc<SegmentLifecycleTracker>,
 
+    pub inflight_segments: InflightSegments,
     pub event_id_gen: EventIdGenerator,
 }
 
@@ -65,12 +68,16 @@ impl ShardContext {
         // Step 3: Initialize core components
         let flush_coordination_lock = Arc::new(Mutex::new(()));
         let segment_lifecycle = Arc::new(SegmentLifecycleTracker::new());
+        let flush_progress = Arc::new(FlushProgress::new());
+        let inflight_segments = InflightSegments::new();
         let flush_manager = FlushManager::new(
             id,
             base_dir.clone(),
             Arc::clone(&segment_ids),
             Arc::clone(&flush_coordination_lock),
             Arc::clone(&segment_lifecycle),
+            Arc::clone(&flush_progress),
+            inflight_segments.clone(),
         );
 
         let capacity = CONFIG.engine.fill_factor * CONFIG.engine.event_per_zone;
@@ -91,8 +98,10 @@ impl ShardContext {
             flush_count: 0,
             wal: Some(wal),
             flush_manager,
+            flush_progress,
             flush_coordination_lock,
             segment_lifecycle,
+            inflight_segments,
             event_id_gen: EventIdGenerator::new(),
         };
 

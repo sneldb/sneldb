@@ -1,9 +1,10 @@
-use crate::engine::core::{FlushWorker, MemTable, SegmentLifecycleTracker};
+use crate::engine::core::{FlushWorker, InflightSegments, MemTable, SegmentLifecycleTracker};
 use crate::engine::errors::StoreError;
 use crate::engine::schema::registry::SchemaRegistry;
+use crate::engine::shard::flush_progress::FlushProgress;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
-use tokio::sync::{mpsc::Sender, oneshot, Mutex, RwLock as TokioRwLock};
+use tokio::sync::{Mutex, RwLock as TokioRwLock, mpsc::Sender, oneshot};
 use tracing::{debug, error, info};
 
 /// Manages the flushing of MemTables to disk segments
@@ -15,9 +16,11 @@ pub struct FlushManager {
         MemTable,
         Arc<TokioRwLock<SchemaRegistry>>,
         Arc<Mutex<MemTable>>,
+        u64,
         Option<oneshot::Sender<Result<(), StoreError>>>,
     )>,
     segment_ids: Arc<RwLock<Vec<String>>>,
+    inflight_segments: InflightSegments,
 }
 
 impl FlushManager {
@@ -28,6 +31,8 @@ impl FlushManager {
         segment_ids: Arc<RwLock<Vec<String>>>,
         flush_coordination_lock: Arc<Mutex<()>>,
         segment_lifecycle: Arc<SegmentLifecycleTracker>,
+        flush_progress: Arc<FlushProgress>,
+        inflight_segments: InflightSegments,
     ) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel(4096);
 
@@ -36,7 +41,10 @@ impl FlushManager {
             shard_id,
             base_dir.clone(),
             flush_coordination_lock,
+            Arc::clone(&segment_ids),
             segment_lifecycle,
+            flush_progress,
+            inflight_segments.clone(),
         );
 
         let worker_handle = tokio::spawn(async move {
@@ -88,11 +96,14 @@ impl FlushManager {
             }
         });
 
-        info!(target: "sneldb::flush", shard_id, "FlushManager started");
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(target: "sneldb::flush", shard_id, "FlushManager started");
+        }
         Self {
             shard_id,
             flush_sender: tx,
             segment_ids,
+            inflight_segments,
         }
     }
 
@@ -103,14 +114,19 @@ impl FlushManager {
         schema_registry: Arc<TokioRwLock<SchemaRegistry>>,
         segment_id: u64,
         passive_memtable: Arc<Mutex<MemTable>>,
+        flush_id: u64,
         completion: Option<oneshot::Sender<Result<(), StoreError>>>,
     ) -> Result<(), StoreError> {
-        debug!(
-            target: "sneldb::flush",
-            shard_id = self.shard_id,
-            segment_id,
-            "Queueing MemTable for flush"
-        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target: "sneldb::flush",
+                shard_id = self.shard_id,
+                segment_id,
+                "Queueing MemTable for flush"
+            );
+        }
+        let segment_name = format!("{:05}", segment_id);
+        self.inflight_segments.insert(&segment_name);
 
         self.flush_sender
             .send((
@@ -118,6 +134,7 @@ impl FlushManager {
                 full_memtable,
                 Arc::clone(&schema_registry),
                 Arc::clone(&passive_memtable),
+                flush_id,
                 completion,
             ))
             .await
@@ -132,26 +149,15 @@ impl FlushManager {
                 StoreError::FlushFailed(format!("flush send error: {}", e))
             })?;
 
-        let segment_name = format!("{:05}", segment_id);
-        {
-            let mut segs = self.segment_ids.write().unwrap();
-            segs.push(segment_name.clone());
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::flush",
+                shard_id = self.shard_id,
+                segment_id,
+                "MemTable queued for flush to segment '{}'",
+                segment_name
+            );
         }
-
-        info!(
-            target: "sneldb::flush",
-            shard_id = self.shard_id,
-            segment_id,
-            "MemTable queued for flush to segment '{}'",
-            segment_name
-        );
-
-        debug!(
-            target: "sneldb::flush",
-            shard_id = self.shard_id,
-            segment_ids = ?self.segment_ids.read().unwrap(),
-            "Updated segment list"
-        );
 
         Ok(())
     }

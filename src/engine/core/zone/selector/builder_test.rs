@@ -9,13 +9,14 @@ use crate::engine::core::zone::selector::{
     builder::ZoneSelectorBuilder, selection_context::SelectionContext,
 };
 
-use crate::test_helpers::factories::command_factory::CommandFactory;
-use crate::test_helpers::factories::filter_group_factory::FilterGroupFactory;
-use crate::test_helpers::factories::query_plan_factory::QueryPlanFactory;
-use crate::test_helpers::factories::schema_factory::SchemaRegistryFactory;
+use crate::test_helpers::factories::{
+    command_factory::CommandFactory, event_factory::EventFactory,
+    filter_group_factory::FilterGroupFactory, memtable_factory::MemTableFactory,
+    query_plan_factory::QueryPlanFactory, schema_factory::SchemaRegistryFactory,
+};
 
 #[tokio::test]
-async fn builder_returns_empty_when_event_type_missing_uid() {
+async fn builder_returns_all_zones_when_event_type_missing_uid() {
     let tmp = tempdir().unwrap();
     let registry = SchemaRegistryFactory::new().registry();
 
@@ -43,9 +44,11 @@ async fn builder_returns_empty_when_event_type_missing_uid() {
 
     let selector = ZoneSelectorBuilder::new(ctx).build();
     let zones = selector.select_for_segment("seg1");
-    assert!(
-        zones.is_empty(),
-        "expected no zones for missing uid on event_type"
+    let expected = CandidateZone::create_all_zones_for_segment("seg1");
+    assert_eq!(
+        zones.len(),
+        expected.len(),
+        "expected all zones for missing uid on event_type"
     );
 }
 
@@ -84,6 +87,269 @@ async fn builder_returns_all_zones_when_context_id_missing_uid() {
         all_zones.len(),
         "expected all zones when uid missing on context_id"
     );
+}
+
+#[tokio::test]
+async fn builder_context_id_fallback_scans_all_known_uids() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp = tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let segment_dir = shard_dir.join("00000");
+    std::fs::create_dir_all(&segment_dir).unwrap();
+
+    let registry_factory = SchemaRegistryFactory::new();
+    let registry = registry_factory.registry();
+    let event_type = "wildcard_evt";
+    registry_factory
+        .define_with_fields(event_type, &[("context_id", "string")])
+        .await
+        .unwrap();
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+
+    let event = EventFactory::new()
+        .with("event_type", event_type)
+        .with("context_id", "ctx1")
+        .create();
+    let memtable = MemTableFactory::new()
+        .with_capacity(1)
+        .with_events(vec![event])
+        .create()
+        .unwrap();
+    Flusher::new(
+        memtable,
+        0,
+        &segment_dir,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
+
+    let command = CommandFactory::query()
+        .with_event_type("*")
+        .with_context_id("ctx1")
+        .create();
+    let plan = QueryPlanFactory::new()
+        .with_command(command)
+        .with_registry(Arc::clone(&registry))
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["00000".into()])
+        .create()
+        .await;
+
+    let filter = FilterGroupFactory::new()
+        .with_column("context_id")
+        .with_operation(CompareOp::Eq)
+        .with_value(serde_json::json!("ctx1"))
+        .create();
+    let ctx = SelectionContext {
+        plan: &filter,
+        query_plan: &plan,
+        base_dir: &plan.segment_base_dir,
+        caches: None,
+    };
+
+    let selector = ZoneSelectorBuilder::new(ctx).build();
+    let zones = selector.select_for_segment("00000");
+    let expected = CandidateZone::create_all_zones_for_segment_from_meta(
+        &plan.segment_base_dir,
+        "00000",
+        &uid,
+    );
+    assert_eq!(
+        zones.len(),
+        expected.len(),
+        "wildcard context should scan all known uids"
+    );
+    assert!(!zones.is_empty());
+}
+
+#[tokio::test]
+async fn builder_event_type_wildcard_scans_all_known_uids() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp = tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let segment_dir = shard_dir.join("00000");
+    std::fs::create_dir_all(&segment_dir).unwrap();
+
+    let registry_factory = SchemaRegistryFactory::new();
+    let registry = registry_factory.registry();
+    let evt_a = "evt_a";
+    let evt_b = "evt_b";
+    registry_factory
+        .define_with_fields(evt_a, &[("context_id", "string")])
+        .await
+        .unwrap();
+    registry_factory
+        .define_with_fields(evt_b, &[("context_id", "string")])
+        .await
+        .unwrap();
+    let uid_a = registry.read().await.get_uid(evt_a).unwrap();
+    let uid_b = registry.read().await.get_uid(evt_b).unwrap();
+
+    let event_a = EventFactory::new()
+        .with("event_type", evt_a)
+        .with("context_id", "ctx1")
+        .create();
+    let event_b = EventFactory::new()
+        .with("event_type", evt_b)
+        .with("context_id", "ctx2")
+        .create();
+    let memtable = MemTableFactory::new()
+        .with_capacity(2)
+        .with_events(vec![event_a, event_b])
+        .create()
+        .unwrap();
+    Flusher::new(
+        memtable,
+        0,
+        &segment_dir,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
+
+    let command = CommandFactory::query()
+        .with_event_type("*")
+        .with_context_id("ctx1")
+        .create();
+    let plan = QueryPlanFactory::new()
+        .with_command(command)
+        .with_registry(Arc::clone(&registry))
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["00000".into()])
+        .create()
+        .await;
+
+    let filter = FilterGroupFactory::new()
+        .with_column("event_type")
+        .with_operation(CompareOp::Eq)
+        .with_value(serde_json::json!("*"))
+        .create();
+    let ctx = SelectionContext {
+        plan: &filter,
+        query_plan: &plan,
+        base_dir: &plan.segment_base_dir,
+        caches: None,
+    };
+
+    let selector = ZoneSelectorBuilder::new(ctx).build();
+    let zones = selector.select_for_segment("00000");
+
+    let mut expected = CandidateZone::create_all_zones_for_segment_from_meta(
+        &plan.segment_base_dir,
+        "00000",
+        &uid_a,
+    );
+    expected.extend(CandidateZone::create_all_zones_for_segment_from_meta(
+        &plan.segment_base_dir,
+        "00000",
+        &uid_b,
+    ));
+    expected = CandidateZone::uniq(expected);
+
+    assert_eq!(
+        zones.len(),
+        expected.len(),
+        "wildcard event_type should scan zones for all known uids"
+    );
+    assert!(!zones.is_empty());
+}
+
+#[tokio::test]
+async fn builder_timestamp_fallback_scans_all_known_uids() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp = tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let segment_dir = shard_dir.join("00000");
+    std::fs::create_dir_all(&segment_dir).unwrap();
+
+    let registry_factory = SchemaRegistryFactory::new();
+    let registry = registry_factory.registry();
+    let event_type = "login_ts";
+    registry_factory
+        .define_with_fields(event_type, &[("device", "string")])
+        .await
+        .unwrap();
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+
+    let events = vec![
+        EventFactory::new()
+            .with("event_type", event_type)
+            .with("context_id", "alice")
+            .with("device", "android")
+            .create(),
+        EventFactory::new()
+            .with("event_type", event_type)
+            .with("context_id", "alice")
+            .with("device", "web")
+            .create(),
+    ];
+    let memtable = MemTableFactory::new()
+        .with_capacity(2)
+        .with_events(events)
+        .create()
+        .unwrap();
+    Flusher::new(
+        memtable,
+        0,
+        &segment_dir,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Mutex::new(())),
+    )
+    .flush()
+    .await
+    .unwrap();
+
+    let command = CommandFactory::query()
+        .with_event_type("*")
+        .with_context_id("alice")
+        .create();
+    let plan = QueryPlanFactory::new()
+        .with_command(command)
+        .with_registry(Arc::clone(&registry))
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["00000".into()])
+        .create()
+        .await;
+
+    let timestamp_filter = plan
+        .filter_groups
+        .iter()
+        .find(|fg| fg.column() == Some("timestamp"))
+        .expect("timestamp filter present");
+
+    let ctx = SelectionContext {
+        plan: timestamp_filter,
+        query_plan: &plan,
+        base_dir: &plan.segment_base_dir,
+        caches: None,
+    };
+
+    let selector = ZoneSelectorBuilder::new(ctx).build();
+    let zones = selector.select_for_segment("00000");
+
+    let expected = CandidateZone::create_all_zones_for_segment_from_meta(
+        &plan.segment_base_dir,
+        "00000",
+        &uid,
+    );
+
+    assert_eq!(
+        zones.len(),
+        expected.len(),
+        "timestamp fallback should scan all zones when uid is missing"
+    );
+    assert!(!zones.is_empty());
 }
 
 #[tokio::test]

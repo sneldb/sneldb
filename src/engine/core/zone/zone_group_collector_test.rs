@@ -85,6 +85,7 @@ fn create_test_plan_with_segments(segment_ids: Vec<String>) -> QueryPlan {
                 &registry,
                 &segment_base_dir,
                 &segment_ids_arc,
+                None,
             ))
             .unwrap()
     })

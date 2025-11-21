@@ -6,7 +6,7 @@ use crate::test_helpers::factories::{
 use serde_json::json;
 use std::time::Duration;
 use tempfile::tempdir;
-use tokio::time::timeout;
+use tokio::time::{Instant, timeout};
 
 #[tokio::test]
 async fn test_insert_and_maybe_flush_e2e() {
@@ -59,6 +59,18 @@ async fn test_insert_and_maybe_flush_e2e() {
         insert_and_maybe_flush(event, &mut ctx, &registry)
             .await
             .expect("Insert failed");
+    }
+
+    // Wait for flush to publish segment ids (flush happens asynchronously)
+    let wait_deadline = Instant::now() + Duration::from_secs(1);
+    loop {
+        if ctx.segment_ids.read().unwrap().len() == 1 {
+            break;
+        }
+        if Instant::now() >= wait_deadline {
+            panic!("Timed out waiting for segment_ids to be populated");
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
     }
 
     // Verify one flush happened (after 2 inserts, due to capacity = 2)
@@ -164,6 +176,7 @@ async fn test_insert_and_maybe_flush_e2e() {
         &ctx.segment_ids,
         &ctx.memtable,
         &ctx.passive_buffers,
+        None,
     )
     .await
     .expect("scan should succeed");
