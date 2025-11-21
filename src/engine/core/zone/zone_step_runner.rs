@@ -31,10 +31,20 @@ impl<'a> ZoneStepRunner<'a> {
         // Full segment list to use before pruning exists
         let mut full_segments: Vec<String> = self._plan.segment_ids.read().unwrap().clone();
         if let Some(tracker) = self._plan.inflight_segments() {
-            for seg in tracker.snapshot() {
-                if !full_segments.contains(&seg) {
-                    full_segments.push(seg);
+            let inflight = tracker.snapshot();
+            for seg in &inflight {
+                if !full_segments.contains(seg) {
+                    full_segments.push(seg.clone());
                 }
+            }
+            if tracing::enabled!(tracing::Level::DEBUG) && !inflight.is_empty() {
+                tracing::debug!(
+                    target: "sneldb::zone_runner",
+                    inflight_count = inflight.len(),
+                    segment_ids = ?inflight,
+                    full_segments = ?full_segments,
+                    "Merged inflight segments into query plan"
+                );
             }
         }
 
@@ -55,8 +65,11 @@ impl<'a> ZoneStepRunner<'a> {
             let segments: Vec<String> = if let Some(subset) = maybe_subset {
                 subset
             } else if allow_prune {
-                // Use pruned list if already computed; otherwise use full list for the first step
-                pruned.clone().unwrap_or_else(|| full_segments.clone())
+                if pos == 0 {
+                    full_segments.clone()
+                } else {
+                    pruned.clone().unwrap_or_else(|| full_segments.clone())
+                }
             } else {
                 full_segments.clone()
             };
