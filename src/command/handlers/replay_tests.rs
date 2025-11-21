@@ -147,3 +147,184 @@ async fn test_replay_returns_no_results() {
         body
     );
 }
+
+#[tokio::test]
+async fn test_replay_handles_wildcard_event_type() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("event1", &[("id", "int")])
+        .await
+        .unwrap();
+    factory
+        .define_with_fields("event2", &[("id", "int")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store events of different types
+    let store_cmd1 = CommandFactory::store()
+        .with_event_type("event1")
+        .with_context_id("ctx-wildcard")
+        .with_payload(serde_json::json!({ "id": 1 }))
+        .create();
+
+    let store_cmd2 = CommandFactory::store()
+        .with_event_type("event2")
+        .with_context_id("ctx-wildcard")
+        .with_payload(serde_json::json!({ "id": 2 }))
+        .create();
+
+    let (mut _r1, mut w1) = duplex(1024);
+    store::handle(
+        &store_cmd1,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut w1,
+        &JsonRenderer,
+    )
+    .await
+    .unwrap();
+
+    let (mut _r2, mut w2) = duplex(1024);
+    store::handle(
+        &store_cmd2,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut w2,
+        &JsonRenderer,
+    )
+    .await
+    .unwrap();
+
+    // Replay with wildcard event type
+    let replay_cmd = CommandFactory::replay()
+        .with_event_type("*") // Wildcard
+        .with_context_id("ctx-wildcard")
+        .create();
+
+    let (mut reader, mut writer) = duplex(1024);
+    handle(&replay_cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Should return events from both event types
+    assert!(
+        body.contains("ctx-wildcard"),
+        "Expected context_id in response, got: {}",
+        body
+    );
+    // Response should contain data (not an error)
+    assert!(
+        !body.contains("\"status\":\"error\""),
+        "Expected successful response, got error: {}",
+        body
+    );
+}
+
+#[tokio::test]
+async fn test_replay_handles_whitespace_only_context_id() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let registry = SchemaRegistryFactory::new().registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Test with whitespace-only context_id (should be treated as empty)
+    let cmd = CommandFactory::replay()
+        .with_event_type("test_event")
+        .with_context_id("   ") // Whitespace only
+        .create();
+
+    let (mut reader, mut writer) = duplex(1024);
+    handle(&cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 512];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    assert!(
+        body.contains("context_id cannot be empty"),
+        "Expected error for whitespace-only context_id, got: {}",
+        body
+    );
+}
+
+#[tokio::test]
+async fn test_replay_with_since_timestamp() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let base_dir = tempdir().unwrap().into_path();
+    let wal_dir = tempdir().unwrap().into_path();
+
+    let factory = SchemaRegistryFactory::new();
+    factory
+        .define_with_fields("timestamped_event", &[("value", "int")])
+        .await
+        .unwrap();
+    let registry = factory.registry();
+    let shard_manager = ShardManager::new(1, base_dir, wal_dir).await;
+
+    // Store an event
+    let store_cmd = CommandFactory::store()
+        .with_event_type("timestamped_event")
+        .with_context_id("ctx-time")
+        .with_payload(serde_json::json!({ "value": 42 }))
+        .create();
+
+    let (mut _r, mut w) = duplex(1024);
+    store::handle(
+        &store_cmd,
+        &shard_manager,
+        &registry,
+        None,
+        None,
+        &mut w,
+        &JsonRenderer,
+    )
+    .await
+    .unwrap();
+
+    // Replay with since timestamp
+    let replay_cmd = CommandFactory::replay()
+        .with_event_type("timestamped_event")
+        .with_context_id("ctx-time")
+        .with_since("2020-01-01T00:00:00Z")
+        .create();
+
+    let (mut reader, mut writer) = duplex(1024);
+    handle(&replay_cmd, &shard_manager, &registry, &mut writer, &JsonRenderer)
+        .await
+        .unwrap();
+
+    let mut buf = vec![0; 4096];
+    let n = reader.read(&mut buf).await.unwrap();
+    let body = String::from_utf8_lossy(&buf[..n]);
+
+    // Should handle since parameter without error
+    assert!(
+        !body.contains("\"status\":\"error\""),
+        "Expected successful response with since parameter, got error: {}",
+        body
+    );
+}

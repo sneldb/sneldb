@@ -43,7 +43,8 @@ impl<'a> ZoneFinder<'a> {
             .is_some();
 
         if tracing::enabled!(tracing::Level::DEBUG) {
-            debug!(target: "sneldb::query", "Finding candidate zones for filter: {:?}", self.plan);
+            let plan_debug = format!("{:?}", self.plan);
+            debug!(target: "sneldb::query", "Finding candidate zones for filter: {}", plan_debug);
         }
         let mut out: Vec<CandidateZone> = Vec::new();
         out.reserve(self.segment_ids.len());

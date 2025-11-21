@@ -187,3 +187,102 @@ async fn test_query_stream_handles_empty_results() {
         "Query stream should succeed even with empty results"
     );
 }
+
+#[tokio::test]
+async fn test_await_flush_idle_shard_returns_immediately() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp_dir = tempdir().expect("Failed to create temp dir");
+    let schema_factory = SchemaRegistryFactory::new();
+    schema_factory
+        .define_with_fields("test_event", &[("value", "u64")])
+        .await
+        .expect("Failed to define schema");
+
+    let registry = schema_factory.registry();
+    let wal_dir = tempdir().unwrap().into_path();
+    let manager = ShardManager::new(1, tmp_dir.path().to_path_buf(), wal_dir).await;
+    let shard = manager.get_shard("ctx-await");
+    let message_factory = ShardMessageFactory::new(Arc::clone(&registry));
+
+    // Idle shard - no flushes pending
+    let (await_msg, await_rx) = message_factory.await_flush();
+    shard
+        .tx
+        .send(await_msg)
+        .await
+        .expect("Failed to send await flush message");
+
+    // Should return immediately for idle shard
+    let result = await_rx.await.expect("Response channel dropped");
+    assert!(
+        result.is_ok(),
+        "AwaitFlush should return immediately for idle shard"
+    );
+}
+
+#[tokio::test]
+async fn test_await_flush_waits_for_pending_flushes() {
+    use crate::logging::init_for_tests;
+    init_for_tests();
+
+    let tmp_dir = tempdir().expect("Failed to create temp dir");
+    let schema_factory = SchemaRegistryFactory::new();
+    schema_factory
+        .define_with_fields("test_event", &[("value", "u64")])
+        .await
+        .expect("Failed to define schema");
+
+    let registry = schema_factory.registry();
+    let wal_dir = tempdir().unwrap().into_path();
+    let manager = ShardManager::new(1, tmp_dir.path().to_path_buf(), wal_dir).await;
+    let shard = manager.get_shard("ctx-wait");
+    let message_factory = ShardMessageFactory::new(Arc::clone(&registry));
+
+    // Store events to trigger flush
+    for i in 0..10 {
+        let event = EventFactory::new()
+            .with("event_type", "test_event")
+            .with("context_id", "ctx-wait")
+            .with("payload", serde_json::json!({ "value": i }))
+            .create();
+
+        let store_msg = message_factory.store(event);
+        shard
+            .tx
+            .send(store_msg)
+            .await
+            .expect("Failed to send store message");
+    }
+
+    // Trigger flush - don't wait for completion, just trigger it
+    let (flush_msg, _flush_rx) = message_factory.flush();
+    shard
+        .tx
+        .send(flush_msg)
+        .await
+        .expect("Failed to send flush message");
+
+    // Give flush a moment to start
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    // Immediately request await flush (should wait)
+    let (await_msg, await_rx) = message_factory.await_flush();
+    shard
+        .tx
+        .send(await_msg)
+        .await
+        .expect("Failed to send await flush message");
+
+    // Should eventually complete when flush finishes
+    let result = tokio::time::timeout(std::time::Duration::from_secs(5), await_rx)
+        .await
+        .expect("AwaitFlush timed out")
+        .expect("Response channel dropped");
+
+    assert!(
+        result.is_ok(),
+        "AwaitFlush should complete when flush finishes"
+    );
+}

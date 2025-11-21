@@ -26,7 +26,8 @@ impl<'a> ZoneHydrator<'a> {
     pub async fn hydrate(self) -> Vec<CandidateZone> {
         let hydrate_start = std::time::Instant::now();
         if tracing::enabled!(tracing::Level::DEBUG) {
-            debug!(target: "sneldb::query", "Starting zone hydration for plan {:?}", self.plan);
+            let plan_debug = format!("{:?}", self.plan);
+            debug!(target: "sneldb::query", "Starting zone hydration for plan {}", plan_debug);
         }
 
         let mut candidate_zones = ZoneCollector::new(self.plan, self.steps.clone())
@@ -127,12 +128,13 @@ impl<'a> ZoneHydrator<'a> {
                     .map(|(uid, indices)| format!("{}:{}", uid, indices.len()))
                     .collect();
                 uid_summary.sort();
+                let columns_debug = format!("{:?}", columns);
                 info!(
                     target: "sneldb::zone_hydrator",
                     uid_count = zones_by_uid.len(),
                     total_zones = candidate_zones.len(),
                     column_count = columns.len(),
-                    columns = ?columns,
+                    columns = columns_debug,
                     uid_breakdown = ?uid_summary,
                     "Hydrating wildcard zones with per-UID loaders"
                 );

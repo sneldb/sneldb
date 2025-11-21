@@ -38,11 +38,12 @@ impl<'a> ZoneStepRunner<'a> {
                 }
             }
             if tracing::enabled!(tracing::Level::DEBUG) && !inflight.is_empty() {
+                let merged_segments = full_segments.clone();
                 tracing::debug!(
                     target: "sneldb::zone_runner",
                     inflight_count = inflight.len(),
                     inflight_segments = ?inflight,
-                    merged_segments = ?full_segments,
+                    merged_segments = ?merged_segments,
                     "Merged inflight segments into query plan"
                 );
             }

@@ -96,7 +96,9 @@ impl FlushManager {
             }
         });
 
-        info!(target: "sneldb::flush", shard_id, "FlushManager started");
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(target: "sneldb::flush", shard_id, "FlushManager started");
+        }
         Self {
             shard_id,
             flush_sender: tx,
@@ -115,12 +117,14 @@ impl FlushManager {
         flush_id: u64,
         completion: Option<oneshot::Sender<Result<(), StoreError>>>,
     ) -> Result<(), StoreError> {
-        debug!(
-            target: "sneldb::flush",
-            shard_id = self.shard_id,
-            segment_id,
-            "Queueing MemTable for flush"
-        );
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!(
+                target: "sneldb::flush",
+                shard_id = self.shard_id,
+                segment_id,
+                "Queueing MemTable for flush"
+            );
+        }
         let segment_name = format!("{:05}", segment_id);
         self.inflight_segments.insert(&segment_name);
 
@@ -145,13 +149,15 @@ impl FlushManager {
                 StoreError::FlushFailed(format!("flush send error: {}", e))
             })?;
 
-        info!(
-            target: "sneldb::flush",
-            shard_id = self.shard_id,
-            segment_id,
-            "MemTable queued for flush to segment '{}'",
-            segment_name
-        );
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::flush",
+                shard_id = self.shard_id,
+                segment_id,
+                "MemTable queued for flush to segment '{}'",
+                segment_name
+            );
+        }
 
         Ok(())
     }

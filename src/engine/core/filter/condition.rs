@@ -55,48 +55,79 @@ pub struct PreparedAccessor<'a> {
 
 impl<'a> PreparedAccessor<'a> {
     pub fn new(columns: &'a HashMap<String, ColumnValues>) -> Self {
-        let mut max_len = 0usize;
-        let mut min_len = usize::MAX;
-        let mut zero_column_total = 0usize;
-        let mut zero_column_sample: Vec<String> = Vec::new();
+        let (max_len, min_len, zero_column_count, zero_column_sample) =
+            Self::collect_column_statistics(columns);
 
-        for (name, column) in columns.iter() {
-            let len = column.len();
-            if len > max_len {
-                max_len = len;
-            }
-            if len < min_len {
-                min_len = len;
-            }
-            if len == 0 {
-                zero_column_total += 1;
-                if zero_column_sample.len() < 5 {
-                    zero_column_sample.push(name.clone());
-                }
-            }
-        }
-
-        if tracing::enabled!(tracing::Level::DEBUG)
-            && !columns.is_empty()
-            && ((min_len != usize::MAX && min_len != max_len) || zero_column_total > 0)
-        {
-            let min_len = if min_len == usize::MAX { 0 } else { min_len };
-            tracing::debug!(
-                target: "sneldb::prepared_accessor",
-                zone_columns = columns.len(),
-                max_len = max_len,
-                min_len = min_len,
-                zero_column_total = zero_column_total,
-                zero_column_sample = ?zero_column_sample,
-                "Derived event_count from sparse column lengths"
-            );
-        }
+        Self::log_column_statistics_if_needed(
+            columns.len(),
+            max_len,
+            min_len,
+            zero_column_count,
+            zero_column_sample,
+        );
 
         let event_count = max_len;
         Self {
             columns,
             event_count,
         }
+    }
+
+    /// Collects statistics about column lengths for event count determination.
+    fn collect_column_statistics(
+        columns: &HashMap<String, ColumnValues>,
+    ) -> (usize, usize, usize, Vec<String>) {
+        let mut max_len = 0usize;
+        let mut min_len = usize::MAX;
+        let mut zero_column_count = 0usize;
+        let mut zero_column_sample = Vec::new();
+        let should_collect_samples =
+            tracing::enabled!(tracing::Level::DEBUG) && !columns.is_empty();
+
+        for (name, column) in columns.iter() {
+            let len = column.len();
+            max_len = max_len.max(len);
+            min_len = min_len.min(len);
+
+            if len == 0 {
+                zero_column_count += 1;
+                if should_collect_samples && zero_column_sample.len() < 5 {
+                    zero_column_sample.push(name.clone());
+                }
+            }
+        }
+
+        (max_len, min_len, zero_column_count, zero_column_sample)
+    }
+
+    /// Logs column statistics if DEBUG logging is enabled and conditions warrant it.
+    fn log_column_statistics_if_needed(
+        column_count: usize,
+        max_len: usize,
+        min_len: usize,
+        zero_column_count: usize,
+        zero_column_sample: Vec<String>,
+    ) {
+        if !tracing::enabled!(tracing::Level::DEBUG) {
+            return;
+        }
+
+        let has_length_variance = min_len != usize::MAX && min_len != max_len;
+        let has_zero_columns = zero_column_count > 0;
+        if !has_length_variance && !has_zero_columns {
+            return;
+        }
+
+        let normalized_min_len = if min_len == usize::MAX { 0 } else { min_len };
+        tracing::debug!(
+            target: "sneldb::prepared_accessor",
+            zone_columns = column_count,
+            max_len = max_len,
+            min_len = normalized_min_len,
+            zero_column_total = zero_column_count,
+            zero_column_sample = ?zero_column_sample,
+            "Derived event_count from sparse column lengths"
+        );
     }
 
     /// Prepares numeric caches for the specified columns so numeric conditions avoid repeated parsing.

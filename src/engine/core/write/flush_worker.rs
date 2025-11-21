@@ -73,14 +73,16 @@ impl FlushWorker {
                 let _inflight_guard = inflight_guard;
                 let was_empty = memtable.is_empty();
 
-                info!(
-                    target: "sneldb::flush",
-                    shard_id,
-                    segment_id,
-                    path = ?segment_dir,
-                    empty = was_empty,
-                    "Starting flush"
-                );
+                if tracing::enabled!(tracing::Level::INFO) {
+                    info!(
+                        target: "sneldb::flush",
+                        shard_id,
+                        segment_id,
+                        path = ?segment_dir,
+                        empty = was_empty,
+                        "Starting flush"
+                    );
+                }
 
                 let track_lifecycle = !was_empty;
                 if track_lifecycle {
@@ -111,21 +113,25 @@ impl FlushWorker {
                     }
                     Ok(()) => {
                         if was_empty {
-                            debug!(
-                                target: "sneldb::flush",
-                                shard_id,
-                                segment_id,
-                                "Flush skipped (empty memtable)"
-                            );
+                            if tracing::enabled!(tracing::Level::DEBUG) {
+                                debug!(
+                                    target: "sneldb::flush",
+                                    shard_id,
+                                    segment_id,
+                                    "Flush skipped (empty memtable)"
+                                );
+                            }
                             return flush_result;
                         }
 
-                        info!(
-                            target: "sneldb::flush",
-                            shard_id,
-                            segment_id,
-                            "Flush completed, verifying segment queryability"
-                        );
+                        if tracing::enabled!(tracing::Level::INFO) {
+                            info!(
+                                target: "sneldb::flush",
+                                shard_id,
+                                segment_id,
+                                "Flush completed, verifying segment queryability"
+                            );
+                        }
 
                         // Mark as written to disk
                         if track_lifecycle {
@@ -148,13 +154,15 @@ impl FlushWorker {
                             let mut segs = segment_ids.write().unwrap();
                             if !segs.contains(&segment_name) {
                                 segs.push(segment_name.clone());
-                                debug!(
-                                    target: "sneldb::flush",
-                                    shard_id,
-                                    segment_id,
-                                    "Added segment '{}' to segment_ids list",
-                                    segment_name
-                                );
+                                if tracing::enabled!(tracing::Level::DEBUG) {
+                                    debug!(
+                                        target: "sneldb::flush",
+                                        shard_id,
+                                        segment_id,
+                                        "Added segment '{}' to segment_ids list",
+                                        segment_name
+                                    );
+                                }
                             }
                         }
 
@@ -174,19 +182,23 @@ impl FlushWorker {
 
                             if let Some(passive) = lifecycle.clear_and_complete(segment_id).await {
                                 passive.lock().await.flush();
-                                debug!(
-                                    target: "sneldb::flush",
-                                    shard_id,
-                                    segment_id,
-                                    "Passive buffer cleared after verification"
-                                );
+                                if tracing::enabled!(tracing::Level::DEBUG) {
+                                    debug!(
+                                        target: "sneldb::flush",
+                                        shard_id,
+                                        segment_id,
+                                        "Passive buffer cleared after verification"
+                                    );
+                                }
                             } else {
-                                warn!(
-                                    target: "sneldb::flush",
-                                    shard_id,
-                                    segment_id,
-                                    "Passive buffer missing when attempting to clear after verification"
-                                );
+                                if tracing::enabled!(tracing::Level::WARN) {
+                                    warn!(
+                                        target: "sneldb::flush",
+                                        shard_id,
+                                        segment_id,
+                                        "Passive buffer missing when attempting to clear after verification"
+                                    );
+                                }
                             }
                         }
 
@@ -194,12 +206,14 @@ impl FlushWorker {
                         // PassiveBufferSet::non_empty() in subsequent queries
 
                         // Clean up WAL files
-                        debug!(
-                            target: "sneldb::flush",
-                            shard_id,
-                            wal_cutoff = segment_id + 1,
-                            "Cleaning up WAL files"
-                        );
+                        if tracing::enabled!(tracing::Level::DEBUG) {
+                            debug!(
+                                target: "sneldb::flush",
+                                shard_id,
+                                wal_cutoff = segment_id + 1,
+                                "Cleaning up WAL files"
+                            );
+                        }
                         let cleaner = WalCleaner::new(shard_id);
                         cleaner.cleanup_up_to(segment_id + 1);
                     }
