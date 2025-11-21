@@ -148,7 +148,17 @@ impl FlushWorker {
                             )
                             .await;
 
-                        // Only update segment_ids after successful flush that created files
+                        if !is_queryable {
+                            warn!(
+                                target: "sneldb::flush",
+                                shard_id,
+                                segment_id,
+                                "Segment verification failed after retries, retaining passive buffer"
+                            );
+                            return flush_result;
+                        }
+
+                        // Only update segment_ids after successful verification
                         let segment_name = format!("{:05}", segment_id);
                         {
                             let mut segs = segment_ids.write().unwrap();
@@ -164,16 +174,6 @@ impl FlushWorker {
                                     );
                                 }
                             }
-                        }
-
-                        if !is_queryable {
-                            warn!(
-                                target: "sneldb::flush",
-                                shard_id,
-                                segment_id,
-                                "Segment verification failed after retries, retaining passive buffer"
-                            );
-                            return flush_result;
                         }
 
                         // Mark as verified and clear passive buffer

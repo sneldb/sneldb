@@ -406,8 +406,14 @@ async fn test_flush_worker_segment_ids_not_updated_on_verification_failure() {
     .await
     .expect("Send failed");
 
-    // Wait for flush to start writing
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    // Wait for flush to complete writing files but before verification
+    // We need to wait for the flush to finish writing, then corrupt before verification
+    let start = std::time::Instant::now();
+    while !base_path.join(format!("{:05}", segment_id)).exists()
+        && start.elapsed() < std::time::Duration::from_secs(2)
+    {
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
 
     // Corrupt or remove a critical file to cause verification failure
     // This simulates verification failure after files are written
@@ -425,8 +431,8 @@ async fn test_flush_worker_segment_ids_not_updated_on_verification_failure() {
     let flush_result = completion_rx.await.expect("Completion channel closed");
     let _ = flush_result; // May be Ok or Err, both are valid for this test
 
-    // Wait for all async operations
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    // Wait for all async operations to complete, including verification retries
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     // CRITICAL: segment_ids should NOT be updated when verification fails
     let ids = segment_ids.read().unwrap().clone();
@@ -516,8 +522,13 @@ async fn test_flush_worker_passive_buffer_preserved_on_failure() {
     .await
     .expect("Send failed");
 
-    // Wait for flush to start
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    // Wait for flush to complete writing files but before verification
+    let start = std::time::Instant::now();
+    while !base_path.join(format!("{:05}", segment_id)).exists()
+        && start.elapsed() < std::time::Duration::from_secs(2)
+    {
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
 
     // Cause verification failure by removing critical files
     let segment_dir = base_path.join(format!("{:05}", segment_id));
@@ -527,9 +538,9 @@ async fn test_flush_worker_passive_buffer_preserved_on_failure() {
         std::fs::remove_file(&zones_file).ok();
     }
 
-    // Wait for flush to complete
+    // Wait for flush to complete (including verification retries)
     let _flush_result = completion_rx.await;
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     // CRITICAL: Passive buffer should still be accessible and contain data
     let passive_guard = passive_arc.lock().await;
@@ -616,13 +627,27 @@ async fn test_inflight_guard_drops_on_flush_failure() {
     .expect("Send failed");
 
     // Wait for flush to start (guard should be created)
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-
-    // Verify segment IS in inflight during flush
+    // Check multiple times to handle race conditions
+    let mut found_inflight = false;
+    for _ in 0..10 {
+        if inflight.contains("00088") {
+            found_inflight = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
     assert!(
-        inflight.contains("00088"),
+        found_inflight,
         "Segment should be in inflight during flush"
     );
+
+    // Wait for flush to write files, then cause verification failure
+    let start = std::time::Instant::now();
+    while !base_path.join(format!("{:05}", segment_id)).exists()
+        && start.elapsed() < std::time::Duration::from_secs(2)
+    {
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
 
     // Cause verification failure
     let segment_dir = base_path.join(format!("{:05}", segment_id));
@@ -634,7 +659,7 @@ async fn test_inflight_guard_drops_on_flush_failure() {
 
     // Wait for flush to complete (should fail)
     let _flush_result = completion_rx.await;
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     // CRITICAL: Guard should drop on failure, removing segment from inflight
     // This ensures queries don't try to read from failed segments
