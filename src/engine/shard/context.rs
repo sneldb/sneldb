@@ -1,7 +1,7 @@
 use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
 use crate::engine::core::segment::range_allocator::RangeAllocator;
 use crate::engine::core::{
-    Event, EventId, EventIdGenerator, FlushManager, MemTable, SegmentIdLoader,
+    Event, EventId, EventIdGenerator, FlushManager, InflightSegments, MemTable, SegmentIdLoader,
     SegmentLifecycleTracker, WalHandle, WalRecovery,
 };
 use crate::engine::shard::flush_progress::FlushProgress;
@@ -41,6 +41,7 @@ pub struct ShardContext {
     // Segment lifecycle tracking for passive buffer management
     pub segment_lifecycle: Arc<SegmentLifecycleTracker>,
 
+    pub inflight_segments: InflightSegments,
     pub event_id_gen: EventIdGenerator,
 }
 
@@ -68,6 +69,7 @@ impl ShardContext {
         let flush_coordination_lock = Arc::new(Mutex::new(()));
         let segment_lifecycle = Arc::new(SegmentLifecycleTracker::new());
         let flush_progress = Arc::new(FlushProgress::new());
+        let inflight_segments = InflightSegments::new();
         let flush_manager = FlushManager::new(
             id,
             base_dir.clone(),
@@ -75,6 +77,7 @@ impl ShardContext {
             Arc::clone(&flush_coordination_lock),
             Arc::clone(&segment_lifecycle),
             Arc::clone(&flush_progress),
+            inflight_segments.clone(),
         );
 
         let capacity = CONFIG.engine.fill_factor * CONFIG.engine.event_per_zone;
@@ -98,6 +101,7 @@ impl ShardContext {
             flush_progress,
             flush_coordination_lock,
             segment_lifecycle,
+            inflight_segments,
             event_id_gen: EventIdGenerator::new(),
         };
 

@@ -71,6 +71,7 @@ async fn scan_emits_memtable_rows() {
         &segment_ids,
         &memtable,
         &passive_buffers,
+        None,
     )
     .await
     .expect("scan should succeed");
@@ -141,6 +142,7 @@ async fn scan_with_metadata() {
         &segment_ids,
         &memtable,
         &passive_buffers,
+        None,
     )
     .await;
 
@@ -184,6 +186,7 @@ async fn scan_with_empty_memtable() {
         &segment_ids,
         &memtable,
         &passive_buffers,
+        None,
     )
     .await
     .expect("scan should succeed even with empty memtable");
@@ -241,6 +244,7 @@ async fn scan_supports_aggregate_queries() {
         &segment_ids,
         &memtable,
         &passive_buffers,
+        None,
     )
     .await;
 
@@ -301,6 +305,7 @@ async fn scan_with_limit() {
         &segment_ids,
         &memtable,
         &passive_buffers,
+        None,
     )
     .await
     .expect("scan with limit should succeed");
@@ -375,6 +380,7 @@ async fn scan_with_context_id_filter() {
         &segment_ids,
         &memtable,
         &passive_buffers,
+        None,
     )
     .await
     .expect("scan with context filter should succeed");
@@ -431,6 +437,7 @@ async fn scan_handles_missing_schema() {
         &segment_ids,
         &memtable,
         &passive_buffers,
+        None,
     )
     .await;
 
@@ -498,6 +505,7 @@ async fn scan_with_multiple_segments() {
         &segment_ids,
         &memtable,
         &passive_buffers,
+        None,
     )
     .await
     .expect("scan with multiple segments should succeed");
@@ -554,6 +562,7 @@ async fn scan_returns_valid_schema() {
         &segment_ids,
         &memtable,
         &passive_buffers,
+        None,
     )
     .await
     .expect("scan should succeed");

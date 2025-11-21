@@ -48,7 +48,7 @@ async fn query_plan_new_assigns_strategies_using_segment_with_catalog() {
         })
         .create();
 
-    let plan = QueryPlan::new(cmd, &registry, base_dir.path(), &seg_ids)
+    let plan = QueryPlan::new(cmd, &registry, base_dir.path(), &seg_ids, None)
         .await
         .unwrap();
 
@@ -74,7 +74,7 @@ async fn query_plan_assigns_fullscan_when_no_catalogs() {
         .with_event_type("ev")
         .create();
 
-    let plan = QueryPlan::new(cmd, &registry, base_dir.path(), &seg_ids)
+    let plan = QueryPlan::new(cmd, &registry, base_dir.path(), &seg_ids, None)
         .await
         .unwrap();
 
@@ -101,7 +101,7 @@ async fn query_plan_with_no_segments_skips_strategy_assignment() {
         .with_event_type("ev")
         .create();
 
-    let plan = QueryPlan::new(cmd, &registry, base_dir.path(), &seg_ids)
+    let plan = QueryPlan::new(cmd, &registry, base_dir.path(), &seg_ids, None)
         .await
         .unwrap();
 
@@ -129,7 +129,7 @@ async fn query_plan_aggregates_remove_implicit_since_filter() {
         .add_count()
         .create();
 
-    let plan = QueryPlan::new(cmd, &registry, base_dir.path(), &seg_ids)
+    let plan = QueryPlan::new(cmd, &registry, base_dir.path(), &seg_ids, None)
         .await
         .unwrap();
 

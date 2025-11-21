@@ -1,7 +1,7 @@
 use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
 use crate::engine::core::segment::range_allocator::RangeAllocator;
 use crate::engine::core::{
-    EventIdGenerator, FlushManager, MemTable, SegmentLifecycleTracker, WalHandle,
+    EventIdGenerator, FlushManager, InflightSegments, MemTable, SegmentLifecycleTracker, WalHandle,
 };
 use crate::engine::shard::context::ShardContext;
 use crate::engine::shard::flush_progress::FlushProgress;
@@ -67,6 +67,7 @@ impl ShardContextFactory {
         let flush_coordination_lock = Arc::new(tokio::sync::Mutex::new(()));
         let segment_lifecycle = Arc::new(SegmentLifecycleTracker::new());
         let flush_progress = Arc::new(FlushProgress::new());
+        let inflight_segments = InflightSegments::new();
         let flush_manager = FlushManager::new(
             self.id,
             base_dir.clone(),
@@ -74,6 +75,7 @@ impl ShardContextFactory {
             Arc::clone(&flush_coordination_lock),
             Arc::clone(&segment_lifecycle),
             Arc::clone(&flush_progress),
+            inflight_segments.clone(),
         );
 
         // Seed allocator from existing ids (if any)
@@ -99,6 +101,7 @@ impl ShardContextFactory {
             flush_progress,
             flush_coordination_lock,
             segment_lifecycle,
+            inflight_segments,
             event_id_gen: EventIdGenerator::new(),
         };
 

@@ -114,6 +114,7 @@ async fn on_query_streaming(
         &ctx.segment_ids,
         &ctx.memtable,
         &ctx.passive_buffers,
+        Some(ctx.inflight_segments.clone()),
     )
     .await
     .map_err(|e| e.to_string())

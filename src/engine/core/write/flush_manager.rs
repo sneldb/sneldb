@@ -1,4 +1,4 @@
-use crate::engine::core::{FlushWorker, MemTable, SegmentLifecycleTracker};
+use crate::engine::core::{FlushWorker, InflightSegments, MemTable, SegmentLifecycleTracker};
 use crate::engine::errors::StoreError;
 use crate::engine::schema::registry::SchemaRegistry;
 use crate::engine::shard::flush_progress::FlushProgress;
@@ -31,6 +31,7 @@ impl FlushManager {
         flush_coordination_lock: Arc<Mutex<()>>,
         segment_lifecycle: Arc<SegmentLifecycleTracker>,
         flush_progress: Arc<FlushProgress>,
+        inflight_segments: InflightSegments,
     ) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel(4096);
 
@@ -42,6 +43,7 @@ impl FlushManager {
             Arc::clone(&segment_ids),
             segment_lifecycle,
             flush_progress,
+            inflight_segments,
         );
 
         let worker_handle = tokio::spawn(async move {

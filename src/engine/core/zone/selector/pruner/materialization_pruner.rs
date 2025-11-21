@@ -4,13 +4,14 @@ use crate::engine::core::zone::zone_meta::ZoneMeta;
 use std::path::PathBuf;
 use tracing::debug;
 
-/// Pruner that filters zones based on materialization creation time.
-/// Skips zones that were created before or at the materialization creation time,
-/// as those zones have already been processed by the materialization.
+/// Pruner that filters zones based on materialization creation time or high-water timestamp.
+/// When a high-water timestamp is provided, zones are dropped only if their timestamp range
+/// ends strictly before that watermark. Otherwise we fall back to comparing creation times.
 pub struct MaterializationPruner<'a> {
     base_dir: &'a PathBuf,
     caches: Option<&'a QueryCaches>,
     materialization_created_at: u64,
+    high_water_timestamp: Option<u64>,
 }
 
 impl<'a> MaterializationPruner<'a> {
@@ -18,11 +19,13 @@ impl<'a> MaterializationPruner<'a> {
         base_dir: &'a PathBuf,
         caches: Option<&'a QueryCaches>,
         materialization_created_at: u64,
+        high_water_timestamp: Option<u64>,
     ) -> Self {
         Self {
             base_dir,
             caches,
             materialization_created_at,
+            high_water_timestamp,
         }
     }
 
@@ -34,11 +37,12 @@ impl<'a> MaterializationPruner<'a> {
         }
 
         // Only log start if there are zones to process (reduce noise)
-        if !zones.is_empty() {
+        if !zones.is_empty() && tracing::enabled!(tracing::Level::DEBUG) {
             debug!(
                 target: "sneldb::materialization_pruner",
                 input_zones = zones.len(),
                 materialization_created_at = self.materialization_created_at,
+                high_water_timestamp = ?self.high_water_timestamp,
                 uid = %uid,
                 "Starting materialization pruning"
             );
@@ -87,22 +91,39 @@ impl<'a> MaterializationPruner<'a> {
                 }
             }
 
-            // Filter zones: only include those with created_at > materialization_created_at
+            // Filter zones: prefer high-water timestamp if available, otherwise fall back to created_at.
             if let Some(metas) = zone_meta_by_segment.get(&zone.segment_id) {
                 if let Some(meta) = metas.get(zone.zone_id as usize) {
-                    if meta.created_at > self.materialization_created_at {
-                        filtered.push(zone.clone());
+                    let should_drop = if let Some(high_water) = self.high_water_timestamp {
+                        meta.timestamp_max < high_water
                     } else {
+                        meta.created_at <= self.materialization_created_at
+                    };
+
+                    if should_drop {
                         if tracing::enabled!(tracing::Level::DEBUG) {
-                            debug!(
-                                target: "sneldb::materialization_pruner",
-                                segment_id = %zone.segment_id,
-                                zone_id = zone.zone_id,
-                                zone_created_at = meta.created_at,
-                                materialization_created_at = self.materialization_created_at,
-                                "Filtered out zone (already materialized)"
-                            );
+                            if let Some(high_water) = self.high_water_timestamp {
+                                debug!(
+                                    target: "sneldb::materialization_pruner",
+                                    segment_id = %zone.segment_id,
+                                    zone_id = zone.zone_id,
+                                    zone_timestamp_max = meta.timestamp_max,
+                                    high_water_timestamp = high_water,
+                                    "Filtered out zone (timestamp entirely before watermark)"
+                                );
+                            } else {
+                                debug!(
+                                    target: "sneldb::materialization_pruner",
+                                    segment_id = %zone.segment_id,
+                                    zone_id = zone.zone_id,
+                                    zone_created_at = meta.created_at,
+                                    materialization_created_at = self.materialization_created_at,
+                                    "Filtered out zone (already materialized)"
+                                );
+                            }
                         }
+                    } else {
+                        filtered.push(zone.clone());
                     }
                 } else {
                     // Zone ID out of bounds - include it (fail open)

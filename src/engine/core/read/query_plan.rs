@@ -1,4 +1,5 @@
 use crate::command::types::{Command, CompareOp, Expr, OrderSpec};
+use crate::engine::core::InflightSegments;
 use crate::engine::core::filter::filter_group::FilterGroup;
 use crate::engine::core::filter::filter_group_builder::FilterGroupBuilder;
 use crate::engine::core::read::aggregate::plan::AggregatePlan;
@@ -28,6 +29,7 @@ pub struct QueryPlan {
     pub aggregate_plan: Option<AggregatePlan>,
     pub index_registry: IndexRegistry,
     event_scope: EventScope,
+    inflight_segments: Option<InflightSegments>,
 }
 
 impl QueryPlan {
@@ -37,6 +39,7 @@ impl QueryPlan {
         registry: &Arc<RwLock<SchemaRegistry>>,
         segment_base_dir: &Path,
         segment_ids: &Arc<std::sync::RwLock<Vec<String>>>,
+        inflight_segments: Option<InflightSegments>,
     ) -> Option<Self> {
         match &command {
             Command::Query {
@@ -114,6 +117,7 @@ impl QueryPlan {
                     aggregate_plan,
                     index_registry: IndexRegistry::new(),
                     event_scope,
+                    inflight_segments,
                 };
                 // Preload catalogs for discovered segments (best-effort)
                 if let Some(uid) = plan.event_type_uid().await {
@@ -301,10 +305,26 @@ impl QueryPlan {
             aggregate_plan,
             index_registry: IndexRegistry::new(),
             event_scope,
+            inflight_segments: None,
         }
     }
 
     pub fn event_scope(&self) -> &EventScope {
         &self.event_scope
+    }
+
+    pub fn set_inflight_segments(&mut self, tracker: Option<InflightSegments>) {
+        self.inflight_segments = tracker;
+    }
+
+    pub fn inflight_segments(&self) -> Option<&InflightSegments> {
+        self.inflight_segments.as_ref()
+    }
+
+    pub fn is_segment_inflight(&self, segment_id: &str) -> bool {
+        self.inflight_segments
+            .as_ref()
+            .map(|tracker| tracker.contains(segment_id))
+            .unwrap_or(false)
     }
 }

@@ -42,7 +42,7 @@ fn filters_zones_created_before_materialization() {
     ZoneMeta::save(uid, &[zone_0.clone(), zone_1.clone()], &seg1).unwrap();
 
     let base_dir = shard_dir.to_path_buf();
-    let pruner = MaterializationPruner::new(&base_dir, None, materialization_created_at);
+    let pruner = MaterializationPruner::new(&base_dir, None, materialization_created_at, None);
 
     let candidate_zones = vec![
         CandidateZone::new(0, "001".to_string()),
@@ -92,7 +92,7 @@ fn filters_zones_with_equal_created_at() {
     ZoneMeta::save(uid, &[zone_0.clone(), zone_1.clone()], &seg1).unwrap();
 
     let base_dir = shard_dir.to_path_buf();
-    let pruner = MaterializationPruner::new(&base_dir, None, materialization_created_at);
+    let pruner = MaterializationPruner::new(&base_dir, None, materialization_created_at, None);
 
     let candidate_zones = vec![
         CandidateZone::new(0, "001".to_string()),
@@ -108,12 +108,100 @@ fn filters_zones_with_equal_created_at() {
 }
 
 #[test]
+fn high_water_timestamp_keeps_equal_timestamp_zone() {
+    let tmp = tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let seg1 = shard_dir.join("001");
+    std::fs::create_dir_all(&seg1).unwrap();
+
+    let uid = "test_uid";
+    let materialization_created_at = 1500u64;
+    let high_water_ts = 1_765_000_000u64;
+
+    // Zone's created_at equals materialization (would have been dropped before), but its
+    // timestamp range touches the high-water boundary, so it must be preserved.
+    let zone_0 = Factory::zone_meta()
+        .with("zone_id", 0)
+        .with("uid", uid)
+        .with("segment_id", 1u64)
+        .with("start_row", 0)
+        .with("end_row", 1)
+        .with("timestamp_min", high_water_ts - 10)
+        .with("timestamp_max", high_water_ts)
+        .with("created_at", materialization_created_at)
+        .create();
+
+    ZoneMeta::save(uid, &[zone_0.clone()], &seg1).unwrap();
+
+    let base_dir = shard_dir.to_path_buf();
+    let pruner = MaterializationPruner::new(
+        &base_dir,
+        None,
+        materialization_created_at,
+        Some(high_water_ts),
+    );
+
+    let candidate_zones = vec![CandidateZone::new(0, "001".to_string())];
+
+    let result = pruner.apply(&candidate_zones, uid);
+    assert_eq!(
+        result.len(),
+        1,
+        "Zone touching the high-water timestamp should be retained"
+    );
+    assert_eq!(result[0].zone_id, 0);
+}
+
+#[test]
+fn high_water_timestamp_filters_strictly_older_zones() {
+    let tmp = tempdir().unwrap();
+    let shard_dir = tmp.path().join("shard-0");
+    let seg1 = shard_dir.join("001");
+    std::fs::create_dir_all(&seg1).unwrap();
+
+    let uid = "test_uid";
+    let materialization_created_at = 1500u64;
+    let high_water_ts = 2_000u64;
+
+    // Even though created_at is larger, the zone's timestamp_max is below the watermark
+    // so it should be filtered out.
+    let zone_0 = Factory::zone_meta()
+        .with("zone_id", 0)
+        .with("uid", uid)
+        .with("segment_id", 1u64)
+        .with("start_row", 0)
+        .with("end_row", 1)
+        .with("timestamp_min", 1000u64)
+        .with("timestamp_max", high_water_ts - 1)
+        .with("created_at", materialization_created_at + 10)
+        .create();
+
+    ZoneMeta::save(uid, &[zone_0.clone()], &seg1).unwrap();
+
+    let base_dir = shard_dir.to_path_buf();
+    let pruner = MaterializationPruner::new(
+        &base_dir,
+        None,
+        materialization_created_at,
+        Some(high_water_ts),
+    );
+
+    let candidate_zones = vec![CandidateZone::new(0, "001".to_string())];
+    let result = pruner.apply(&candidate_zones, uid);
+
+    assert!(
+        result.is_empty(),
+        "Zone entirely before the watermark should be filtered"
+    );
+}
+
+#[test]
 fn returns_empty_for_empty_input() {
     let tmp = tempdir().unwrap();
     let shard_dir = tmp.path().join("shard-0");
 
     let base_dir = shard_dir.to_path_buf();
-    let pruner = MaterializationPruner::new(&base_dir, None, 1000u64);
+    let pruner = MaterializationPruner::new(&base_dir, None, 1000u64, None);
 
     let result = pruner.apply(&[], "test_uid");
 
@@ -130,7 +218,7 @@ fn handles_missing_zone_metadata_file() {
     let uid = "test_uid";
 
     let base_dir = shard_dir.to_path_buf();
-    let pruner = MaterializationPruner::new(&base_dir, None, 1000u64);
+    let pruner = MaterializationPruner::new(&base_dir, None, 1000u64, None);
 
     let candidate_zones = vec![CandidateZone::new(0, "001".to_string())];
 
@@ -165,7 +253,7 @@ fn handles_invalid_zone_id() {
     ZoneMeta::save(uid, &[zone_0.clone()], &seg1).unwrap();
 
     let base_dir = shard_dir.to_path_buf();
-    let pruner = MaterializationPruner::new(&base_dir, None, 1000u64);
+    let pruner = MaterializationPruner::new(&base_dir, None, 1000u64, None);
 
     // Request zone 5 which doesn't exist in metadata
     let candidate_zones = vec![CandidateZone::new(5, "001".to_string())];
@@ -228,7 +316,7 @@ fn handles_multiple_segments() {
     ZoneMeta::save(uid, &[zone_0_seg2], &seg2).unwrap();
 
     let base_dir = shard_dir.to_path_buf();
-    let pruner = MaterializationPruner::new(&base_dir, None, materialization_created_at);
+    let pruner = MaterializationPruner::new(&base_dir, None, materialization_created_at, None);
 
     let candidate_zones = vec![
         CandidateZone::new(0, "001".to_string()),
@@ -319,7 +407,7 @@ fn handles_multiple_zones_per_segment() {
     ZoneMeta::save(uid, &zones, &seg1).unwrap();
 
     let base_dir = shard_dir.to_path_buf();
-    let pruner = MaterializationPruner::new(&base_dir, None, materialization_created_at);
+    let pruner = MaterializationPruner::new(&base_dir, None, materialization_created_at, None);
 
     let candidate_zones: Vec<CandidateZone> = (0..5)
         .map(|i| CandidateZone::new(i, "001".to_string()))
@@ -358,7 +446,7 @@ fn handles_cache_miss_gracefully() {
     // Create a cache that doesn't have this segment (simulating cache miss)
     let base_dir = shard_dir.to_path_buf();
     let cache = QueryCaches::new(base_dir.clone());
-    let pruner = MaterializationPruner::new(&base_dir, Some(&cache), 1000u64);
+    let pruner = MaterializationPruner::new(&base_dir, Some(&cache), 1000u64, None);
 
     let candidate_zones = vec![CandidateZone::new(0, "001".to_string())];
 
@@ -405,7 +493,7 @@ fn handles_very_large_created_at_values() {
     ZoneMeta::save(uid, &[zone_0.clone(), zone_1.clone()], &seg1).unwrap();
 
     let base_dir = shard_dir.to_path_buf();
-    let pruner = MaterializationPruner::new(&base_dir, None, materialization_created_at);
+    let pruner = MaterializationPruner::new(&base_dir, None, materialization_created_at, None);
 
     let candidate_zones = vec![
         CandidateZone::new(0, "001".to_string()),
@@ -455,7 +543,7 @@ fn handles_zero_created_at_timestamp() {
     ZoneMeta::save(uid, &[zone_0.clone(), zone_1.clone()], &seg1).unwrap();
 
     let base_dir = shard_dir.to_path_buf();
-    let pruner = MaterializationPruner::new(&base_dir, None, materialization_created_at);
+    let pruner = MaterializationPruner::new(&base_dir, None, materialization_created_at, None);
 
     let candidate_zones = vec![
         CandidateZone::new(0, "001".to_string()),
@@ -516,7 +604,7 @@ fn handles_all_zones_created_before_materialization() {
     ZoneMeta::save(uid, &zones, &seg1).unwrap();
 
     let base_dir = shard_dir.to_path_buf();
-    let pruner = MaterializationPruner::new(&base_dir, None, materialization_created_at);
+    let pruner = MaterializationPruner::new(&base_dir, None, materialization_created_at, None);
 
     let candidate_zones: Vec<CandidateZone> = (0..3)
         .map(|i| CandidateZone::new(i, "001".to_string()))
@@ -574,7 +662,7 @@ fn handles_all_zones_created_after_materialization() {
     ZoneMeta::save(uid, &zones, &seg1).unwrap();
 
     let base_dir = shard_dir.to_path_buf();
-    let pruner = MaterializationPruner::new(&base_dir, None, materialization_created_at);
+    let pruner = MaterializationPruner::new(&base_dir, None, materialization_created_at, None);
 
     let candidate_zones: Vec<CandidateZone> = (0..3)
         .map(|i| CandidateZone::new(i, "001".to_string()))

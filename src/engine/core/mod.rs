@@ -43,6 +43,7 @@ pub use read::query_execution::QueryExecution;
 pub use read::query_plan::QueryPlan;
 pub use read::range_query_handler::RangeQueryHandler;
 pub use read::segment_query_runner::SegmentQueryRunner;
+pub use segment::inflight::InflightSegments;
 pub use segment::lifecycle::SegmentLifecycleTracker;
 pub use segment::segment_id_loader::SegmentIdLoader;
 pub use segment::segment_index::{SegmentEntry, SegmentIndex};

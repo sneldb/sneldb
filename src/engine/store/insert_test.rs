@@ -176,6 +176,7 @@ async fn test_insert_and_maybe_flush_e2e() {
         &ctx.segment_ids,
         &ctx.memtable,
         &ctx.passive_buffers,
+        None,
     )
     .await
     .expect("scan should succeed");

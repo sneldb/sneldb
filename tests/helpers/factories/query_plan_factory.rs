@@ -1,5 +1,5 @@
 use crate::command::types::Command;
-use crate::engine::core::QueryPlan;
+use crate::engine::core::{InflightSegments, QueryPlan};
 use crate::engine::schema::registry::SchemaRegistry;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock as StdRwLock};
@@ -12,6 +12,7 @@ pub struct QueryPlanFactory {
     registry: Option<Arc<RwLock<SchemaRegistry>>>,
     segment_base_dir: PathBuf,
     segment_ids: Arc<StdRwLock<Vec<String>>>,
+    inflight_segments: Option<InflightSegments>,
 }
 
 impl QueryPlanFactory {
@@ -21,6 +22,7 @@ impl QueryPlanFactory {
             registry: None,
             segment_base_dir: PathBuf::from("/tmp/SNELDB_query_test"),
             segment_ids: Arc::new(StdRwLock::new(vec!["seg1".into()])),
+            inflight_segments: None,
         }
     }
 
@@ -44,6 +46,11 @@ impl QueryPlanFactory {
         self
     }
 
+    pub fn with_inflight_segments(mut self, inflight: InflightSegments) -> Self {
+        self.inflight_segments = Some(inflight);
+        self
+    }
+
     pub async fn create(self) -> QueryPlan {
         let command = self.command.expect("QueryPlanFactory: command is required");
         let registry = self
@@ -55,6 +62,7 @@ impl QueryPlanFactory {
             &registry,
             &self.segment_base_dir,
             &self.segment_ids,
+            self.inflight_segments.clone(),
         )
         .await
         .expect("QueryPlan::new should return Some(QueryPlan)")

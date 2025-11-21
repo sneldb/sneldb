@@ -1,6 +1,6 @@
 use crate::engine::core::segment::segment_id::SegmentId;
 use crate::engine::core::{
-    Flusher, MemTable, SegmentLifecycleTracker, SegmentVerifier, WalCleaner,
+    Flusher, InflightSegments, MemTable, SegmentLifecycleTracker, SegmentVerifier, WalCleaner,
 };
 use crate::engine::errors::StoreError;
 use crate::engine::schema::registry::SchemaRegistry;
@@ -21,6 +21,7 @@ pub struct FlushWorker {
     segment_ids: Arc<RwLock<Vec<String>>>,
     segment_lifecycle: Arc<SegmentLifecycleTracker>,
     flush_progress: Arc<FlushProgress>,
+    inflight_segments: InflightSegments,
 }
 
 impl FlushWorker {
@@ -32,6 +33,7 @@ impl FlushWorker {
         segment_ids: Arc<RwLock<Vec<String>>>,
         segment_lifecycle: Arc<SegmentLifecycleTracker>,
         flush_progress: Arc<FlushProgress>,
+        inflight_segments: InflightSegments,
     ) -> Self {
         Self {
             shard_id,
@@ -40,6 +42,7 @@ impl FlushWorker {
             segment_ids,
             segment_lifecycle,
             flush_progress,
+            inflight_segments,
         }
     }
 
@@ -58,6 +61,7 @@ impl FlushWorker {
         while let Some((segment_id, memtable, registry, passive_memtable, flush_id, completion)) =
             rx.recv().await
         {
+            let inflight_guard = self.inflight_segments.guard(format!("{:05}", segment_id));
             let segment_dir = SegmentId::from(segment_id as u32).join_dir(&self.base_dir);
             let shard_id = self.shard_id;
             let flush_coord_lock = Arc::clone(&self.flush_coordination_lock);
@@ -66,6 +70,7 @@ impl FlushWorker {
             let base_dir = self.base_dir.clone();
 
             let flush_task = tokio::spawn(async move {
+                let _inflight_guard = inflight_guard;
                 let was_empty = memtable.is_empty();
 
                 info!(

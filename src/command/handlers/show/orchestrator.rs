@@ -138,6 +138,14 @@ impl<'a, G: CatalogGateway> ShowExecutionPipeline<'a, G> {
             "materialization_created_at".to_string(),
             entry.created_at.to_string(),
         );
+        metadata.insert(
+            "materialization_high_water_ts".to_string(),
+            initial_high_water.timestamp.to_string(),
+        );
+        metadata.insert(
+            "materialization_high_water_event_id".to_string(),
+            initial_high_water.event_id.to_string(),
+        );
 
         let delta_command = self.build_delta_command(&entry)?;
 

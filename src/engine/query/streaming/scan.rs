@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::command::types::Command;
 use crate::engine::core::memory::passive_buffer_set::PassiveBufferSet;
 use crate::engine::core::read::flow::shard_pipeline::ShardFlowHandle;
-use crate::engine::core::{MemTable, QueryPlan};
+use crate::engine::core::{InflightSegments, MemTable, QueryPlan};
 use crate::engine::errors::QueryExecutionError;
 use crate::engine::schema::registry::SchemaRegistry;
 use tokio::sync::RwLock;
@@ -31,10 +31,17 @@ impl<'a> StreamingScan<'a> {
         segment_ids: &Arc<std::sync::RwLock<Vec<String>>>,
         memtable: &'a MemTable,
         passive_buffers: &Arc<PassiveBufferSet>,
+        inflight_segments: Option<InflightSegments>,
     ) -> Result<Self, QueryExecutionError> {
-        let mut plan = QueryPlan::new(command.clone(), registry, segment_base_dir, segment_ids)
-            .await
-            .ok_or(QueryExecutionError::Aborted)?;
+        let mut plan = QueryPlan::new(
+            command.clone(),
+            registry,
+            segment_base_dir,
+            segment_ids,
+            inflight_segments,
+        )
+        .await
+        .ok_or(QueryExecutionError::Aborted)?;
 
         // Apply metadata if provided
         if let Some(meta) = metadata {

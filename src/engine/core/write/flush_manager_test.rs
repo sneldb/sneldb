@@ -1,4 +1,6 @@
-use crate::engine::core::{FlushManager, SegmentIndex, SegmentLifecycleTracker, ZoneMeta};
+use crate::engine::core::{
+    FlushManager, InflightSegments, SegmentIndex, SegmentLifecycleTracker, ZoneMeta,
+};
 use crate::engine::shard::flush_progress::FlushProgress;
 use crate::test_helpers::factories::{EventFactory, MemTableFactory, SchemaRegistryFactory};
 use std::sync::{Arc, RwLock};
@@ -38,6 +40,7 @@ async fn test_flush_manager_queues_and_flushes_memtable() {
     let flush_lock = Arc::new(tokio::sync::Mutex::new(()));
     let lifecycle = Arc::new(SegmentLifecycleTracker::new());
     let flush_progress = Arc::new(FlushProgress::new());
+    let inflight_segments = InflightSegments::new();
     let manager = FlushManager::new(
         shard_id,
         base_dir.clone(),
@@ -45,6 +48,7 @@ async fn test_flush_manager_queues_and_flushes_memtable() {
         flush_lock,
         lifecycle,
         Arc::clone(&flush_progress),
+        inflight_segments,
     );
 
     // Act: queue for flush

@@ -1,4 +1,6 @@
-use crate::engine::core::{FlushWorker, SegmentIndex, SegmentLifecycleTracker, ZoneMeta};
+use crate::engine::core::{
+    FlushWorker, InflightSegments, SegmentIndex, SegmentLifecycleTracker, ZoneMeta,
+};
 use crate::engine::shard::flush_progress::FlushProgress;
 use crate::test_helpers::factories::{EventFactory, MemTableFactory, SchemaRegistryFactory};
 use std::sync::{Arc, RwLock};
@@ -39,6 +41,7 @@ async fn test_flush_worker_processes_memtable() {
     let segment_ids = Arc::new(RwLock::new(vec![]));
     let lifecycle = Arc::new(SegmentLifecycleTracker::new());
     let flush_progress = Arc::new(FlushProgress::new());
+    let inflight = InflightSegments::new();
 
     // Spawn FlushWorker
     let flush_lock = std::sync::Arc::new(tokio::sync::Mutex::new(()));
@@ -49,6 +52,7 @@ async fn test_flush_worker_processes_memtable() {
         Arc::clone(&segment_ids),
         Arc::clone(&lifecycle),
         Arc::clone(&flush_progress),
+        inflight.clone(),
     );
     tokio::spawn(async move {
         worker.run(rx).await.expect("Worker run failed");
@@ -167,6 +171,7 @@ async fn test_flush_worker_skips_cleanup_for_empty_memtable() {
     let flush_lock = std::sync::Arc::new(tokio::sync::Mutex::new(()));
     let lifecycle = Arc::new(SegmentLifecycleTracker::new());
     let flush_progress = Arc::new(FlushProgress::new());
+    let inflight = InflightSegments::new();
     let worker = FlushWorker::new(
         1,
         base_path.clone(),
@@ -174,6 +179,7 @@ async fn test_flush_worker_skips_cleanup_for_empty_memtable() {
         Arc::clone(&segment_ids),
         Arc::clone(&lifecycle),
         Arc::clone(&flush_progress),
+        inflight,
     );
     tokio::spawn(async move {
         worker.run(rx).await.expect("Worker run failed");
