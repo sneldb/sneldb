@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sneldb-client"
+version = "0.1.0"
+description = "A clean Python client for interacting with the SnelDB event database"
+readme = "README.md"
+license = { file = "../../LICENSE.md" }
+authors = [{ name = "SnelDB" }]
+requires-python = ">=3.9"
+dependencies = [
+  "httpx>=0.26.0",
+  "websocket-client>=1.7.0"
+]
+keywords = ["sneldb", "events", "database", "client"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "License :: Other/Proprietary License",
+  "Operating System :: OS Independent",
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Topic :: Database"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.4.0"
+]
+arrow = [
+  "pyarrow>=17.0.0"
+]
+
+[project.urls]
+Homepage = "https://sneldb.com"
+Repository = "https://github.com/sneldb/sneldb"
