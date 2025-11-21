@@ -6,4 +6,4 @@ title = "SnelDB: The Complete Guide"
 
 [output.html]
 additional-js = ["theme/book.js", "theme/sneldb.js"]
-additional-css = ["theme/sneldb.css"]
+additional-css = ["theme/sneldb.css", "theme/codedocs.css"]

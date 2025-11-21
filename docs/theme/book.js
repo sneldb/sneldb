@@ -1,23 +1,32 @@
 // theme/book.js
 document.addEventListener('DOMContentLoaded', function () {
-    var hl = window.hljs;
-    if (!hl) return;
-
-    // Optional: quick debug
-    try { console.log('hljs version:', hl.versionString || '(unknown)'); } catch(e) {}
-
+  var hl = window.hljs;
+  if (hl) {
     document.querySelectorAll('pre code.language-sneldb').forEach(function (block) {
       if (typeof hl.highlightElement === 'function') {
-        // hljs >= 11
         hl.highlightElement(block);
       } else if (typeof hl.highlightBlock === 'function') {
-        // hljs <= 10
         hl.highlightBlock(block);
       } else if (typeof hl.highlight === 'function') {
-        // very old fallback
         var res = hl.highlight(block.textContent, { language: 'sneldb', ignoreIllegals: true });
         block.innerHTML = res.value;
         block.classList.add('hljs');
       }
     });
-  });
+  }
+
+  var searchWrapper = document.getElementById('search-wrapper');
+  var sidebar = document.querySelector('nav.sidebar');
+  if (searchWrapper && sidebar) {
+    searchWrapper.classList.remove('hidden');
+    var scrollbox = sidebar.querySelector('.sidebar-scrollbox');
+    if (scrollbox && searchWrapper.parentElement !== sidebar) {
+      sidebar.insertBefore(searchWrapper, scrollbox);
+    }
+
+    var searchInput = searchWrapper.querySelector('#searchbar');
+    if (searchInput) {
+      searchInput.setAttribute('placeholder', 'Search documentation...');
+    }
+  }
+});

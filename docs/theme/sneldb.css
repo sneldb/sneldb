@@ -49,7 +49,7 @@ code.hljs .hljs-string {
 .menu-title::before {
   content: "";
   display: inline-block;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   background: url("logo.svg") no-repeat center / contain;
 }

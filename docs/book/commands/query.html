@@ -12,24 +12,24 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="../favicon.svg">
-        <link rel="shortcut icon" href="../favicon.png">
-        <link rel="stylesheet" href="../css/variables.css">
-        <link rel="stylesheet" href="../css/general.css">
-        <link rel="stylesheet" href="../css/chrome.css">
-        <link rel="stylesheet" href="../css/print.css" media="print">
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
-        <link rel="stylesheet" href="../fonts/fonts.css">
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
-        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
-        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
 
         <!-- Custom theme stylesheets -->
-        <link rel="stylesheet" href="../theme/sneldb.css">
+        <link rel="stylesheet" href="../theme/sneldb-daee71b0.css">
+        <link rel="stylesheet" href="../theme/codedocs-63cc7b92.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -37,10 +37,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex.js";
+            window.path_to_searchindex_js = "../searchindex-435af5f2.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc.js"></script>
+        <script src="../toc-fcaacb9e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -54,7 +54,7 @@
             </div>
         </div>
     </div>
-    <div id="body-container">
+    <div id="mdbook-body-container">
         <!-- Work around some values being stored in localStorage wrapped in quotes -->
         <script>
             try {
@@ -83,12 +83,12 @@
             html.classList.add("js");
         </script>
 
-        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
 
         <!-- Hide / unhide sidebar before it is displayed -->
         <script>
             let sidebar = null;
-            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
             if (document.body.clientWidth >= 1080) {
                 try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
                 sidebar = sidebar || 'visible';
@@ -103,39 +103,39 @@
             }
         </script>
 
-        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
                 <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
-            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
             </div>
         </nav>
 
-        <div id="page-wrapper" class="page-wrapper">
+        <div id="mdbook-page-wrapper" class="page-wrapper">
 
             <div class="page">
-                <div id="menu-bar-hover-placeholder"></div>
-                <div id="menu-bar" class="menu-bar sticky">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
                     <div class="left-buttons">
-                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
-                            <i class="fa fa-bars"></i>
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
                         </label>
-                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
-                            <i class="fa fa-paint-brush"></i>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
                         </button>
-                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
-                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
                         </ul>
-                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
-                            <i class="fa fa-search"></i>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
                         </button>
                     </div>
 
@@ -143,45 +143,58 @@
 
                     <div class="right-buttons">
                         <a href="../print.html" title="Print this book" aria-label="Print this book">
-                            <i id="print-button" class="fa fa-print"></i>
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
                         </a>
 
                     </div>
                 </div>
 
-                <div id="search-wrapper" class="hidden">
-                    <form id="searchbar-outer" class="searchbar-outer">
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
                         <div class="search-wrapper">
-                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
                             <div class="spinner-wrapper">
-                                <i class="fa fa-spinner fa-spin"></i>
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
                             </div>
                         </div>
                     </form>
-                    <div id="searchresults-outer" class="searchresults-outer hidden">
-                        <div id="searchresults-header" class="searchresults-header"></div>
-                        <ul id="searchresults">
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
                         </ul>
                     </div>
                 </div>
 
                 <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
                 <script>
-                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
-                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
-                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
                         link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
                     });
                 </script>
 
-                <div id="content" class="content">
+                <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="query"><a class="header" href="#query">QUERY</a></h1>
 <h2 id="purpose"><a class="header" href="#purpose">Purpose</a></h2>
 <p>Filter events by type, optionally by context, time, predicate, and limit.</p>
 <h2 id="form"><a class="header" href="#form">Form</a></h2>
-<pre><code class="language-sneldb">QUERY &lt;event_type:WORD&gt; [ FOR &lt;context_id:WORD or STRING&gt; ] [ SINCE timestamp:STRING ] [ WHERE  ] [ LIMIT  ]
+<pre><code class="language-sneldb">QUERY &lt;event_type:WORD&gt;
+  [ FOR &lt;context_id:WORD or STRING&gt; ]
+  [ SINCE &lt;timestamp:STRING_OR_NUMBER&gt; ]
+  [ USING &lt;time_field:WORD&gt; ]
+  [ RETURN [ &lt;field:WORD or STRING&gt;, ... ] ]
+  [ WHERE &lt;expr&gt; ]
+  [ &lt;aggregations&gt; ]
+  [ PER &lt;time_granularity: HOUR|DAY|WEEK|MONTH&gt; [ USING &lt;time_field:WORD&gt; ] ]
+  [ BY &lt;field&gt; [, &lt;field&gt; ...] [ USING &lt;time_field:WORD&gt; ] ]
+  [ LIMIT &lt;n:NUMBER&gt; ]
 </code></pre>
+<h2 id="constraints"><a class="header" href="#constraints">Constraints</a></h2>
+<ul>
+<li>Requires authentication and read permission for the event type (or appropriate role: <code>admin</code>, <code>read-only</code>/<code>viewer</code>, or <code>editor</code>).</li>
+</ul>
 <h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
 <pre><code class="language-sneldb">QUERY order_created WHERE status="confirmed"
 </code></pre>
@@ -193,20 +206,134 @@
 </code></pre>
 <pre><code class="language-sneldb">QUERY order_created WHERE country="NL" OR country="FR"
 </code></pre>
-<pre><code class="language-sneldb">QUERY login FOR user-1 WHERE device="android"
+<pre><code class="language-sneldb">QUERY order_created WHERE id IN (1, 2, 3)
+</code></pre>
+<pre><code class="language-sneldb">QUERY order_created WHERE (status = "active" OR status = "pending") AND priority &gt; 5
+</code></pre>
+<pre><code class="language-sneldb">QUERY order_created WHERE NOT status = "cancelled"
 </code></pre>
 <pre><code class="language-sneldb">QUERY payment SINCE "2025-08-01T00:00:00Z" WHERE amount &gt;= 500 LIMIT 100
 </code></pre>
+<pre><code class="language-sneldb">QUERY orders SINCE 1735689600000 USING created_at WHERE amount &gt;= 10
+# SINCE accepts ISO-8601 strings or numeric epoch in s/ms/µs/ns; all normalized to seconds
+</code></pre>
+<pre><code class="language-sneldb">QUERY product RETURN [name, "price"] WHERE price &gt; 10
+</code></pre>
+<h3 id="aggregations"><a class="header" href="#aggregations">Aggregations</a></h3>
+<pre><code class="language-sneldb"># Count all orders
+QUERY orders COUNT
+
+# Count unique contexts (users) per country
+QUERY orders COUNT UNIQUE context_id BY country
+
+# Sum and average amount by day using created_at field
+QUERY orders TOTAL amount, AVG amount PER DAY USING created_at
+
+# Multiple metrics with grouping
+QUERY orders COUNT, TOTAL amount, AVG amount BY country
+
+# Min/Max over comparable fields
+QUERY orders MIN amount, MAX amount BY country
+</code></pre>
 <h2 id="notes"><a class="header" href="#notes">Notes</a></h2>
 <ul>
-<li><code>SINCE</code> is a STRING timestamp.</li>
+<li><code>SINCE</code> accepts ISO-8601 strings (e.g., <code>2025-01-01T00:00:00Z</code>) or numeric epoch in seconds, milliseconds, microseconds, or nanoseconds. Inputs are normalized to epoch seconds.</li>
+<li><code>USING &lt;time_field&gt;</code> makes <code>SINCE</code> and temporal pruning use a payload datetime field (e.g., <code>created_at</code>). Defaults to the core <code>timestamp</code> field.</li>
+<li><code>RETURN [ ... ]</code> limits the payload fields included in results. Omit to return all payload fields. An empty list <code>RETURN []</code> also returns all payload fields.</li>
+<li>Field names in <code>RETURN</code> can be bare words or quoted strings.</li>
 <li>Works across in-memory and on-disk segments.</li>
 <li>If nothing matches, returns: No matching events found.</li>
+<li><code>IN</code> operator: <code>WHERE id IN (1, 2, 3)</code> is equivalent to <code>WHERE id = 1 OR id = 2 OR id = 3</code>. Each value uses zone indexes for efficient pruning.</li>
+<li>Parentheses: Complex WHERE clauses with parentheses are supported. Example: <code>WHERE (status = "active" OR status = "pending") AND priority &gt; 5</code>.</li>
+<li><code>NOT</code> operator: <code>WHERE NOT status = "cancelled"</code> returns all events except those matching the condition. Supports De Morgan’s laws for complex expressions like <code>NOT (A AND B)</code> and <code>NOT (A OR B)</code>.</li>
+</ul>
+<h3 id="aggregation-notes"><a class="header" href="#aggregation-notes">Aggregation notes</a></h3>
+<ul>
+<li>Aggregations are requested via one or more of: <code>COUNT</code>, <code>COUNT UNIQUE &lt;field&gt;</code>, <code>COUNT &lt;field&gt;</code>, <code>TOTAL &lt;field&gt;</code>, <code>AVG &lt;field&gt;</code>, <code>MIN &lt;field&gt;</code>, <code>MAX &lt;field&gt;</code>.</li>
+<li>Optional <code>BY &lt;fields...&gt;</code> groups results by one or more payload fields.</li>
+<li>Optional <code>PER &lt;HOUR|DAY|WEEK|MONTH&gt;</code> buckets results by the chosen time field. You can select the time field for bucketing with <code>USING &lt;time_field&gt;</code>; default is <code>timestamp</code>.</li>
+<li><code>LIMIT</code> on aggregation caps the number of distinct groups produced (it does not limit events scanned within those groups).</li>
+<li>Aggregations return a tabular result with columns: optional <code>bucket</code>, grouped fields, followed by metric columns like <code>count</code>, <code>total_&lt;field&gt;</code>, <code>avg_&lt;field&gt;</code>, <code>min_&lt;field&gt;</code>, <code>max_&lt;field&gt;</code>.</li>
+</ul>
+<h2 id="sequence-queries"><a class="header" href="#sequence-queries">Sequence Queries</a></h2>
+<p>SnelDB supports sequence matching queries that find events that occur in a specific order for the same entity. This is perfect for funnel analysis, conversion tracking, and understanding event dependencies.</p>
+<h3 id="basic-form"><a class="header" href="#basic-form">Basic Form</a></h3>
+<pre><code class="language-sneldb">QUERY &lt;event_type_a&gt; FOLLOWED BY &lt;event_type_b&gt; LINKED BY &lt;link_field&gt;
+QUERY &lt;event_type_a&gt; PRECEDED BY &lt;event_type_b&gt; LINKED BY &lt;link_field&gt;
+</code></pre>
+<h3 id="concepts"><a class="header" href="#concepts">Concepts</a></h3>
+<ul>
+<li><strong>FOLLOWED BY</strong>: Finds events where <code>event_type_b</code> occurs after <code>event_type_a</code> in time</li>
+<li><strong>PRECEDED BY</strong>: Finds events where <code>event_type_b</code> occurred before <code>event_type_a</code> in time</li>
+<li><strong>LINKED BY</strong>: Defines the field that connects events together (e.g., <code>user_id</code>, <code>order_id</code>, <code>session_id</code>)</li>
+</ul>
+<h3 id="examples-1"><a class="header" href="#examples-1">Examples</a></h3>
+<p><strong>Funnel analysis</strong>: Find users who viewed the checkout page and then created an order:</p>
+<pre><code class="language-sneldb">QUERY page_view FOLLOWED BY order_created LINKED BY user_id
+</code></pre>
+<p><strong>With WHERE clause</strong>: Only count checkout page views:</p>
+<pre><code class="language-sneldb">QUERY page_view FOLLOWED BY order_created LINKED BY user_id WHERE page_view.page="/checkout"
+</code></pre>
+<p><strong>Event-specific filters</strong>: Filter both events in the sequence:</p>
+<pre><code class="language-sneldb">QUERY page_view FOLLOWED BY order_created LINKED BY user_id
+WHERE page_view.page="/checkout" AND order_created.status="done"
+</code></pre>
+<p><strong>PRECEDED BY</strong>: Find orders that were preceded by a payment failure:</p>
+<pre><code class="language-sneldb">QUERY order_created PRECEDED BY payment_failed LINKED BY user_id WHERE order_created.status="done"
+</code></pre>
+<p><strong>Avoiding ambiguity</strong>: If both event types have the same field name, use event-prefixed fields:</p>
+<pre><code class="language-sneldb"># This will return 400 Bad Request if both order_created and payment_failed have a "status" field
+QUERY order_created PRECEDED BY payment_failed LINKED BY user_id WHERE status="done"
+
+# Use event-prefixed fields to disambiguate
+QUERY order_created PRECEDED BY payment_failed LINKED BY user_id WHERE order_created.status="done"
+</code></pre>
+<p><strong>Different link fields</strong>: Use order_id instead of user_id:</p>
+<pre><code class="language-sneldb">QUERY order_created FOLLOWED BY order_cancelled LINKED BY order_id
+</code></pre>
+<h3 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h3>
+<ol>
+<li><strong>Grouping</strong>: Events are grouped by the <code>link_field</code> value (e.g., all events for <code>user_id="u1"</code> are grouped together)</li>
+<li><strong>Sorting</strong>: Within each group, events are sorted by timestamp</li>
+<li><strong>Matching</strong>: The two-pointer algorithm finds matching sequences efficiently</li>
+<li><strong>Filtering</strong>: WHERE clauses are applied before matching to reduce the search space</li>
+</ol>
+<h3 id="where-clause-behavior"><a class="header" href="#where-clause-behavior">WHERE Clause Behavior</a></h3>
+<ul>
+<li><strong>Event-prefixed fields</strong>: Use <code>event_type.field</code> to filter specific events (e.g., <code>page_view.page="/checkout"</code>)</li>
+<li><strong>Common fields</strong>: Fields without a prefix apply to all events (e.g., <code>timestamp &gt; 1000</code>)</li>
+<li><strong>Combined</strong>: You can mix event-specific and common filters with <code>AND</code>/<code>OR</code></li>
+<li><strong>Ambiguity detection</strong>: If a common field (without event prefix) exists in multiple event types within the sequence, the query will return a <code>400 Bad Request</code> error. Use event-prefixed fields to disambiguate (e.g., <code>order_created.status="done"</code> instead of <code>status="done"</code> when both <code>order_created</code> and <code>payment_failed</code> have a <code>status</code> field)</li>
+</ul>
+<h3 id="performance"><a class="header" href="#performance">Performance</a></h3>
+<p>Sequence queries are optimized for performance:</p>
+<ul>
+<li><strong>Columnar processing</strong>: Events are processed in columnar format without materialization</li>
+<li><strong>Early filtering</strong>: WHERE clauses are applied before grouping and matching</li>
+<li><strong>Parallel collection</strong>: Zones for different event types are collected in parallel</li>
+<li><strong>Index usage</strong>: Existing indexes on <code>link_field</code> and <code>event_type</code> are leveraged</li>
+</ul>
+<h3 id="notes-1"><a class="header" href="#notes-1">Notes</a></h3>
+<ul>
+<li>Both events in the sequence must have the same value for the <code>link_field</code></li>
+<li>For <code>FOLLOWED BY</code>, <code>event_type_b</code> must occur at the same timestamp or later than <code>event_type_a</code></li>
+<li>For <code>PRECEDED BY</code>, <code>event_type_b</code> must occur strictly before <code>event_type_a</code> (same timestamp does not match)</li>
+<li>The query returns both events from each matched sequence</li>
+<li><code>LIMIT</code> applies to the number of matched sequences, not individual events</li>
+</ul>
+<h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
+<ul>
+<li><code>Authentication required</code>: No user ID provided or authentication failed.</li>
+<li><code>Read permission denied for event type '&lt;event_type&gt;'</code>: User lacks read permission for the event type.</li>
 </ul>
 <h2 id="gotchas"><a class="header" href="#gotchas">Gotchas</a></h2>
 <ul>
 <li>Field names used in <code>WHERE</code> must exist in the schema for that event type.</li>
 <li>Strings must be double-quoted when you need explicit string literals.</li>
+<li>Unknown fields in <code>RETURN</code> are ignored; only schema-defined payload fields (plus core fields <code>context_id</code>, <code>event_type</code>, <code>timestamp</code>) are returned.</li>
+<li>Temporal literals in <code>WHERE</code> (e.g., `created_at = “2025-01-01T00:00:01Z”) are parsed and normalized to epoch seconds. Fractional seconds are truncated; ranges using only sub-second differences may collapse to empty after normalization.</li>
+<li>In sequence queries, the <code>link_field</code> must exist in both event types’ schemas.</li>
+<li>In sequence queries, if a WHERE clause uses a common field (without event prefix) that exists in multiple event types, you must use event-prefixed fields to disambiguate. For example, if both <code>order_created</code> and <code>payment_failed</code> have a <code>status</code> field, use <code>order_created.status="done"</code> instead of <code>status="done"</code> to avoid ambiguity errors.</li>
 </ul>
 
                     </main>
@@ -214,11 +341,11 @@
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
                             <a rel="prev" href="../commands/store.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
-                                <i class="fa fa-angle-left"></i>
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
                             <a rel="next prefetch" href="../commands/replay.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                                <i class="fa fa-angle-right"></i>
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
                         <div style="clear: both"></div>
@@ -228,15 +355,21 @@
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
                     <a rel="prev" href="../commands/store.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
-                        <i class="fa fa-angle-left"></i>
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
                     <a rel="next prefetch" href="../commands/replay.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                        <i class="fa fa-angle-right"></i>
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
 
         </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
         <!-- Livereload script (if served using the cli tool) -->
         <script>
@@ -256,23 +389,22 @@
         </script>
 
 
-
         <script>
             window.playground_copyable = true;
         </script>
 
 
-        <script src="../elasticlunr.min.js"></script>
-        <script src="../mark.min.js"></script>
-        <script src="../searcher.js"></script>
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
 
-        <script src="../clipboard.min.js"></script>
-        <script src="../highlight.js"></script>
-        <script src="../book.js"></script>
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-de5ebf4e.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/book.js"></script>
-        <script src="../theme/sneldb.js"></script>
+        <script src="../theme/book-de5ebf4e.js"></script>
+        <script src="../theme/sneldb-6024da72.js"></script>
 
 
 

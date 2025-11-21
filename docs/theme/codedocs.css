@@ -1,0 +1,352 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+:root,
+html.light,
+html.rust,
+html.coal,
+html.navy,
+html.ayu {
+  --accent: #a855f7;
+  --accent-strong: #bf91ff;
+  --bg: #0f1117;
+  --bg-elevated: #111525;
+  --bg-sunken: #0b0d13;
+  --border: #1f2336;
+  --border-strong: #2a3050;
+  --fg: #e7ebf3;
+  --fg-muted: #b4b9c8;
+  --fg-subtle: #9ba1b3;
+  --code-bg: #111524;
+  --shadow-strong: 0 18px 40px rgba(0, 0, 0, 0.45);
+  --sidebar-width: 320px;
+  --sidebar-bg: #0b0d13;
+  --sidebar-fg: #e7ebf3;
+  --searchbar-bg: #12162a;
+  --searchbar-fg: #e7ebf3;
+  --searchbar-border-color: #1f2336;
+  --searchbar-shadow-color: #a855f7;
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Inter", "Segoe UI", "SF Pro Display", -apple-system, system-ui, sans-serif;
+}
+
+body {
+  line-height: 1.65;
+}
+
+a {
+  color: var(--accent-strong);
+}
+
+a:hover {
+  color: #d4b4ff;
+}
+
+#page-wrapper {
+  background: var(--bg);
+  min-height: 100vh;
+}
+
+#menu-bar {
+  background: #0c0f18;
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.36);
+  height: 68px;
+  padding: 0 20px;
+}
+
+#menu-bar .left-buttons,
+#menu-bar .right-buttons {
+  gap: 10px;
+}
+
+#menu-bar .icon-button,
+#menu-bar .right-buttons a {
+  background: #141828;
+  color: var(--fg-muted);
+  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  transition: all 120ms ease;
+}
+
+#menu-bar .icon-button:hover,
+#menu-bar .right-buttons a:hover {
+  background: #1b2034;
+  color: var(--fg);
+  border-color: var(--border-strong);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+#menu-bar #search-toggle {
+  display: none !important;
+}
+
+#menu-bar .menu-title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  letter-spacing: 0.01em;
+}
+
+nav.sidebar {
+  width: var(--sidebar-width);
+  background: var(--bg-sunken);
+  border-right: 1px solid var(--border);
+  box-shadow: 8px 0 40px rgba(0, 0, 0, 0.32);
+}
+
+nav.sidebar .sidebar-scrollbox {
+  padding: 10px 12px 40px;
+}
+
+nav.sidebar .chapter,
+nav.sidebar .section {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+nav.sidebar .chapter-item {
+  margin: 4px 0;
+}
+
+nav.sidebar .chapter-item strong {
+  display: none;
+}
+
+nav.sidebar .chapter-item > a {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  color: var(--fg-muted);
+  text-decoration: none;
+  font-weight: 600;
+  border: 1px solid transparent;
+  transition: all 140ms ease;
+}
+
+nav.sidebar .chapter-item > a:hover {
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.02);
+  border-color: var(--border);
+}
+
+nav.sidebar .chapter-item > a.active {
+  color: #f8f7ff;
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 14px 28px rgba(168, 85, 247, 0.35);
+}
+
+nav.sidebar .chapter-item > a::before {
+  font-family: "FontAwesome";
+  font-size: 1.6rem;
+  opacity: 0.75;
+  width: 18px;
+  text-align: center;
+}
+
+nav.sidebar .chapter-item > a.active::before {
+  opacity: 1;
+}
+
+nav.sidebar a[href$="quickstart.html"]::before {
+  content: "\f0e7";
+}
+
+nav.sidebar a[href$="introduction.html"]::before {
+  content: "\f129";
+}
+
+nav.sidebar a[href$="commands.html"]::before {
+  content: "\f121";
+}
+
+nav.sidebar a[href$="design.html"]::before {
+  content: "\f1b3";
+}
+
+nav.sidebar ol.section > li.chapter-item > a::before {
+  content: "\f105";
+  font-size: 1.4rem;
+  opacity: 0.65;
+}
+
+nav.sidebar ol.section {
+  margin-left: 10px;
+  padding-left: 14px;
+  border-left: 1px solid var(--border);
+}
+
+#search-wrapper {
+  margin: 16px 14px 10px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  position: relative;
+}
+
+#searchbar-outer {
+  padding: 0;
+  max-width: none;
+}
+
+#search-wrapper .search-wrapper {
+  background: #12162a;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.35);
+}
+
+#searchbar {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 0;
+  margin: 0;
+  color: var(--fg);
+  font-size: 1.5rem;
+}
+
+#searchbar::placeholder {
+  color: var(--fg-subtle);
+}
+
+#searchbar:focus,
+#searchbar.active {
+  box-shadow: none;
+}
+
+#search-wrapper .spinner-wrapper {
+  color: var(--accent);
+  background: transparent;
+  right: 12px;
+}
+
+#searchresults-outer {
+  background: #0f1324;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-strong);
+  max-width: none;
+  width: 100%;
+  margin: 8px 0 0;
+  padding: 0 0 10px;
+}
+
+#searchresults {
+  padding: 10px 16px 4px;
+}
+
+#searchresults li {
+  margin: 8px 0;
+}
+
+#searchresults span.teaser {
+  color: var(--fg-subtle);
+}
+
+#content {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px 46px 120px;
+}
+
+main h1 {
+  font-size: 3.4rem;
+  margin: 12px 0 18px;
+  color: #f9fbff;
+  letter-spacing: -0.01em;
+}
+
+main h2 {
+  font-size: 2.4rem;
+  color: #f4f7ff;
+  margin-top: 28px;
+}
+
+main p {
+  color: #c5cad8;
+  font-size: 1.7rem;
+}
+
+blockquote {
+  background: #1a1631;
+  border: 1px solid #2f2655;
+  border-radius: 14px;
+  padding: 16px 18px 16px 48px;
+  color: #d6dbeb;
+  position: relative;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
+}
+
+blockquote::before {
+  content: "\f05a";
+  font-family: "FontAwesome";
+  color: var(--accent);
+  position: absolute;
+  left: 18px;
+  top: 16px;
+  font-size: 1.6rem;
+}
+
+pre,
+code {
+  background: var(--code-bg);
+  color: #e5e9f3;
+}
+
+pre {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-strong);
+}
+
+code {
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+
+.nav-wide-wrapper .nav-chapters,
+.mobile-nav-chapters {
+  color: var(--fg-muted);
+  border-color: var(--border);
+}
+
+.nav-wide-wrapper .nav-chapters:hover,
+.mobile-nav-chapters:hover {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+
+@media (max-width: 1080px) {
+  nav.sidebar {
+    width: 280px;
+  }
+
+  #menu-bar {
+    padding: 0 12px;
+  }
+
+  #content {
+    padding: 24px;
+  }
+}
