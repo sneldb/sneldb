@@ -99,7 +99,9 @@ async fn xor_eq_uses_zxf_to_narrow_zones() {
     let qplan = QueryPlanFactory::new()
         .with_registry(Arc::clone(&registry))
         .with_command(command)
-        .build()
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["001".into(), "002".into()])
+        .create()
         .await;
 
     let ctx = SelectionContext {
@@ -560,7 +562,9 @@ async fn enum_pruner_respects_eq_and_neq() {
     let q = QueryPlanFactory::new()
         .with_registry(Arc::clone(&registry))
         .with_command(cmd)
-        .build()
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["001".into()])
+        .create()
         .await;
     let ctx = SelectionContext {
         plan: &f_eq,
@@ -647,8 +651,15 @@ async fn returns_all_zones_when_value_missing() {
     let q = QueryPlanFactory::new()
         .with_registry(Arc::clone(&registry))
         .with_command(cmd)
-        .build()
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["001".into()])
+        .create()
         .await;
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+    assert!(
+        q.segment_maybe_contains_uid("001", &uid),
+        "test setup should register zones for uid"
+    );
     let ctx = SelectionContext {
         plan: &filter,
         query_plan: &q,
@@ -658,7 +669,7 @@ async fn returns_all_zones_when_value_missing() {
     let sel = ZoneSelectorBuilder::new(ctx).build();
     let zones = sel.select_for_segment("001");
 
-    let all = CandidateZone::create_all_zones_for_segment("001");
+    let all = CandidateZone::create_all_zones_for_segment_from_meta(&shard_dir, "001", &uid);
     assert_eq!(zones.len(), all.len());
 }
 
@@ -711,8 +722,14 @@ async fn falls_back_when_uid_missing() {
     let q = QueryPlanFactory::new()
         .with_registry(Arc::clone(&registry))
         .with_command(cmd)
-        .build()
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["001".into()])
+        .create()
         .await;
+    assert!(
+        q.segment_maybe_contains_uid("001", &uid),
+        "test setup should register zones for uid"
+    );
     let ctx = SelectionContext {
         plan: &filter,
         query_plan: &q,
@@ -785,7 +802,9 @@ async fn xor_pruner_skips_on_neq_operation() {
     let q = QueryPlanFactory::new()
         .with_registry(Arc::clone(&registry))
         .with_command(cmd)
-        .build()
+        .with_segment_base_dir(&shard_dir)
+        .with_segment_ids(vec!["001".into()])
+        .create()
         .await;
     let ctx = SelectionContext {
         plan: &filter,
@@ -795,14 +814,14 @@ async fn xor_pruner_skips_on_neq_operation() {
     };
     let sel = ZoneSelectorBuilder::new(ctx).build();
     let zones = sel.select_for_segment("001");
-    assert!(
-        !zones.is_empty(),
-        "neq should fall back to scanning the entire segment"
+    let uid = registry.read().await.get_uid(event_type).unwrap();
+    let expected = CandidateZone::create_all_zones_for_segment_from_meta(&shard_dir, "001", &uid);
+    assert_eq!(
+        zones.len(),
+        expected.len(),
+        "neq fallback should return all zones for the matching uid"
     );
-    assert!(
-        zones.iter().all(|z| z.segment_id == "001"),
-        "fallback must still honor the target segment"
-    );
+    assert!(zones.iter().all(|z| z.segment_id == "001"));
 }
 
 #[tokio::test]
@@ -1394,7 +1413,7 @@ async fn materialization_pruner_filters_zones_created_before_materialization() {
         .with_command(cmd)
         .with_segment_base_dir(&shard_dir)
         .with_segment_ids(vec!["001".to_string()])
-        .build()
+        .create()
         .await;
     q.set_metadata(
         "materialization_created_at".to_string(),
@@ -1484,7 +1503,7 @@ async fn materialization_pruner_no_filter_when_metadata_missing() {
         .with_command(cmd)
         .with_segment_base_dir(&shard_dir)
         .with_segment_ids(vec!["001".to_string()])
-        .build()
+        .create()
         .await;
 
     let mut filter = FilterGroupFactory::new()
@@ -1569,7 +1588,7 @@ async fn materialization_pruner_filters_zones_with_equal_created_at() {
         .with_command(cmd)
         .with_segment_base_dir(&shard_dir)
         .with_segment_ids(vec!["001".to_string()])
-        .build()
+        .create()
         .await;
     q.set_metadata(
         "materialization_created_at".to_string(),
