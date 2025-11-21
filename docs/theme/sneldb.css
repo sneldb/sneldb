@@ -1,43 +1,51 @@
 /* Non-keyword identifiers (e.g. ctx_123, amount) */
 code.hljs .hljs-identifier {
-    color: #56b6c2;       /* soft cyan */
-    font-weight: normal;  /* no bold */
-  }
+  color: #56b6c2;       /* soft cyan - kept as contrasting accent */
+  font-weight: normal;  /* no bold */
+}
 
-  /* Event types (e.g. order_created) */
-  code.hljs .hljs-event-type {
-    color: #d19a66;       /* warm amber */
-    font-style: italic;   /* subtle emphasis */
-    font-weight: normal;
-  }
+/* Event types (e.g. order_created) */
+code.hljs .hljs-event-type {
+  color: #d19a66;       /* warm amber */
+  font-style: italic;   /* subtle emphasis */
+  font-weight: normal;
+}
 
-  /* Keywords (DEFINE, STORE, QUERY, …) */
-  code.hljs .hljs-keyword {
-    color: #e06c75;       /* muted red */
-    font-weight: 600;     /* keep them slightly strong */
-  }
+/* Keywords (DEFINE, STORE, QUERY, …) */
+code.hljs .hljs-keyword {
+  color: #e06c75;       /* muted red */
+  font-weight: 600;     /* keep them slightly strong */
+}
 
-  /* JSON keys (id, amount, currency inside { }) */
-  code.hljs .hljs-attr {
-    color: #61afef;       /* gentle blue */
-    font-weight: normal;
-  }
+/* JSON keys (id, amount, currency inside { }) */
+code.hljs .hljs-attr {
+  color: #c678dd;       /* soft purple (was blue) */
+  font-weight: normal;
+}
 
-  /* Numbers */
-  code.hljs .hljs-number {
-    color: #98c379;       /* green */
-  }
+/* Numbers */
+code.hljs .hljs-number {
+  color: #98c379;       /* green */
+}
 
-  /* Operators (=, >=, etc.) */
-  code.hljs .hljs-operator {
-    color: #abb2bf;       /* neutral gray */
-  }
+/* Operators (=, >=, etc.) */
+code.hljs .hljs-operator {
+  color: #abb2bf;       /* neutral gray */
+}
 
-  /* Strings (payload values, timestamps) */
+/* Strings (payload values, timestamps) */
 code.hljs .hljs-string {
-    color: #c1ccd7;       /* light gray with a hint of blue */
-    font-weight: normal;
-  }
+  color: #c1ccd7;       /* light gray with a hint of blue */
+  font-weight: normal;
+}
+
+/* Base hljs container override - fix background mismatch */
+.hljs {
+    display: block;
+    overflow-x: auto;
+    background: var(--code-bg) !important; /* FORCE override of #191f26 */
+    color: var(--fg) !important;
+}
 
 /* Header logo injection */
 .menu-title {
@@ -52,4 +60,217 @@ code.hljs .hljs-string {
   width: 24px;
   height: 24px;
   background: url("logo.svg") no-repeat center / contain;
+}
+
+/* === Custom Dark Grey & Purple Theme === */
+
+:root {
+  /* Core palette */
+  --purple-primary: #a855f7; /* Purple 500 */
+  --purple-hover: #c084fc;   /* Purple 400 */
+  --purple-soft: rgba(168, 85, 247, 0.15);
+  --purple-dark: rgba(168, 85, 247, 0.3);
+
+  --dark-bg: #0f0f11;        /* Very dark grey, almost black */
+  --dark-sidebar: #161618;   /* Slightly lighter */
+  --dark-code: #1c1c1f;
+  --dark-hover: #222126;     /* Purple-tinted dark grey */
+
+  --text-main: #f3f4f6;
+  --text-muted: #9ca3af;
+  --text-dim: #6b7280;
+}
+
+/* Global Selection Color (The "Blue Line" often refers to selection) */
+::selection {
+    background: var(--purple-dark);
+    color: #ffffff;
+}
+
+/* Global Focus Ring */
+*:focus {
+    outline: 2px solid var(--purple-primary);
+    outline-offset: 2px;
+}
+
+/* Force styling across all themes to ensure consistent look */
+html.coal, html.navy, html.rust, html.light, html.ayu {
+    /* Layout Backgrounds */
+    --bg: var(--dark-bg);
+    --fg: var(--text-main);
+
+    /* Sidebar */
+    --sidebar-bg: var(--dark-sidebar);
+    --sidebar-fg: var(--text-muted);
+    --sidebar-non-existant: var(--text-dim);
+
+    --sidebar-active: var(--purple-soft);
+    --sidebar-active-fg: #ffffff;
+    --sidebar-hover: var(--dark-hover);
+
+    /* Sidebar Header Border (active section indicator) */
+    --sidebar-header-border-color: var(--purple-primary);
+
+    /* Links */
+    --links: var(--purple-primary);
+
+    /* Content Elements */
+    --quote-bg: var(--dark-code);
+    --quote-border: var(--purple-primary);
+
+    --table-header-bg: var(--dark-hover);
+    --table-border-color: #2d2d30;
+    --table-row-odd-bg: var(--dark-sidebar);
+
+    --code-bg: var(--dark-code);
+    --inline-code-bg: #242226; /* Purple-tinted grey */
+    --inline-code-color: #e5e7eb;
+
+    /* Search */
+    --search-bg: var(--dark-sidebar);
+    --search-fg: var(--text-main);
+    --search-border-color: #333;
+    --search-icon-color: var(--text-muted);
+    --search-result-bg: var(--purple-soft);
+
+    /* Headings */
+    --heading-fg: #ffffff;
+
+    /* Icons */
+    --icons: var(--text-muted);
+    --icons-hover: var(--purple-hover);
+}
+
+/* Horizontal Rules */
+hr {
+    border: none;
+    border-top: 2px solid var(--purple-dark);
+}
+
+/* Sidebar Active Item - Purple Left Border */
+.sidebar .chapter li a.active {
+    color: var(--sidebar-active-fg) !important;
+    background-color: var(--sidebar-active) !important;
+    border-left: 3px solid var(--purple-primary);
+    padding-left: 17px !important; /* Adjust padding to account for border */
+}
+
+.sidebar .chapter li a {
+    border-left: 3px solid transparent;
+    transition: all 0.2s ease;
+    color: var(--sidebar-fg);
+}
+
+.sidebar .chapter li a:hover {
+    background-color: var(--sidebar-hover) !important;
+    color: var(--purple-hover) !important;
+}
+
+/* Part Titles in Sidebar */
+.sidebar .chapter .part-title {
+    color: var(--text-main) !important;
+    font-weight: bold;
+    margin-top: 1em;
+    border-bottom: none !important; /* Remove any default borders */
+}
+
+/* Navigation Buttons (Next/Prev) */
+.nav-chapters {
+    transition: color 0.2s ease;
+}
+
+.nav-chapters:hover {
+    color: var(--purple-hover) !important;
+}
+
+.nav-chapters.next:hover, .nav-chapters.previous:hover {
+    text-decoration: none;
+    color: var(--purple-hover);
+}
+
+/* Top Bar Icons (Hamburger, Print, Search, Theme) */
+.theme-popup, #search-toggle, #print-button, #git-repository-button, .sidebar-toggle {
+    color: var(--icons) !important;
+    transition: color 0.2s ease;
+}
+
+.theme-popup:hover, #search-toggle:hover, #print-button:hover, #git-repository-button:hover, .sidebar-toggle:hover {
+    color: var(--icons-hover) !important;
+}
+
+/* Search Bar Active State */
+#searchwrapper {
+    border-color: var(--search-border-color) !important;
+    transition: border-color 0.2s ease;
+    background-color: var(--search-bg) !important;
+}
+
+#searchwrapper:focus-within {
+    border-color: var(--purple-primary) !important;
+    box-shadow: 0 0 0 2px var(--purple-dark);
+}
+
+/* Search Mark (Highlighter) */
+mark {
+    background-color: var(--purple-dark);
+    color: #fff;
+    border-radius: 2px;
+}
+
+/* Custom "Getting Started" Banner Style */
+blockquote {
+    background: var(--quote-bg);
+    border: none !important;
+    border-left: 4px solid var(--quote-border) !important;
+    padding: 15px 20px;
+    margin: 20px 0;
+    border-radius: 0 4px 4px 0;
+    color: var(--fg);
+    font-style: normal;
+}
+
+/* Make the menu bar match */
+#menu-bar {
+    background-color: var(--bg) !important;
+}
+#menu-bar > #menu-bar-sticky-container {
+    background-color: var(--bg) !important;
+    border-bottom: 1px solid #202023; /* ensure subtle separation */
+}
+
+/* Syntax Highlighting Container Override */
+pre {
+    background-color: var(--code-bg) !important;
+    border-radius: 6px;
+    border: 1px solid #2d2d30;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+    background: var(--bg);
+}
+::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--purple-primary);
+}
+
+/* Links in content */
+.content a {
+    text-decoration: none;
+    font-weight: 500;
+    color: var(--purple-primary);
+}
+.content a:hover {
+    text-decoration: underline;
+    color: var(--purple-hover);
+}
+
+/* Buttons styling */
+button {
+    transition: all 0.2s ease;
 }
