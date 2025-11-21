@@ -29,7 +29,14 @@ impl<'a> ZoneStepRunner<'a> {
         let mut pruned: Option<Vec<String>> = None;
 
         // Full segment list to use before pruning exists
-        let full_segments: Vec<String> = self._plan.segment_ids.read().unwrap().clone();
+        let mut full_segments: Vec<String> = self._plan.segment_ids.read().unwrap().clone();
+        if let Some(tracker) = self._plan.inflight_segments() {
+            for seg in tracker.snapshot() {
+                if !full_segments.contains(&seg) {
+                    full_segments.push(seg);
+                }
+            }
+        }
 
         // Decide if pruning is allowed: only when op is AND and the first planned step is context_id
         let op = LogicalOp::from_expr(self._plan.where_clause());

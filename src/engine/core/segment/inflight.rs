@@ -39,6 +39,15 @@ impl InflightSegments {
             .expect("inflight lock poisoned")
             .contains(segment_id)
     }
+
+    pub fn snapshot(&self) -> Vec<String> {
+        self.inner
+            .read()
+            .expect("inflight lock poisoned")
+            .iter()
+            .cloned()
+            .collect()
+    }
 }
 
 /// Guard that automatically removes the segment from the in-flight set when dropped.

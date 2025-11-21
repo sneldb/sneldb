@@ -65,3 +65,13 @@ fn multiple_guards_for_same_segment_drop_cleanly() {
         "segment should be removed when final guard drops"
     );
 }
+
+#[test]
+fn snapshot_includes_all_current_segments() {
+    let tracker = InflightSegments::new();
+    let _a = tracker.guard("seg-a");
+    let _b = tracker.guard("seg-b");
+    let mut segments = tracker.snapshot();
+    segments.sort();
+    assert_eq!(segments, vec!["seg-a".to_string(), "seg-b".to_string()]);
+}
