@@ -20,6 +20,7 @@ pub struct FlushManager {
         Option<oneshot::Sender<Result<(), StoreError>>>,
     )>,
     segment_ids: Arc<RwLock<Vec<String>>>,
+    inflight_segments: InflightSegments,
 }
 
 impl FlushManager {
@@ -43,7 +44,7 @@ impl FlushManager {
             Arc::clone(&segment_ids),
             segment_lifecycle,
             flush_progress,
-            inflight_segments,
+            inflight_segments.clone(),
         );
 
         let worker_handle = tokio::spawn(async move {
@@ -100,6 +101,7 @@ impl FlushManager {
             shard_id,
             flush_sender: tx,
             segment_ids,
+            inflight_segments,
         }
     }
 
@@ -119,6 +121,8 @@ impl FlushManager {
             segment_id,
             "Queueing MemTable for flush"
         );
+        let segment_name = format!("{:05}", segment_id);
+        self.inflight_segments.insert(&segment_name);
 
         self.flush_sender
             .send((
@@ -140,8 +144,6 @@ impl FlushManager {
                 );
                 StoreError::FlushFailed(format!("flush send error: {}", e))
             })?;
-
-        let segment_name = format!("{:05}", segment_id);
 
         info!(
             target: "sneldb::flush",

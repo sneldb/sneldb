@@ -4215,7 +4215,6 @@
       "STORE in_not FOR n3 PAYLOAD {\"id\":3}",
       "STORE in_not FOR n4 PAYLOAD {\"id\":4}",
       "STORE in_not FOR n5 PAYLOAD {\"id\":5}",
-      "FLUSH",
       "QUERY in_not WHERE NOT id IN (2, 4, 6)"
     ],
     "matchers": [
