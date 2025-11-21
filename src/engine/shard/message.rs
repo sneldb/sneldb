@@ -14,6 +14,9 @@ pub enum ShardMessage {
         registry: Arc<RwLock<SchemaRegistry>>,
         completion: oneshot::Sender<Result<(), String>>,
     },
+    AwaitFlush {
+        completion: oneshot::Sender<Result<(), String>>,
+    },
     QueryStream {
         command: Command,
         metadata: Option<HashMap<String, String>>,

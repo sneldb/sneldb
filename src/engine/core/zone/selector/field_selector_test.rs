@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use serde_json::json;
@@ -36,8 +37,6 @@ async fn xor_eq_uses_zxf_to_narrow_zones() {
         .define_with_fields(event_type, &[("context_id", "string"), ("key", "string")])
         .await
         .unwrap();
-    let uid = registry.read().await.get_uid(event_type).unwrap();
-
     // seg1 zone 0 has key = "a", seg2 zone 0 has key = "b"
     {
         let e1 = EventFactory::new()
@@ -211,11 +210,7 @@ async fn timestamp_filter_falls_back_when_uid_missing() {
     let selector = ZoneSelectorBuilder::new(ctx).build();
     let zones = selector.select_for_segment("00000");
 
-    let expected = CandidateZone::create_all_zones_for_segment_from_meta(
-        &shard_dir,
-        "00000",
-        &uid,
-    );
+    let expected = CandidateZone::create_all_zones_for_segment_from_meta(&shard_dir, "00000", &uid);
     assert_eq!(
         zones.len(),
         expected.len(),
@@ -627,6 +622,7 @@ async fn falls_back_when_uid_missing() {
         .with_column("key")
         .with_value(json!("x"))
         .create();
+    let uid = registry.read().await.get_uid(event_type).unwrap();
     let cmd = CommandFactory::query().with_event_type(event_type).create();
     let q = QueryPlanFactory::new()
         .with_registry(Arc::clone(&registry))
@@ -641,12 +637,16 @@ async fn falls_back_when_uid_missing() {
     };
     let sel = ZoneSelectorBuilder::new(ctx).build();
     let zones = sel.select_for_segment("001");
-    let expected =
-        CandidateZone::create_all_zones_for_segment_from_meta(&shard_dir, "001", &uid);
-    assert_eq!(
-        zones.len(),
-        expected.len(),
-        "missing uid should return all zones via fallback"
+    let expected = CandidateZone::create_all_zones_for_segment_from_meta(&shard_dir, "001", &uid);
+    let zone_keys: HashSet<(String, u32)> = zones
+        .iter()
+        .map(|z| (z.segment_id.clone(), z.zone_id))
+        .collect();
+    assert!(
+        expected
+            .iter()
+            .all(|exp| zone_keys.contains(&(exp.segment_id.clone(), exp.zone_id))),
+        "fallback should include all zones from the matching uid"
     );
     assert!(!zones.is_empty());
 }

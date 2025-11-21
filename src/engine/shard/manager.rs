@@ -97,6 +97,36 @@ impl ShardManager {
         errors
     }
 
+    pub async fn wait_for_flush_completion(&self) -> Vec<(usize, String)> {
+        let mut completions = Vec::new();
+        let mut errors = Vec::new();
+
+        for shard in &self.shards {
+            let (tx, rx) = oneshot::channel();
+            match shard
+                .tx
+                .send(ShardMessage::AwaitFlush { completion: tx })
+                .await
+            {
+                Ok(_) => completions.push((shard.id, rx)),
+                Err(e) => errors.push((
+                    shard.id,
+                    format!("Failed to send flush wait command: {}", e),
+                )),
+            }
+        }
+
+        for (shard_id, rx) in completions {
+            match rx.await {
+                Ok(Ok(())) => {}
+                Ok(Err(err)) => errors.push((shard_id, err)),
+                Err(_) => errors.push((shard_id, "Flush wait channel dropped".to_string())),
+            }
+        }
+
+        errors
+    }
+
     /// Signal all shards to shutdown and wait for acknowledgement. Returns (shard_id, error) pairs.
     pub async fn shutdown_all(&self) -> Vec<(usize, String)> {
         let mut completions = Vec::new();

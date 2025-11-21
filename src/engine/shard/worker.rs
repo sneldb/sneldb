@@ -54,6 +54,18 @@ pub async fn run_worker_loop(mut ctx: ShardContext, mut rx: Receiver<ShardMessag
                     }
                 }
             }
+            ShardMessage::AwaitFlush { completion } => {
+                debug!(target: LOG_TARGET, shard_id = id, "Received AwaitFlush message");
+                match on_wait_for_flush(&ctx).await {
+                    Ok(()) => {
+                        let _ = completion.send(Ok(()));
+                    }
+                    Err(e) => {
+                        error!(target: LOG_TARGET, shard_id = id, error = %e, "AwaitFlush failed");
+                        let _ = completion.send(Err(e));
+                    }
+                }
+            }
             ShardMessage::Shutdown { completion } => {
                 debug!(target: LOG_TARGET, shard_id = id, "Received Shutdown message");
                 let result = on_shutdown(&mut ctx).await;
@@ -122,12 +134,14 @@ async fn on_flush(
     // Use the existing flush manager from context
     info!(target: LOG_TARGET, shard_id = ctx.id, "Queueing memtable for flush");
     let (completion_tx, completion_rx) = oneshot::channel();
+    let flush_id = ctx.flush_progress.next_id();
     ctx.flush_manager
         .queue_for_flush(
             flushed_mem,
             Arc::clone(registry),
             segment_id,
             Arc::clone(&passive),
+            flush_id,
             Some(completion_tx),
         )
         .await
@@ -137,6 +151,23 @@ async fn on_flush(
         Ok(Ok(())) => Ok(()),
         Ok(Err(e)) => Err(e.to_string()),
         Err(_) => Err("Flush worker dropped completion signal".to_string()),
+    }
+}
+
+async fn on_wait_for_flush(ctx: &ShardContext) -> Result<(), String> {
+    use tokio::time::{Duration, sleep};
+
+    let target = ctx.flush_progress.snapshot();
+
+    if ctx.flush_progress.completed() >= target {
+        return Ok(());
+    }
+
+    loop {
+        if ctx.flush_progress.completed() >= target {
+            return Ok(());
+        }
+        sleep(Duration::from_millis(10)).await;
     }
 }
 

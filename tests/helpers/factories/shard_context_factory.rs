@@ -4,6 +4,7 @@ use crate::engine::core::{
     EventIdGenerator, FlushManager, MemTable, SegmentLifecycleTracker, WalHandle,
 };
 use crate::engine::shard::context::ShardContext;
+use crate::engine::shard::flush_progress::FlushProgress;
 use crate::shared::config::CONFIG;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -65,12 +66,14 @@ impl ShardContextFactory {
         let segment_ids = Arc::new(RwLock::new(vec![]));
         let flush_coordination_lock = Arc::new(tokio::sync::Mutex::new(()));
         let segment_lifecycle = Arc::new(SegmentLifecycleTracker::new());
+        let flush_progress = Arc::new(FlushProgress::new());
         let flush_manager = FlushManager::new(
             self.id,
             base_dir.clone(),
             Arc::clone(&segment_ids),
             Arc::clone(&flush_coordination_lock),
             Arc::clone(&segment_lifecycle),
+            Arc::clone(&flush_progress),
         );
 
         // Seed allocator from existing ids (if any)
@@ -93,6 +96,7 @@ impl ShardContextFactory {
             flush_count: 0,
             wal: Some(wal),
             flush_manager,
+            flush_progress,
             flush_coordination_lock,
             segment_lifecycle,
             event_id_gen: EventIdGenerator::new(),

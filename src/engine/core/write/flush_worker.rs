@@ -4,6 +4,7 @@ use crate::engine::core::{
 };
 use crate::engine::errors::StoreError;
 use crate::engine::schema::registry::SchemaRegistry;
+use crate::engine::shard::flush_progress::FlushProgress;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use tokio::sync::{Mutex, RwLock as TokioRwLock, mpsc::Receiver, oneshot};
@@ -19,6 +20,7 @@ pub struct FlushWorker {
     flush_coordination_lock: Arc<Mutex<()>>,
     segment_ids: Arc<RwLock<Vec<String>>>,
     segment_lifecycle: Arc<SegmentLifecycleTracker>,
+    flush_progress: Arc<FlushProgress>,
 }
 
 impl FlushWorker {
@@ -29,6 +31,7 @@ impl FlushWorker {
         flush_coordination_lock: Arc<Mutex<()>>,
         segment_ids: Arc<RwLock<Vec<String>>>,
         segment_lifecycle: Arc<SegmentLifecycleTracker>,
+        flush_progress: Arc<FlushProgress>,
     ) -> Self {
         Self {
             shard_id,
@@ -36,6 +39,7 @@ impl FlushWorker {
             flush_coordination_lock,
             segment_ids,
             segment_lifecycle,
+            flush_progress,
         }
     }
 
@@ -47,10 +51,11 @@ impl FlushWorker {
             MemTable,
             Arc<TokioRwLock<SchemaRegistry>>,
             Arc<tokio::sync::Mutex<MemTable>>,
+            u64,
             Option<oneshot::Sender<Result<(), StoreError>>>,
         )>,
     ) -> Result<(), StoreError> {
-        while let Some((segment_id, memtable, registry, passive_memtable, completion)) =
+        while let Some((segment_id, memtable, registry, passive_memtable, flush_id, completion)) =
             rx.recv().await
         {
             let segment_dir = SegmentId::from(segment_id as u32).join_dir(&self.base_dir);
@@ -132,21 +137,21 @@ impl FlushWorker {
                             )
                             .await;
 
-                            // Only update segment_ids after successful flush that created files
-                            let segment_name = format!("{:05}", segment_id);
-                            {
-                                let mut segs = segment_ids.write().unwrap();
-                                if !segs.contains(&segment_name) {
-                                    segs.push(segment_name.clone());
-                                    debug!(
-                                        target: "sneldb::flush",
-                                        shard_id,
-                                        segment_id,
-                                        "Added segment '{}' to segment_ids list",
-                                        segment_name
-                                    );
-                                }
+                        // Only update segment_ids after successful flush that created files
+                        let segment_name = format!("{:05}", segment_id);
+                        {
+                            let mut segs = segment_ids.write().unwrap();
+                            if !segs.contains(&segment_name) {
+                                segs.push(segment_name.clone());
+                                debug!(
+                                    target: "sneldb::flush",
+                                    shard_id,
+                                    segment_id,
+                                    "Added segment '{}' to segment_ids list",
+                                    segment_name
+                                );
                             }
+                        }
 
                         if !is_queryable {
                             warn!(
@@ -216,6 +221,8 @@ impl FlushWorker {
                     ))
                 }
             };
+
+            self.flush_progress.mark_completed(flush_id);
 
             // Always send completion signal, even on error/panic
             if let Some(completion) = completion {

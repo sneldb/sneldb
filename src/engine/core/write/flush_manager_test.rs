@@ -1,4 +1,5 @@
 use crate::engine::core::{FlushManager, SegmentIndex, SegmentLifecycleTracker, ZoneMeta};
+use crate::engine::shard::flush_progress::FlushProgress;
 use crate::test_helpers::factories::{EventFactory, MemTableFactory, SchemaRegistryFactory};
 use std::sync::{Arc, RwLock};
 use tempfile::tempdir;
@@ -36,28 +37,42 @@ async fn test_flush_manager_queues_and_flushes_memtable() {
     // Create FlushManager
     let flush_lock = Arc::new(tokio::sync::Mutex::new(()));
     let lifecycle = Arc::new(SegmentLifecycleTracker::new());
+    let flush_progress = Arc::new(FlushProgress::new());
     let manager = FlushManager::new(
         shard_id,
         base_dir.clone(),
         Arc::clone(&segment_ids),
         flush_lock,
         lifecycle,
+        Arc::clone(&flush_progress),
     );
 
     // Act: queue for flush
+    let flush_id = flush_progress.next_id();
+
     manager
         .queue_for_flush(
             memtable,
             Arc::clone(&registry),
             segment_id,
             Arc::new(tokio::sync::Mutex::new(memtable_clone)),
+            flush_id,
             None,
         )
         .await
         .expect("FlushManager failed");
 
     // Wait for async flush to complete
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    let start = std::time::Instant::now();
+    while flush_progress.completed() < flush_id
+        && start.elapsed() < std::time::Duration::from_secs(2)
+    {
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert!(
+        flush_progress.completed() >= flush_id,
+        "flush should complete within timeout"
+    );
 
     // Verify .zones file written
     let segment_dir = base_dir.join(format!("{:05}", segment_id));

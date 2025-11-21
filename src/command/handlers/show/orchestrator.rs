@@ -107,7 +107,7 @@ impl<'a, G: CatalogGateway> ShowExecutionPipeline<'a, G> {
         let entry = catalog_handle.fetch(self.context.alias())?;
 
         self.ensure_schema_present(&entry)?;
-        self.flush_pending_writes().await?;
+        self.wait_for_inflight_flushes().await?;
 
         let schema = SchemaBuilder::build(&entry)?;
         let timestamp_column = self.timestamp_column(&entry);
@@ -213,7 +213,7 @@ impl<'a, G: CatalogGateway> ShowExecutionPipeline<'a, G> {
         Ok(())
     }
 
-    async fn flush_pending_writes(&self) -> ShowResult<()> {
+    async fn wait_for_inflight_flushes(&self) -> ShowResult<()> {
         debug!(
             target: "sneldb::show",
             alias = self.context.alias(),
@@ -223,7 +223,7 @@ impl<'a, G: CatalogGateway> ShowExecutionPipeline<'a, G> {
         let errors = self
             .context
             .shard_manager()
-            .flush_all(self.context.registry())
+            .wait_for_flush_completion()
             .await;
 
         if errors.is_empty() {
@@ -240,14 +240,14 @@ impl<'a, G: CatalogGateway> ShowExecutionPipeline<'a, G> {
                 .collect::<Vec<_>>()
                 .join(", ");
             Err(ShowError::new(format!(
-                "Failed to flush shards before SHOW: {joined}"
+                "Failed to wait for shard flushes before SHOW: {joined}"
             )))
         }
     }
 
     #[cfg(test)]
-    pub(crate) async fn test_flush_pending_writes(&self) -> ShowResult<()> {
-        self.flush_pending_writes().await
+    pub(crate) async fn test_wait_for_inflight_flushes(&self) -> ShowResult<()> {
+        self.wait_for_inflight_flushes().await
     }
 
     fn ensure_schema_present(&self, entry: &MaterializationEntry) -> ShowResult<()> {

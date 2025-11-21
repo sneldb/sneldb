@@ -1,4 +1,5 @@
 use crate::engine::core::{FlushWorker, SegmentIndex, SegmentLifecycleTracker, ZoneMeta};
+use crate::engine::shard::flush_progress::FlushProgress;
 use crate::test_helpers::factories::{EventFactory, MemTableFactory, SchemaRegistryFactory};
 use std::sync::{Arc, RwLock};
 use tempfile::tempdir;
@@ -37,6 +38,7 @@ async fn test_flush_worker_processes_memtable() {
 
     let segment_ids = Arc::new(RwLock::new(vec![]));
     let lifecycle = Arc::new(SegmentLifecycleTracker::new());
+    let flush_progress = Arc::new(FlushProgress::new());
 
     // Spawn FlushWorker
     let flush_lock = std::sync::Arc::new(tokio::sync::Mutex::new(()));
@@ -46,17 +48,21 @@ async fn test_flush_worker_processes_memtable() {
         flush_lock,
         Arc::clone(&segment_ids),
         Arc::clone(&lifecycle),
+        Arc::clone(&flush_progress),
     );
     tokio::spawn(async move {
         worker.run(rx).await.expect("Worker run failed");
     });
 
     // Send flush request
+    let flush_id = flush_progress.next_id();
+
     tx.send((
         segment_id,
         memtable,
         Arc::clone(&registry),
         Arc::new(tokio::sync::Mutex::new(memtable_clone)),
+        flush_id,
         None,
     ))
     .await
@@ -160,12 +166,14 @@ async fn test_flush_worker_skips_cleanup_for_empty_memtable() {
     // Spawn FlushWorker
     let flush_lock = std::sync::Arc::new(tokio::sync::Mutex::new(()));
     let lifecycle = Arc::new(SegmentLifecycleTracker::new());
+    let flush_progress = Arc::new(FlushProgress::new());
     let worker = FlushWorker::new(
         1,
         base_path.clone(),
         flush_lock,
         Arc::clone(&segment_ids),
         Arc::clone(&lifecycle),
+        Arc::clone(&flush_progress),
     );
     tokio::spawn(async move {
         worker.run(rx).await.expect("Worker run failed");
@@ -175,11 +183,14 @@ async fn test_flush_worker_skips_cleanup_for_empty_memtable() {
     let (completion_tx, completion_rx) = oneshot::channel();
 
     // Send flush request with empty memtable
+    let flush_id = flush_progress.next_id();
+
     tx.send((
         segment_id,
         empty_memtable,
         Arc::clone(&registry),
         Arc::clone(&passive_memtable_arc),
+        flush_id,
         Some(completion_tx),
     ))
     .await

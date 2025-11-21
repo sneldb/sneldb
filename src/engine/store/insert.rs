@@ -59,12 +59,15 @@ pub async fn insert_and_maybe_flush(
             "Queuing passive MemTable for flush"
         );
 
+        let flush_id = ctx.flush_progress.next_id();
+
         ctx.flush_manager
             .queue_for_flush(
                 flushed_mem,
                 Arc::clone(schema_registry),
                 current_segment_id,
                 Arc::clone(&passive_arc),
+                flush_id,
                 None,
             )
             .await?;

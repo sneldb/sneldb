@@ -81,4 +81,3 @@ impl SegmentLifecycleTracker {
             .map(|state| state.passive_buffer)
     }
 }
-

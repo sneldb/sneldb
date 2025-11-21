@@ -163,7 +163,7 @@ fn build_outcome_updates_entry_metrics() {
 }
 
 #[tokio::test]
-async fn flush_pending_writes_propagates_errors() {
+async fn wait_for_inflight_flushes_propagates_errors() {
     let (tx, rx) = mpsc::channel(1);
     drop(rx);
 
@@ -179,18 +179,19 @@ async fn flush_pending_writes_propagates_errors() {
     let pipeline = ShowExecutionPipeline::new_with_gateway(context, StubGateway);
 
     let err = pipeline
-        .test_flush_pending_writes()
+        .test_wait_for_inflight_flushes()
         .await
         .expect_err("flush should fail");
     assert!(
-        err.message().contains("Failed to flush shards"),
+        err.message()
+            .contains("Failed to wait for shard flushes before SHOW"),
         "unexpected error message: {}",
         err.message()
     );
 }
 
 #[tokio::test]
-async fn flush_pending_writes_waits_for_completion() {
+async fn wait_for_inflight_flushes_waits_for_completion() {
     let (tx, mut rx) = mpsc::channel(1);
     let notify = Arc::new(Notify::new());
     let flush_count = Arc::new(AtomicUsize::new(0));
@@ -199,7 +200,7 @@ async fn flush_pending_writes_waits_for_completion() {
     let counter = Arc::clone(&flush_count);
     tokio::spawn(async move {
         if let Some(message) = rx.recv().await {
-            if let ShardMessage::Flush { completion, .. } = message {
+            if let ShardMessage::AwaitFlush { completion } = message {
                 counter.fetch_add(1, Ordering::SeqCst);
                 notify_listener.notified().await;
                 let _ = completion.send(Ok(()));
@@ -219,7 +220,7 @@ async fn flush_pending_writes_waits_for_completion() {
     let (context, _temp_dir) = make_context_with_manager(shard_manager);
     let pipeline = ShowExecutionPipeline::new_with_gateway(context, StubGateway);
 
-    let flush_future = pipeline.test_flush_pending_writes();
+    let flush_future = pipeline.test_wait_for_inflight_flushes();
     tokio::pin!(flush_future);
 
     let pending = tokio::time::timeout(Duration::from_millis(25), flush_future.as_mut()).await;
