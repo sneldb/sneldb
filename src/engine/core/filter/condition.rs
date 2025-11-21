@@ -55,7 +55,44 @@ pub struct PreparedAccessor<'a> {
 
 impl<'a> PreparedAccessor<'a> {
     pub fn new(columns: &'a HashMap<String, ColumnValues>) -> Self {
-        let event_count = columns.values().next().map(|v| v.len()).unwrap_or(0);
+        let mut max_len = 0usize;
+        let mut min_len = usize::MAX;
+        let mut zero_column_total = 0usize;
+        let mut zero_column_sample: Vec<String> = Vec::new();
+
+        for (name, column) in columns.iter() {
+            let len = column.len();
+            if len > max_len {
+                max_len = len;
+            }
+            if len < min_len {
+                min_len = len;
+            }
+            if len == 0 {
+                zero_column_total += 1;
+                if zero_column_sample.len() < 5 {
+                    zero_column_sample.push(name.clone());
+                }
+            }
+        }
+
+        if tracing::enabled!(tracing::Level::DEBUG)
+            && !columns.is_empty()
+            && ((min_len != usize::MAX && min_len != max_len) || zero_column_total > 0)
+        {
+            let min_len = if min_len == usize::MAX { 0 } else { min_len };
+            tracing::debug!(
+                target: "sneldb::prepared_accessor",
+                zone_columns = columns.len(),
+                max_len = max_len,
+                min_len = min_len,
+                zero_column_total = zero_column_total,
+                zero_column_sample = ?zero_column_sample,
+                "Derived event_count from sparse column lengths"
+            );
+        }
+
+        let event_count = max_len;
         Self {
             columns,
             event_count,

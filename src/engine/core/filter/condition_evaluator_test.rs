@@ -1,5 +1,5 @@
 use crate::engine::core::column::column_values::ColumnValues;
-use crate::engine::core::filter::condition::{CompareOp, PreparedAccessor};
+use crate::engine::core::filter::condition::{CompareOp, FieldAccessor, PreparedAccessor};
 use crate::engine::core::filter::condition_evaluator::ConditionEvaluator;
 use crate::engine::core::read::cache::DecompressedBlock;
 use crate::engine::core::zone::candidate_zone::CandidateZone;
@@ -110,6 +110,47 @@ fn evaluate_row_at_works_with_accessor() {
     assert!(!evaluator.evaluate_row_at(&accessor, 0));
     // Row 1 should pass (200, b)
     assert!(evaluator.evaluate_row_at(&accessor, 1));
+}
+
+#[test]
+fn prepared_accessor_event_count_uses_max_len() {
+    let mut values = HashMap::new();
+    values.insert("optional_field".to_string(), Vec::new());
+    values.insert("order_id".to_string(), vec!["123".into()]);
+
+    let zone = CandidateZoneFactory::new()
+        .with("zone_id", 8)
+        .with("segment_id", "seg-max")
+        .with_values(values)
+        .create();
+
+    let accessor = PreparedAccessor::new(&zone.values);
+    assert_eq!(
+        accessor.event_count(),
+        1,
+        "should pick longest column length"
+    );
+}
+
+#[test]
+fn evaluate_zones_handles_sparse_optional_columns() {
+    let mut values = HashMap::new();
+    values.insert("optional_field".to_string(), Vec::new());
+    values.insert("status".to_string(), vec!["confirmed".into()]);
+    values.insert("order_id".to_string(), vec!["123".into()]);
+
+    let zone = CandidateZoneFactory::new()
+        .with("zone_id", 9)
+        .with("segment_id", "seg-sparse")
+        .with_values(values)
+        .create();
+
+    let mut evaluator = ConditionEvaluator::new();
+    evaluator.add_string_condition("status".into(), CompareOp::Eq, "confirmed".into());
+
+    let results = evaluator.evaluate_zones(vec![zone]);
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].get_field_value("order_id"), "123");
 }
 
 #[test]
