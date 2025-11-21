@@ -71,9 +71,11 @@ impl ZoneXorFilterIndex {
 
         for zone in zones {
             // Collect unique values for this field in this zone
+            use std::sync::Arc;
+            let field_arc: Arc<str> = Arc::from(field);
             let mut values: Vec<String> = Vec::new();
             for event in &zone.events {
-                if let Some(v) = event.payload.get(field) {
+                if let Some(v) = event.payload.get(field_arc.as_ref()) {
                     if let Some(s) = value_to_string(v) {
                         values.push(s);
                     }
@@ -243,7 +245,7 @@ pub fn build_all_zxf_filtered(
     for z in zone_plans {
         for e in &z.events {
             for k in e.payload.keys() {
-                all_fields.insert(k.clone());
+                all_fields.insert(k.as_ref().to_string());
             }
         }
     }

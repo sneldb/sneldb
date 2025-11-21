@@ -8,7 +8,8 @@ use crate::engine::core::read::aggregate::plan::AggregateOpSpec;
 use crate::engine::core::{Event, EventId, QueryPlan};
 use crate::engine::types::ScalarValue;
 use ahash::RandomState as AHashRandomState;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Converts aggregated groups into Events
 pub(crate) fn into_events(
@@ -36,16 +37,17 @@ pub(crate) fn into_events(
 
     let mut out = Vec::with_capacity(groups.len());
     for (mut gk, aggs) in groups.into_iter() {
-        let mut payload = BTreeMap::new();
+        use std::collections::HashMap;
+        let mut payload = HashMap::new();
         // Add key fields
         if let Some(b) = gk.bucket {
-            payload.insert("bucket".to_string(), ScalarValue::Int64(b as i64));
+            payload.insert(Arc::from("bucket"), ScalarValue::Int64(b as i64));
         }
         if let Some(gb) = &group_by {
             let groups_str_vec = gk.groups_str();
             for (i, name) in gb.iter().enumerate() {
                 if let Some(val) = groups_str_vec.get(i) {
-                    payload.insert(name.clone(), ScalarValue::Utf8(val.clone()));
+                    payload.insert(Arc::from(name.as_str()), ScalarValue::Utf8(val.clone()));
                 }
             }
         }
@@ -86,7 +88,7 @@ pub(crate) fn into_events(
                     },
                 ),
             };
-            payload.insert(key, val);
+            payload.insert(Arc::from(key), val);
         }
 
         let event = Event {

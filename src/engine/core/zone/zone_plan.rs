@@ -2,7 +2,7 @@ use crate::engine::core::{Event, ZoneRow};
 use crate::engine::errors::StoreError;
 use crate::engine::types::ScalarValue;
 use crate::shared::time;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use tracing::{info, trace, warn};
 
 /// Defines a range of rows for a zone.
@@ -116,7 +116,7 @@ impl ZonePlan {
         // Collect dynamic field names from all events in one pass
         for event in &self.events {
             for key in event.payload.keys() {
-                all_field_names.insert(key.clone());
+                all_field_names.insert(key.as_ref().to_string());
             }
         }
 
@@ -200,10 +200,11 @@ impl ZonePlan {
         let events: Vec<Event> = rows
             .into_iter()
             .map(|row| {
-                let payload: BTreeMap<String, ScalarValue> = row
+                use std::sync::Arc;
+                let payload: HashMap<Arc<str>, ScalarValue> = row
                     .payload
                     .into_iter()
-                    .map(|(k, v)| (k, ScalarValue::from(v)))
+                    .map(|(k, v)| (Arc::from(k), ScalarValue::from(v)))
                     .collect();
                 Event {
                     context_id: row.context_id,

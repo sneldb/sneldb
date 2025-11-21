@@ -25,7 +25,11 @@ fn test_build_event() {
     assert_eq!(event.timestamp, 1234567890);
 
     assert_eq!(
-        event.payload.get("custom_field"),
+        event
+            .payload
+            .iter()
+            .find(|(k, _)| k.as_ref() == "custom_field")
+            .map(|(_, v)| v),
         Some(&ScalarValue::Utf8("test_value".to_string()))
     );
 }
@@ -37,21 +41,33 @@ fn test_add_field_with_numbers() {
     // Test integer
     builder.add_field("integer_field", "42");
     assert_eq!(
-        builder.payload.get("integer_field"),
+        builder
+            .payload
+            .iter()
+            .find(|(k, _)| k.as_ref() == "integer_field")
+            .map(|(_, v)| v),
         Some(&ScalarValue::Int64(42))
     );
 
     // Test float
     builder.add_field("float_field", "3.14");
     assert_eq!(
-        builder.payload.get("float_field"),
+        builder
+            .payload
+            .iter()
+            .find(|(k, _)| k.as_ref() == "float_field")
+            .map(|(_, v)| v),
         Some(&ScalarValue::Float64(3.14))
     );
 
     // Test string
     builder.add_field("string_field", "hello");
     assert_eq!(
-        builder.payload.get("string_field"),
+        builder
+            .payload
+            .iter()
+            .find(|(k, _)| k.as_ref() == "string_field")
+            .map(|(_, v)| v),
         Some(&ScalarValue::Utf8("hello".to_string()))
     );
 }
@@ -64,14 +80,29 @@ fn test_add_field_booleans_and_null() {
     builder.add_field("n_null", "null");
 
     assert_eq!(
-        builder.payload.get("b_true"),
+        builder
+            .payload
+            .iter()
+            .find(|(k, _)| k.as_ref() == "b_true")
+            .map(|(_, v)| v),
         Some(&ScalarValue::Boolean(true))
     );
     assert_eq!(
-        builder.payload.get("b_false"),
+        builder
+            .payload
+            .iter()
+            .find(|(k, _)| k.as_ref() == "b_false")
+            .map(|(_, v)| v),
         Some(&ScalarValue::Boolean(false))
     );
-    assert_eq!(builder.payload.get("n_null"), Some(&ScalarValue::Null));
+    assert_eq!(
+        builder
+            .payload
+            .iter()
+            .find(|(k, _)| k.as_ref() == "n_null")
+            .map(|(_, v)| v),
+        Some(&ScalarValue::Null)
+    );
 }
 
 #[test]
@@ -81,14 +112,29 @@ fn test_add_field_whitespace_and_strings() {
     builder.add_field("ws_bool", "  true ");
     builder.add_field("raw_preserve", "  spaced  value  ");
 
-    assert_eq!(builder.payload.get("ws_int"), Some(&ScalarValue::Int64(7)));
     assert_eq!(
-        builder.payload.get("ws_bool"),
+        builder
+            .payload
+            .iter()
+            .find(|(k, _)| k.as_ref() == "ws_int")
+            .map(|(_, v)| v),
+        Some(&ScalarValue::Int64(7))
+    );
+    assert_eq!(
+        builder
+            .payload
+            .iter()
+            .find(|(k, _)| k.as_ref() == "ws_bool")
+            .map(|(_, v)| v),
         Some(&ScalarValue::Boolean(true))
     );
     // String fallback preserves original input (not trimmed)
     assert_eq!(
-        builder.payload.get("raw_preserve"),
+        builder
+            .payload
+            .iter()
+            .find(|(k, _)| k.as_ref() == "raw_preserve")
+            .map(|(_, v)| v),
         Some(&ScalarValue::Utf8("  spaced  value  ".to_string()))
     );
 }
@@ -101,11 +147,19 @@ fn test_add_field_large_u64_and_negative_i64() {
     builder.add_field("neg", "-9223372036854775808"); // i64::MIN
 
     assert_eq!(
-        builder.payload.get("big").map(|v| v.to_json()),
+        builder
+            .payload
+            .iter()
+            .find(|(k, _)| k.as_ref() == "big")
+            .map(|(_, v)| v.to_json()),
         Some(json!(big))
     );
     assert_eq!(
-        builder.payload.get("neg"),
+        builder
+            .payload
+            .iter()
+            .find(|(k, _)| k.as_ref() == "neg")
+            .map(|(_, v)| v),
         Some(&ScalarValue::Int64(i64::MIN))
     );
 }
@@ -118,15 +172,27 @@ fn test_add_field_nonfinite_float_falls_back_to_string() {
     builder.add_field("ninf", "-infinity");
 
     assert_eq!(
-        builder.payload.get("nan"),
+        builder
+            .payload
+            .iter()
+            .find(|(k, _)| k.as_ref() == "nan")
+            .map(|(_, v)| v),
         Some(&ScalarValue::Utf8("NaN".into()))
     );
     assert_eq!(
-        builder.payload.get("inf"),
+        builder
+            .payload
+            .iter()
+            .find(|(k, _)| k.as_ref() == "inf")
+            .map(|(_, v)| v),
         Some(&ScalarValue::Utf8("inf".into()))
     );
     assert_eq!(
-        builder.payload.get("ninf"),
+        builder
+            .payload
+            .iter()
+            .find(|(k, _)| k.as_ref() == "ninf")
+            .map(|(_, v)| v),
         Some(&ScalarValue::Utf8("-infinity".into()))
     );
 }
@@ -140,7 +206,14 @@ fn test_overrides() {
     builder.add_field("x", "2");
 
     assert_eq!(builder.event_type, "b");
-    assert_eq!(builder.payload.get("x"), Some(&ScalarValue::Int64(2)));
+    assert_eq!(
+        builder
+            .payload
+            .iter()
+            .find(|(k, _)| k.as_ref() == "x")
+            .map(|(_, v)| v),
+        Some(&ScalarValue::Int64(2))
+    );
 }
 
 #[test]
@@ -161,4 +234,103 @@ fn test_invalid_timestamp() {
     let mut builder = EventBuilder::new();
     builder.add_field("timestamp", "invalid");
     assert_eq!(builder.timestamp, 0);
+}
+
+#[test]
+fn test_with_capacity() {
+    let builder = EventBuilder::with_capacity(32);
+    assert_eq!(builder.event_type, "");
+    assert_eq!(builder.context_id, "");
+    assert_eq!(builder.timestamp, 0);
+    assert!(builder.payload.is_empty());
+}
+
+#[test]
+fn test_add_field_u64() {
+    let mut builder = EventBuilder::new();
+    builder.add_field_u64("test_field", 42);
+    assert_eq!(
+        builder
+            .payload
+            .iter()
+            .find(|(k, _)| k.as_ref() == "test_field")
+            .map(|(_, v)| v),
+        Some(&ScalarValue::Int64(42))
+    );
+}
+
+#[test]
+fn test_add_field_i64() {
+    let mut builder = EventBuilder::new();
+    builder.add_field_i64("test_field", -42);
+    assert_eq!(
+        builder
+            .payload
+            .iter()
+            .find(|(k, _)| k.as_ref() == "test_field")
+            .map(|(_, v)| v),
+        Some(&ScalarValue::Int64(-42))
+    );
+}
+
+#[test]
+fn test_add_field_f64() {
+    let mut builder = EventBuilder::new();
+    builder.add_field_f64("test_field", 3.14);
+    assert_eq!(
+        builder
+            .payload
+            .iter()
+            .find(|(k, _)| k.as_ref() == "test_field")
+            .map(|(_, v)| v),
+        Some(&ScalarValue::Float64(3.14))
+    );
+}
+
+#[test]
+fn test_add_field_bool() {
+    let mut builder = EventBuilder::new();
+    builder.add_field_bool("test_field", true);
+    assert_eq!(
+        builder
+            .payload
+            .iter()
+            .find(|(k, _)| k.as_ref() == "test_field")
+            .map(|(_, v)| v),
+        Some(&ScalarValue::Boolean(true))
+    );
+}
+
+#[test]
+fn test_add_field_null() {
+    let mut builder = EventBuilder::new();
+    builder.add_field_null("test_field");
+    assert_eq!(
+        builder
+            .payload
+            .iter()
+            .find(|(k, _)| k.as_ref() == "test_field")
+            .map(|(_, v)| v),
+        Some(&ScalarValue::Null)
+    );
+}
+
+#[test]
+fn test_field_name_arc_str_keys() {
+    let mut builder1 = EventBuilder::new();
+    let mut builder2 = EventBuilder::new();
+
+    builder1.add_field("shared_field", "value1");
+    builder2.add_field("shared_field", "value2");
+
+    let event1 = builder1.build();
+    let event2 = builder2.build();
+
+    let key1 = event1.payload.keys().next().unwrap();
+    let key2 = event2.payload.keys().next().unwrap();
+
+    // Keys are Arc<str> and should be equal in value
+    assert_eq!(key1, key2);
+    // Note: They may not be the same pointer since we're using Arc::from() directly
+    // instead of interning, but that's fine - Arc equality works by value
 }

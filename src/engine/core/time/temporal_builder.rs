@@ -62,13 +62,14 @@ impl<'a> TemporalIndexBuilder<'a> {
             for ev in &zp.events {
                 // Iterate over payload map once; push relevant temporal fields
                 for (k, v) in ev.payload.iter() {
-                    if !temporal_field_set.contains(k) {
+                    let k_str = k.as_ref();
+                    if !temporal_field_set.contains(k_str) {
                         continue;
                     }
                     if let Some(i) = v.as_i64() {
-                        ts_per_field.entry(k.clone()).or_default().push(i);
+                        ts_per_field.entry(k_str.to_string()).or_default().push(i);
                     } else if let Some(u) = v.as_u64() {
-                        ts_per_field.entry(k.clone()).or_default().push(u as i64);
+                        ts_per_field.entry(k_str.to_string()).or_default().push(u as i64);
                     }
                 }
             }

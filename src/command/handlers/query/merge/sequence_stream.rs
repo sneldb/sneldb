@@ -475,7 +475,7 @@ impl SequenceStreamMerger {
                     event_type = %event.event_type,
                     context_id = %event.context_id,
                     timestamp = event.timestamp,
-                    payload_fields = ?event.payload.keys().collect::<Vec<_>>(),
+                    payload_fields = ?event.payload.keys().map(|k| k.as_ref()).collect::<Vec<_>>(),
                     "Event details"
                 );
             }
@@ -501,7 +501,7 @@ impl SequenceStreamMerger {
         // Add payload fields
         for (field, _value) in &first_event.payload {
             columns.push(ColumnSpec {
-                name: field.clone(),
+                name: field.as_ref().to_string(),
                 logical_type: "String".to_string(), // Simplified - would infer actual type
             });
         }

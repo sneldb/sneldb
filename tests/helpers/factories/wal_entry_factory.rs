@@ -1,7 +1,7 @@
 use crate::engine::core::{EventId, WalEntry};
 use rand::Rng;
 use serde_json::{Value, json};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 pub struct WalEntryFactory {
     params: HashMap<String, Value>,
@@ -28,7 +28,7 @@ impl WalEntryFactory {
             context_id: self.params["context_id"].as_str().unwrap().to_string(),
             timestamp: self.params["timestamp"].as_u64().unwrap(),
             event_type: self.params["event_type"].as_str().unwrap().to_string(),
-            payload: BTreeMap::new(),
+            payload: HashMap::new(),
             event_id: self.params["event_id"]
                 .as_u64()
                 .map(EventId::from)
@@ -53,7 +53,7 @@ impl WalEntryFactory {
                     context_id,
                     timestamp,
                     event_type: self.params["event_type"].as_str().unwrap().to_string(),
-                    payload: BTreeMap::new(),
+                    payload: HashMap::new(),
                     event_id: EventId::from(i as u64 + 1),
                 };
                 entry.set_payload_json(payload_json);

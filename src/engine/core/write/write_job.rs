@@ -39,7 +39,7 @@ impl WriteJob {
 
             for event in &zone_plan.events {
                 for key in event.payload.keys() {
-                    all_fields.insert(key.clone());
+                    all_fields.insert(key.as_ref().to_string());
                 }
             }
 
