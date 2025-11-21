@@ -14,7 +14,7 @@ pub struct SegmentLifecycleTracker {
 struct SegmentLifecycleState {
     phase: LifecyclePhase,
     passive_buffer: Arc<Mutex<MemTable>>,
-    flushed_at: Instant,
+    _flushed_at: Instant,
     verified_at: Option<Instant>,
 }
 
@@ -40,7 +40,7 @@ impl SegmentLifecycleTracker {
             SegmentLifecycleState {
                 phase: LifecyclePhase::Flushing,
                 passive_buffer,
-                flushed_at: Instant::now(),
+                _flushed_at: Instant::now(),
                 verified_at: None,
             },
         );

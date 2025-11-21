@@ -5,6 +5,7 @@ use crate::engine::schema::SchemaRegistry;
 use crate::engine::shard::manager::ShardManager;
 use crate::shared::response::render::Renderer;
 use crate::shared::response::{Response, StatusCode};
+use std::fmt::Write as _;
 use std::sync::Arc;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio::sync::RwLock;
@@ -48,6 +49,29 @@ pub async fn handle<W: AsyncWrite + Unpin>(
         since = ?since,
         "Processing Replay command via streaming query path"
     );
+
+    // Ensure any in-flight flushes finish so replay sees the segments they produce.
+    let flush_errors = shard_manager.wait_for_flush_completion().await;
+    if !flush_errors.is_empty() {
+        let mut joined = String::new();
+        for (idx, (shard_id, err)) in flush_errors.iter().enumerate() {
+            if idx > 0 {
+                joined.push_str(", ");
+            }
+            let _ = write!(joined, "shard {}: {}", shard_id, err);
+        }
+        warn!(
+            target: "sneldb::replay",
+            context_id,
+            errors = %joined,
+            "Replay waited for flushes but encountered errors"
+        );
+        let resp = Response::error(
+            StatusCode::InternalError,
+            &format!("Replay failed to wait for pending flushes: {joined}"),
+        );
+        return writer.write_all(&renderer.render(&resp)).await;
+    }
 
     // Convert REPLAY to QUERY command
     let query_cmd = match cmd.to_query_command() {
