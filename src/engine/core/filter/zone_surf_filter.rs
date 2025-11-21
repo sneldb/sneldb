@@ -35,9 +35,11 @@ fn is_field_numeric_consistent(zone_plans: &[ZonePlan], key: &str) -> bool {
         Unknown,
     }
     let mut kind = Kind::Unknown;
+    use std::sync::Arc;
+    let key_arc: Arc<str> = Arc::from(key);
     for zp in zone_plans {
         for ev in &zp.events {
-            let Some(v) = ev.payload.get(key) else {
+            let Some(v) = ev.payload.get(key_arc.as_ref()) else {
                 continue;
             };
             let this = match v {
@@ -161,7 +163,7 @@ impl ZoneSurfFilter {
         for zp in zone_plans {
             let mut dynamic_keys: Vec<String> = Vec::new();
             if let Some(event) = zp.events.get(0) {
-                dynamic_keys.extend(event.payload.keys().cloned());
+                dynamic_keys.extend(event.payload.keys().map(|k| k.as_ref().to_string()));
             }
             for key in dynamic_keys {
                 if !allowed_fields.contains(&key) {
@@ -170,9 +172,11 @@ impl ZoneSurfFilter {
                 if !is_field_numeric_consistent(zone_plans, &key) {
                     continue;
                 }
+                use std::sync::Arc;
+                let key_arc: Arc<str> = Arc::from(key.as_str());
                 let mut values: Vec<Vec<u8>> = Vec::new();
                 for ev in &zp.events {
-                    if let Some(val) = ev.payload.get(&key) {
+                    if let Some(val) = ev.payload.get(key_arc.as_ref()) {
                         if let Some(bytes) = encode_value(val) {
                             values.push(bytes);
                         }

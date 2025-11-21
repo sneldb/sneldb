@@ -163,6 +163,25 @@ impl ConditionEvaluator {
                 }
             }
 
+            // OPTIMIZATION: Pre-clone field names once per zone to avoid repeated allocations
+            // Convert to Arc<str> for sharing, but avoid expensive DashMap lookups
+            use std::sync::Arc;
+            let u64_field_names: Vec<Arc<str>> = u64_fields.iter()
+                .map(|(field, _)| Arc::from(field.as_str()))
+                .collect();
+            let i64_field_names: Vec<Arc<str>> = i64_fields.iter()
+                .map(|(field, _)| Arc::from(field.as_str()))
+                .collect();
+            let f64_field_names: Vec<Arc<str>> = f64_fields.iter()
+                .map(|(field, _)| Arc::from(field.as_str()))
+                .collect();
+            let bool_field_names: Vec<Arc<str>> = bool_fields.iter()
+                .map(|(field, _)| Arc::from(field.as_str()))
+                .collect();
+            let str_field_names: Vec<Arc<str>> = str_fields.iter()
+                .map(|(field, _)| Arc::from(field.as_str()))
+                .collect();
+
             for i in 0..event_count {
                 if !mask[i] {
                     continue;
@@ -174,40 +193,40 @@ impl ConditionEvaluator {
                 }
                 let mut builder = EventBuilder::new();
 
-                // Optimized: Use pre-classified field lists instead of matching every field
-                for (field, values) in &u64_fields {
+                // Optimized: Use pre-interned field names directly to avoid re-interning
+                for (field_name, (_, values)) in u64_field_names.iter().zip(u64_fields.iter()) {
                     if let Some(n) = values.get_u64_at(i) {
-                        builder.add_field_u64(field, n);
+                        builder.add_field_u64_arc(field_name.clone(), n);
                     } else {
-                        builder.add_field_null(field);
+                        builder.add_field_null_arc(field_name.clone());
                     }
                 }
-                for (field, values) in &i64_fields {
+                for (field_name, (_, values)) in i64_field_names.iter().zip(i64_fields.iter()) {
                     if let Some(n) = values.get_i64_at(i) {
-                        builder.add_field_i64(field, n);
+                        builder.add_field_i64_arc(field_name.clone(), n);
                     } else {
-                        builder.add_field_null(field);
+                        builder.add_field_null_arc(field_name.clone());
                     }
                 }
-                for (field, values) in &f64_fields {
+                for (field_name, (_, values)) in f64_field_names.iter().zip(f64_fields.iter()) {
                     if let Some(f) = values.get_f64_at(i) {
-                        builder.add_field_f64(field, f);
+                        builder.add_field_f64_arc(field_name.clone(), f);
                     } else {
-                        builder.add_field_null(field);
+                        builder.add_field_null_arc(field_name.clone());
                     }
                 }
-                for (field, values) in &bool_fields {
+                for (field_name, (_, values)) in bool_field_names.iter().zip(bool_fields.iter()) {
                     if let Some(b) = values.get_bool_at(i) {
-                        builder.add_field_bool(field, b);
+                        builder.add_field_bool_arc(field_name.clone(), b);
                     } else {
-                        builder.add_field_null(field);
+                        builder.add_field_null_arc(field_name.clone());
                     }
                 }
-                for (field, values) in &str_fields {
+                for (field_name, (_, values)) in str_field_names.iter().zip(str_fields.iter()) {
                     if let Some(value) = values.get_str_at(i) {
-                        builder.add_field(field, value);
+                        builder.add_field_arc(field_name.clone(), value);
                     } else {
-                        builder.add_field_null(field);
+                        builder.add_field_null_arc(field_name.clone());
                     }
                 }
 

@@ -11,7 +11,7 @@ use crate::shared::response::render::Renderer;
 use crate::shared::response::{Response, StatusCode};
 // time parsing utilities are used via schema normalizer
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio::sync::RwLock;
@@ -150,7 +150,7 @@ pub async fn handle<W: AsyncWrite + Unpin>(
         event_type: event_type.clone(),
         context_id: context_id.clone(),
         id: EventId::default(),
-        payload: BTreeMap::new(),
+        payload: HashMap::new(),
     };
     event.set_payload_json(normalized_payload);
 

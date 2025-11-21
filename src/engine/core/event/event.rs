@@ -2,20 +2,71 @@ use crate::engine::core::event::event_id::EventId;
 use crate::engine::errors::StoreError;
 use crate::engine::types::ScalarValue;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
-use serde::{Deserialize, Serialize};
+use serde::{
+    de::{MapAccess, Visitor},
+    Deserialize, Deserializer, Serialize, Serializer,
+};
 use serde_json::Value as JsonValue;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
+use std::fmt;
+use std::sync::Arc;
 use tracing::{debug, warn};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct Event {
     pub event_type: String,
     pub context_id: String,
     pub timestamp: u64,
     #[serde(skip_serializing, skip_deserializing, default)]
     pub(crate) id: EventId,
-    #[serde(default)]
-    pub payload: BTreeMap<String, ScalarValue>,
+    #[serde(serialize_with = "serialize_payload", deserialize_with = "deserialize_payload")]
+    pub payload: HashMap<Arc<str>, ScalarValue>,
+}
+
+fn serialize_payload<S>(
+    payload: &HashMap<Arc<str>, ScalarValue>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    use serde::ser::SerializeMap;
+    let mut map = serializer.serialize_map(Some(payload.len()))?;
+    for (k, v) in payload {
+        map.serialize_entry(k.as_ref(), v)?;
+    }
+    map.end()
+}
+
+fn deserialize_payload<'de, D>(
+    deserializer: D,
+) -> Result<HashMap<Arc<str>, ScalarValue>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct PayloadVisitor;
+
+    impl<'de> Visitor<'de> for PayloadVisitor {
+        type Value = HashMap<Arc<str>, ScalarValue>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a map")
+        }
+
+        fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+        where
+            M: MapAccess<'de>,
+        {
+            let mut map = HashMap::with_capacity(access.size_hint().unwrap_or(0));
+            while let Some((k, v)) = access.next_entry::<String, ScalarValue>()? {
+                map.insert(Arc::from(k), v);
+            }
+            Ok(map)
+        }
+    }
+
+    deserializer.deserialize_map(PayloadVisitor)
 }
 
 impl Event {
@@ -52,7 +103,13 @@ impl Event {
             "event_type" => Some(ScalarValue::Utf8(self.event_type.clone())),
             "timestamp" => Some(ScalarValue::Timestamp(self.timestamp as i64)),
             "event_id" => Some(ScalarValue::Int64(self.id.raw() as i64)),
-            _ => self.payload.get(name).cloned(),
+            _ => {
+                // Iterate through keys to avoid DashMap lookup - payloads are small
+                self.payload
+                    .iter()
+                    .find(|(k, _)| k.as_ref() == name)
+                    .map(|(_, v)| v.clone())
+            }
         }
     }
 
@@ -64,11 +121,13 @@ impl Event {
             "event_type" => self.event_type.clone(),
             "timestamp" => self.timestamp.to_string(),
             "event_id" => self.id.raw().to_string(),
-            other => self
-                .payload
-                .get(other)
-                .map(Self::scalar_to_string)
-                .unwrap_or_default(),
+            other => {
+                self.payload
+                    .iter()
+                    .find(|(k, _)| k.as_ref() == other)
+                    .map(|(_, v)| Self::scalar_to_string(v))
+                    .unwrap_or_default()
+            }
         }
     }
 
@@ -83,11 +142,13 @@ impl Event {
             // Pad timestamp to 20 digits for u64 (max: 18446744073709551615 = 20 digits)
             "timestamp" => format!("{:020}", self.timestamp),
             "event_id" => format!("{:020}", self.id.raw()),
-            other => self
-                .payload
-                .get(other)
-                .map(Self::scalar_to_sortable)
-                .unwrap_or_default(),
+            other => {
+                self.payload
+                    .iter()
+                    .find(|(k, _)| k.as_ref() == other)
+                    .map(|(_, v)| Self::scalar_to_sortable(v))
+                    .unwrap_or_default()
+            }
         }
     }
 
@@ -99,7 +160,7 @@ impl Event {
         fields.insert("timestamp".to_string());
         fields.insert("event_id".to_string());
         for key in self.payload.keys() {
-            fields.insert(key.clone());
+            fields.insert(key.as_ref().to_string());
         }
         debug!(target: "event::meta", ?fields, "Collected all field names");
         fields
@@ -181,20 +242,20 @@ impl Event {
     pub fn set_payload_json(&mut self, value: JsonValue) {
         self.payload = match value {
             JsonValue::Object(map) => {
-                let mut out = BTreeMap::new();
+                let mut out = HashMap::with_capacity(map.len());
                 for (k, v) in map.into_iter() {
-                    out.insert(k, ScalarValue::from(v));
+                    out.insert(Arc::from(k), ScalarValue::from(v));
                 }
                 out
             }
-            _ => BTreeMap::new(),
+            _ => HashMap::new(),
         };
     }
 
     pub fn payload_as_json(&self) -> JsonValue {
         let mut map = serde_json::Map::new();
         for (k, v) in &self.payload {
-            map.insert(k.clone(), v.to_json());
+            map.insert(k.as_ref().to_string(), v.to_json());
         }
         JsonValue::Object(map)
     }
@@ -220,7 +281,7 @@ impl Event {
 
             // Escape and add key
             result.push('"');
-            escape_json_string(k, &mut result);
+            escape_json_string(k.as_ref(), &mut result);
             result.push('"');
             result.push(':');
 

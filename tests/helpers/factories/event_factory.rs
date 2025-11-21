@@ -1,7 +1,7 @@
 use crate::engine::core::{Event, EventId};
 use rand::Rng;
 use serde_json::{Value, json};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 pub struct EventFactory {
     params: HashMap<String, Value>,
@@ -33,7 +33,7 @@ impl EventFactory {
             timestamp: self.params["timestamp"].as_u64().unwrap(),
             event_type: self.params["event_type"].as_str().unwrap().to_string(),
             id: EventId::from(event_id_raw),
-            payload: BTreeMap::new(),
+            payload: HashMap::new(),
         };
         event.set_payload_json(self.params["payload"].clone());
         event
@@ -64,7 +64,7 @@ impl EventFactory {
                     timestamp,
                     event_type: self.params["event_type"].as_str().unwrap().to_string(),
                     id: EventId::from(event_id),
-                    payload: BTreeMap::new(),
+                    payload: HashMap::new(),
                 };
                 event.set_payload_json(payload);
                 event

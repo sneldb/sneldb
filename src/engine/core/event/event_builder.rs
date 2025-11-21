@@ -1,7 +1,8 @@
 use crate::engine::core::Event;
 use crate::engine::core::event::event_id::EventId;
 use crate::engine::types::ScalarValue;
-use std::collections::BTreeMap;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Builds Event objects from zone values
 pub struct EventBuilder {
@@ -9,7 +10,7 @@ pub struct EventBuilder {
     pub context_id: String,
     pub timestamp: u64,
     pub event_id: EventId,
-    pub payload: BTreeMap<String, ScalarValue>,
+    pub payload: HashMap<Arc<str>, ScalarValue>,
 }
 
 impl EventBuilder {
@@ -19,15 +20,19 @@ impl EventBuilder {
             context_id: String::new(),
             timestamp: 0,
             event_id: EventId::default(),
-            payload: BTreeMap::new(),
+            payload: HashMap::with_capacity(16),
         }
     }
 
-    /// Create a new EventBuilder (capacity hint not used for BTreeMap)
     #[inline]
-    pub fn with_capacity(_capacity: usize) -> Self {
-        // BTreeMap doesn't support with_capacity, just create new
-        Self::new()
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            event_type: String::new(),
+            context_id: String::new(),
+            timestamp: 0,
+            event_id: EventId::default(),
+            payload: HashMap::with_capacity(capacity),
+        }
     }
 
     pub fn build(self) -> Event {
@@ -60,10 +65,14 @@ impl EventBuilder {
         }
     }
 
-    /// Helper to insert a value with field name (avoids repeated to_string calls in hot paths)
     #[inline(always)]
     fn insert_value(&mut self, field: &str, value: ScalarValue) {
-        self.payload.insert(field.to_string(), value);
+        self.payload.insert(Arc::from(field), value);
+    }
+
+    #[inline(always)]
+    fn insert_value_arc(&mut self, field: Arc<str>, value: ScalarValue) {
+        self.payload.insert(field, value);
     }
 
     #[inline]
@@ -118,6 +127,148 @@ impl EventBuilder {
                 self.insert_value(field, ScalarValue::Null);
             }
         }
+    }
+
+    #[inline]
+    pub(crate) fn add_field_u64_arc(&mut self, field: Arc<str>, value: u64) {
+        match field.as_ref() {
+            "timestamp" => {
+                self.timestamp = value;
+            }
+            "event_id" => {
+                self.event_id = EventId::from(value);
+            }
+            "context_id" | "event_type" => {
+                self.add_field(field.as_ref(), &value.to_string());
+            }
+            _ => {
+                self.insert_value_arc(
+                    field,
+                    i64::try_from(value)
+                        .map(ScalarValue::Int64)
+                        .unwrap_or_else(|_| ScalarValue::Utf8(value.to_string())),
+                );
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate) fn add_field_i64_arc(&mut self, field: Arc<str>, value: i64) {
+        match field.as_ref() {
+            "timestamp" => {
+                self.timestamp = value as u64;
+            }
+            "event_id" => {
+                self.event_id = EventId::from((value as i128).max(0) as u64);
+            }
+            "context_id" | "event_type" => {
+                self.add_field(field.as_ref(), &value.to_string());
+            }
+            _ => {
+                self.insert_value_arc(field, ScalarValue::Int64(value));
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate) fn add_field_f64_arc(&mut self, field: Arc<str>, value: f64) {
+        if value.is_finite() {
+            self.insert_value_arc(field, ScalarValue::Float64(value));
+        } else {
+            self.insert_value_arc(field, ScalarValue::Null);
+        }
+    }
+
+    #[inline]
+    pub(crate) fn add_field_bool_arc(&mut self, field: Arc<str>, value: bool) {
+        match field.as_ref() {
+            "context_id" | "event_type" => {
+                self.add_field(field.as_ref(), if value { "true" } else { "false" })
+            }
+            _ => {
+                self.insert_value_arc(field, ScalarValue::Boolean(value));
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate) fn add_field_null_arc(&mut self, field: Arc<str>) {
+        match field.as_ref() {
+            "context_id" | "event_type" => self.add_field(field.as_ref(), ""),
+            _ => {
+                self.insert_value_arc(field, ScalarValue::Null);
+            }
+        }
+    }
+
+    pub(crate) fn add_field_arc(&mut self, field: Arc<str>, value: &str) {
+        match field.as_ref() {
+            "event_type" => {
+                self.event_type = value.to_string();
+            }
+            "context_id" => {
+                self.context_id = value.to_string();
+            }
+            "timestamp" => {
+                self.timestamp = value.parse::<u64>().unwrap_or(0);
+            }
+            "event_id" => {
+                self.event_id = value
+                    .trim()
+                    .parse::<u64>()
+                    .map(EventId::from)
+                    .unwrap_or_default();
+            }
+            _ => self.add_payload_field_arc(field, value),
+        }
+    }
+
+    #[inline]
+    fn add_payload_field_arc(&mut self, field: Arc<str>, value: &str) {
+        let trimmed = value.trim();
+
+        match trimmed {
+            "true" => {
+                self.insert_value_arc(field, ScalarValue::Boolean(true));
+                return;
+            }
+            "false" => {
+                self.insert_value_arc(field, ScalarValue::Boolean(false));
+                return;
+            }
+            "null" => {
+                self.insert_value_arc(field, ScalarValue::Null);
+                return;
+            }
+            _ => {}
+        }
+
+        if trimmed.starts_with('-') {
+            if let Ok(i) = trimmed.parse::<i64>() {
+                self.insert_value_arc(field, ScalarValue::Int64(i));
+                return;
+            }
+        } else if let Ok(u) = trimmed.parse::<u64>() {
+            self.insert_value_arc(
+                field,
+                i64::try_from(u)
+                    .map(ScalarValue::Int64)
+                    .unwrap_or_else(|_| ScalarValue::Utf8(u.to_string())),
+            );
+            return;
+        } else if let Ok(i) = trimmed.parse::<i64>() {
+            self.insert_value_arc(field, ScalarValue::Int64(i));
+            return;
+        }
+
+        if let Ok(f) = trimmed.parse::<f64>() {
+            if f.is_finite() {
+                self.insert_value_arc(field, ScalarValue::Float64(f));
+                return;
+            }
+        }
+
+        self.insert_value_arc(field, ScalarValue::Utf8(value.to_string()));
     }
 
     pub fn add_field(&mut self, field: &str, value: &str) {
