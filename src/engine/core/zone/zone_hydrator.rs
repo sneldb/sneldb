@@ -1,9 +1,10 @@
+use crate::engine::core::read::event_scope::EventScope;
 use crate::engine::core::{
     CandidateZone, ExecutionStep, QueryCaches, QueryPlan, SegmentZoneId, ZoneCollector, ZoneFilter,
     ZoneValueLoader,
 };
 use std::collections::HashSet;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 pub struct ZoneHydrator<'a> {
     plan: &'a QueryPlan,
@@ -51,30 +52,108 @@ impl<'a> ZoneHydrator<'a> {
         }
         let zones_after_filter = candidate_zones.len();
 
-        if tracing::enabled!(tracing::Level::DEBUG) {
-            debug!(target: "sneldb::query", "Deduplicated to {} candidate zones", candidate_zones.len());
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!(
+                target: "sneldb::zone_hydrator",
+                collected = zones_after_collect,
+                deduplicated = zones_after_dedup,
+                filtered = zones_after_filter,
+                "Zone collection stats prior to hydration"
+            );
         }
 
-        match self.plan.event_type_uid().await {
-            Some(uid) => {
-                // Build minimal column set: filters + projection + core fields
-                let columns = self.plan.columns_to_load().await;
+        let columns = self.plan.columns_to_load().await;
+        let mut zones_by_uid: std::collections::HashMap<String, Vec<usize>> =
+            std::collections::HashMap::new();
+        for (idx, zone) in candidate_zones.iter().enumerate() {
+            if let Some(uid) = zone.uid() {
+                zones_by_uid.entry(uid.to_string()).or_default().push(idx);
+            }
+        }
 
-                if tracing::enabled!(tracing::Level::INFO) {
-                    info!(target: "sneldb::query", "Hydrating zones with columns: {:?}", columns);
-                }
-
-                let loader = ZoneValueLoader::new(self.plan.segment_base_dir.clone(), uid)
-                    .with_caches(self.caches);
-                loader.load_zone_values(&mut candidate_zones, &columns);
-
-                if tracing::enabled!(tracing::Level::DEBUG) {
-                    debug!(target: "sneldb::query", "Loaded values into {} zones", candidate_zones.len());
+        if zones_by_uid.is_empty() {
+            if matches!(self.plan.event_scope(), EventScope::Wildcard { .. })
+                && tracing::enabled!(tracing::Level::WARN)
+            {
+                let missing_uid = candidate_zones.iter().filter(|z| z.uid().is_none()).count();
+                if missing_uid > 0 {
+                    warn!(
+                        target: "sneldb::zone_hydrator",
+                        missing_uid_zones = missing_uid,
+                        total_zones = candidate_zones.len(),
+                        "Wildcard query produced zones without UID metadata; falling back to legacy loader"
+                    );
                 }
             }
-            None => {
-                if tracing::enabled!(tracing::Level::DEBUG) {
-                    debug!(target: "sneldb::query", "No UID found for event_type {:?}", self.plan.event_type());
+            match self.plan.event_type_uid().await {
+                Some(uid) => {
+                    if tracing::enabled!(tracing::Level::INFO) {
+                        info!(
+                            target: "sneldb::zone_hydrator",
+                            %uid,
+                            zone_count = candidate_zones.len(),
+                            column_count = columns.len(),
+                            columns = ?columns,
+                            "Hydrating specific event type"
+                        );
+                    }
+
+                    let loader = ZoneValueLoader::new(self.plan.segment_base_dir.clone(), uid)
+                        .with_caches(self.caches);
+                    loader.load_zone_values(&mut candidate_zones, &columns);
+
+                    if tracing::enabled!(tracing::Level::DEBUG) {
+                        debug!(
+                            target: "sneldb::query",
+                            "Loaded values into {} zones",
+                            candidate_zones.len()
+                        );
+                    }
+                }
+                None => {
+                    if tracing::enabled!(tracing::Level::DEBUG) {
+                        debug!(
+                            target: "sneldb::query",
+                            "No UID found for event_type {:?}",
+                            self.plan.event_type()
+                        );
+                    }
+                }
+            }
+        } else {
+            if tracing::enabled!(tracing::Level::INFO) {
+                let mut uid_summary: Vec<String> = zones_by_uid
+                    .iter()
+                    .map(|(uid, indices)| format!("{}:{}", uid, indices.len()))
+                    .collect();
+                uid_summary.sort();
+                info!(
+                    target: "sneldb::zone_hydrator",
+                    uid_count = zones_by_uid.len(),
+                    total_zones = candidate_zones.len(),
+                    column_count = columns.len(),
+                    columns = ?columns,
+                    uid_breakdown = ?uid_summary,
+                    "Hydrating wildcard zones with per-UID loaders"
+                );
+            }
+            for (uid, indices) in zones_by_uid {
+                let zone_count = indices.len();
+                let loader = ZoneValueLoader::new(self.plan.segment_base_dir.clone(), uid.clone())
+                    .with_caches(self.caches);
+                for idx in indices {
+                    if let Some(zone) = candidate_zones.get_mut(idx) {
+                        loader.load_zone_values(std::slice::from_mut(zone), &columns);
+                    }
+                }
+                if tracing::enabled!(tracing::Level::INFO) {
+                    info!(
+                        target: "sneldb::zone_hydrator",
+                        %uid,
+                        zone_count = zone_count,
+                        column_count = columns.len(),
+                        "Finished hydrating UID subset for wildcard query"
+                    );
                 }
             }
         }

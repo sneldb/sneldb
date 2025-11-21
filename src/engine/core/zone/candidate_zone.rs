@@ -12,6 +12,7 @@ pub struct CandidateZone {
     pub zone_id: u32,
     pub segment_id: String,
     pub values: HashMap<String, ColumnValues>,
+    uid: Option<String>,
 }
 
 impl CandidateZone {
@@ -20,11 +21,24 @@ impl CandidateZone {
             zone_id,
             segment_id,
             values: HashMap::new(),
+            uid: None,
         }
     }
 
     pub fn set_values(&mut self, values: HashMap<String, ColumnValues>) {
         self.values = values;
+    }
+
+    pub fn set_uid<S: Into<String>>(&mut self, uid: S) {
+        self.uid = Some(uid.into());
+    }
+
+    pub fn clear_uid(&mut self) {
+        self.uid = None;
+    }
+
+    pub fn uid(&self) -> Option<&str> {
+        self.uid.as_deref()
     }
 
     pub fn create_all_zones_for_segment(segment_id: &str) -> Vec<Self> {
@@ -51,12 +65,16 @@ impl CandidateZone {
     ) -> Vec<Self> {
         let segment_path = segment_base_dir.join(segment_id);
         let zones_file = segment_path.join(format!("{}.zones", uid));
-        match ZoneMeta::load(&zones_file) {
+        let mut zones = match ZoneMeta::load(&zones_file) {
             Ok(metas) => (0..metas.len())
                 .map(|z| Self::new(z as u32, segment_id.to_string()))
                 .collect(),
             Err(_) => Self::create_all_zones_for_segment(segment_id),
+        };
+        for zone in &mut zones {
+            zone.set_uid(uid.to_string());
         }
+        zones
     }
 
     /// Cached variant: consult per-query caches to avoid repeated .zones disk loads.
@@ -69,12 +87,15 @@ impl CandidateZone {
         if let Some(c) = caches {
             if let Ok(metas_arc) = c.get_or_load_zone_meta(segment_id, uid) {
                 let count = metas_arc.len();
-                return (0..count)
+                let mut zones = (0..count)
                     .map(|z| Self::new(z as u32, segment_id.to_string()))
-                    .collect();
+                    .collect::<Vec<_>>();
+                for zone in &mut zones {
+                    zone.set_uid(uid.to_string());
+                }
+                return zones;
             }
         }
-        // Fallback to direct load or fill_factor path
         Self::create_all_zones_for_segment_from_meta(segment_base_dir, segment_id, uid)
     }
 
