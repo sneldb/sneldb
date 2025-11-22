@@ -23,7 +23,7 @@ REMEMBER QUERY <query-expr> AS <name>
 
 1. The query plan is compiled and executed once through the streaming pipeline.
 2. Batches are persisted to `materializations/<name>/frames/NNNNNN.mat` using the same column ordering and types as the live query.
-3. A catalog entry (`materializations/catalog.bin`) records:
+3. A catalog entry (stored in `materializations/catalog.mcat` and per-entry files) records:
    - Canonical query hash and serialized query spec.
    - Stored schema snapshot.
    - Current row and byte totals.
@@ -39,7 +39,7 @@ Each remembered query can optionally track a retention policy (max rows or max a
 ## Diagnostics & Telemetry
 
 - Successful runs log a `sneldb::remember` event with alias, total rows, rows appended, and watermark details.
-- You can inspect `materializations/catalog.bin` (bincode + JSON-encoded spec) to review metadata, or issue `SHOW <name>` to fetch both the stored snapshot and the latest delta.
+- You can inspect the catalog (index at `materializations/catalog.mcat` and entry files) to review metadata, or issue `SHOW <name>` to fetch both the stored snapshot and the latest delta.
 
 ## Errors
 
@@ -47,3 +47,7 @@ Each remembered query can optionally track a retention policy (max rows or max a
 - Query is not streaming-compatible.
 - Engine is unable to write the materialization directory (disk full / permission).
 - Catalog persistence failure (corrupted header or serialization error).
+
+## Further Reading
+
+For details on how materialization works internally, see [Materialization](../design/materialization.md).

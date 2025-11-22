@@ -39,5 +39,9 @@ If a retention policy (max rows / max age) is recorded in the catalog, the store
 
 ## Operational Notes
 
-- The catalog (`materializations/catalog.bin`) is persisted with a binary header and JSON-encoded query spec. Deleting the file removes all metadata; individual materializations can be dropped by removing both the directory and the catalog entry.
+- The catalog (`materializations/catalog.mcat`) uses a per-entry file design for scalability. Deleting the catalog index removes all metadata; individual materializations can be dropped by removing both the directory and the catalog entry.
 - High-water mark age is included in logs to help detect stale materializations that are not being refreshed.
+
+## Further Reading
+
+For details on how materialization works internally, see [Materialization](../design/materialization.md).

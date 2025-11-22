@@ -1,6 +1,225 @@
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
+use std::fmt;
 
 use crate::shared::datetime::time::TimeConfig;
+
+/// Parse a human-readable size string (e.g., "256MB", "100KB", "1GB") or integer into bytes.
+/// Supports: B, KB, MB, GB, TB (case-insensitive)
+/// Also accepts plain integers for backward compatibility.
+/// This function is public so it can be reused in test configs.
+pub fn parse_size_bytes<'de, D>(deserializer: D) -> Result<usize, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+
+    struct SizeVisitor;
+
+    impl<'de> Visitor<'de> for SizeVisitor {
+        type Value = usize;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a size string (e.g., \"256MB\", \"100KB\") or an integer")
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            parse_size_string(value).map_err(E::custom)
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            // Backward compatibility: accept raw integers as bytes
+            Ok(value as usize)
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            if value < 0 {
+                return Err(E::custom("size cannot be negative"));
+            }
+            // Backward compatibility: accept raw integers as bytes
+            Ok(value as usize)
+        }
+    }
+
+    deserializer.deserialize_any(SizeVisitor)
+}
+
+/// Parse a human-readable size string into bytes.
+/// Supports: B, KB, MB, GB, TB (case-insensitive, with or without space)
+/// This function is public so it can be reused in test configs.
+pub fn parse_size_string(s: &str) -> Result<usize, String> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Err("empty size string".to_string());
+    }
+
+    // Try to parse as plain number first (backward compatibility)
+    if let Ok(bytes) = s.parse::<usize>() {
+        return Ok(bytes);
+    }
+
+    // Parse number and unit
+    let s_upper = s.to_uppercase();
+    let (num_str, unit) = if s_upper.ends_with("B") {
+        // Find where the number ends
+        let mut num_end = s_upper.len() - 1;
+        while num_end > 0
+            && s_upper
+                .chars()
+                .nth(num_end - 1)
+                .map_or(false, |c| c.is_alphabetic())
+        {
+            num_end -= 1;
+        }
+        let num_str = s[..num_end].trim();
+        let unit = &s_upper[num_end..];
+        (num_str, unit)
+    } else {
+        // No unit, treat as bytes
+        return s
+            .parse::<usize>()
+            .map_err(|e| format!("invalid size: {}", e));
+    };
+
+    let num: f64 = num_str
+        .parse()
+        .map_err(|e| format!("invalid number in size string '{}': {}", s, e))?;
+
+    let multiplier = match unit {
+        "B" => 1,
+        "KB" => 1024,
+        "MB" => 1024 * 1024,
+        "GB" => 1024 * 1024 * 1024,
+        "TB" => 1024_u64 * 1024 * 1024 * 1024,
+        _ => {
+            return Err(format!(
+                "unknown size unit '{}' in '{}'. Supported: B, KB, MB, GB, TB",
+                unit, s
+            ));
+        }
+    };
+
+    let bytes = (num * multiplier as f64) as usize;
+    Ok(bytes)
+}
+
+/// Parse a human-readable size string (e.g., "256MB", "100KB") or integer into megabytes.
+/// For backward compatibility, also accepts integers which are treated as MB.
+/// This function is public so it can be reused in test configs.
+pub fn parse_size_mb<'de, D>(deserializer: D) -> Result<usize, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+
+    struct SizeVisitor;
+
+    impl<'de> Visitor<'de> for SizeVisitor {
+        type Value = usize;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str(
+                "a size string (e.g., \"256MB\", \"100KB\") or an integer (treated as MB)",
+            )
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            let bytes = parse_size_string(value).map_err(E::custom)?;
+            Ok(bytes / (1024 * 1024)) // Convert bytes to MB
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            // Backward compatibility: accept raw integers as MB
+            Ok(value as usize)
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            if value < 0 {
+                return Err(E::custom("size cannot be negative"));
+            }
+            // Backward compatibility: accept raw integers as MB
+            Ok(value as usize)
+        }
+    }
+
+    deserializer.deserialize_any(SizeVisitor)
+}
+
+/// Parse an optional human-readable size string or integer into bytes.
+/// This function is public so it can be reused in test configs.
+pub fn parse_optional_size_bytes<'de, D>(deserializer: D) -> Result<Option<usize>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+
+    struct OptionalSizeVisitor;
+
+    impl<'de> Visitor<'de> for OptionalSizeVisitor {
+        type Value = Option<usize>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("an optional size string (e.g., \"256MB\", \"100KB\") or integer")
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            parse_size_bytes(deserializer).map(Some)
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            parse_size_string(value).map_err(E::custom).map(Some)
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(value as usize))
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            if value < 0 {
+                return Err(E::custom("size cannot be negative"));
+            }
+            Ok(Some(value as usize))
+        }
+    }
+
+    deserializer.deserialize_option(OptionalSizeVisitor)
+}
 
 #[derive(Debug, Deserialize)]
 pub struct Settings {
@@ -26,6 +245,8 @@ pub struct WalConfig {
     pub dir: String,
     pub fsync: bool,
     pub buffered: bool,
+    /// Buffer size in bytes. Can be specified as human-readable string (e.g., "8MB", "100KB") or integer (bytes).
+    #[serde(deserialize_with = "parse_size_bytes")]
     pub buffer_size: usize,
     pub flush_each_write: bool,
     pub fsync_every_n: Option<usize>,
@@ -46,7 +267,11 @@ pub struct EngineConfig {
     pub compaction_interval: u64,
     pub sys_io_threshold: usize,
     /// Minimum available memory in MB required to run compaction (default: 512 MB)
-    #[serde(default = "default_memory_threshold_mb")]
+    /// Can be specified as human-readable string (e.g., "512MB", "256MB") or integer (MB).
+    #[serde(
+        default = "default_memory_threshold_mb",
+        deserialize_with = "parse_size_mb"
+    )]
     pub sys_memory_threshold_mb: usize,
     pub max_inflight_passives: Option<usize>,
     /// Number of L0 segments to merge per compaction unit (k-way)
@@ -60,7 +285,11 @@ pub struct EngineConfig {
 #[derive(Debug, Deserialize)]
 pub struct QueryConfig {
     pub zone_index_cache_max_entries: Option<usize>,
+    /// Column block cache size in bytes. Can be specified as human-readable string (e.g., "4GB", "256MB") or integer (bytes).
+    #[serde(deserialize_with = "parse_optional_size_bytes")]
     pub column_block_cache_max_bytes: Option<usize>,
+    /// Zone surf cache size in bytes. Can be specified as human-readable string (e.g., "4GB", "256MB") or integer (bytes).
+    #[serde(deserialize_with = "parse_optional_size_bytes")]
     pub zone_surf_cache_max_bytes: Option<usize>,
     /// Batch size for streaming JSON responses (0 = per-row, >0 = batched)
     /// Defaults to 1000 if not specified

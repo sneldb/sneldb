@@ -7,6 +7,8 @@
   - [A Gentle Guide](./quickstart/gentle_intro.md)
   - [Design Philosophy](./quickstart/philosophy.md)
 
+- [Configuration](./config.md)
+
 - [Introduction](./introduction.md)
 
   - [Why SnelDB?](./introduction/why_sneldb.md)
@@ -33,6 +35,7 @@
   - [Query and Replay](./design/query_replay.md)
   - [Filter Architecture and Zone Collection](./design/filter_architecture.md)
   - [Streaming Query Flow](./design/streaming_flow.md)
+  - [Materialization](./design/materialization.md)
   - [Aggregations](./design/aggregations.md)
   - [Sharding](./design/sharding.md)
   - [Infrastructure](./design/infrastructure.md)
