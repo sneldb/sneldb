@@ -192,8 +192,10 @@ This is the spine of the engine: durable append, fast memory, immutable segments
 ## Materialized Query Store
 
 - **Materialized Query Store**
-  - Directory structure: `materializations/catalog.bin` + `materializations/<alias>/frames/NNNNNN.mat` + `manifest.bin`.
+  - Directory structure: `materializations/catalog.mcat` + `materializations/<alias>/frames/NNNNNN.mat` + `manifest.bin`.
   - Catalog entries store the serialized query spec (JSON in bincode), schema snapshot, byte/row counters, high-water mark, retention hints, and telemetry deltas.
   - Each frame is typed row storage with a shared header + LZ4-compressed payload (null bitmap + typed values) so it can be streamed back verbatim.
   - SHOW streams existing frames, runs a delta pipeline using the stored high-water mark, appends new frames, and updates catalog metadata.
   - Retention policies (max rows / max age) are persisted but currently optional; when present, frames are pruned after each append.
+
+For a complete overview of materialization, see [Materialization](./materialization.md).

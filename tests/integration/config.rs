@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use snel_db::shared::config::model::parse_size_bytes;
 use std::fs;
 
 #[derive(Serialize, Deserialize)]
@@ -32,7 +33,11 @@ pub struct AuthConfig {
 #[derive(Serialize, Deserialize)]
 pub struct QueryConfig {
     pub zone_index_cache_max_entries: usize,
+    /// Column block cache size in bytes. Can be specified as human-readable string (e.g., "4GB", "256MB") or integer (bytes).
+    #[serde(deserialize_with = "parse_size_bytes")]
     pub column_block_cache_max_bytes: usize,
+    /// Zone surf cache size in bytes. Can be specified as human-readable string (e.g., "4GB", "256MB") or integer (bytes).
+    #[serde(deserialize_with = "parse_size_bytes")]
     pub zone_surf_cache_max_bytes: usize,
 }
 #[derive(Serialize, Deserialize)]
@@ -48,6 +53,8 @@ pub struct WalConfig {
     pub dir: String,
     pub fsync: bool,
     pub buffered: bool,
+    /// Buffer size in bytes. Can be specified as human-readable string (e.g., "8MB", "100KB") or integer (bytes).
+    #[serde(deserialize_with = "parse_size_bytes")]
     pub buffer_size: usize,
     pub flush_each_write: bool,
     pub fsync_every_n: Option<usize>,

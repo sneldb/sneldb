@@ -2,7 +2,7 @@
 enabled = true
 fsync = false
 buffered = true
-buffer_size = 102400
+buffer_size = "100KB"
 dir = "../data/wal/"
 flush_each_write = false
 fsync_every_n = 1024
@@ -21,7 +21,7 @@ shard_count = 3
 event_per_zone = 1
 compaction_interval = 300
 sys_io_threshold = 10
-sys_memory_threshold_mb = 128
+sys_memory_threshold_mb = "128MB"
 max_inflight_passives = 8
 segments_per_merge = 2
 compaction_max_shard_concurrency = 1
@@ -57,8 +57,8 @@ file_level = "error"
 
 [query]
 zone_index_cache_max_entries = 256
-column_block_cache_max_bytes = 67108864
-zone_surf_cache_max_bytes = 10485760
+column_block_cache_max_bytes = "64MB"
+zone_surf_cache_max_bytes = "10MB"
 
 [time]
 timezone = "UTC"
